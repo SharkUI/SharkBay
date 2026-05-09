@@ -36,7 +36,7 @@ export function resolveSelectedCandidate(
 }
 
 export function shouldResetTerminalObservationForInput(data: string): boolean {
-  return data !== "\u001b[I" && data !== "\u001b[O";
+  return data.replace(/\u001b\[(?:I|O)/g, "").length > 0;
 }
 
 export function projectTerminalActivityStates(

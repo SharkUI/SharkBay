@@ -30,8 +30,11 @@ describe("renderer workflow contracts", () => {
   it("does not treat terminal focus control sequences as user input", () => {
     expect(shouldResetTerminalObservationForInput("\u001b[I")).toBe(false);
     expect(shouldResetTerminalObservationForInput("\u001b[O")).toBe(false);
+    expect(shouldResetTerminalObservationForInput("\u001b[O\u001b[I")).toBe(false);
+    expect(shouldResetTerminalObservationForInput("\u001b[O\u001b[O")).toBe(false);
     expect(shouldResetTerminalObservationForInput("a")).toBe(true);
     expect(shouldResetTerminalObservationForInput("\r")).toBe(true);
+    expect(shouldResetTerminalObservationForInput("\u001b[Oa")).toBe(true);
   });
 
   it("resolves project row terminal activity from candidate or path keys", () => {

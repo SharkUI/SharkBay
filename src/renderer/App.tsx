@@ -869,15 +869,18 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
             <div className="terminal-tabs">
               {space.tabs.length ? (
                 <div className="terminal-tab-list" role="tablist">
-                  {space.tabs.map((tab) => (
-                    <div className={cx("terminal-tab", tab.session.id === space.activeId && "is-active")} key={tab.session.id} role="tab" aria-selected={tab.session.id === space.activeId}>
-                      <button className="terminal-tab-main" type="button" onClick={() => { setActiveTab(space.projectId, tab.session.id); clearTerminalDoneState(tab.session.id); }}>
-                        <span className={cx("terminal-state", tab.activityState === "working" && "is-working", tab.activityState === "done" && "is-done", tab.session.status === "exited" && "is-exited")} />
-                        <span className="truncate">{tab.session.title}</span>
-                      </button>
-                      <button aria-label={`Close ${tab.session.title}`} className="terminal-tab-close" type="button" onClick={(event) => { event.stopPropagation(); void closeTab(tab.session.id); }}>x</button>
-                    </div>
-                  ))}
+                  {space.tabs.map((tab) => {
+                    const isActiveTab = tab.session.id === space.activeId;
+                    return (
+                      <div className={cx("terminal-tab", isActiveTab && "is-active")} key={tab.session.id} role="tab" aria-selected={isActiveTab}>
+                        <button className="terminal-tab-main" type="button" onClick={() => { setActiveTab(space.projectId, tab.session.id); clearTerminalDoneState(tab.session.id); }}>
+                          <span className={cx("terminal-state", tab.activityState === "working" && "is-working", !isActiveTab && tab.activityState === "done" && "is-done", tab.session.status === "exited" && "is-exited")} />
+                          <span className="truncate">{tab.session.title}</span>
+                        </button>
+                        <button aria-label={`Close ${tab.session.title}`} className="terminal-tab-close" type="button" onClick={(event) => { event.stopPropagation(); void closeTab(tab.session.id); }}>x</button>
+                      </div>
+                    );
+                  })}
                 </div>
               ) : null}
               <button aria-label="New terminal tab" className="icon-button terminal-tab-add" disabled={!canCreate} title="New terminal tab" type="button" onClick={() => void openCurrentProjectTab()}><PlusIcon /></button>

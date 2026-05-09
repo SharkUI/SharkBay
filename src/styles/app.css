@@ -91,6 +91,11 @@ textarea::placeholder {
   color: #edf2ef;
   background: #203136;
   border-right: 1px solid rgba(255, 255, 255, 0.1);
+  scrollbar-width: none;
+}
+
+.sidebar::-webkit-scrollbar {
+  display: none;
 }
 
 .detail-header,
@@ -568,6 +573,11 @@ body.is-resizing-columns * {
   overflow-x: hidden;
   overflow-y: auto;
   padding-right: 2px;
+  scrollbar-width: none;
+}
+
+.project-sections::-webkit-scrollbar {
+  display: none;
 }
 
 .project-section {
@@ -806,9 +816,9 @@ body.is-resizing-columns * {
 }
 
 .terminal-activity-pill.is-idle {
-  color: #7a5520;
-  background: #f3e1bd;
-  border: 1px solid #dfc98d;
+  color: #ffffff;
+  background: #c9962f;
+  border: 0;
 }
 
 .detail-layout {
@@ -2148,9 +2158,9 @@ button.project-file-toggle:focus-visible {
 }
 
 .app-shell[data-theme="night"] .terminal-activity-pill.is-idle {
-  color: rgba(229, 203, 145, 0.8);
-  background: rgba(215, 189, 120, 0.13);
-  border-color: rgba(215, 189, 120, 0.18);
+  color: #ffffff;
+  background: #c9962f;
+  border: 0;
 }
 
 .app-shell[data-theme="night"] .project-row-status .worktree-pill,
