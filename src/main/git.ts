@@ -106,5 +106,5 @@ async function git(repoPath: string, args: string[]): Promise<string> {
     timeout: 3000,
     maxBuffer: 1024 * 1024,
   });
-  return stdout.trim();
+  return stdout.trimEnd();
 }

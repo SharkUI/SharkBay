@@ -5,6 +5,7 @@ export type WorkflowProjectCandidate = {
   rootPath: string;
   iconSources?: Array<{ kind: "local" | "favicon"; url: string; label: string }>;
   services?: Array<{ id: string; label: string; command: string; script: string; cwd: string }>;
+  dirtyWorktree?: boolean | null;
 };
 
 export type WorkflowProjectTerminalActivityState = "working" | "idle";

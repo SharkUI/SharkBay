@@ -267,11 +267,7 @@ function editorCommandFor(relativePath: string): string {
 
 function gitDiffCommandFor(relativePath: string): string {
   const quotedPath = shellQuote(relativePath);
-  return [
-    `git --no-pager diff -- ${quotedPath}`,
-    `git --no-pager diff --cached -- ${quotedPath}`,
-    `if git ls-files --others --exclude-standard -- ${quotedPath} | grep -Fqx -- ${quotedPath}; then git --no-pager diff --no-index -- /dev/null ${quotedPath} || true; fi`,
-  ].join("; ");
+  return `git --no-pager diff -- ${quotedPath}`;
 }
 
 function shellQuote(value: string): string {
@@ -803,7 +799,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     clearTerminalQuietTimer(event.sessionId);
     const message = `\r\n[process exited${event.exitCode === null ? "" : ` with code ${event.exitCode}`}${event.signal ? `, signal ${event.signal}` : ""}]\r\n`;
     const match = findTerminalTabWithSpace(spacesRef.current, event.sessionId);
-    if (match?.tab.session.service) { match.tab.terminal.write(message); void closeTerminal(event.sessionId).catch(() => undefined); removeTerminalTab(event.sessionId, match); return; }
     match?.tab.terminal.write(message);
     setSpaces((current) => mapTerminalTab(current, event.sessionId, (currentTab) => ({ ...currentTab, activityState: "idle", outputBurstStartedAt: null, session: { ...currentTab.session, status: "exited" } })));
   }
@@ -874,7 +869,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                     return (
                       <div className={cx("terminal-tab", isActiveTab && "is-active")} key={tab.session.id} role="tab" aria-selected={isActiveTab}>
                         <button className="terminal-tab-main" type="button" onClick={() => { setActiveTab(space.projectId, tab.session.id); clearTerminalDoneState(tab.session.id); }}>
-                          <span className={cx("terminal-state", tab.activityState === "working" && "is-working", !isActiveTab && tab.activityState === "done" && "is-done", tab.session.status === "exited" && "is-exited")} />
+                          <span className={cx("terminal-state", tab.session.service && tab.session.status === "running" && "is-service-running", tab.activityState === "working" && "is-working", !isActiveTab && tab.activityState === "done" && "is-done", tab.session.status === "exited" && "is-exited")} />
                           <span className="truncate">{tab.session.title}</span>
                         </button>
                         <button aria-label={`Close ${tab.session.title}`} className="terminal-tab-close" type="button" onClick={(event) => { event.stopPropagation(); void closeTab(tab.session.id); }}>x</button>
@@ -987,6 +982,7 @@ function ProjectList({ candidates, runningServiceProjectIds, terminalActivityByP
         {candidates.map((candidate) => {
           const hasRunningService = runningServiceProjectIds.has(candidate.id);
           const terminalActivity = terminalActivityForCandidate(candidate, terminalActivityByProjectId);
+          const hasProjectStatus = Boolean(terminalActivity) || candidate.dirtyWorktree === true;
           return (
             <button className={cx("project-row", selectedId === candidate.id && "is-selected")} key={candidate.id} onClick={() => onSelect(candidate.id)}>
               <ProjectIcon name={candidate.name} sources={candidate.iconSources ?? []} />
@@ -997,9 +993,12 @@ function ProjectList({ candidates, runningServiceProjectIds, terminalActivityByP
                 </span>
                 <span className="cell-subtitle truncate">{candidate.path}</span>
               </span>
-              {terminalActivity ? (
+              {hasProjectStatus ? (
                 <span className="project-row-status">
-                  <span className={cx("terminal-activity-pill", terminalActivity === "working" ? "is-working" : "is-idle")}>{terminalActivity}</span>
+                  {terminalActivity ? (
+                    <span className={cx("terminal-activity-pill", terminalActivity === "working" ? "is-working" : "is-idle")}>{terminalActivity}</span>
+                  ) : null}
+                  {candidate.dirtyWorktree === true ? <span className="worktree-pill is-dirty">dirty</span> : null}
                 </span>
               ) : null}
             </button>
@@ -1105,7 +1104,10 @@ function ProjectFactsCard({ detail, candidate }: { detail: ProjectDetail | null;
       </div>
       <div className="project-facts-list">
         {facts.map((fact) => (
-          <Fact key={fact.label} label={fact.label} tone={fact.tone} value={fact.value} />
+          <div className={cx("repository-fact", fact.tone === "warn" && "is-warn")} key={fact.label}>
+            <span>{fact.label}</span>
+            <strong>{fact.value}</strong>
+          </div>
         ))}
       </div>
     </section>
@@ -1114,30 +1116,27 @@ function ProjectFactsCard({ detail, candidate }: { detail: ProjectDetail | null;
 
 function DirtyFilesPanel({ detail, setToast, onOpenGitDiff }: { detail: ProjectDetail | null; setToast: (toast: Toast) => void; onOpenGitDiff: (relativePath: string) => Promise<void> }) {
   const files = detail?.gitDirtyFiles ?? [];
+  if (!files.length) return null;
   return (
     <section className="subpanel dirty-files-card">
       <div className="panel-title-row compact-title-row">
         <h4>Dirty Files</h4>
-        <span className="form-note">{files.length ? `${files.length} changed` : "Clean"}</span>
+        <span className="form-note">{files.length} changed</span>
       </div>
-      {files.length ? (
-        <div className="dirty-file-list">
-          {files.map((file) => (
-            <button
-              className="dirty-file-row"
-              key={`${file.status}-${file.path}`}
-              title={`${file.status} ${file.path}`}
-              type="button"
-              onDoubleClick={() => void onOpenGitDiff(file.path).catch((error) => setToast({ tone: "error", message: asMessage(error) }))}
-            >
-              <span className="dirty-file-status">{file.status}</span>
-              <span className="dirty-file-path">{file.path}</span>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <div className="muted-row compact-muted-row">No dirty files.</div>
-      )}
+      <div className="dirty-file-list">
+        {files.map((file) => (
+          <button
+            className="dirty-file-row"
+            key={`${file.status}-${file.path}`}
+            title={`${file.status} ${file.path}`}
+            type="button"
+            onDoubleClick={() => void onOpenGitDiff(file.path).catch((error) => setToast({ tone: "error", message: asMessage(error) }))}
+          >
+            <span className="dirty-file-status">{file.status}</span>
+            <span className="dirty-file-path">{file.path}</span>
+          </button>
+        ))}
+      </div>
     </section>
   );
 }

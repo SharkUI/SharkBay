@@ -1,8 +1,12 @@
 import { promises as fs } from "node:fs";
+import { execFile } from "node:child_process";
 import path from "node:path";
+import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { createGitRepoFixture, makeTempRoot, writeJson } from "./helpers.js";
 import { scanConfiguredRoots } from "../src/main/scanner.js";
+
+const execFileAsync = promisify(execFile);
 
 describe("scanner", () => {
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=", "base64");
@@ -48,6 +52,19 @@ describe("scanner", () => {
     const candidate = result.candidates.find((c) => c.name === "ServiceApp");
 
     expect(candidate?.services.length).toBeGreaterThan(0);
+  });
+
+  it("adds git dirty worktree state to project rows", async () => {
+    const root = await makeTempRoot("scanner-dirty");
+    const repo = path.join(root, "DirtyRepo");
+    await fs.mkdir(repo, { recursive: true });
+    await execFileAsync("git", ["init"], { cwd: repo });
+    await writeJson(path.join(repo, "package.json"), { name: "dirty-repo", version: "1.0.0" });
+
+    const result = await scanConfiguredRoots([root]);
+    const candidate = result.candidates.find((c) => c.name === "DirtyRepo");
+
+    expect(candidate?.dirtyWorktree).toBe(true);
   });
 
   it("keeps discovering repositories nested below four directory levels", async () => {

@@ -3,6 +3,7 @@ import path from "node:path";
 import type { IpcRuntimeLike, ProjectCandidate, ProjectScanInput, ScanProjectsResult } from "../shared/types.js";
 import { loadAppConfig, getRuntimeConfigPath } from "./config.js";
 import { discoverProjectDevServices } from "./dev-services.js";
+import { readGitMetadata } from "./git.js";
 import { resolveConfiguredRoots } from "./path-safety.js";
 import { resolveProjectIconSources } from "./project-icons.js";
 
@@ -32,11 +33,12 @@ export async function scanConfiguredRoots(configuredRoots: string[], options: { 
     for (const repoPath of repos) {
       if (found.has(repoPath)) continue;
       const name = path.basename(repoPath);
-      const [iconSources, services] = await Promise.all([
+      const [iconSources, services, gitMetadata] = await Promise.all([
         resolveProjectIconSources(repoPath, [root.path]),
         discoverProjectDevServices(repoPath),
+        readGitMetadata(repoPath),
       ]);
-      found.set(repoPath, { id: repoPath, name, path: repoPath, rootPath: root.path, iconSources, services });
+      found.set(repoPath, { id: repoPath, name, path: repoPath, rootPath: root.path, iconSources, services, dirtyWorktree: gitMetadata.dirtyWorktree });
     }
   }
 

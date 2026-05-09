@@ -73,6 +73,7 @@ export type ProjectCandidate = {
   rootPath: string;
   iconSources: ProjectIconSource[];
   services: ProjectDevService[];
+  dirtyWorktree: boolean | null;
 };
 
 export type GitMetadata = {

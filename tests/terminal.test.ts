@@ -231,6 +231,15 @@ describe("terminal cwd validation", () => {
         }
       });
     });
+    const exited = new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("service terminal exit timed out")), 3000);
+      manager.on("exit", (event) => {
+        if ((!sessionId || event.sessionId === sessionId)) {
+          clearTimeout(timeout);
+          resolve();
+        }
+      });
+    });
     const session = await manager.create({ userDataPath }, {
       cwd: repo,
       initialCommand: "printf 'sharkbay-service-ok\\n'",
@@ -242,6 +251,7 @@ describe("terminal cwd validation", () => {
       expect(session.title).toBe("dev");
       expect(session.service).toEqual({ id: "dev", label: "dev", command: "npm run dev" });
       await expect(output).resolves.toContain("sharkbay-service-ok");
+      await expect(exited).resolves.toBeUndefined();
     } finally {
       manager.close({ sessionId: session.id });
     }

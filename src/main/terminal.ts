@@ -140,7 +140,7 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
       session.activeCommandLine = initialCommand;
       session.commandSubmittedAt = this.now();
       session.foregroundCommandObserved = false;
-      ptyProcess.write(`${initialCommand}\r`);
+      ptyProcess.write(`${input.service ? serviceCommandLine(initialCommand) : initialCommand}\r`);
     }
 
     return publicSession(session);
@@ -424,6 +424,10 @@ function normalizeTerminalCommandLine(command: string | null | undefined): strin
     .replace(/\s+/g, " ")
     .trim();
   return normalized || null;
+}
+
+function serviceCommandLine(command: string): string {
+  return `(${command}); exit $?`;
 }
 
 function normalizeForegroundProcess(foregroundProcess: string | null | undefined): string | null {
