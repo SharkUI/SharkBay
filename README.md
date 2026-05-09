@@ -1,37 +1,31 @@
 # SharkBay
 
-SharkBay is a local-first macOS workbench for managing harness-enabled software projects.
+SharkBay is a local-first macOS workbench for software projects.
 
-It reads lightweight project metadata from local repositories, shows task, Git, terminal, and verification state in one place, and opens project-rooted terminal spaces for local work.
+It scans user-configured folders for local Git repositories, shows repository status and project files, and opens project-rooted terminal spaces for day-to-day development work.
 
 ## What It Does
 
-- Scans user-configured local folders for harness-enabled projects.
-- Reads project state from contained `.sharkbay/` harnesses and legacy `.agent`/root `docs`/root `tasks` harnesses.
-- Shows active tasks, queues, lifecycle phase, recent decisions, Git status, and verification artifacts.
-- Presents project detail as focused Tasks, Decisions, Git, and Info tabs.
-- Creates or sets up managed projects from bundled Ripple harness templates.
-- Opens per-project terminal workspaces backed by xterm and `node-pty`, with tabs titled from runtime cwd or foreground commands.
+- Scans only folders configured by the user.
+- Discovers Git repositories under those roots.
+- Shows each project with local icon candidates, Git branch, dirty files, recent Git activity, and a lazy file tree.
+- Opens per-project terminal workspaces backed by xterm and `node-pty`.
+- Detects common `package.json` dev scripts and exposes them as service pills.
 - Keeps workbench columns resizable and preserves terminal sessions while Settings is open.
-- Keeps filesystem access scoped to configured roots.
+- Keeps filesystem and terminal access scoped to configured roots.
 
 ## Project Model
 
-SharkBay expects managed projects to use a small file-based harness:
+SharkBay treats a project as a local Git repository inside a configured scan root. It does not require project-specific control files or templates.
 
-- `AGENTS.md` for agent entrypoint instructions.
-- `.sharkbay/manifest.json` for project identity.
-- `.sharkbay/state.json` and `.sharkbay/queue.json` for machine-readable state.
-- `.sharkbay/state.md` and `.sharkbay/queue.md` for human-readable mirrors.
-- `.sharkbay/docs/` for durable product, architecture, task, and learning records.
-- `.sharkbay/tasks/<task-id>/` for phase artifacts, reviews, verification evidence, and decisions.
-- `.sharkbay/development.json` for optional stable project-authored development metadata.
+Project metadata is discovered from ordinary repository files:
 
-The app is intentionally local-first. Project data stays in local repository files unless the user chooses to publish the repository.
+- `.git` identifies a project.
+- Git commands provide branch, history, dirty-worktree, and changed-file data.
+- `package.json` contributes dev service commands when scripts are present.
+- Common icon locations such as `resources/project-icon.png`, `public/favicon.png`, and monorepo web app public folders provide project avatars.
 
-SharkBay still reads legacy projects that use `.agent/`, root `docs/`, and root `tasks/`. New setup uses the contained `.sharkbay/` layout to minimize interference with external projects. For legacy projects, the detail view can offer an explicit confirmed migration that moves only recognized harness files into `.sharkbay/`; it does not touch `.gitignore` or unrelated root `docs`/`tasks` content.
-
-The bundled source templates for that harness live in `templates/harness/` and are part of the public product repository. SharkBay's own local dogfood harness state under root `.agent/`, root `tasks/`, `docs/task.md`, and `docs/learnings.md` is intentionally ignored so forked copies do not inherit this repository's private work queue or run history.
+The app is intentionally local-first. SharkBay reads local files and spawns local shells; it does not publish repository data or run remote operations unless a future explicit feature does so.
 
 ## Tech Stack
 
@@ -40,6 +34,8 @@ The bundled source templates for that harness live in `templates/harness/` and a
 - TypeScript
 - Vite
 - Vitest
+- xterm
+- node-pty
 
 ## Requirements
 
@@ -98,13 +94,13 @@ Outputs are written to `release/`, including `release/mac-arm64/SharkBay.app`, a
 
 SharkBay is designed around explicit local boundaries:
 
-- It scans only folders configured by the user.
-- Runtime services load configured roots from app config rather than trusting renderer-provided authority.
-- Existing managed repositories are updated only through narrow harness JSON writes.
-- Template installation rejects non-empty targets and symlink escapes.
+- Configured roots are loaded from app config in the main process.
+- Renderer-provided paths are resolved against configured roots before filesystem, Git, file-listing, or terminal operations.
+- Project files are exposed through scoped file-tree listing, not arbitrary path reads.
 - Terminal sessions are spawned only after the main process resolves the requested cwd inside configured roots.
-- Direct agent execution is treated as a future capability that requires explicit approval and visible logs.
+- External URLs are opened through Electron shell handling rather than inside privileged app contexts.
+- Direct agent execution is not part of the current product surface.
 
 ## Repository Status
 
-This repository can be managed by SharkBay locally, but its root `.agent/` and `tasks/` state are not part of the public source tree. Use `templates/harness/` as the canonical example of the contained files SharkBay installs into other projects.
+This repository is the SharkBay desktop app source. Local scan configuration is stored in the user's SharkBay app config, not in this repository.

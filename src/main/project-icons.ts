@@ -1,6 +1,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { ProjectIconSource, UrlFields } from "../shared/types.js";
+import type { ProjectIconSource } from "../shared/types.js";
+
+type UrlFields = { localUrl: string | null; testUrl: string | null; deploymentUrl: string | null };
 import { isRecord } from "../shared/schema.js";
 import { readJsonFile } from "./json-file.js";
 import { resolveReadableRepoFile } from "./path-safety.js";
@@ -36,7 +38,7 @@ const commonIconPaths = [
 
 const displayableExtensions = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".ico"]);
 
-export async function resolveProjectIconSources(repoPath: string, configuredRoots: string[], urls: UrlFields): Promise<ProjectIconSource[]> {
+export async function resolveProjectIconSources(repoPath: string, configuredRoots: string[], urls: UrlFields = { localUrl: null, testUrl: null, deploymentUrl: null }): Promise<ProjectIconSource[]> {
   const localSources = await resolveLocalIconSources(repoPath, configuredRoots);
   const faviconSources = faviconSourcesFromUrls(urls);
   return dedupeSources([...localSources, ...faviconSources]);

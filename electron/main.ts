@@ -125,14 +125,11 @@ function createMainWindow(): BrowserWindow {
 app.whenReady().then(async () => {
   const runtime = {
     userDataPath: app.getPath("userData"),
-    templateRoot: app.isPackaged
-      ? join(process.resourcesPath, "templates", "harness")
-      : join(app.getAppPath(), "templates", "harness")
   };
   const config = await loadAppConfig(getRuntimeConfigPath(runtime));
   appearanceTheme = config.appearanceTheme;
 
-  registerIpcHandlers(runtime, undefined, {
+  registerIpcHandlers(runtime, {
     onAppearanceThemeChanged: setAppearanceTheme,
   });
 

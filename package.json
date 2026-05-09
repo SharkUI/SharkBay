@@ -2,7 +2,7 @@
   "name": "sharkbay",
   "version": "0.1.0",
   "private": true,
-  "description": "A local macOS control panel for harness-enabled repositories.",
+  "description": "A local macOS control panel for software projects.",
   "type": "module",
   "main": "dist-electron/electron/main.js",
   "scripts": {
@@ -56,10 +56,6 @@
       {
         "from": "resources",
         "to": "resources"
-      },
-      {
-        "from": "templates/harness",
-        "to": "templates/harness"
       }
     ],
     "asarUnpack": [

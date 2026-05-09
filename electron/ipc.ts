@@ -5,111 +5,40 @@ import {
   removeConfiguredRoot,
   setAppearanceTheme
 } from "../src/main/config.js";
-import { readProjectDetail } from "../src/main/harness-reader.js";
-import { checkHarnessTemplateSync, updateHarnessTemplateFiles } from "../src/main/harness-template-sync.js";
-import { uninstallHarness } from "../src/main/harness-uninstall.js";
-import { migrateLegacyHarnessToContained } from "../src/main/legacy-harness-cleanup.js";
 import { listProjectFiles } from "../src/main/project-files.js";
-import {
-  updateHarnessManifest,
-  updateHarnessQueue,
-  updateHarnessState,
-  updateProjectUrls
-} from "../src/main/harness-writer.js";
 import { scanProjects } from "../src/main/scanner.js";
-import { createHarnessRepo } from "../src/main/template-installer.js";
+import { readGitMetadata, readGitHistory, readGitDirtyFiles } from "../src/main/git.js";
 import { TerminalManager } from "../src/main/terminal.js";
 import type {
   AppConfig,
   AppearanceTheme,
   AppearanceThemeInput,
-  CreateHarnessRepoInput,
-  CreateHarnessRepoResult,
-  HarnessJsonPatchInput,
-  HarnessUninstallInput,
-  HarnessUninstallResult,
-  HarnessTemplateSyncCheckInput,
-  HarnessTemplateSyncCheckResult,
-  HarnessTemplateSyncUpdateInput,
-  HarnessTemplateSyncUpdateResult,
-  LegacyHarnessCleanupCheckInput,
-  LegacyHarnessCleanupMigrationResult,
   ProjectDetail,
-  ProjectDetailInput,
   ProjectFilesInput,
   ProjectFilesResult,
   ProjectScanInput,
-  ProjectSummary,
-  ScanProjectsResult,
   RemoveRootInput,
   RootConfigInput,
-  SafeWriteResult,
+  ScanProjectsResult,
   TerminalCloseInput,
   TerminalCreateInput,
   TerminalInput,
   TerminalResizeInput,
   TerminalSession,
-  TerminalUpdateEvent,
-  UpdateProjectUrlsInput
+  TerminalUpdateEvent
 } from "../src/shared/types.js";
+import { ipcChannels as channels } from "../src/shared/ipc-channels.js";
+import { resolveProjectIconSources } from "../src/main/project-icons.js";
+import { resolveRepoPath } from "../src/main/path-safety.js";
+import path from "node:path";
 
 export type IpcRuntime = {
   userDataPath: string;
-  templateRoot: string;
 };
 
 export type IpcCallbacks = {
   onAppearanceThemeChanged?: (theme: AppearanceTheme) => void;
 };
-
-export type SharkBayIpcServices = {
-  listRoots: () => Promise<AppConfig>;
-  addRoot: (input: RootConfigInput) => Promise<AppConfig>;
-  removeRoot: (input: RemoveRootInput) => Promise<AppConfig>;
-  setAppearanceTheme: (input: AppearanceThemeInput) => Promise<AppConfig>;
-  scanProjects: (input?: ProjectScanInput) => Promise<ScanProjectsResult>;
-  getProjectDetail: (input: ProjectDetailInput) => Promise<ProjectDetail>;
-  listProjectFiles: (input: ProjectFilesInput) => Promise<ProjectFilesResult>;
-  updateProjectUrls: (input: UpdateProjectUrlsInput) => Promise<SafeWriteResult>;
-  updateHarnessState: (input: HarnessJsonPatchInput) => Promise<SafeWriteResult>;
-  updateHarnessManifest: (input: HarnessJsonPatchInput) => Promise<SafeWriteResult>;
-  updateHarnessQueue: (input: HarnessJsonPatchInput) => Promise<SafeWriteResult>;
-  checkHarnessTemplateSync: (input: HarnessTemplateSyncCheckInput) => Promise<HarnessTemplateSyncCheckResult>;
-  updateHarnessTemplateFiles: (input: HarnessTemplateSyncUpdateInput) => Promise<HarnessTemplateSyncUpdateResult>;
-  migrateLegacyHarness: (input: LegacyHarnessCleanupCheckInput) => Promise<LegacyHarnessCleanupMigrationResult>;
-  uninstallHarness: (input: HarnessUninstallInput) => Promise<HarnessUninstallResult>;
-  createHarnessRepo: (input: CreateHarnessRepoInput) => Promise<CreateHarnessRepoResult>;
-  createTerminal: (input: TerminalCreateInput) => Promise<TerminalSession>;
-  terminalInput: (input: TerminalInput) => Promise<TerminalSession>;
-  resizeTerminal: (input: TerminalResizeInput) => Promise<TerminalSession>;
-  closeTerminal: (input: TerminalCloseInput) => Promise<TerminalSession>;
-};
-
-const channels = {
-  listRoots: "config:listRoots",
-  addRoot: "config:addRoot",
-  removeRoot: "config:removeRoot",
-  setAppearanceTheme: "config:setAppearanceTheme",
-  scanProjects: "projects:scan",
-  getProjectDetail: "projects:getDetail",
-  listProjectFiles: "projects:listFiles",
-  updateProjectUrls: "projects:updateUrls",
-  updateHarnessState: "harness:updateState",
-  updateHarnessManifest: "harness:updateManifest",
-  updateHarnessQueue: "harness:updateQueue",
-  checkHarnessTemplateSync: "harness:checkTemplateSync",
-  updateHarnessTemplateFiles: "harness:updateTemplateFiles",
-  migrateLegacyHarness: "harness:migrateLegacy",
-  uninstallHarness: "harness:uninstall",
-  createHarnessRepo: "projects:createHarnessRepo",
-  createTerminal: "terminal:create",
-  terminalInput: "terminal:input",
-  resizeTerminal: "terminal:resize",
-  closeTerminal: "terminal:close",
-  terminalData: "terminal:data",
-  terminalUpdate: "terminal:update",
-  terminalExit: "terminal:exit"
-} as const;
 
 const terminalManager = new TerminalManager();
 
@@ -117,43 +46,26 @@ export function closeAllTerminalSessions(): void {
   terminalManager.closeAll();
 }
 
-function createDefaultServices(runtime: IpcRuntime): SharkBayIpcServices {
+async function getProjectDetail(runtime: IpcRuntime, input: { repoPath?: string }): Promise<ProjectDetail> {
+  const configuredRoots = (await getConfiguredRoots(runtime)).configuredRoots;
+  const safeRepo = await resolveRepoPath(input.repoPath ?? "", configuredRoots);
+  const repoPath = safeRepo.repoPath;
+  const [gitMeta, gitHistory, gitDirtyFiles, iconSources] = await Promise.all([
+    readGitMetadata(repoPath),
+    readGitHistory(repoPath),
+    readGitDirtyFiles(repoPath),
+    resolveProjectIconSources(repoPath, configuredRoots),
+  ]);
   return {
-    listRoots: () => getConfiguredRoots(runtime),
-    addRoot: (input) => addConfiguredRoot(runtime, input),
-    removeRoot: (input) => removeConfiguredRoot(runtime, input),
-    setAppearanceTheme: (input) => setAppearanceTheme(runtime, input),
-    scanProjects: (input) => scanProjects(runtime, input),
-    getProjectDetail: (input) => readProjectDetail(runtime, input),
-    listProjectFiles: async (input) => {
-      const configuredRoots = (await getConfiguredRoots(runtime)).configuredRoots;
-      return listProjectFiles(runtime, { ...input, configuredRoots });
-    },
-    updateProjectUrls: (input) => updateProjectUrls(runtime, input),
-    updateHarnessState: (input) => updateHarnessState(runtime, input),
-    updateHarnessManifest: (input) => updateHarnessManifest(runtime, input),
-    updateHarnessQueue: (input) => updateHarnessQueue(runtime, input),
-    checkHarnessTemplateSync: async (input) => {
-      const configuredRoots = (await getConfiguredRoots(runtime)).configuredRoots;
-      return checkHarnessTemplateSync({ ...input, configuredRoots, templateDir: runtime.templateRoot });
-    },
-    updateHarnessTemplateFiles: async (input) => {
-      const configuredRoots = (await getConfiguredRoots(runtime)).configuredRoots;
-      return updateHarnessTemplateFiles({ ...input, configuredRoots, templateDir: runtime.templateRoot });
-    },
-    migrateLegacyHarness: async (input) => {
-      const configuredRoots = (await getConfiguredRoots(runtime)).configuredRoots;
-      return migrateLegacyHarnessToContained({ ...input, configuredRoots });
-    },
-    uninstallHarness: async (input) => {
-      const configuredRoots = (await getConfiguredRoots(runtime)).configuredRoots;
-      return uninstallHarness({ ...input, configuredRoots });
-    },
-    createHarnessRepo: (input) => createHarnessRepo(runtime, input),
-    createTerminal: (input) => terminalManager.create(runtime, input),
-    terminalInput: (input) => Promise.resolve(terminalManager.input(input)),
-    resizeTerminal: (input) => Promise.resolve(terminalManager.resize(input)),
-    closeTerminal: (input) => Promise.resolve(terminalManager.close(input))
+    id: repoPath,
+    name: path.basename(repoPath),
+    path: repoPath,
+    iconSources,
+    repoUrl: gitMeta.remoteOrigin,
+    currentBranch: gitMeta.currentBranch,
+    dirtyWorktree: gitMeta.dirtyWorktree,
+    gitHistory,
+    gitDirtyFiles,
   };
 }
 
@@ -167,7 +79,6 @@ function handle<Payload, Result>(
 
 export function registerIpcHandlers(
   runtime: IpcRuntime,
-  services: SharkBayIpcServices = createDefaultServices(runtime),
   callbacks: IpcCallbacks = {}
 ): void {
   terminalManager.removeAllListeners("data");
@@ -188,63 +99,36 @@ export function registerIpcHandlers(
       window.webContents.send(channels.terminalExit, event);
     });
   });
-  handle<void, AppConfig>(channels.listRoots, () => services.listRoots());
-  handle<RootConfigInput, AppConfig>(channels.addRoot, (payload) => services.addRoot(payload));
-  handle<RemoveRootInput, AppConfig>(channels.removeRoot, (payload) =>
-    services.removeRoot(payload)
-  );
+
+  handle<void, AppConfig>(channels.listRoots, () => getConfiguredRoots(runtime));
+  handle<RootConfigInput, AppConfig>(channels.addRoot, (payload) => addConfiguredRoot(runtime, payload));
+  handle<RemoveRootInput, AppConfig>(channels.removeRoot, (payload) => removeConfiguredRoot(runtime, payload));
   handle<AppearanceThemeInput, AppConfig>(channels.setAppearanceTheme, (payload) =>
-    services.setAppearanceTheme(payload).then((config) => {
+    setAppearanceTheme(runtime, payload).then((config) => {
       callbacks.onAppearanceThemeChanged?.(config.appearanceTheme);
       return config;
     })
   );
   handle<ProjectScanInput | undefined, ScanProjectsResult>(channels.scanProjects, (payload) =>
-    services.scanProjects(payload)
+    scanProjects(runtime, payload)
   );
-  handle<ProjectDetailInput, ProjectDetail>(channels.getProjectDetail, (payload) =>
-    services.getProjectDetail(payload)
+  handle<{ repoPath?: string }, ProjectDetail>(channels.getProjectDetail, (payload) =>
+    getProjectDetail(runtime, payload)
   );
-  handle<ProjectFilesInput, ProjectFilesResult>(channels.listProjectFiles, (payload) =>
-    services.listProjectFiles(payload)
-  );
-  handle<UpdateProjectUrlsInput, SafeWriteResult>(channels.updateProjectUrls, (payload) =>
-    services.updateProjectUrls(payload)
-  );
-  handle<HarnessJsonPatchInput, SafeWriteResult>(channels.updateHarnessState, (payload) =>
-    services.updateHarnessState(payload)
-  );
-  handle<HarnessJsonPatchInput, SafeWriteResult>(channels.updateHarnessManifest, (payload) =>
-    services.updateHarnessManifest(payload)
-  );
-  handle<HarnessJsonPatchInput, SafeWriteResult>(channels.updateHarnessQueue, (payload) =>
-    services.updateHarnessQueue(payload)
-  );
-  handle<HarnessTemplateSyncCheckInput, HarnessTemplateSyncCheckResult>(channels.checkHarnessTemplateSync, (payload) =>
-    services.checkHarnessTemplateSync(payload)
-  );
-  handle<HarnessTemplateSyncUpdateInput, HarnessTemplateSyncUpdateResult>(channels.updateHarnessTemplateFiles, (payload) =>
-    services.updateHarnessTemplateFiles(payload)
-  );
-  handle<LegacyHarnessCleanupCheckInput, LegacyHarnessCleanupMigrationResult>(channels.migrateLegacyHarness, (payload) =>
-    services.migrateLegacyHarness(payload)
-  );
-  handle<HarnessUninstallInput, HarnessUninstallResult>(channels.uninstallHarness, (payload) =>
-    services.uninstallHarness(payload)
-  );
-  handle<CreateHarnessRepoInput, CreateHarnessRepoResult>(channels.createHarnessRepo, (payload) =>
-    services.createHarnessRepo(payload)
-  );
+  handle<ProjectFilesInput, ProjectFilesResult>(channels.listProjectFiles, async (payload) => {
+    const configuredRoots = (await getConfiguredRoots(runtime)).configuredRoots;
+    return listProjectFiles(runtime, { ...payload, configuredRoots });
+  });
   handle<TerminalCreateInput, TerminalSession>(channels.createTerminal, (payload) =>
-    services.createTerminal(payload)
+    terminalManager.create(runtime, payload)
   );
   handle<TerminalInput, TerminalSession>(channels.terminalInput, (payload) =>
-    services.terminalInput(payload)
+    Promise.resolve(terminalManager.input(payload))
   );
   handle<TerminalResizeInput, TerminalSession>(channels.resizeTerminal, (payload) =>
-    services.resizeTerminal(payload)
+    Promise.resolve(terminalManager.resize(payload))
   );
   handle<TerminalCloseInput, TerminalSession>(channels.closeTerminal, (payload) =>
-    services.closeTerminal(payload)
+    Promise.resolve(terminalManager.close(payload))
   );
 }

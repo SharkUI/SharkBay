@@ -9,8 +9,8 @@ SharkBay should become a local-first project workbench, not a dashboard of imple
 | Phase | Goal | Deliverables | Gate |
 | --- | --- | --- | --- |
 | 0 | Establish local macOS app foundation | Electron/React app, safe scan roots, project detail, and project terminals | Typecheck, tests, build, and dogfood scan pass |
-| 1 | Make the UI project-centered | Projects/Settings IA, managed project list, current-task-first detail pane | User can understand what projects exist and what needs attention without reading protocol files |
-| 2 | Discover ordinary local projects | Root child index, managed/unmanaged status, one-click Ripple setup path | User can see all child projects under a root, not only already-managed projects |
+| 1 | Make the UI project-centered | Projects/Settings IA, project list, Git and Files detail pane | User can understand what projects exist and what changed without reading protocol files |
+| 2 | Discover ordinary local projects | Root Git repository discovery, project icons, dev service detection | User can see local repositories under configured roots |
 | 3 | Add runtime and repository operations | GitHub metadata, local dev server status, start/stop/restart actions, deployment commands | Operations are explicit, reversible where possible, and visibly logged |
 
 ## 3. Milestones
@@ -18,7 +18,7 @@ SharkBay should become a local-first project workbench, not a dashboard of imple
 | Milestone | Target | Exit Criteria |
 | --- | --- | --- |
 | Project workbench v0 | Completed 2026-05-05 | Projects is primary; roots/create live in Settings; full tests and build pass |
-| Root child discovery | Next | Scan roots show managed and unmanaged projects with clear setup affordance |
+| Generic Git project discovery | Next | Scan roots show Git repositories, icons, dirty files, file trees, and dev services |
 
 ## 4. Dependencies
 
@@ -27,6 +27,6 @@ t-001 foundation
   -> t-002 self-hosting UX
     -> t-003 dogfood fixes
       -> t-004 project-centered UI
-        -> root child discovery and one-click Ripple setup
+        -> generic Git project discovery
         -> runtime/GitHub/deployment operations
 ```

@@ -1,7 +1,7 @@
 import { constants, promises as fs } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
 import path from "node:path";
-import { computeRevision } from "./revision.js";
+import { createHash } from "node:crypto";
 
 export type JsonReadResult =
   | {
@@ -30,7 +30,7 @@ export async function readJsonFile(filePath: string): Promise<JsonReadResult> {
     };
   }
 
-  const revision = await computeRevision(filePath);
+  const revision = createHash("sha256").update(content).digest("hex").slice(0, 12);
   try {
     return {
       ok: true,
@@ -62,7 +62,7 @@ export async function writeJsonAtomic(filePath: string, data: unknown): Promise<
     handle = null;
     await fs.rename(tempPath, filePath);
     await fsyncDirectory(directory);
-    return computeRevision(filePath);
+    return createHash("sha256").update(serialized).digest("hex").slice(0, 12);
   } catch (error) {
     if (handle) {
       await handle.close().catch(() => undefined);

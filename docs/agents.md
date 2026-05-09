@@ -6,32 +6,19 @@ This file provides guidance to automation agents and contributors when working i
 
 - Product: SharkBay
 - Project type: local-first macOS app / developer tool
-- Current public repository mode: product source plus bundled harness templates
+- Current repository mode: product source for a generic Git project workbench
 
 ## Required Reading
 
 Start with public project context:
 
-- `AGENTS.md` - repository entry point
 - `README.md` - project overview and development commands
-- `docs/product.md` - product requirements
-- `docs/architecture.md` - architecture and module boundaries
-- `templates/harness/` - canonical harness files installed into managed projects
+- `docs/product.md` - product requirements, when present
+- `docs/architecture.md` - architecture and module boundaries, when present
+- `docs/roadmap.md` - near-term product direction
 - `scripts/README.md` - validation script conventions
 
-When a local dogfood harness exists in this clone, also read its resolved harness layout. This repository currently uses the legacy local layout:
-
-- `.agent/manifest.json` - machine-readable project identity
-- `.agent/state.json` - machine-readable repository state
-- `.agent/queue.json` - machine-readable task queue
-- `.agent/protocol.md` - controller workflow
-- `.agent/quality-rules.md` - review and verification gates
-- `.agent/queue.md` - human-readable task queue
-- `.agent/state.md` - human-readable repository state
-- `docs/task.md` - human-readable task list
-- `docs/learnings.md` - durable lessons
-
-The root `.agent/`, root `tasks/`, `docs/task.md`, and `docs/learnings.md` files are local SharkBay dogfood state and are intentionally not tracked in the public repository. Do not recreate SharkBay's private task history in fresh clones unless the user explicitly asks to initialize a local harness.
+Some older clones may still contain private local work-state directories. Treat those as user data. Do not recreate or modify local task histories unless the user explicitly asks.
 
 ## Development Commands
 
@@ -51,17 +38,17 @@ Use `scripts/` for project-local validation helpers that make verification repea
 
 Conventions:
 
-- Prefer small scripts with clear names, such as `scripts/verify-auth-flow.sh` or `scripts/check-fixtures.ts`.
+- Prefer small scripts with clear names, such as `scripts/check-fixtures.ts`.
 - Scripts must print useful pass/fail evidence.
 - Scripts should return non-zero on failure.
 - Do not hide important failures behind broad catch blocks.
-- Record script command, exit code, and output excerpt in `tasks/<task-id>/verification.md`.
+- Record script command, exit code, and output excerpt in the relevant task notes or final report.
 
 ## Code Review Preconditions
 
-Before entering or completing `code_review`, run the checks named in `tasks/<task-id>/contract.md`.
+Before completing review-level work, run the checks relevant to the touched surface.
 
-If the project has known commands, prefer this order:
+Prefer this order:
 
 1. lint
 2. typecheck
@@ -69,24 +56,21 @@ If the project has known commands, prefer this order:
 4. build
 5. task-specific verification scripts
 
-If a command is unavailable, record the missing command and residual risk in `code-review.md` or `verification.md`.
+If a command is unavailable, record the missing command and residual risk.
 
 ## Key Constraints
 
 - Work inside this repository.
 - SharkBay itself must only manage directories configured by the user inside the app.
 - Runtime IPC/service entry points must treat persisted configured roots as authoritative; renderer-supplied roots are not trusted.
-- Existing managed repo writes must go through narrow typed harness JSON patches with revision checks, schema validation, path containment, and atomic write behavior.
 - Preserve user changes.
-- Keep task state on disk when a local harness is present.
-- Register new or ad-hoc harness-managed work in `tasks/<task-id>/status.md`, Active queue, and currentTask before product changes.
 - Prefer small, reviewable changes.
 - Do not skip review or verification gates.
+- Do not weaken filesystem, IPC, schema, credential, production-data, or destructive-action safeguards in the name of simplicity.
 
 ## Behavioral Discipline
 
 - Clarify material ambiguity before implementation by recording assumptions, tradeoffs, or blocking questions.
-- Prefer the simplest implementation that satisfies the task contract.
-- Keep changes traceable to the user goal, task contract, review finding, or verification failure.
+- Prefer the simplest implementation that satisfies the task.
+- Keep changes traceable to the user goal, review finding, or verification failure.
 - Map each done criterion to concrete verification evidence.
-- Do not weaken filesystem, IPC, schema, credential, billing, production-data, or destructive-action safeguards in the name of simplicity.

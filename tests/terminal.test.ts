@@ -10,7 +10,7 @@ import {
   terminalShellEnvironment,
   TerminalManager,
 } from "../src/main/terminal.js";
-import { createHarnessFixture, makeTempRoot, writeJson } from "./helpers.js";
+import { createGitRepoFixture, makeTempRoot, writeJson } from "./helpers.js";
 
 describe("terminal cwd validation", () => {
   it("starts shells without interactive TTY-only flags or Apple session restore", () => {
@@ -25,7 +25,7 @@ describe("terminal cwd validation", () => {
   it("allows project directories inside configured roots", async () => {
     const userDataPath = await makeTempRoot("terminal-config");
     const root = await makeTempRoot("terminal-root");
-    const repo = await createHarnessFixture(root, "TerminalRepo");
+    const repo = await createGitRepoFixture(root, "TerminalRepo");
     await writeJson(getRuntimeConfigPath({ userDataPath }), {
       schemaVersion: 1,
       configuredRoots: [root],
@@ -133,7 +133,7 @@ describe("terminal cwd validation", () => {
   it("creates and closes a terminal session in a safe cwd", async () => {
     const userDataPath = await makeTempRoot("terminal-config");
     const root = await makeTempRoot("terminal-root");
-    const repo = await createHarnessFixture(root, "TerminalRepo");
+    const repo = await createGitRepoFixture(root, "TerminalRepo");
     await writeJson(getRuntimeConfigPath({ userDataPath }), {
       schemaVersion: 1,
       configuredRoots: [root],
@@ -158,7 +158,7 @@ describe("terminal cwd validation", () => {
   it("ignores invalid resize dimensions without surfacing node-pty errors", async () => {
     const userDataPath = await makeTempRoot("terminal-config");
     const root = await makeTempRoot("terminal-root");
-    const repo = await createHarnessFixture(root, "TerminalRepo");
+    const repo = await createGitRepoFixture(root, "TerminalRepo");
     await writeJson(getRuntimeConfigPath({ userDataPath }), {
       schemaVersion: 1,
       configuredRoots: [root],
@@ -183,7 +183,7 @@ describe("terminal cwd validation", () => {
   it("accepts input and streams command output", async () => {
     const userDataPath = await makeTempRoot("terminal-config");
     const root = await makeTempRoot("terminal-root");
-    const repo = await createHarnessFixture(root, "TerminalRepo");
+    const repo = await createGitRepoFixture(root, "TerminalRepo");
     await writeJson(getRuntimeConfigPath({ userDataPath }), {
       schemaVersion: 1,
       configuredRoots: [root],
@@ -213,7 +213,7 @@ describe("terminal cwd validation", () => {
   it("can start a service session with an initial command and service metadata", async () => {
     const userDataPath = await makeTempRoot("terminal-service-config");
     const root = await makeTempRoot("terminal-service-root");
-    const repo = await createHarnessFixture(root, "TerminalServiceRepo");
+    const repo = await createGitRepoFixture(root, "TerminalServiceRepo");
     await writeJson(getRuntimeConfigPath({ userDataPath }), {
       schemaVersion: 1,
       configuredRoots: [root],

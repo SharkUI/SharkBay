@@ -1,29 +1,16 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { appChannels } from "../src/shared/app-events.js";
+import { ipcChannels as channels } from "../src/shared/ipc-channels.js";
 import type {
   AppConfig,
   AppearanceThemeInput,
-  CreateHarnessRepoInput,
-  CreateHarnessRepoResult,
-  HarnessJsonPatchInput,
-  HarnessUninstallInput,
-  HarnessUninstallResult,
-  HarnessTemplateSyncCheckInput,
-  HarnessTemplateSyncCheckResult,
-  HarnessTemplateSyncUpdateInput,
-  HarnessTemplateSyncUpdateResult,
-  LegacyHarnessCleanupCheckInput,
-  LegacyHarnessCleanupMigrationResult,
   ProjectDetail,
-  ProjectDetailInput,
   ProjectFilesInput,
   ProjectFilesResult,
   ProjectScanInput,
-  ProjectSummary,
-  ScanProjectsResult,
   RemoveRootInput,
   RootConfigInput,
-  SafeWriteResult,
+  ScanProjectsResult,
   TerminalCloseInput,
   TerminalCreateInput,
   TerminalDataEvent,
@@ -31,35 +18,8 @@ import type {
   TerminalInput,
   TerminalResizeInput,
   TerminalSession,
-  TerminalUpdateEvent,
-  UpdateProjectUrlsInput
+  TerminalUpdateEvent
 } from "../src/shared/types.js";
-
-const channels = {
-  listRoots: "config:listRoots",
-  addRoot: "config:addRoot",
-  removeRoot: "config:removeRoot",
-  setAppearanceTheme: "config:setAppearanceTheme",
-  scanProjects: "projects:scan",
-  getProjectDetail: "projects:getDetail",
-  listProjectFiles: "projects:listFiles",
-  updateProjectUrls: "projects:updateUrls",
-  updateHarnessState: "harness:updateState",
-  updateHarnessManifest: "harness:updateManifest",
-  updateHarnessQueue: "harness:updateQueue",
-  checkHarnessTemplateSync: "harness:checkTemplateSync",
-  updateHarnessTemplateFiles: "harness:updateTemplateFiles",
-  migrateLegacyHarness: "harness:migrateLegacy",
-  uninstallHarness: "harness:uninstall",
-  createHarnessRepo: "projects:createHarnessRepo",
-  createTerminal: "terminal:create",
-  terminalInput: "terminal:input",
-  resizeTerminal: "terminal:resize",
-  closeTerminal: "terminal:close",
-  terminalData: "terminal:data",
-  terminalUpdate: "terminal:update",
-  terminalExit: "terminal:exit"
-} as const;
 
 const openSettingsListeners = new Set<() => void>();
 let openSettingsPending = false;
@@ -69,7 +29,6 @@ ipcRenderer.on(appChannels.openSettings, () => {
     openSettingsPending = true;
     return;
   }
-
   openSettingsListeners.forEach((callback) => callback());
 });
 
@@ -81,28 +40,13 @@ const sharkBayApi = {
   app: {
     onOpenSettings: (callback: () => void) => {
       openSettingsListeners.add(callback);
-
       if (openSettingsPending) {
         openSettingsPending = false;
         queueMicrotask(callback);
       }
-
       return () => openSettingsListeners.delete(callback);
     }
   },
-  listRoots: () => invoke<AppConfig>(channels.listRoots),
-  addRoot: (input: RootConfigInput) => invoke<AppConfig>(channels.addRoot, input),
-  removeRoot: (input: RemoveRootInput) => invoke<AppConfig>(channels.removeRoot, input),
-  setAppearanceTheme: (input: AppearanceThemeInput) => invoke<AppConfig>(channels.setAppearanceTheme, input),
-  scanProjects: (input?: ProjectScanInput) => invoke<ScanProjectsResult>(channels.scanProjects, input),
-  getProjectDetail: (input: ProjectDetailInput) =>
-    invoke<ProjectDetail>(channels.getProjectDetail, input),
-  listProjectFiles: (input: ProjectFilesInput) =>
-    invoke<ProjectFilesResult>(channels.listProjectFiles, input),
-  updateProjectUrls: (input: UpdateProjectUrlsInput) =>
-    invoke<SafeWriteResult>(channels.updateProjectUrls, input),
-  createHarnessRepo: (input: CreateHarnessRepoInput) =>
-    invoke<CreateHarnessRepoResult>(channels.createHarnessRepo, input),
   config: {
     listRoots: () => invoke<AppConfig>(channels.listRoots),
     addRoot: (input: RootConfigInput) => invoke<AppConfig>(channels.addRoot, input),
@@ -111,30 +55,8 @@ const sharkBayApi = {
   },
   projects: {
     scan: (input?: ProjectScanInput) => invoke<ScanProjectsResult>(channels.scanProjects, input),
-    getDetail: (input: ProjectDetailInput) =>
-      invoke<ProjectDetail>(channels.getProjectDetail, input),
-    listFiles: (input: ProjectFilesInput) =>
-      invoke<ProjectFilesResult>(channels.listProjectFiles, input),
-    updateUrls: (input: UpdateProjectUrlsInput) =>
-      invoke<SafeWriteResult>(channels.updateProjectUrls, input),
-    createHarnessRepo: (input: CreateHarnessRepoInput) =>
-      invoke<CreateHarnessRepoResult>(channels.createHarnessRepo, input)
-  },
-  harness: {
-    updateState: (input: HarnessJsonPatchInput) =>
-      invoke<SafeWriteResult>(channels.updateHarnessState, input),
-    updateManifest: (input: HarnessJsonPatchInput) =>
-      invoke<SafeWriteResult>(channels.updateHarnessManifest, input),
-    updateQueue: (input: HarnessJsonPatchInput) =>
-      invoke<SafeWriteResult>(channels.updateHarnessQueue, input),
-    checkTemplateSync: (input: HarnessTemplateSyncCheckInput) =>
-      invoke<HarnessTemplateSyncCheckResult>(channels.checkHarnessTemplateSync, input),
-    updateTemplateFiles: (input: HarnessTemplateSyncUpdateInput) =>
-      invoke<HarnessTemplateSyncUpdateResult>(channels.updateHarnessTemplateFiles, input),
-    migrateLegacyHarness: (input: LegacyHarnessCleanupCheckInput) =>
-      invoke<LegacyHarnessCleanupMigrationResult>(channels.migrateLegacyHarness, input),
-    uninstall: (input: HarnessUninstallInput) =>
-      invoke<HarnessUninstallResult>(channels.uninstallHarness, input)
+    getDetail: (input: { repoPath: string }) => invoke<ProjectDetail>(channels.getProjectDetail, input),
+    listFiles: (input: ProjectFilesInput) => invoke<ProjectFilesResult>(channels.listProjectFiles, input)
   },
   terminal: {
     create: (input: TerminalCreateInput) => invoke<TerminalSession>(channels.createTerminal, input),

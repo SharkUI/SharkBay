@@ -1,22 +1,10 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { HarnessJsonFile, RootScanResult } from "../shared/types.js";
-import { detectHarnessLayout, harnessJsonRelativePath, harnessLayouts, type HarnessLayout } from "./harness-layout.js";
-
-export const harnessJsonFiles: HarnessJsonFile[] = [
-  ".agent/manifest.json",
-  ".agent/state.json",
-  ".agent/queue.json",
-];
+import type { RootScanResult } from "../shared/types.js";
 
 export type SafeRepoPath = {
   repoPath: string;
   containingRoot: string;
-};
-
-export type SafeHarnessFile = SafeRepoPath & {
-  filePath: string;
-  file: HarnessJsonFile;
 };
 
 export function isPathInside(parent: string, child: string): boolean {
@@ -74,81 +62,6 @@ export async function resolveRepoPath(repoPath: string, configuredRoots: string[
   return { repoPath: realRepo, containingRoot };
 }
 
-export async function resolveHarnessJsonFile(
-  repoPath: string,
-  configuredRoots: string[],
-  file: HarnessJsonFile,
-): Promise<SafeHarnessFile> {
-  if (!harnessJsonFiles.includes(file)) {
-    throw new Error("Unsupported harness JSON file");
-  }
-
-  const safeRepo = await resolveRepoPath(repoPath, configuredRoots);
-  await rejectHarnessRootSymlinks(safeRepo.repoPath);
-  const detected = await detectHarnessLayout(safeRepo.repoPath);
-  const layout = detected?.layout ?? await existingHarnessRootLayout(safeRepo.repoPath);
-  if (!layout) {
-    throw new Error("Repository does not contain a supported harness layout");
-  }
-  const relativePath = harnessJsonRelativePath(layout, file);
-  const harnessRootPath = path.join(safeRepo.repoPath, layout.rootDir);
-  await rejectSymlink(harnessRootPath, `${layout.rootDir} directory cannot be a symlink`);
-
-  const filePath = path.join(safeRepo.repoPath, relativePath);
-  await rejectSymlink(filePath, "Harness JSON file cannot be a symlink");
-  const realFile = await fs.realpath(filePath);
-  const expected = path.join(safeRepo.repoPath, relativePath);
-
-  if (realFile !== expected) {
-    throw new Error("Harness JSON file resolves away from the repository");
-  }
-  if (!isPathInside(safeRepo.repoPath, realFile) || !isPathInside(safeRepo.containingRoot, realFile)) {
-    throw new Error("Harness JSON file is outside the allowed boundary");
-  }
-
-  return { ...safeRepo, filePath: realFile, file };
-}
-
-export async function resolveReadableHarnessJsonFile(
-  repoPath: string,
-  configuredRoots: string[],
-  file: HarnessJsonFile,
-): Promise<SafeHarnessFile> {
-  if (!harnessJsonFiles.includes(file)) {
-    throw new Error("Unsupported harness JSON file");
-  }
-
-  const safeRepo = await resolveRepoPath(repoPath, configuredRoots);
-  await rejectHarnessRootSymlinks(safeRepo.repoPath);
-  const detected = await detectHarnessLayout(safeRepo.repoPath);
-  const layout = detected?.layout ?? await existingHarnessRootLayout(safeRepo.repoPath);
-  if (!layout) {
-    throw new Error("Repository does not contain a supported harness layout");
-  }
-  const relativePath = harnessJsonRelativePath(layout, file);
-  const harnessRootPath = path.join(safeRepo.repoPath, layout.rootDir);
-  await rejectSymlink(harnessRootPath, `${layout.rootDir} directory cannot be a symlink`);
-
-  const filePath = path.join(safeRepo.repoPath, relativePath);
-  const expected = filePath;
-  try {
-    await rejectSymlink(filePath, "Harness JSON file cannot be a symlink");
-  } catch (error) {
-    if (!isMissingPathError(error)) throw error;
-    return { ...safeRepo, filePath: expected, file };
-  }
-
-  const realFile = await fs.realpath(filePath);
-  if (realFile !== expected) {
-    throw new Error("Harness JSON file resolves away from the repository");
-  }
-  if (!isPathInside(safeRepo.repoPath, realFile) || !isPathInside(safeRepo.containingRoot, realFile)) {
-    throw new Error("Harness JSON file is outside the allowed boundary");
-  }
-
-  return { ...safeRepo, filePath: realFile, file };
-}
-
 export async function resolveReadableRepoFile(
   repoPath: string,
   configuredRoots: string[],
@@ -161,10 +74,15 @@ export async function resolveReadableRepoFile(
   const safeRepo = await resolveRepoPath(repoPath, configuredRoots);
   const filePath = path.join(safeRepo.repoPath, relativePath);
   try {
-    await rejectSymlink(filePath, "Repository file cannot be a symlink");
+    const stat = await fs.lstat(filePath);
+    if (stat.isSymbolicLink()) {
+      throw new Error("Repository file cannot be a symlink");
+    }
   } catch (error) {
-    if (!isMissingPathError(error)) throw error;
-    return filePath;
+    if (typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === "ENOENT") {
+      return filePath;
+    }
+    throw error;
   }
 
   const realFile = await fs.realpath(filePath);
@@ -174,66 +92,7 @@ export async function resolveReadableRepoFile(
   return realFile;
 }
 
-export async function assertCreateTargetInsideConfiguredRoots(targetDir: string, configuredRoots?: string[]): Promise<void> {
-  if (!configuredRoots || configuredRoots.length === 0) {
-    throw new Error("Configured roots are required for create target validation");
-  }
-  const roots = await availableRootPaths(configuredRoots);
-  const absoluteTarget = path.resolve(targetDir);
-  await rejectExistingSymlink(absoluteTarget, "Target directory cannot be a symlink");
-  const parent = await fs.realpath(path.dirname(absoluteTarget));
-  const containingRoot = roots.find((root) => isPathInside(root, parent));
-  if (!containingRoot) {
-    throw new Error("Target directory is outside configured roots");
-  }
-  const existingTargetReal = await fs.realpath(absoluteTarget).catch((error) => {
-    if (isMissingPathError(error)) return null;
-    throw error;
-  });
-  if (existingTargetReal && !isPathInside(containingRoot, existingTargetReal)) {
-    throw new Error("Target directory resolves outside configured roots");
-  }
-}
-
 async function availableRootPaths(configuredRoots: string[]): Promise<string[]> {
   const results = await resolveConfiguredRoots(configuredRoots);
   return results.filter((root) => root.available && root.path).map((root) => root.path as string);
-}
-
-async function rejectSymlink(targetPath: string, message: string): Promise<void> {
-  const stat = await fs.lstat(targetPath);
-  if (stat.isSymbolicLink()) {
-    throw new Error(message);
-  }
-}
-
-async function rejectExistingSymlink(targetPath: string, message: string): Promise<void> {
-  try {
-    await rejectSymlink(targetPath, message);
-  } catch (error) {
-    if (isMissingPathError(error)) return;
-    throw error;
-  }
-}
-
-async function rejectHarnessRootSymlinks(repoPath: string): Promise<void> {
-  for (const layout of harnessLayouts) {
-    await rejectExistingSymlink(path.join(repoPath, layout.rootDir), `${layout.rootDir} directory cannot be a symlink`);
-  }
-}
-
-async function existingHarnessRootLayout(repoPath: string): Promise<HarnessLayout | null> {
-  for (const layout of harnessLayouts) {
-    try {
-      const stat = await fs.lstat(path.join(repoPath, layout.rootDir));
-      if (stat.isDirectory() && !stat.isSymbolicLink()) return layout;
-    } catch {
-      // Try the next layout.
-    }
-  }
-  return null;
-}
-
-function isMissingPathError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === "ENOENT";
 }

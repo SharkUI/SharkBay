@@ -870,20 +870,9 @@ body.is-resizing-columns * {
 
 .project-info-card,
 .project-facts-card,
-.harness-sync-card,
 .info-section {
   display: grid;
   gap: 7px;
-}
-
-.harness-sync-card {
-  border-color: #dfc98d;
-  background: #fff8e8;
-}
-
-.harness-sync-card.is-missing {
-  border-color: #e5b8af;
-  background: #fff2ef;
 }
 
 .info-chip-row {

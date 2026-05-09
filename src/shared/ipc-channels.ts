@@ -1,0 +1,16 @@
+export const ipcChannels = {
+  listRoots: "config:listRoots",
+  addRoot: "config:addRoot",
+  removeRoot: "config:removeRoot",
+  setAppearanceTheme: "config:setAppearanceTheme",
+  scanProjects: "projects:scan",
+  getProjectDetail: "projects:getDetail",
+  listProjectFiles: "projects:listFiles",
+  createTerminal: "terminal:create",
+  terminalInput: "terminal:input",
+  resizeTerminal: "terminal:resize",
+  closeTerminal: "terminal:close",
+  terminalData: "terminal:data",
+  terminalUpdate: "terminal:update",
+  terminalExit: "terminal:exit",
+} as const;
