@@ -15,6 +15,13 @@ import type {
   AppConfig,
   AppearanceTheme,
   AppearanceThemeInput,
+  BrowserActionInput,
+  BrowserCloseInput,
+  BrowserCreateInput,
+  BrowserNavigateInput,
+  BrowserResizeInput,
+  BrowserSession,
+  BrowserUpdateEvent,
   ProjectScanInput,
   ProjectDetail,
   ProjectFilesInput,
@@ -31,6 +38,7 @@ import type {
 } from "../src/shared/types.js";
 import { ipcChannels as channels } from "../src/shared/ipc-channels.js";
 import { AgentSessionWatcher, listAvailableAgentClis } from "../src/main/agent-clis.js";
+import { BrowserManager } from "../src/main/browser-tabs.js";
 import { resolveProjectIconSources } from "../src/main/project-icons.js";
 import { resolveRepoPath } from "../src/main/path-safety.js";
 import path from "node:path";
@@ -45,9 +53,11 @@ export type IpcCallbacks = {
 
 const terminalManager = new TerminalManager();
 const agentSessionWatcher = new AgentSessionWatcher();
+const browserManager = new BrowserManager();
 
 export function closeAllTerminalSessions(): void {
   terminalManager.closeAll();
+  browserManager.closeAll();
 }
 
 async function getProjectDetail(runtime: IpcRuntime, input: { repoPath?: string }): Promise<ProjectDetail> {
@@ -89,6 +99,7 @@ export function registerIpcHandlers(
   terminalManager.removeAllListeners("update");
   terminalManager.removeAllListeners("exit");
   agentSessionWatcher.removeAllListeners("status");
+  browserManager.removeAllListeners("update");
   terminalManager.on("data", (event) => {
     BrowserWindow.getAllWindows().forEach((window) => {
       window.webContents.send(channels.terminalData, event);
@@ -110,6 +121,11 @@ export function registerIpcHandlers(
     });
   });
   agentSessionWatcher.start();
+  browserManager.on("update", (event: BrowserUpdateEvent) => {
+    BrowserWindow.getAllWindows().forEach((window) => {
+      window.webContents.send(channels.browserUpdate, event);
+    });
+  });
 
   handle<void, AppConfig>(channels.listRoots, () => getConfiguredRoots(runtime));
   handle<RootConfigInput, AppConfig>(channels.addRoot, (payload) => addConfiguredRoot(runtime, payload));
@@ -131,6 +147,32 @@ export function registerIpcHandlers(
     return listProjectFiles(runtime, { ...payload, configuredRoots });
   });
   handle<void, AgentCli[]>(channels.listAgentClis, () => listAvailableAgentClis());
+  ipcMain.removeHandler(channels.createBrowser);
+  ipcMain.handle(channels.createBrowser, (event, payload: BrowserCreateInput) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window) {
+      throw new Error("Browser window not found");
+    }
+    return browserManager.create(window, payload);
+  });
+  handle<BrowserNavigateInput, BrowserSession>(channels.browserNavigate, (payload) =>
+    Promise.resolve(browserManager.navigate(payload))
+  );
+  handle<BrowserResizeInput, BrowserSession>(channels.browserResize, (payload) =>
+    Promise.resolve(browserManager.resize(payload))
+  );
+  handle<BrowserCloseInput, BrowserSession>(channels.browserClose, (payload) =>
+    Promise.resolve(browserManager.close(payload))
+  );
+  handle<BrowserActionInput, BrowserSession>(channels.browserGoBack, (payload) =>
+    Promise.resolve(browserManager.goBack(payload))
+  );
+  handle<BrowserActionInput, BrowserSession>(channels.browserGoForward, (payload) =>
+    Promise.resolve(browserManager.goForward(payload))
+  );
+  handle<BrowserActionInput, BrowserSession>(channels.browserReload, (payload) =>
+    Promise.resolve(browserManager.reload(payload))
+  );
   handle<TerminalCreateInput, TerminalSession>(channels.createTerminal, (payload) =>
     terminalManager.create(runtime, payload)
   );

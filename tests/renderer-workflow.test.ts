@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  firstHttpUrl,
   projectTerminalActivityStates,
   resolveSelectedCandidate,
+  shouldKeepCurrentServiceUrl,
   shouldResetTerminalObservationForInput,
   terminalActivityForCandidate,
   validTerminalResizeDimensions,
@@ -57,5 +59,17 @@ describe("renderer workflow contracts", () => {
         { projectId: "project-b", tabs: [{ activityState: "done", session: {} }] },
       ]),
     ).toEqual({ "project-a": "working", "project-b": "idle" });
+  });
+
+  it("prefers local service URLs and keeps them over later documentation links", () => {
+    const nextOutput = [
+      "- Local:         http://localhost:3000",
+      "- Network:       http://10.1.2.243:3000",
+      "See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory",
+    ].join("\n");
+
+    expect(firstHttpUrl(nextOutput)).toBe("http://localhost:3000");
+    expect(shouldKeepCurrentServiceUrl("http://localhost:3000", "https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory")).toBe(true);
+    expect(shouldKeepCurrentServiceUrl("https://nextjs.org/docs", "http://127.0.0.1:3000")).toBe(false);
   });
 });

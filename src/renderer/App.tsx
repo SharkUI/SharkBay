@@ -10,6 +10,9 @@ import type {
   AgentProjectStatusEvent,
   AppConfig,
   AppearanceTheme,
+  BrowserBounds,
+  BrowserSession,
+  BrowserUpdateEvent,
   ProjectCandidate,
   ProjectDetail,
   ProjectFileTreeItem,
@@ -24,8 +27,10 @@ import type {
   TerminalUpdateEvent,
 } from "./types";
 import {
+  firstHttpUrl,
   projectTerminalActivityStates,
   resolveSelectedCandidate,
+  shouldKeepCurrentServiceUrl,
   shouldResetTerminalObservationForInput,
   terminalActivityForCandidate,
   validTerminalResizeDimensions,
@@ -53,7 +58,8 @@ type Disposable = {
 type TerminalActivityState = "idle" | "working" | "done";
 type ProjectTerminalActivityState = WorkflowProjectTerminalActivityState;
 
-type TerminalTab = {
+type TerminalShellTab = {
+  kind: "terminal";
   session: TerminalSession;
   terminal: XTerm;
   fitAddon: FitAddon;
@@ -62,12 +68,21 @@ type TerminalTab = {
   outputBurstStartedAt: number | null;
 };
 
+type BrowserTab = {
+  kind: "browser";
+  browser: BrowserSession;
+  addressValue: string;
+};
+
+type TerminalTab = TerminalShellTab | BrowserTab;
+
 type TerminalSpace = {
   projectId: string;
   projectName: string;
   path: string;
   tabs: TerminalTab[];
   activeId: string | null;
+  serviceUrl: string | null;
 };
 
 type TerminalPaneHandle = {
@@ -262,6 +277,36 @@ async function closeTerminal(sessionId: string): Promise<void> {
   const handler = getBridge().terminal?.close;
   if (!handler) throw new Error("Terminal close is not exposed by the preload API.");
   await handler({ sessionId });
+}
+
+async function createBrowser(initialUrl: string): Promise<BrowserSession> {
+  const handler = getBridge().browser?.create;
+  if (!handler) throw new Error("Browser sessions are not exposed by the preload API.");
+  return handler({ initialUrl, bounds: hiddenBrowserBounds() });
+}
+
+async function navigateBrowser(browserId: string, url: string): Promise<BrowserSession> {
+  const handler = getBridge().browser?.navigate;
+  if (!handler) throw new Error("Browser navigation is not exposed by the preload API.");
+  return handler({ browserId, url });
+}
+
+async function resizeBrowser(browserId: string, bounds: BrowserBounds, active = false): Promise<void> {
+  const handler = getBridge().browser?.resize;
+  if (!handler) throw new Error("Browser resize is not exposed by the preload API.");
+  await handler({ browserId, bounds, active });
+}
+
+async function closeBrowser(browserId: string): Promise<void> {
+  const handler = getBridge().browser?.close;
+  if (!handler) throw new Error("Browser close is not exposed by the preload API.");
+  await handler({ browserId });
+}
+
+async function browserAction(action: "goBack" | "goForward" | "reload", browserId: string): Promise<void> {
+  const handler = getBridge().browser?.[action];
+  if (!handler) throw new Error("Browser controls are not exposed by the preload API.");
+  await handler({ browserId });
 }
 
 function editorCommandFor(relativePath: string): string {
@@ -515,6 +560,7 @@ function DashboardView({
   const [terminalActivityByProjectId, setTerminalActivityByProjectId] = useState<Record<string, ProjectTerminalActivityState>>({});
   const [agentClis, setAgentClis] = useState<AgentCli[]>([]);
   const [agentStatusByProjectPath, setAgentStatusByProjectPath] = useState<AgentStatusByProjectPath>({});
+  const [terminalFocusMode, setTerminalFocusMode] = useState(false);
   const [projectColumnWidth, setProjectColumnWidth] = useState(() =>
     storedColumnWidth(projectColumnStorageKey, defaultProjectColumnWidth, minProjectColumnWidth),
   );
@@ -605,12 +651,14 @@ function DashboardView({
   }, [bridgeAvailable]);
 
   const gridStyle = {
-    gridTemplateColumns: `${projectColumnWidth}px ${resizerColumnWidth}px minmax(${minTerminalColumnWidth}px, 1fr) ${resizerColumnWidth}px ${detailColumnWidth}px`,
+    gridTemplateColumns: terminalFocusMode
+      ? "minmax(0, 1fr)"
+      : `${projectColumnWidth}px ${resizerColumnWidth}px minmax(${minTerminalColumnWidth}px, 1fr) ${resizerColumnWidth}px ${detailColumnWidth}px`,
   } satisfies CSSProperties;
 
   return (
-    <div className="dashboard-grid" ref={gridRef} style={gridStyle}>
-      <section className="project-panel">
+    <div className={cx("dashboard-grid", terminalFocusMode && "is-terminal-focused")} ref={gridRef} style={gridStyle}>
+      <section className="project-panel" hidden={terminalFocusMode}>
         <div className="project-window-drag-strip" aria-hidden="true" />
         {scanErrors.length ? (
           <div className="inline-errors">
@@ -629,7 +677,7 @@ function DashboardView({
         </div>
       </section>
 
-      <div aria-label="Resize project column" aria-orientation="vertical" className="column-resizer" role="separator" tabIndex={0}
+      <div aria-label="Resize project column" aria-orientation="vertical" className="column-resizer" hidden={terminalFocusMode} role="separator" tabIndex={0}
         onKeyDown={(event) => resizeWithKeyboard("project", event)}
         onPointerDown={(event) => startColumnResize("project", event)}
       />
@@ -643,6 +691,7 @@ function DashboardView({
           bridgeAvailable={bridgeAvailable}
           isVisible={isVisible}
           setToast={setToast}
+          onToggleFocusMode={() => setTerminalFocusMode((value) => !value)}
           onRunningServiceProjectIdsChange={(nextIds) =>
             setRunningServiceProjectIds((currentIds) => sameStringSet(currentIds, nextIds) ? currentIds : nextIds)
           }
@@ -652,12 +701,12 @@ function DashboardView({
         />
       </section>
 
-      <div aria-label="Resize terminal and detail columns" aria-orientation="vertical" className="column-resizer" role="separator" tabIndex={0}
+      <div aria-label="Resize terminal and detail columns" aria-orientation="vertical" className="column-resizer" hidden={terminalFocusMode} role="separator" tabIndex={0}
         onKeyDown={(event) => resizeWithKeyboard("detail", event)}
         onPointerDown={(event) => startColumnResize("detail", event)}
       />
 
-      <section className="detail-panel">
+      <section className="detail-panel" hidden={terminalFocusMode}>
         {selectedCandidate ? (
           <ProjectDetailPane
             detail={detail}
@@ -686,9 +735,10 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   candidate: ProjectCandidate | null;
   isVisible: boolean;
   setToast: (toast: Toast) => void;
+  onToggleFocusMode: () => void;
   onRunningServiceProjectIdsChange: (projectIds: Set<string>) => void;
   onTerminalActivityProjectStatesChange: (states: Record<string, ProjectTerminalActivityState>) => void;
-}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, isVisible, setToast, onRunningServiceProjectIdsChange, onTerminalActivityProjectStatesChange }, ref) {
+}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, isVisible, setToast, onToggleFocusMode, onRunningServiceProjectIdsChange, onTerminalActivityProjectStatesChange }, ref) {
   const [spaces, setSpaces] = useState<Record<string, TerminalSpace>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const spacesRef = useRef<Record<string, TerminalSpace>>({});
@@ -705,16 +755,18 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
 
   useEffect(() => {
     const runningProjectIds = new Set(
-      Object.values(spaces).filter((space) => space.tabs.some((tab) => tab.session.service && tab.session.status === "running")).map((space) => space.projectId),
+      Object.values(spaces).filter((space) => space.tabs.some((tab) => isRunningServiceTab(tab))).map((space) => space.projectId),
     );
     onRunningServiceProjectIdsChange(runningProjectIds);
   }, [onRunningServiceProjectIdsChange, spaces]);
 
-  useEffect(() => { onTerminalActivityProjectStatesChange(projectTerminalActivityStates(Object.values(spaces))); }, [onTerminalActivityProjectStatesChange, spaces]);
+  useEffect(() => { onTerminalActivityProjectStatesChange(projectTerminalActivityStates(terminalActivitySpaces(Object.values(spaces)))); }, [onTerminalActivityProjectStatesChange, spaces]);
 
   useEffect(() => {
     for (const space of Object.values(spacesRef.current)) {
-      for (const tab of space.tabs) tab.terminal.options.theme = terminalThemes[appearanceTheme];
+      for (const tab of space.tabs) {
+        if (tab.kind === "terminal") tab.terminal.options.theme = terminalThemes[appearanceTheme];
+      }
     }
   }, [appearanceTheme]);
 
@@ -729,11 +781,17 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   }, [bridgeAvailable]);
 
   useEffect(() => {
+    if (!bridgeAvailable) return;
+    const unsubscribe = getBridge().browser?.onUpdate?.((event: BrowserUpdateEvent) => updateBrowserSession(event.browser));
+    return () => unsubscribe?.();
+  }, [bridgeAvailable]);
+
+  useEffect(() => {
     if (!candidate?.path || !bridgeAvailable) { if (!candidate) setActiveProjectId(null); return; }
     setActiveProjectId(candidate.id);
     setSpaces((current) => {
       if (current[candidate.id]) return current;
-      return { ...current, [candidate.id]: { projectId: candidate.id, projectName: candidate.name, path: candidate.path, tabs: [], activeId: null } };
+      return { ...current, [candidate.id]: { projectId: candidate.id, projectName: candidate.name, path: candidate.path, tabs: [], activeId: null, serviceUrl: null } };
     });
     if (!isVisible) return;
     const existing = spacesRef.current[candidate.id];
@@ -753,6 +811,12 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     await openProjectTab(candidate.id, candidate.path, candidate.name, false, { initialCommand: agent.command });
   }
 
+  async function openBrowserProjectTab() {
+    if (!candidate?.path) return;
+    const initialUrl = selectedSpace?.tabs.some((tab) => isRunningServiceTab(tab)) ? selectedSpace.serviceUrl ?? "about:blank" : "about:blank";
+    await openBrowserTab(candidate.id, candidate.path, candidate.name, initialUrl);
+  }
+
   useImperativeHandle(ref, () => ({
     openFileInEditor: async (projectPath, projectName, relativePath) => {
       await openProjectTab(projectPath, projectPath, projectName, false, { initialCommand: editorCommandFor(relativePath) });
@@ -766,18 +830,32 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     try {
       const session = await createTerminal(cwd, projectName, options);
       const terminal = createXTerm(session.id, appearanceTheme, setToast, recordTerminalInputActivity);
-      const tab: TerminalTab = { session, terminal: terminal.instance, fitAddon: terminal.fitAddon, disposables: terminal.disposables, activityState: "idle", outputBurstStartedAt: null };
+      const tab: TerminalTab = { kind: "terminal", session, terminal: terminal.instance, fitAddon: terminal.fitAddon, disposables: terminal.disposables, activityState: "idle", outputBurstStartedAt: null };
       setSpaces((current) => {
-        const existing = current[projectId] ?? { projectId, projectName, path: cwd, tabs: [], activeId: null };
+        const existing = current[projectId] ?? { projectId, projectName, path: cwd, tabs: [], activeId: null, serviceUrl: null };
         return { ...current, [projectId]: { ...existing, projectName, path: cwd, tabs: [...existing.tabs, tab], activeId: session.id } };
       });
       setActiveProjectId(projectId);
     } catch (error) { if (!quiet) setToast({ tone: "error", message: asMessage(error) }); }
   }
 
+  async function openBrowserTab(projectId: string, cwd: string, projectName: string, initialUrl: string) {
+    try {
+      const browser = await createBrowser(initialUrl);
+      const tab: TerminalTab = { kind: "browser", browser, addressValue: browser.url === "about:blank" ? "" : browser.url };
+      setSpaces((current) => {
+        const existing = current[projectId] ?? { projectId, projectName, path: cwd, tabs: [], activeId: null, serviceUrl: null };
+        return { ...current, [projectId]: { ...existing, projectName, path: cwd, tabs: [...existing.tabs, tab], activeId: browser.id } };
+      });
+      setActiveProjectId(projectId);
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    }
+  }
+
   async function toggleService(service: NonNullable<ProjectCandidate["services"]>[number]) {
     if (!candidate?.path) return;
-    const existing = selectedSpace?.tabs.find((tab) => tab.session.service?.id === service.id && tab.session.status === "running");
+    const existing = selectedSpace?.tabs.find((tab): tab is TerminalShellTab => tab.kind === "terminal" && tab.session.service?.id === service.id && tab.session.status === "running");
     if (existing) { await closeTab(existing.session.id); return; }
     await openProjectTab(candidate.id, service.cwd, candidate.name, false, { initialCommand: service.command, service: { id: service.id, label: service.label, command: service.command } });
   }
@@ -785,6 +863,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   function appendTerminalOutput(event: TerminalDataEvent) {
     const tab = findTerminalTab(spacesRef.current, event.sessionId);
     tab?.terminal.write(event.data);
+    if (tab && isRunningServiceTab(tab)) recordServiceUrl(event.sessionId, event.data);
     recordTerminalOutputActivity(event.sessionId);
   }
 
@@ -842,23 +921,56 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     setSpaces((current) => mapTerminalTab(current, event.session.id, (currentTab) => ({ ...currentTab, session: event.session })));
   }
 
-  async function closeTab(sessionId: string) {
-    const match = findTerminalTabWithSpace(spacesRef.current, sessionId);
-    try { await closeTerminal(sessionId); } catch (error) { setToast({ tone: "error", message: asMessage(error) }); } finally { removeTerminalTab(sessionId, match); }
+  function updateBrowserSession(browser: BrowserSession) {
+    setSpaces((current) => mapBrowserTab(current, browser.id, (currentTab) => ({
+      ...currentTab,
+      browser,
+      addressValue: browser.url === "about:blank" ? "" : browser.url,
+    })));
   }
 
-  function removeTerminalTab(sessionId: string, match: ReturnType<typeof findTerminalTabWithSpace>) {
-    clearTerminalQuietTimer(sessionId);
-    match?.tab.disposables.forEach((d) => d.dispose());
-    match?.tab.terminal.dispose();
+  function updateBrowserAddress(browserId: string, value: string) {
+    setSpaces((current) => mapBrowserTab(current, browserId, (currentTab) => ({ ...currentTab, addressValue: value })));
+  }
+
+  function recordServiceUrl(sessionId: string, data: string) {
+    const url = firstHttpUrl(data);
+    if (!url) return;
+    const match = findTerminalTabWithSpace(spacesRef.current, sessionId);
+    if (!match?.tab.session.service) return;
+    setSpaces((current) => {
+      const space = current[match.space.projectId];
+      if (!space || space.serviceUrl === url || shouldKeepCurrentServiceUrl(space.serviceUrl, url)) return current;
+      return { ...current, [space.projectId]: { ...space, serviceUrl: url } };
+    });
+  }
+
+  async function closeTab(tabId: string) {
+    const match = findTabWithSpace(spacesRef.current, tabId);
+    try {
+      if (match?.tab.kind === "browser") await closeBrowser(tabId);
+      else await closeTerminal(tabId);
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      removeTab(tabId, match);
+    }
+  }
+
+  function removeTab(tabId: string, match: ReturnType<typeof findTabWithSpace>) {
+    if (match?.tab.kind === "terminal") {
+      clearTerminalQuietTimer(tabId);
+      match.tab.disposables.forEach((d) => d.dispose());
+      match.tab.terminal.dispose();
+    }
     setSpaces((current) => {
       if (!match) return current;
       const space = current[match.space.projectId];
       if (!space) return current;
-      const nextTabs = space.tabs.filter((tab) => tab.session.id !== sessionId);
-      const closingActive = space.activeId === sessionId;
+      const nextTabs = space.tabs.filter((tab) => tabIdForTab(tab) !== tabId);
+      const closingActive = space.activeId === tabId;
       const fallback = nextTabs[match.index] ?? nextTabs[match.index - 1] ?? null;
-      return { ...current, [space.projectId]: { ...space, tabs: nextTabs, activeId: closingActive ? fallback?.session.id ?? null : space.activeId } };
+      return { ...current, [space.projectId]: { ...space, tabs: nextTabs, activeId: closingActive ? fallback ? tabIdForTab(fallback) : null : space.activeId } };
     });
   }
 
@@ -882,7 +994,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
         {services.length ? (
           <div className="service-actions" aria-label="Project services">
             {services.map((service) => {
-              const running = Boolean(selectedSpace?.tabs.some((tab) => tab.session.service?.id === service.id && tab.session.status === "running"));
+              const running = Boolean(selectedSpace?.tabs.some((tab) => tab.kind === "terminal" && tab.session.service?.id === service.id && tab.session.status === "running"));
               return (
                 <button aria-label={`${running ? "Stop" : "Start"} ${service.label}`} className={cx("service-pill", running && "is-running")} disabled={!canCreate} key={service.id} title={`${running ? "Stop" : "Start"} ${service.command}`} type="button" onClick={() => void toggleService(service)}>
                   <span className="service-dot" aria-hidden="true" />
@@ -900,20 +1012,27 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
               {space.tabs.length ? (
                 <div className="terminal-tab-list" role="tablist">
                   {space.tabs.map((tab) => {
-                    const isActiveTab = tab.session.id === space.activeId;
+                    const tabId = tabIdForTab(tab);
+                    const isActiveTab = tabId === space.activeId;
+                    const tabTitle = titleForTab(tab);
                     return (
-                      <div className={cx("terminal-tab", isActiveTab && "is-active")} key={tab.session.id} role="tab" aria-selected={isActiveTab}>
-                        <button className="terminal-tab-main" type="button" onClick={() => { setActiveTab(space.projectId, tab.session.id); clearTerminalDoneState(tab.session.id); }}>
-                          <span className={cx("terminal-state", tab.session.service && tab.session.status === "running" && "is-service-running", tab.activityState === "working" && "is-working", !isActiveTab && tab.activityState === "done" && "is-done", tab.session.status === "exited" && "is-exited")} />
-                          <span className="truncate">{tab.session.title}</span>
+                      <div className={cx("terminal-tab", isActiveTab && "is-active")} key={tabId} role="tab" aria-selected={isActiveTab}>
+                        <button className="terminal-tab-main" type="button" onClick={() => { setActiveTab(space.projectId, tabId); if (tab.kind === "terminal") clearTerminalDoneState(tab.session.id); }} onDoubleClick={onToggleFocusMode}>
+                          {tab.kind === "terminal" ? (
+                            <span className={cx("terminal-state", tab.session.service && tab.session.status === "running" && "is-service-running", tab.activityState === "working" && "is-working", !isActiveTab && tab.activityState === "done" && "is-done", tab.session.status === "exited" && "is-exited")} />
+                          ) : (
+                            <GlobeIcon />
+                          )}
+                          <span className="truncate">{tabTitle}</span>
                         </button>
-                        <button aria-label={`Close ${tab.session.title}`} className="terminal-tab-close" type="button" onClick={(event) => { event.stopPropagation(); void closeTab(tab.session.id); }}>x</button>
+                        <button aria-label={`Close ${tabTitle}`} className="terminal-tab-close" type="button" onClick={(event) => { event.stopPropagation(); void closeTab(tabId); }}>x</button>
                       </div>
                     );
                   })}
                 </div>
               ) : null}
               <button aria-label="New terminal tab" className="icon-button terminal-tab-add" disabled={!canCreate} title="New terminal tab" type="button" onClick={() => void openCurrentProjectTab()}><PlusIcon /></button>
+              <button aria-label="Open browser" className="icon-button terminal-tab-add terminal-browser-button" disabled={!canCreate} title="Browser" type="button" onClick={() => void openBrowserProjectTab()}><GlobeIcon /></button>
               {agentClis.map((agent) => (
                 <button aria-label={agent.label} className="icon-button terminal-tab-add terminal-agent-button" disabled={!canCreate} key={agent.id} title={agent.label} type="button" onClick={() => void openAgentProjectTab(agent)}>
                   <AgentCliIcon agent={agent} />
@@ -921,9 +1040,14 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
               ))}
             </div>
             <div className="xterm-surface-stack">
-              {space.tabs.map((tab) => (
-                <XTermSurface active={isVisible && space.projectId === activeProjectId && tab.session.id === space.activeId} key={tab.session.id} tab={tab} onResize={(cols, rows) => void resizeTerminal(tab.session.id, cols, rows).catch((error) => setToast({ tone: "error", message: asMessage(error) }))} />
-              ))}
+              {space.tabs.map((tab) => {
+                const active = isVisible && space.projectId === activeProjectId && tabIdForTab(tab) === space.activeId;
+                return tab.kind === "terminal" ? (
+                  <XTermSurface active={active} key={tab.session.id} tab={tab} onResize={(cols, rows) => void resizeTerminal(tab.session.id, cols, rows).catch((error) => setToast({ tone: "error", message: asMessage(error) }))} />
+                ) : (
+                  <BrowserSurface active={active} key={tab.browser.id} setToast={setToast} tab={tab} onAddressChange={(value) => updateBrowserAddress(tab.browser.id, value)} onBrowserUpdate={(browser) => updateBrowserSession(browser)} />
+                );
+              })}
               {!space.tabs.length ? (<div className="xterm-empty-state"><EmptyState title="No terminal open" body="Open a tab for the selected project." /></div>) : null}
             </div>
           </div>
@@ -932,6 +1056,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
           <div className="terminal-space is-active terminal-empty-space">
             <div className="terminal-tabs">
               <button aria-label="New terminal tab" className="icon-button terminal-tab-add" disabled={!canCreate} title="New terminal tab" type="button" onClick={() => void openCurrentProjectTab()}><PlusIcon /></button>
+              <button aria-label="Open browser" className="icon-button terminal-tab-add terminal-browser-button" disabled={!canCreate} title="Browser" type="button" onClick={() => void openBrowserProjectTab()}><GlobeIcon /></button>
               {agentClis.map((agent) => (
                 <button aria-label={agent.label} className="icon-button terminal-tab-add terminal-agent-button" disabled={!canCreate} key={agent.id} title={agent.label} type="button" onClick={() => void openAgentProjectTab(agent)}>
                   <AgentCliIcon agent={agent} />
@@ -946,7 +1071,64 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   );
 });
 
-function XTermSurface({ active, onResize, tab }: { active: boolean; onResize: (cols: number, rows: number) => void; tab: TerminalTab }) {
+function BrowserSurface({
+  active,
+  onAddressChange,
+  onBrowserUpdate,
+  setToast,
+  tab,
+}: {
+  active: boolean;
+  onAddressChange: (value: string) => void;
+  onBrowserUpdate: (browser: BrowserSession) => void;
+  setToast: (toast: Toast) => void;
+  tab: BrowserTab;
+}) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const resize = () => {
+      const bounds = active && hostRef.current ? browserBoundsForElement(hostRef.current) : hiddenBrowserBounds();
+      void resizeBrowser(tab.browser.id, bounds, active).catch((error) => setToast({ tone: "error", message: asMessage(error) }));
+    };
+    const frame = window.requestAnimationFrame(resize);
+    const observer = new ResizeObserver(() => resize());
+    if (hostRef.current) observer.observe(hostRef.current);
+    window.addEventListener("resize", resize);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener("resize", resize);
+      void resizeBrowser(tab.browser.id, hiddenBrowserBounds(), false).catch(() => undefined);
+    };
+  }, [active, setToast, tab.browser.id]);
+
+  async function submitAddress(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    try {
+      const browser = await navigateBrowser(tab.browser.id, tab.addressValue);
+      onBrowserUpdate(browser);
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    }
+  }
+
+  return (
+    <div aria-hidden={!active} className={cx("browser-surface", active && "is-active")}>
+      <div className="browser-toolbar">
+        <button aria-label="Back" className="icon-button browser-tool-button" disabled={!tab.browser.canGoBack} title="Back" type="button" onClick={() => void browserAction("goBack", tab.browser.id).catch((error) => setToast({ tone: "error", message: asMessage(error) }))}><ArrowLeftIcon /></button>
+        <button aria-label="Forward" className="icon-button browser-tool-button" disabled={!tab.browser.canGoForward} title="Forward" type="button" onClick={() => void browserAction("goForward", tab.browser.id).catch((error) => setToast({ tone: "error", message: asMessage(error) }))}><ArrowRightIcon /></button>
+        <button aria-label="Reload" className="icon-button browser-tool-button" title="Reload" type="button" onClick={() => void browserAction("reload", tab.browser.id).catch((error) => setToast({ tone: "error", message: asMessage(error) }))}><RefreshIcon /></button>
+        <form className="browser-address-form" onSubmit={(event) => void submitAddress(event)}>
+          <input aria-label="Browser address" className="browser-address-input" placeholder="about:blank" value={tab.addressValue} onChange={(event) => onAddressChange(event.target.value)} />
+        </form>
+      </div>
+      <div className="browser-view-host" ref={hostRef} />
+    </div>
+  );
+}
+
+function XTermSurface({ active, onResize, tab }: { active: boolean; onResize: (cols: number, rows: number) => void; tab: TerminalShellTab }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const openedRef = useRef(false);
   useEffect(() => { if (!hostRef.current || openedRef.current) return; tab.terminal.open(hostRef.current); openedRef.current = true; }, [tab]);
@@ -975,13 +1157,24 @@ function createXTerm(sessionId: string, appearanceTheme: AppearanceTheme, setToa
   return { instance, fitAddon, disposables: [inputDisposable] };
 }
 
-function findTerminalTab(spaces: Record<string, TerminalSpace>, sessionId: string): TerminalTab | null {
+function findTerminalTab(spaces: Record<string, TerminalSpace>, sessionId: string): TerminalShellTab | null {
   return findTerminalTabWithSpace(spaces, sessionId)?.tab ?? null;
 }
 
-function findTerminalTabWithSpace(spaces: Record<string, TerminalSpace>, sessionId: string): { space: TerminalSpace; tab: TerminalTab; index: number } | null {
+function findTerminalTabWithSpace(spaces: Record<string, TerminalSpace>, sessionId: string): { space: TerminalSpace; tab: TerminalShellTab; index: number } | null {
   for (const space of Object.values(spaces)) {
-    const index = space.tabs.findIndex((tab) => tab.session.id === sessionId);
+    const index = space.tabs.findIndex((tab) => tab.kind === "terminal" && tab.session.id === sessionId);
+    if (index >= 0) {
+      const tab = space.tabs[index];
+      if (tab?.kind === "terminal") return { space, tab, index };
+    }
+  }
+  return null;
+}
+
+function findTabWithSpace(spaces: Record<string, TerminalSpace>, tabId: string): { space: TerminalSpace; tab: TerminalTab; index: number } | null {
+  for (const space of Object.values(spaces)) {
+    const index = space.tabs.findIndex((tab) => tabIdForTab(tab) === tabId);
     if (index >= 0) { const tab = space.tabs[index]; if (tab) return { space, tab, index }; }
   }
   return null;
@@ -992,13 +1185,62 @@ function isCurrentOpenTerminalTab(spaces: Record<string, TerminalSpace>, session
   return Boolean(match && match.space.projectId === activeProjectId && match.space.activeId === sessionId);
 }
 
-function mapTerminalTab(spaces: Record<string, TerminalSpace>, sessionId: string, mapTab: (tab: TerminalTab) => TerminalTab): Record<string, TerminalSpace> {
+function mapTerminalTab(spaces: Record<string, TerminalSpace>, sessionId: string, mapTab: (tab: TerminalShellTab) => TerminalShellTab): Record<string, TerminalSpace> {
+  return mapTabById(spaces, sessionId, (tab) => tab.kind === "terminal" ? mapTab(tab) : tab);
+}
+
+function mapBrowserTab(spaces: Record<string, TerminalSpace>, browserId: string, mapTab: (tab: BrowserTab) => BrowserTab): Record<string, TerminalSpace> {
+  return mapTabById(spaces, browserId, (tab) => tab.kind === "browser" ? mapTab(tab) : tab);
+}
+
+function mapTabById(spaces: Record<string, TerminalSpace>, tabId: string, mapTab: (tab: TerminalTab) => TerminalTab): Record<string, TerminalSpace> {
   let changed = false;
   const nextSpaces = Object.fromEntries(Object.entries(spaces).map(([projectId, space]) => {
-    const nextTabs = space.tabs.map((tab) => { if (tab.session.id !== sessionId) return tab; changed = true; return mapTab(tab); });
-    return [projectId, changed ? { ...space, tabs: nextTabs } : space];
+    let spaceChanged = false;
+    const nextTabs = space.tabs.map((tab) => {
+      if (tabIdForTab(tab) !== tabId) return tab;
+      spaceChanged = true;
+      changed = true;
+      return mapTab(tab);
+    });
+    return [projectId, spaceChanged ? { ...space, tabs: nextTabs } : space];
   }));
   return changed ? nextSpaces : spaces;
+}
+
+function terminalActivitySpaces(spaces: TerminalSpace[]) {
+  return spaces.map((space) => ({
+    projectId: space.projectId,
+    tabs: space.tabs
+      .filter((tab): tab is TerminalShellTab => tab.kind === "terminal")
+      .map((tab) => ({ activityState: tab.activityState, session: tab.session })),
+  }));
+}
+
+function isRunningServiceTab(tab: TerminalTab): boolean {
+  return tab.kind === "terminal" && Boolean(tab.session.service) && tab.session.status === "running";
+}
+
+function tabIdForTab(tab: TerminalTab): string {
+  return tab.kind === "terminal" ? tab.session.id : tab.browser.id;
+}
+
+function titleForTab(tab: TerminalTab): string {
+  return tab.kind === "terminal" ? tab.session.title : tab.browser.title || "Browser";
+}
+
+function hiddenBrowserBounds(): BrowserBounds {
+  return { x: -10000, y: -10000, width: 1, height: 1 };
+}
+
+function browserBoundsForElement(element: HTMLElement): BrowserBounds {
+  const rect = element.getBoundingClientRect();
+  return {
+    x: Math.max(0, Math.round(rect.left)),
+    y: Math.max(0, Math.round(rect.top)),
+    width: Math.max(0, Math.round(rect.width)),
+    height: Math.max(0, Math.round(rect.height)),
+  };
 }
 
 function sameStringSet(left: Set<string>, right: Set<string>): boolean {
@@ -1494,8 +1736,20 @@ function ArrowLeftIcon() {
   return <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16"><path d="m15 18-6-6 6-6" /></svg>;
 }
 
+function ArrowRightIcon() {
+  return <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16"><path d="m9 18 6-6-6-6" /></svg>;
+}
+
 function PlusIcon() {
   return <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16"><path d="M12 5v14" /><path d="M5 12h14" /></svg>;
+}
+
+function RefreshIcon() {
+  return <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16"><path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" /></svg>;
+}
+
+function GlobeIcon() {
+  return <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16"><circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a15.3 15.3 0 0 1 0 20" /><path d="M12 2a15.3 15.3 0 0 0 0 20" /></svg>;
 }
 
 function AgentCliIcon({ agent }: { agent: AgentCli }) {

@@ -188,3 +188,47 @@ export type AgentProjectStatusEvent = {
   text: string;
   timestamp: string;
 };
+
+export type BrowserBounds = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type BrowserCreateInput = {
+  initialUrl: string;
+  bounds: BrowserBounds;
+};
+
+export type BrowserNavigateInput = {
+  browserId: string;
+  url: string;
+};
+
+export type BrowserResizeInput = {
+  browserId: string;
+  bounds: BrowserBounds;
+  active?: boolean;
+};
+
+export type BrowserCloseInput = {
+  browserId: string;
+};
+
+export type BrowserActionInput = {
+  browserId: string;
+};
+
+export type BrowserSession = {
+  id: string;
+  title: string;
+  url: string;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  loading: boolean;
+};
+
+export type BrowserUpdateEvent = {
+  browser: BrowserSession;
+};

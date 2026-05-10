@@ -312,6 +312,11 @@ textarea::placeholder {
   min-height: 0;
 }
 
+.dashboard-grid.is-terminal-focused .terminal-panel {
+  height: 100%;
+  margin-top: 0;
+}
+
 .column-resizer {
   display: grid;
   place-items: center;
@@ -1807,7 +1812,8 @@ button.project-file-toggle:focus-visible {
   background: #d8cfbf;
 }
 
-.terminal-tab-add + .terminal-agent-button,
+.terminal-tab-add + .terminal-browser-button,
+.terminal-browser-button + .terminal-agent-button,
 .terminal-agent-button + .terminal-agent-button {
   margin-left: 0;
 }
@@ -1958,6 +1964,63 @@ button.project-file-toggle:focus-visible {
 
 .xterm-surface.is-active {
   display: block;
+}
+
+.browser-surface {
+  position: absolute;
+  inset: 0;
+  display: none;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  min-width: 0;
+  background: #f7f1e4;
+}
+
+.browser-surface.is-active {
+  display: grid;
+}
+
+.browser-toolbar {
+  display: grid;
+  grid-template-columns: auto auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  background: #f7f1e4;
+  border-bottom: 1px solid #ded5c4;
+}
+
+.browser-tool-button {
+  width: 26px;
+  height: 26px;
+  background: #e8e0d2;
+  border-color: #d5ccbc;
+}
+
+.browser-address-form {
+  min-width: 0;
+}
+
+.browser-address-input {
+  width: 100%;
+  height: 28px;
+  color: #263235;
+  background: #fffdfa;
+  border: 1px solid #d5ccbc;
+  border-radius: 6px;
+  padding: 0 9px;
+  font: 12px/1.2 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+.browser-address-input:focus {
+  border-color: #8aa0a6;
+  outline: none;
+}
+
+.browser-view-host {
+  min-height: 0;
+  min-width: 0;
+  background: #fffdfa;
 }
 
 .xterm-surface .xterm {
@@ -2377,6 +2440,26 @@ button.project-file-toggle:focus-visible {
   border-bottom-color: #263639;
 }
 
+.app-shell[data-theme="night"] .browser-surface,
+.app-shell[data-theme="night"] .browser-toolbar {
+  background: #101719;
+}
+
+.app-shell[data-theme="night"] .browser-toolbar {
+  border-bottom-color: #263639;
+}
+
+.app-shell[data-theme="night"] .browser-tool-button,
+.app-shell[data-theme="night"] .browser-address-input {
+  color: #dbe7ff;
+  background: #182426;
+  border-color: #32474b;
+}
+
+.app-shell[data-theme="night"] .browser-view-host {
+  background: #101719;
+}
+
 .app-shell[data-theme="night"] .detail-tab-cards {
   background: #101719;
   border-bottom-color: #263639;
@@ -2524,7 +2607,24 @@ button.project-file-toggle:focus-visible {
 }
 
 .app-shell[data-theme="morning"] .terminal-space-stack,
-.app-shell[data-theme="morning"] .xterm-surface {
+.app-shell[data-theme="morning"] .xterm-surface,
+.app-shell[data-theme="morning"] .browser-surface,
+.app-shell[data-theme="morning"] .browser-toolbar {
+  background: #101719;
+}
+
+.app-shell[data-theme="morning"] .browser-toolbar {
+  border-bottom-color: #263639;
+}
+
+.app-shell[data-theme="morning"] .browser-tool-button,
+.app-shell[data-theme="morning"] .browser-address-input {
+  color: #dbe7ff;
+  background: #182426;
+  border-color: #32474b;
+}
+
+.app-shell[data-theme="morning"] .browser-view-host {
   background: #101719;
 }
 

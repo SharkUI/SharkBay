@@ -161,6 +161,50 @@ export type AgentProjectStatusEvent = {
   timestamp: string;
 };
 
+export type BrowserBounds = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type BrowserCreateInput = {
+  initialUrl: string;
+  bounds: BrowserBounds;
+};
+
+export type BrowserNavigateInput = {
+  browserId: string;
+  url: string;
+};
+
+export type BrowserResizeInput = {
+  browserId: string;
+  bounds: BrowserBounds;
+  active?: boolean;
+};
+
+export type BrowserCloseInput = {
+  browserId: string;
+};
+
+export type BrowserActionInput = {
+  browserId: string;
+};
+
+export type BrowserSession = {
+  id: string;
+  title: string;
+  url: string;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  loading: boolean;
+};
+
+export type BrowserUpdateEvent = {
+  browser: BrowserSession;
+};
+
 export type SharkBayBridge = {
   app?: {
     onOpenSettings?: (callback: () => void) => () => void;
@@ -184,6 +228,16 @@ export type SharkBayBridge = {
     onData?: (callback: (event: TerminalDataEvent) => void) => () => void;
     onExit?: (callback: (event: TerminalExitEvent) => void) => () => void;
     onUpdate?: (callback: (event: TerminalUpdateEvent) => void) => () => void;
+  };
+  browser?: {
+    create?: (input: BrowserCreateInput) => Promise<BrowserSession>;
+    navigate?: (input: BrowserNavigateInput) => Promise<BrowserSession>;
+    resize?: (input: BrowserResizeInput) => Promise<BrowserSession>;
+    close?: (input: BrowserCloseInput) => Promise<BrowserSession>;
+    goBack?: (input: BrowserActionInput) => Promise<BrowserSession>;
+    goForward?: (input: BrowserActionInput) => Promise<BrowserSession>;
+    reload?: (input: BrowserActionInput) => Promise<BrowserSession>;
+    onUpdate?: (callback: (event: BrowserUpdateEvent) => void) => () => void;
   };
   agents?: {
     listClis?: () => Promise<AgentCli[]>;

@@ -61,3 +61,22 @@ export function terminalActivityForCandidate(
 ): WorkflowProjectTerminalActivityState | null {
   return statesByProjectId[candidate.id] ?? statesByProjectId[candidate.path] ?? null;
 }
+
+export function firstHttpUrl(data: string): string | null {
+  const text = data.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, " ");
+  const urls = [...text.matchAll(/https?:\/\/[^\s'"<>）)]+/gu)].map((match) => match[0]).filter(Boolean);
+  return urls.find((url) => isLocalBrowserUrl(url)) ?? urls[0] ?? null;
+}
+
+export function shouldKeepCurrentServiceUrl(currentUrl: string | null, nextUrl: string): boolean {
+  return Boolean(currentUrl && isLocalBrowserUrl(currentUrl) && !isLocalBrowserUrl(nextUrl));
+}
+
+export function isLocalBrowserUrl(value: string): boolean {
+  try {
+    const hostname = new URL(value).hostname.toLowerCase();
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "0.0.0.0";
+  } catch {
+    return false;
+  }
+}

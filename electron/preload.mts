@@ -6,6 +6,13 @@ import type {
   AgentProjectStatusEvent,
   AppConfig,
   AppearanceThemeInput,
+  BrowserActionInput,
+  BrowserCloseInput,
+  BrowserCreateInput,
+  BrowserNavigateInput,
+  BrowserResizeInput,
+  BrowserSession,
+  BrowserUpdateEvent,
   ProjectScanInput,
   ProjectDetail,
   ProjectFilesInput,
@@ -79,6 +86,20 @@ const sharkBayApi = {
       const listener = (_event: Electron.IpcRendererEvent, payload: TerminalUpdateEvent) => callback(payload);
       ipcRenderer.on(channels.terminalUpdate, listener);
       return () => ipcRenderer.removeListener(channels.terminalUpdate, listener);
+    }
+  },
+  browser: {
+    create: (input: BrowserCreateInput) => invoke<BrowserSession>(channels.createBrowser, input),
+    navigate: (input: BrowserNavigateInput) => invoke<BrowserSession>(channels.browserNavigate, input),
+    resize: (input: BrowserResizeInput) => invoke<BrowserSession>(channels.browserResize, input),
+    close: (input: BrowserCloseInput) => invoke<BrowserSession>(channels.browserClose, input),
+    goBack: (input: BrowserActionInput) => invoke<BrowserSession>(channels.browserGoBack, input),
+    goForward: (input: BrowserActionInput) => invoke<BrowserSession>(channels.browserGoForward, input),
+    reload: (input: BrowserActionInput) => invoke<BrowserSession>(channels.browserReload, input),
+    onUpdate: (callback: (event: BrowserUpdateEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: BrowserUpdateEvent) => callback(payload);
+      ipcRenderer.on(channels.browserUpdate, listener);
+      return () => ipcRenderer.removeListener(channels.browserUpdate, listener);
     }
   },
   agents: {
