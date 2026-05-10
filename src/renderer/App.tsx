@@ -1474,17 +1474,25 @@ function GitHistoryItems({ events }: { events: NonNullable<ProjectDetail["gitHis
   const visible = events ?? [];
   return (
     <div className="decision-list">
-      {visible.map((event) => (
-        <div className="decision-item" key={`${event.selector}-${event.hash}-${event.date}`}>
-          <div className="decision-meta">
-            {event.hash.slice(0, 7)} / {event.selector}
+      {visible.map((event) => {
+        const actionMatch = /^([^:]+:)(?:\s*(.*))?$/u.exec(event.action);
+        return (
+          <div className="decision-item" key={`${event.selector}-${event.hash}-${event.date}`}>
+            <div className="decision-action">
+              {actionMatch ? (
+                <>
+                  <strong>{actionMatch[1]}</strong>
+                  {actionMatch[2] ? ` ${actionMatch[2]}` : null}
+                </>
+              ) : event.action}
+            </div>
+            <div className="decision-side-meta">
+              <span className="decision-meta">{event.hash.slice(0, 7)}</span>
+              <span className="history-time">{formatRelativeTime(event.date)}</span>
+            </div>
           </div>
-          <div>{event.action}</div>
-          <div className="history-time" title={formatHistoryTime(event.date)}>
-            {formatRelativeTime(event.date)}
-          </div>
-        </div>
-      ))}
+        );
+      })}
       {!visible.length ? <div className="muted-row">Restart SharkBay once to load Git history.</div> : null}
     </div>
   );
