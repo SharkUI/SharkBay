@@ -34,6 +34,8 @@ describe("renderer workflow contracts", () => {
     expect(shouldResetTerminalObservationForInput("\u001b[O")).toBe(false);
     expect(shouldResetTerminalObservationForInput("\u001b[O\u001b[I")).toBe(false);
     expect(shouldResetTerminalObservationForInput("\u001b[O\u001b[O")).toBe(false);
+    expect(shouldResetTerminalObservationForInput("\u001b[?1004h")).toBe(false);
+    expect(shouldResetTerminalObservationForInput("\u001b[?1004l")).toBe(false);
     expect(shouldResetTerminalObservationForInput("a")).toBe(true);
     expect(shouldResetTerminalObservationForInput("\r")).toBe(true);
     expect(shouldResetTerminalObservationForInput("\u001b[Oa")).toBe(true);

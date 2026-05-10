@@ -224,6 +224,7 @@ export type BrowserSession = {
   id: string;
   title: string;
   url: string;
+  faviconUrl: string | null;
   canGoBack: boolean;
   canGoForward: boolean;
   loading: boolean;

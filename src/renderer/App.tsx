@@ -745,7 +745,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const [spaces, setSpaces] = useState<Record<string, TerminalSpace>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const spacesRef = useRef<Record<string, TerminalSpace>>({});
-  const activeProjectIdRef = useRef<string | null>(null);
   const creatingProjects = useRef(new Set<string>());
   const quietTimers = useRef(new Map<string, ReturnType<typeof window.setTimeout>>());
   const selectedSpace = candidate?.id ? spaces[candidate.id] ?? null : null;
@@ -753,7 +752,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const services = candidate?.services ?? [];
 
   useEffect(() => { spacesRef.current = spaces; }, [spaces]);
-  useEffect(() => { activeProjectIdRef.current = activeProjectId; }, [activeProjectId]);
   useEffect(() => () => { for (const timer of quietTimers.current.values()) window.clearTimeout(timer); quietTimers.current.clear(); }, []);
 
   useEffect(() => {
@@ -896,8 +894,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     if (existingTimer) window.clearTimeout(existingTimer);
     const timer = window.setTimeout(() => {
       quietTimers.current.delete(sessionId);
-      const isCurrentTab = isCurrentOpenTerminalTab(spacesRef.current, sessionId, activeProjectIdRef.current);
-      setSpaces((current) => mapTerminalTab(current, sessionId, (currentTab) => ({ ...currentTab, activityState: currentTab.activityState === "working" && !isCurrentTab ? "done" : "idle", outputBurstStartedAt: null })));
+      setSpaces((current) => mapTerminalTab(current, sessionId, (currentTab) => ({ ...currentTab, activityState: "idle", outputBurstStartedAt: null })));
     }, terminalQuietDoneMs);
     quietTimers.current.set(sessionId, timer);
   }
@@ -1029,7 +1026,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                           {tab.kind === "terminal" ? (
                             <span className={cx("terminal-state", tab.session.service && tab.session.status === "running" && "is-service-running", tab.activityState === "working" && "is-working", !isActiveTab && tab.activityState === "done" && "is-done", tab.session.status === "exited" && "is-exited")} />
                           ) : (
-                            <GlobeIcon />
+                            <BrowserTabIcon browser={tab.browser} />
                           )}
                           <span className="truncate">{tabTitle}</span>
                         </button>
@@ -1199,11 +1196,6 @@ function findTabWithSpace(spaces: Record<string, TerminalSpace>, tabId: string):
   return null;
 }
 
-function isCurrentOpenTerminalTab(spaces: Record<string, TerminalSpace>, sessionId: string, activeProjectId: string | null): boolean {
-  const match = findTerminalTabWithSpace(spaces, sessionId);
-  return Boolean(match && match.space.projectId === activeProjectId && match.space.activeId === sessionId);
-}
-
 function mapTerminalTab(spaces: Record<string, TerminalSpace>, sessionId: string, mapTab: (tab: TerminalShellTab) => TerminalShellTab): Record<string, TerminalSpace> {
   return mapTabById(spaces, sessionId, (tab) => tab.kind === "terminal" ? mapTab(tab) : tab);
 }
@@ -1346,6 +1338,17 @@ function ProjectIcon({ name, sources }: { name: string; sources: NonNullable<Pro
           return sources.length;
         })}
       />
+    </span>
+  );
+}
+
+function BrowserTabIcon({ browser }: { browser: BrowserSession }) {
+  const [failed, setFailed] = useState(false);
+  const imageUrl = !failed && browser.faviconUrl ? browser.faviconUrl : defaultProjectIconUrl;
+  useEffect(() => { setFailed(false); }, [browser.faviconUrl]);
+  return (
+    <span className={cx("browser-tab-icon", !browser.faviconUrl || failed ? "is-default" : "has-favicon")} aria-hidden="true">
+      <img alt="" draggable={false} src={imageUrl} onError={() => setFailed(true)} />
     </span>
   );
 }
@@ -1601,6 +1604,7 @@ function ProjectFileTreeItemRow({ item, level, expandedDirectories, loadingDirec
             }
           }}
         >
+          <ProjectFileIcon item={item} expanded={expanded} />
           <span className="project-file-name">{item.name}</span>
         </button>
       </div>
@@ -1609,6 +1613,37 @@ function ProjectFileTreeItemRow({ item, level, expandedDirectories, loadingDirec
       )) : null}
     </>
   );
+}
+
+function ProjectFileIcon({ item, expanded }: { item: ProjectFileTreeItem; expanded: boolean }) {
+  if (item.kind === "directory") {
+    return (
+      <span className={cx("project-file-icon", "is-folder", expanded && "is-open")} aria-hidden="true">
+        <svg viewBox="0 0 16 16" focusable="false">
+          <path d={expanded ? "M2 5.2h12.1v1.7H2z" : "M2 4.4h4.7l1.2 1.2H14v1.7H2z"} />
+          <path d={expanded ? "M2.4 6.4h11.2l-1 5.2H3.4z" : "M2.6 6.4h10.8v5.2H2.6z"} />
+        </svg>
+      </span>
+    );
+  }
+  return (
+    <span className={cx("project-file-icon", fileIconClassName(item.name))} aria-hidden="true">
+      <svg viewBox="0 0 16 16" focusable="false">
+        <path d="M4 2.2h5.5L12 4.7v9.1H4z" />
+        <path d="M9.3 2.4v2.7h2.5" />
+      </svg>
+    </span>
+  );
+}
+
+function fileIconClassName(fileName: string): string {
+  const lower = fileName.toLowerCase();
+  if (/\.(tsx?|jsx?|mjs|cjs)$/u.test(lower)) return "is-code";
+  if (/\.(css|scss|sass|less|html)$/u.test(lower)) return "is-style";
+  if (/\.(json|ya?ml|toml|ini|env(?:\..*)?)$/u.test(lower) || lower.startsWith(".env")) return "is-config";
+  if (/\.(md|mdx|txt|rst)$/u.test(lower)) return "is-doc";
+  if (/\.(png|jpe?g|gif|webp|svg|ico)$/u.test(lower)) return "is-image";
+  return "is-file";
 }
 
 function updateProjectFileChildren(items: ProjectFileTreeItem[], targetPath: string, children: ProjectFileTreeItem[]): ProjectFileTreeItem[] {

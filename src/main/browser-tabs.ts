@@ -18,6 +18,7 @@ type BrowserRecord = {
   window: BrowserWindow;
   title: string;
   url: string;
+  faviconUrl: string | null;
   loading: boolean;
   attached: boolean;
 };
@@ -47,6 +48,7 @@ export class BrowserManager extends EventEmitter<BrowserManagerEvents> {
       window,
       title: "Browser",
       url: normalizeBrowserUrl(input.initialUrl),
+      faviconUrl: null,
       loading: false,
       attached: false,
     };
@@ -60,8 +62,13 @@ export class BrowserManager extends EventEmitter<BrowserManagerEvents> {
       record.title = title.trim() || titleForUrl(record.url);
       this.emitUpdate(record);
     });
+    view.webContents.on("page-favicon-updated", (_event, favicons) => {
+      record.faviconUrl = firstUsableFaviconUrl(favicons);
+      this.emitUpdate(record);
+    });
     view.webContents.on("did-start-loading", () => {
       record.loading = true;
+      record.faviconUrl = null;
       this.emitUpdate(record);
     });
     view.webContents.on("did-stop-loading", () => {
@@ -90,6 +97,7 @@ export class BrowserManager extends EventEmitter<BrowserManagerEvents> {
     const url = normalizeBrowserUrl(input.url);
     record.url = url;
     record.title = titleForUrl(url);
+    record.faviconUrl = null;
     void record.view.webContents.loadURL(url);
     this.emitUpdate(record);
     return publicBrowserSession(record);
@@ -228,6 +236,7 @@ function publicBrowserSession(record: BrowserRecord): BrowserSession {
     id: record.id,
     title: record.title || titleForUrl(currentUrl),
     url: currentUrl,
+    faviconUrl: record.faviconUrl,
     canGoBack: !record.view.webContents.isDestroyed() && record.view.webContents.canGoBack(),
     canGoForward: !record.view.webContents.isDestroyed() && record.view.webContents.canGoForward(),
     loading: record.loading,
@@ -243,11 +252,23 @@ function titleForUrl(url: string): string {
   }
 }
 
+function firstUsableFaviconUrl(favicons: string[]): string | null {
+  return favicons.find((favicon) => {
+    try {
+      const parsed = new URL(favicon);
+      return parsed.protocol === "http:" || parsed.protocol === "https:" || parsed.protocol === "data:";
+    } catch {
+      return false;
+    }
+  }) ?? null;
+}
+
 function missingBrowserSession(id: string): BrowserSession {
   return {
     id,
     title: "Browser",
     url: blankUrl,
+    faviconUrl: null,
     canGoBack: false,
     canGoForward: false,
     loading: false,

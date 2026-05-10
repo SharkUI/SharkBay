@@ -402,7 +402,8 @@ body.is-resizing-columns * {
   height: calc(100% - var(--workbench-edge-inset));
   margin-top: var(--workbench-edge-inset);
   background: #eee7da;
-  border-color: #d8d1c4;
+  border-color: #e3dccf;
+  border-radius: 0;
   padding: 0;
 }
 
@@ -1167,8 +1168,9 @@ button.project-file-toggle:focus-visible {
 
 .project-file-action {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: 16px minmax(0, 1fr);
   align-items: center;
+  gap: 6px;
   min-width: 0;
   color: inherit;
   font: inherit;
@@ -1184,6 +1186,45 @@ button.project-file-toggle:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.project-file-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: #81908d;
+}
+
+.project-file-icon svg {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+  stroke: none;
+}
+
+.project-file-icon.is-folder {
+  color: #a37f39;
+}
+
+.project-file-icon.is-code {
+  color: #3d7b9c;
+}
+
+.project-file-icon.is-style {
+  color: #8b5fa8;
+}
+
+.project-file-icon.is-config {
+  color: #7b8870;
+}
+
+.project-file-icon.is-doc {
+  color: #667f9d;
+}
+
+.project-file-icon.is-image {
+  color: #9a6b74;
 }
 
 .artifact-panel {
@@ -1869,6 +1910,27 @@ button.project-file-toggle:focus-visible {
   border: 0;
   padding: 0;
   text-align: left;
+}
+
+.browser-tab-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  overflow: hidden;
+  border-radius: 3px;
+}
+
+.browser-tab-icon img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.browser-tab-icon.is-default {
+  padding: 1px;
+  background: #d8cfbf;
 }
 
 .terminal-state {
