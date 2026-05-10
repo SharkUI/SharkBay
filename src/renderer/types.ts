@@ -145,6 +145,22 @@ export type TerminalUpdateEvent = {
   session: TerminalSession;
 };
 
+export type AgentCli = {
+  id: string;
+  label: string;
+  command: string;
+  executablePath: string;
+  shortLabel: string;
+};
+
+export type AgentProjectStatusEvent = {
+  agentId: string;
+  projectPath: string;
+  sessionId: string | null;
+  text: string;
+  timestamp: string;
+};
+
 export type SharkBayBridge = {
   app?: {
     onOpenSettings?: (callback: () => void) => () => void;
@@ -168,5 +184,9 @@ export type SharkBayBridge = {
     onData?: (callback: (event: TerminalDataEvent) => void) => () => void;
     onExit?: (callback: (event: TerminalExitEvent) => void) => () => void;
     onUpdate?: (callback: (event: TerminalUpdateEvent) => void) => () => void;
+  };
+  agents?: {
+    listClis?: () => Promise<AgentCli[]>;
+    onStatus?: (callback: (event: AgentProjectStatusEvent) => void) => () => void;
   };
 };

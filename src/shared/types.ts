@@ -172,3 +172,19 @@ export type TerminalExitEvent = {
 export type TerminalUpdateEvent = {
   session: TerminalSession;
 };
+
+export type AgentCli = {
+  id: string;
+  label: string;
+  command: string;
+  executablePath: string;
+  shortLabel: string;
+};
+
+export type AgentProjectStatusEvent = {
+  agentId: string;
+  projectPath: string;
+  sessionId: string | null;
+  text: string;
+  timestamp: string;
+};

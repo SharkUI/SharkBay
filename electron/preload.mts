@@ -2,12 +2,14 @@ import { contextBridge, ipcRenderer } from "electron";
 import { appChannels } from "../src/shared/app-events.js";
 import { ipcChannels as channels } from "../src/shared/ipc-channels.js";
 import type {
+  AgentCli,
+  AgentProjectStatusEvent,
   AppConfig,
   AppearanceThemeInput,
+  ProjectScanInput,
   ProjectDetail,
   ProjectFilesInput,
   ProjectFilesResult,
-  ProjectScanInput,
   RemoveRootInput,
   RootConfigInput,
   ScanProjectsResult,
@@ -77,6 +79,14 @@ const sharkBayApi = {
       const listener = (_event: Electron.IpcRendererEvent, payload: TerminalUpdateEvent) => callback(payload);
       ipcRenderer.on(channels.terminalUpdate, listener);
       return () => ipcRenderer.removeListener(channels.terminalUpdate, listener);
+    }
+  },
+  agents: {
+    listClis: () => invoke<AgentCli[]>(channels.listAgentClis),
+    onStatus: (callback: (event: AgentProjectStatusEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: AgentProjectStatusEvent) => callback(payload);
+      ipcRenderer.on(channels.agentStatus, listener);
+      return () => ipcRenderer.removeListener(channels.agentStatus, listener);
     }
   }
 };

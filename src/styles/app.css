@@ -1807,6 +1807,27 @@ button.project-file-toggle:focus-visible {
   background: #d8cfbf;
 }
 
+.terminal-tab-add + .terminal-agent-button,
+.terminal-agent-button + .terminal-agent-button {
+  margin-left: 0;
+}
+
+.terminal-agent-button svg {
+  fill: currentColor;
+  stroke: none;
+}
+
+.agent-cli-monogram {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
 .terminal-tab {
   display: grid;
   grid-template-columns: minmax(40px, 1fr) auto;

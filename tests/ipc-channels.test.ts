@@ -18,6 +18,8 @@ describe("IPC channels", () => {
       terminalData: "terminal:data",
       terminalUpdate: "terminal:update",
       terminalExit: "terminal:exit",
+      listAgentClis: "agents:listClis",
+      agentStatus: "agents:status",
     });
     expect(Object.values(ipcChannels).some((channel) => channel.startsWith("harness:"))).toBe(false);
   });

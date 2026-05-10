@@ -10,13 +10,15 @@ import { scanProjects } from "../src/main/scanner.js";
 import { readGitMetadata, readGitHistory, readGitDirtyFiles } from "../src/main/git.js";
 import { TerminalManager } from "../src/main/terminal.js";
 import type {
+  AgentCli,
+  AgentProjectStatusEvent,
   AppConfig,
   AppearanceTheme,
   AppearanceThemeInput,
+  ProjectScanInput,
   ProjectDetail,
   ProjectFilesInput,
   ProjectFilesResult,
-  ProjectScanInput,
   RemoveRootInput,
   RootConfigInput,
   ScanProjectsResult,
@@ -28,6 +30,7 @@ import type {
   TerminalUpdateEvent
 } from "../src/shared/types.js";
 import { ipcChannels as channels } from "../src/shared/ipc-channels.js";
+import { AgentSessionWatcher, listAvailableAgentClis } from "../src/main/agent-clis.js";
 import { resolveProjectIconSources } from "../src/main/project-icons.js";
 import { resolveRepoPath } from "../src/main/path-safety.js";
 import path from "node:path";
@@ -41,6 +44,7 @@ export type IpcCallbacks = {
 };
 
 const terminalManager = new TerminalManager();
+const agentSessionWatcher = new AgentSessionWatcher();
 
 export function closeAllTerminalSessions(): void {
   terminalManager.closeAll();
@@ -84,6 +88,7 @@ export function registerIpcHandlers(
   terminalManager.removeAllListeners("data");
   terminalManager.removeAllListeners("update");
   terminalManager.removeAllListeners("exit");
+  agentSessionWatcher.removeAllListeners("status");
   terminalManager.on("data", (event) => {
     BrowserWindow.getAllWindows().forEach((window) => {
       window.webContents.send(channels.terminalData, event);
@@ -99,6 +104,12 @@ export function registerIpcHandlers(
       window.webContents.send(channels.terminalExit, event);
     });
   });
+  agentSessionWatcher.on("status", (event: AgentProjectStatusEvent) => {
+    BrowserWindow.getAllWindows().forEach((window) => {
+      window.webContents.send(channels.agentStatus, event);
+    });
+  });
+  agentSessionWatcher.start();
 
   handle<void, AppConfig>(channels.listRoots, () => getConfiguredRoots(runtime));
   handle<RootConfigInput, AppConfig>(channels.addRoot, (payload) => addConfiguredRoot(runtime, payload));
@@ -119,6 +130,7 @@ export function registerIpcHandlers(
     const configuredRoots = (await getConfiguredRoots(runtime)).configuredRoots;
     return listProjectFiles(runtime, { ...payload, configuredRoots });
   });
+  handle<void, AgentCli[]>(channels.listAgentClis, () => listAvailableAgentClis());
   handle<TerminalCreateInput, TerminalSession>(channels.createTerminal, (payload) =>
     terminalManager.create(runtime, payload)
   );

@@ -13,4 +13,6 @@ export const ipcChannels = {
   terminalData: "terminal:data",
   terminalUpdate: "terminal:update",
   terminalExit: "terminal:exit",
+  listAgentClis: "agents:listClis",
+  agentStatus: "agents:status",
 } as const;
