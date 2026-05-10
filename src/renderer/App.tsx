@@ -812,7 +812,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
 
   async function openAgentProjectTab(agent: AgentCli) {
     if (!candidate?.path) return;
-    await openProjectTab(candidate.id, candidate.path, candidate.name, false, { initialCommand: agent.command });
+    await openProjectTab(candidate.id, candidate.path, candidate.name, false, { initialCommand: shellQuote(agent.executablePath || agent.command) });
   }
 
   async function openBrowserProjectTab() {
@@ -1394,7 +1394,7 @@ function ProjectDetailPane({ detail, candidate, setToast, onRefresh, onOpenFileI
         ))}
       </div>
       <div aria-labelledby="project-detail-tab-git" className="detail-tab-panel" hidden={activeDetailTab !== "git"} id="project-detail-tabpanel-git" role="tabpanel">
-        <GitDetailTab detail={detail} candidate={candidate} setToast={setToast} onOpenGitDiff={onOpenGitDiff} />
+        <GitDetailTab detail={detail} candidate={candidate} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} />
       </div>
       <div aria-labelledby="project-detail-tab-files" className="detail-tab-panel" hidden={activeDetailTab !== "files"} id="project-detail-tabpanel-files" role="tabpanel">
         <FilesDetailTab active={activeDetailTab === "files"} candidate={candidate} detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} />
@@ -1403,11 +1403,11 @@ function ProjectDetailPane({ detail, candidate, setToast, onRefresh, onOpenFileI
   );
 }
 
-function GitDetailTab({ detail, candidate, setToast, onOpenGitDiff }: { detail: ProjectDetail | null; candidate: ProjectCandidate; setToast: (toast: Toast) => void; onOpenGitDiff: (relativePath: string) => Promise<void> }) {
+function GitDetailTab({ detail, candidate, setToast, onOpenFileInEditor, onOpenGitDiff }: { detail: ProjectDetail | null; candidate: ProjectCandidate; setToast: (toast: Toast) => void; onOpenFileInEditor: (relativePath: string) => Promise<void>; onOpenGitDiff: (relativePath: string) => Promise<void> }) {
   return (
     <>
       <ProjectFactsCard detail={detail} candidate={candidate} />
-      <DirtyFilesPanel detail={detail} setToast={setToast} onOpenGitDiff={onOpenGitDiff} />
+      <DirtyFilesPanel detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} />
       {detail?.gitHistory?.length || detail?.currentBranch ? (
         <GitHistoryItems events={detail?.gitHistory ?? []} />
       ) : (
@@ -1443,7 +1443,7 @@ function ProjectFactsCard({ detail, candidate }: { detail: ProjectDetail | null;
   );
 }
 
-function DirtyFilesPanel({ detail, setToast, onOpenGitDiff }: { detail: ProjectDetail | null; setToast: (toast: Toast) => void; onOpenGitDiff: (relativePath: string) => Promise<void> }) {
+function DirtyFilesPanel({ detail, setToast, onOpenFileInEditor, onOpenGitDiff }: { detail: ProjectDetail | null; setToast: (toast: Toast) => void; onOpenFileInEditor: (relativePath: string) => Promise<void>; onOpenGitDiff: (relativePath: string) => Promise<void> }) {
   const files = detail?.gitDirtyFiles ?? [];
   if (!files.length) return null;
   return (
@@ -1459,7 +1459,7 @@ function DirtyFilesPanel({ detail, setToast, onOpenGitDiff }: { detail: ProjectD
             key={`${file.status}-${file.path}`}
             title={`${file.status} ${file.path}`}
             type="button"
-            onDoubleClick={() => void onOpenGitDiff(file.path).catch((error) => setToast({ tone: "error", message: asMessage(error) }))}
+            onDoubleClick={() => void (file.status === "??" ? onOpenFileInEditor(file.path) : onOpenGitDiff(file.path)).catch((error) => setToast({ tone: "error", message: asMessage(error) }))}
           >
             <span className="dirty-file-status">{file.status}</span>
             <span className="dirty-file-path">{file.path}</span>

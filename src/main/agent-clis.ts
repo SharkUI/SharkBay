@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { promises as fs } from "node:fs";
+import { constants as fsConstants, promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -51,6 +51,19 @@ const agentCliDefinitions: AgentCliDefinition[] = [
   { id: "deepseek", label: "DeepSeek TUI", commands: ["deepseek"], shortLabel: "D" },
   { id: "qwen", label: "Qwen Code", commands: ["qwen", "qwen-code", "qianwen"], shortLabel: "Q" },
   { id: "opencode", label: "OpenCode", commands: ["opencode"], shortLabel: "O" },
+];
+
+const fallbackCommandDirectories = [
+  ".local/bin",
+  ".bun/bin",
+  ".nvm/current/bin",
+  "/opt/homebrew/bin",
+  "/opt/homebrew/sbin",
+  "/usr/local/bin",
+  "/usr/bin",
+  "/bin",
+  "/usr/sbin",
+  "/sbin",
 ];
 
 export async function listAvailableAgentClis(): Promise<AgentCli[]> {
@@ -243,7 +256,7 @@ function statusFromJsonLine(line: string, state: AgentSessionState): string | nu
 
 async function resolveAgentCli(definition: AgentCliDefinition): Promise<AgentCli | null> {
   for (const command of definition.commands) {
-    const executablePath = await commandPath(command);
+    const executablePath = await resolveCommandPath(command);
     if (executablePath) {
       return {
         id: definition.id,
@@ -257,13 +270,39 @@ async function resolveAgentCli(definition: AgentCliDefinition): Promise<AgentCli
   return null;
 }
 
-async function commandPath(command: string): Promise<string | null> {
+export async function resolveCommandPath(
+  command: string,
+  fallbackDirectories = fallbackCommandDirectories,
+  homeDirectory = os.homedir()
+): Promise<string | null> {
   if (!/^[\w.-]+$/u.test(command)) return null;
   try {
     const result = await execFileAsync("/bin/zsh", ["-lc", `command -v ${command}`], { timeout: 3000 });
-    return result.stdout.trim().split(/\r?\n/u)[0] ?? null;
+    const firstPath = result.stdout.trim().split(/\r?\n/u)[0] ?? null;
+    if (firstPath) return firstPath;
   } catch {
-    return null;
+    // Finder-launched macOS apps often start with a sparse PATH. Fall through to
+    // common install locations used by local developer CLIs.
+  }
+
+  for (const directory of fallbackDirectories) {
+    const executablePath = directory.startsWith("/")
+      ? path.join(directory, command)
+      : path.join(homeDirectory, directory, command);
+    if (await isExecutableFile(executablePath)) {
+      return executablePath;
+    }
+  }
+  return null;
+}
+
+async function isExecutableFile(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath, fsConstants.X_OK);
+    const stat = await fs.stat(filePath);
+    return stat.isFile();
+  } catch {
+    return false;
   }
 }
 
