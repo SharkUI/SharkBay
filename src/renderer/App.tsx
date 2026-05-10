@@ -75,6 +75,7 @@ type BrowserTab = {
 };
 
 type TerminalTab = TerminalShellTab | BrowserTab;
+type ActiveTerminalTabKind = TerminalTab["kind"] | null;
 
 type TerminalSpace = {
   projectId: string;
@@ -560,22 +561,23 @@ function DashboardView({
   const [terminalActivityByProjectId, setTerminalActivityByProjectId] = useState<Record<string, ProjectTerminalActivityState>>({});
   const [agentClis, setAgentClis] = useState<AgentCli[]>([]);
   const [agentStatusByProjectPath, setAgentStatusByProjectPath] = useState<AgentStatusByProjectPath>({});
-  const [terminalFocusMode, setTerminalFocusMode] = useState(false);
+  const [activeTerminalTabKind, setActiveTerminalTabKind] = useState<ActiveTerminalTabKind>(null);
   const [projectColumnWidth, setProjectColumnWidth] = useState(() =>
     storedColumnWidth(projectColumnStorageKey, defaultProjectColumnWidth, minProjectColumnWidth),
   );
   const [detailColumnWidth, setDetailColumnWidth] = useState(() =>
     storedColumnWidth(detailColumnStorageKey, defaultDetailColumnWidth, minDetailColumnWidth),
   );
+  const detailPanelHidden = activeTerminalTabKind === "browser";
 
-  function normalizeColumnWidths(projectWidth: number, detailWidth: number, gridWidth: number) {
-    const availableWidth = gridWidth - resizerColumnWidth * 2;
-    const minimumWidth = minProjectColumnWidth + minDetailColumnWidth + minTerminalColumnWidth;
+  function normalizeColumnWidths(projectWidth: number, detailWidth: number, gridWidth: number, detailHidden = detailPanelHidden) {
+    const availableWidth = gridWidth - resizerColumnWidth * (detailHidden ? 1 : 2);
+    const minimumWidth = minProjectColumnWidth + minTerminalColumnWidth + (detailHidden ? 0 : minDetailColumnWidth);
     if (availableWidth <= minimumWidth) {
-      return { projectWidth: minProjectColumnWidth, detailWidth: minDetailColumnWidth };
+      return { projectWidth: minProjectColumnWidth, detailWidth: detailHidden ? detailWidth : minDetailColumnWidth };
     }
-    const nextProjectWidth = clamp(projectWidth, minProjectColumnWidth, availableWidth - minDetailColumnWidth - minTerminalColumnWidth);
-    const nextDetailWidth = clamp(detailWidth, minDetailColumnWidth, availableWidth - nextProjectWidth - minTerminalColumnWidth);
+    const nextProjectWidth = clamp(projectWidth, minProjectColumnWidth, availableWidth - minTerminalColumnWidth - (detailHidden ? 0 : minDetailColumnWidth));
+    const nextDetailWidth = detailHidden ? detailWidth : clamp(detailWidth, minDetailColumnWidth, availableWidth - nextProjectWidth - minTerminalColumnWidth);
     return { projectWidth: Math.round(nextProjectWidth), detailWidth: Math.round(nextDetailWidth) };
   }
 
@@ -627,7 +629,7 @@ function DashboardView({
     });
     observer.observe(grid);
     return () => observer.disconnect();
-  }, [detailColumnWidth, projectColumnWidth]);
+  }, [detailColumnWidth, detailPanelHidden, projectColumnWidth]);
 
   useEffect(() => {
     if (!bridgeAvailable) return;
@@ -651,14 +653,14 @@ function DashboardView({
   }, [bridgeAvailable]);
 
   const gridStyle = {
-    gridTemplateColumns: terminalFocusMode
-      ? "minmax(0, 1fr)"
+    gridTemplateColumns: detailPanelHidden
+      ? `${projectColumnWidth}px ${resizerColumnWidth}px minmax(${minTerminalColumnWidth}px, 1fr) 0px 0px`
       : `${projectColumnWidth}px ${resizerColumnWidth}px minmax(${minTerminalColumnWidth}px, 1fr) ${resizerColumnWidth}px ${detailColumnWidth}px`,
   } satisfies CSSProperties;
 
   return (
-    <div className={cx("dashboard-grid", terminalFocusMode && "is-terminal-focused")} ref={gridRef} style={gridStyle}>
-      <section className="project-panel" hidden={terminalFocusMode}>
+    <div className={cx("dashboard-grid", detailPanelHidden && "is-detail-hidden")} ref={gridRef} style={gridStyle}>
+      <section className="project-panel">
         <div className="project-window-drag-strip" aria-hidden="true" />
         {scanErrors.length ? (
           <div className="inline-errors">
@@ -677,7 +679,7 @@ function DashboardView({
         </div>
       </section>
 
-      <div aria-label="Resize project column" aria-orientation="vertical" className="column-resizer" hidden={terminalFocusMode} role="separator" tabIndex={0}
+      <div aria-label="Resize project column" aria-orientation="vertical" className="column-resizer" role="separator" tabIndex={0}
         onKeyDown={(event) => resizeWithKeyboard("project", event)}
         onPointerDown={(event) => startColumnResize("project", event)}
       />
@@ -691,7 +693,7 @@ function DashboardView({
           bridgeAvailable={bridgeAvailable}
           isVisible={isVisible}
           setToast={setToast}
-          onToggleFocusMode={() => setTerminalFocusMode((value) => !value)}
+          onActiveTabKindChange={setActiveTerminalTabKind}
           onRunningServiceProjectIdsChange={(nextIds) =>
             setRunningServiceProjectIds((currentIds) => sameStringSet(currentIds, nextIds) ? currentIds : nextIds)
           }
@@ -701,12 +703,13 @@ function DashboardView({
         />
       </section>
 
-      <div aria-label="Resize terminal and detail columns" aria-orientation="vertical" className="column-resizer" hidden={terminalFocusMode} role="separator" tabIndex={0}
+      <div aria-label="Resize terminal and detail columns" aria-orientation="vertical" className="column-resizer detail-column-resizer" role="separator" tabIndex={detailPanelHidden ? -1 : 0}
+        aria-hidden={detailPanelHidden}
         onKeyDown={(event) => resizeWithKeyboard("detail", event)}
         onPointerDown={(event) => startColumnResize("detail", event)}
       />
 
-      <section className="detail-panel" hidden={terminalFocusMode}>
+      <section className="detail-panel" aria-hidden={detailPanelHidden}>
         {selectedCandidate ? (
           <ProjectDetailPane
             detail={detail}
@@ -735,10 +738,10 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   candidate: ProjectCandidate | null;
   isVisible: boolean;
   setToast: (toast: Toast) => void;
-  onToggleFocusMode: () => void;
+  onActiveTabKindChange: (kind: ActiveTerminalTabKind) => void;
   onRunningServiceProjectIdsChange: (projectIds: Set<string>) => void;
   onTerminalActivityProjectStatesChange: (states: Record<string, ProjectTerminalActivityState>) => void;
-}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, isVisible, setToast, onToggleFocusMode, onRunningServiceProjectIdsChange, onTerminalActivityProjectStatesChange }, ref) {
+}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, isVisible, setToast, onActiveTabKindChange, onRunningServiceProjectIdsChange, onTerminalActivityProjectStatesChange }, ref) {
   const [spaces, setSpaces] = useState<Record<string, TerminalSpace>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const spacesRef = useRef<Record<string, TerminalSpace>>({});
@@ -761,6 +764,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   }, [onRunningServiceProjectIdsChange, spaces]);
 
   useEffect(() => { onTerminalActivityProjectStatesChange(projectTerminalActivityStates(terminalActivitySpaces(Object.values(spaces)))); }, [onTerminalActivityProjectStatesChange, spaces]);
+  useEffect(() => { onActiveTabKindChange(activeTabKindForProject(spaces, activeProjectId)); }, [activeProjectId, onActiveTabKindChange, spaces]);
 
   useEffect(() => {
     for (const space of Object.values(spacesRef.current)) {
@@ -831,6 +835,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       const session = await createTerminal(cwd, projectName, options);
       const terminal = createXTerm(session.id, appearanceTheme, setToast, recordTerminalInputActivity);
       const tab: TerminalTab = { kind: "terminal", session, terminal: terminal.instance, fitAddon: terminal.fitAddon, disposables: terminal.disposables, activityState: "idle", outputBurstStartedAt: null };
+      onActiveTabKindChange("terminal");
       setSpaces((current) => {
         const existing = current[projectId] ?? { projectId, projectName, path: cwd, tabs: [], activeId: null, serviceUrl: null };
         return { ...current, [projectId]: { ...existing, projectName, path: cwd, tabs: [...existing.tabs, tab], activeId: session.id } };
@@ -843,6 +848,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     try {
       const browser = await createBrowser(initialUrl);
       const tab: TerminalTab = { kind: "browser", browser, addressValue: browser.url === "about:blank" ? "" : browser.url };
+      onActiveTabKindChange("browser");
       setSpaces((current) => {
         const existing = current[projectId] ?? { projectId, projectName, path: cwd, tabs: [], activeId: null, serviceUrl: null };
         return { ...current, [projectId]: { ...existing, projectName, path: cwd, tabs: [...existing.tabs, tab], activeId: browser.id } };
@@ -975,6 +981,8 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   }
 
   function setActiveTab(projectId: string, sessionId: string) {
+    const nextKind = tabKindForId(spacesRef.current[projectId], sessionId);
+    onActiveTabKindChange(nextKind);
     setSpaces((current) => {
       const space = current[projectId];
       if (!space) return current;
@@ -1017,7 +1025,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                     const tabTitle = titleForTab(tab);
                     return (
                       <div className={cx("terminal-tab", isActiveTab && "is-active")} key={tabId} role="tab" aria-selected={isActiveTab}>
-                        <button className="terminal-tab-main" type="button" onClick={() => { setActiveTab(space.projectId, tabId); if (tab.kind === "terminal") clearTerminalDoneState(tab.session.id); }} onDoubleClick={onToggleFocusMode}>
+                        <button className="terminal-tab-main" type="button" onClick={() => { setActiveTab(space.projectId, tabId); if (tab.kind === "terminal") clearTerminalDoneState(tab.session.id); }}>
                           {tab.kind === "terminal" ? (
                             <span className={cx("terminal-state", tab.session.service && tab.session.status === "running" && "is-service-running", tab.activityState === "working" && "is-working", !isActiveTab && tab.activityState === "done" && "is-done", tab.session.status === "exited" && "is-exited")} />
                           ) : (
@@ -1087,18 +1095,29 @@ function BrowserSurface({
   const hostRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    let frame = 0;
+    let secondFrame = 0;
     const resize = () => {
       const bounds = active && hostRef.current ? browserBoundsForElement(hostRef.current) : hiddenBrowserBounds();
+      if (active && (!bounds.width || !bounds.height)) return;
       void resizeBrowser(tab.browser.id, bounds, active).catch((error) => setToast({ tone: "error", message: asMessage(error) }));
     };
-    const frame = window.requestAnimationFrame(resize);
-    const observer = new ResizeObserver(() => resize());
+    const scheduleResize = () => {
+      window.cancelAnimationFrame(frame);
+      window.cancelAnimationFrame(secondFrame);
+      frame = window.requestAnimationFrame(() => {
+        secondFrame = window.requestAnimationFrame(resize);
+      });
+    };
+    scheduleResize();
+    const observer = new ResizeObserver(() => scheduleResize());
     if (hostRef.current) observer.observe(hostRef.current);
-    window.addEventListener("resize", resize);
+    window.addEventListener("resize", scheduleResize);
     return () => {
       window.cancelAnimationFrame(frame);
+      window.cancelAnimationFrame(secondFrame);
       observer.disconnect();
-      window.removeEventListener("resize", resize);
+      window.removeEventListener("resize", scheduleResize);
       void resizeBrowser(tab.browser.id, hiddenBrowserBounds(), false).catch(() => undefined);
     };
   }, [active, setToast, tab.browser.id]);
@@ -1227,6 +1246,17 @@ function tabIdForTab(tab: TerminalTab): string {
 
 function titleForTab(tab: TerminalTab): string {
   return tab.kind === "terminal" ? tab.session.title : tab.browser.title || "Browser";
+}
+
+function activeTabKindForProject(spaces: Record<string, TerminalSpace>, activeProjectId: string | null): ActiveTerminalTabKind {
+  if (!activeProjectId) return null;
+  const space = spaces[activeProjectId];
+  return tabKindForId(space, space?.activeId ?? null);
+}
+
+function tabKindForId(space: TerminalSpace | null | undefined, tabId: string | null): ActiveTerminalTabKind {
+  if (!space || !tabId) return null;
+  return space.tabs.find((tab) => tabIdForTab(tab) === tabId)?.kind ?? null;
 }
 
 function hiddenBrowserBounds(): BrowserBounds {

@@ -19,6 +19,7 @@ type BrowserRecord = {
   title: string;
   url: string;
   loading: boolean;
+  attached: boolean;
 };
 
 type BrowserManagerEvents = {
@@ -47,11 +48,10 @@ export class BrowserManager extends EventEmitter<BrowserManagerEvents> {
       title: "Browser",
       url: normalizeBrowserUrl(input.initialUrl),
       loading: false,
+      attached: false,
     };
 
     this.records.set(id, record);
-    window.addBrowserView(view);
-    setBrowserBounds(view, input.bounds);
     view.webContents.setWindowOpenHandler(({ url }) => {
       void shell.openExternal(url);
       return { action: "deny" };
@@ -102,12 +102,13 @@ export class BrowserManager extends EventEmitter<BrowserManagerEvents> {
     }
     if (input.active) {
       this.hideOtherViews(record);
+      this.attach(record);
       setBrowserBounds(record.view, input.bounds);
       if (!record.window.isDestroyed()) {
         record.window.setTopBrowserView(record.view);
       }
     } else {
-      setBrowserBounds(record.view, hiddenBrowserBounds);
+      this.detach(record);
     }
     return publicBrowserSession(record);
   }
@@ -119,7 +120,7 @@ export class BrowserManager extends EventEmitter<BrowserManagerEvents> {
     }
     const session = publicBrowserSession(record);
     this.records.delete(record.id);
-    if (!record.window.isDestroyed()) {
+    if (record.attached && !record.window.isDestroyed()) {
       record.window.removeBrowserView(record.view);
     }
     if (!record.view.webContents.isDestroyed()) {
@@ -171,8 +172,20 @@ export class BrowserManager extends EventEmitter<BrowserManagerEvents> {
   private hideOtherViews(activeRecord: BrowserRecord): void {
     for (const record of this.records.values()) {
       if (record.id === activeRecord.id || record.window !== activeRecord.window) continue;
-      setBrowserBounds(record.view, hiddenBrowserBounds);
+      this.detach(record);
     }
+  }
+
+  private attach(record: BrowserRecord): void {
+    if (record.attached || record.window.isDestroyed()) return;
+    record.window.addBrowserView(record.view);
+    record.attached = true;
+  }
+
+  private detach(record: BrowserRecord): void {
+    if (!record.attached || record.window.isDestroyed()) return;
+    record.window.removeBrowserView(record.view);
+    record.attached = false;
   }
 }
 
@@ -200,8 +213,6 @@ function setBrowserBounds(view: BrowserView, bounds: BrowserBounds): void {
     height: positiveDimension(bounds.height),
   });
 }
-
-const hiddenBrowserBounds: BrowserBounds = { x: -10000, y: -10000, width: 1, height: 1 };
 
 function integer(value: number): number {
   return Number.isFinite(value) ? Math.round(value) : 0;
