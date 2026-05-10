@@ -824,7 +824,7 @@ body.is-resizing-columns * {
   border: 0;
 }
 
-.terminal-activity-pill.is-idle {
+.terminal-activity-pill.is-attention {
   color: #ffffff;
   background: #c9962f;
   border: 0;
@@ -1827,33 +1827,41 @@ button.project-file-toggle:focus-visible {
 
 .terminal-tabs {
   display: flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 38px;
-  padding: 6px 8px;
-  border-bottom: 1px solid #d8d1c4;
+  align-items: flex-end;
+  gap: 2px;
+  min-height: 36px;
+  padding: 4px 8px 0;
+  background: #e5ded1;
+  border-bottom: 0;
 }
 
 .terminal-tab-list {
   display: flex;
   flex: 1 1 auto;
-  gap: 5px;
+  align-items: flex-end;
+  gap: 0;
   min-width: 0;
   overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.terminal-tab-list::-webkit-scrollbar {
+  display: none;
 }
 
 .terminal-tab-add {
   flex: 0 0 auto;
   margin-left: auto;
   color: #4f5c5f;
-  background: #e5ded1;
-  border-color: #d1c8b8;
+  background: transparent;
+  border-color: transparent;
+  margin-bottom: 4px;
 }
 
 .terminal-tab-add:hover,
 .terminal-tab-add:focus-visible {
   color: #263235;
-  background: #d8cfbf;
+  background: rgba(38, 50, 53, 0.08);
 }
 
 .terminal-tab-add + .terminal-browser-button,
@@ -1879,24 +1887,53 @@ button.project-file-toggle:focus-visible {
 }
 
 .terminal-tab {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(40px, 1fr) auto;
   align-items: center;
-  gap: 2px;
-  max-width: 190px;
-  min-height: 26px;
-  color: #5d6668;
-  background: #e8e0d2;
-  border: 1px solid #d5ccbc;
-  border-radius: 6px;
-  padding: 3px 6px;
+  gap: 4px;
+  max-width: 210px;
+  min-height: 31px;
+  color: #5b6668;
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 9px 9px 0 0;
+  margin-bottom: 0;
+  padding: 4px 8px 4px 10px;
   font-size: 12px;
+}
+
+.terminal-tab:not(.is-active)::after {
+  position: absolute;
+  top: 9px;
+  right: 0;
+  bottom: 8px;
+  width: 1px;
+  background: rgba(87, 93, 91, 0.18);
+  content: "";
+}
+
+.terminal-tab:not(.is-active):hover,
+.terminal-tab:not(.is-active):focus-within {
+  color: #263235;
+  background: rgba(255, 253, 250, 0.45);
+}
+
+.terminal-tab:not(.is-active):hover::after,
+.terminal-tab:not(.is-active):focus-within::after {
+  opacity: 0;
+}
+
+.terminal-tab:not(.is-active):has(+ .terminal-tab.is-active)::after {
+  opacity: 0;
 }
 
 .terminal-tab.is-active {
   color: #263235;
-  background: #fffdfa;
-  border-color: #c9bda9;
+  background: #f7f1e4;
+  border-color: transparent;
+  box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.7), 1px 0 0 rgba(255, 255, 255, 0.32), -1px 0 0 rgba(255, 255, 255, 0.32);
 }
 
 .terminal-tab-main {
@@ -1963,13 +2000,15 @@ button.project-file-toggle:focus-visible {
 .terminal-tab-close {
   display: grid;
   place-items: center;
-  width: 16px;
-  height: 16px;
-  color: #7a817f;
+  width: 18px;
+  height: 18px;
+  color: #8b9492;
   background: transparent;
   border: 0;
-  border-radius: 4px;
+  border-radius: 999px;
   padding: 0;
+  font-size: 12px;
+  line-height: 1;
 }
 
 .terminal-tab-close:hover,
@@ -2143,6 +2182,12 @@ button.project-file-toggle:focus-visible {
   background: transparent;
   border-color: transparent;
   box-shadow: none;
+}
+
+.app-shell[data-theme="night"] .column-resizer:hover::before,
+.app-shell[data-theme="night"] .column-resizer:focus-visible::before,
+body.is-resizing-columns .app-shell[data-theme="night"] .column-resizer::before {
+  background: #31474b;
 }
 
 .app-shell[data-theme="night"] .terminal-panel {
@@ -2324,7 +2369,7 @@ button.project-file-toggle:focus-visible {
   border-color: rgba(215, 189, 120, 0.18);
 }
 
-.app-shell[data-theme="night"] .terminal-activity-pill.is-idle {
+.app-shell[data-theme="night"] .terminal-activity-pill.is-attention {
   color: #ffffff;
   background: #c9962f;
   border: 0;
@@ -2464,17 +2509,40 @@ button.project-file-toggle:focus-visible {
   box-shadow: 0 0 0 3px rgba(120, 169, 255, 0.14);
 }
 
-.app-shell[data-theme="night"] .terminal-tab-add,
-.app-shell[data-theme="night"] .terminal-tab {
+.app-shell[data-theme="night"] .terminal-tabs {
+  background: #172022;
+  border-bottom: 0;
+}
+
+.app-shell[data-theme="night"] .terminal-tab-add {
   color: #cbd9f7;
-  background: #1d2a2d;
-  border-color: #2c3c3f;
+  background: transparent;
+  border-color: transparent;
+}
+
+.app-shell[data-theme="night"] .terminal-tab {
+  color: #b7c7c2;
+  background: transparent;
+  border-color: transparent;
+}
+
+.app-shell[data-theme="night"] .terminal-tab:not(.is-active)::after {
+  background: rgba(203, 217, 247, 0.16);
+}
+
+.app-shell[data-theme="night"] .terminal-tab:not(.is-active):hover,
+.app-shell[data-theme="night"] .terminal-tab:not(.is-active):focus-within,
+.app-shell[data-theme="night"] .terminal-tab-add:hover,
+.app-shell[data-theme="night"] .terminal-tab-add:focus-visible {
+  color: #ffffff;
+  background: #223235;
 }
 
 .app-shell[data-theme="night"] .terminal-tab.is-active {
   color: #ffffff;
-  background: #2b4448;
-  border-color: #4e6d73;
+  background: #101719;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .app-shell[data-theme="night"] .terminal-state {
@@ -2499,10 +2567,6 @@ button.project-file-toggle:focus-visible {
 .app-shell[data-theme="night"] .terminal-state.is-service-running {
   background: #78a9ff;
   box-shadow: 0 0 0 3px rgba(120, 169, 255, 0.14);
-}
-
-.app-shell[data-theme="night"] .terminal-tabs {
-  border-bottom-color: #263639;
 }
 
 .app-shell[data-theme="night"] .browser-surface,
@@ -2576,6 +2640,12 @@ button.project-file-toggle:focus-visible {
   box-shadow: 0 1px 0 rgba(32, 49, 54, 0.04);
 }
 
+.app-shell[data-theme="morning"] .column-resizer:hover::before,
+.app-shell[data-theme="morning"] .column-resizer:focus-visible::before,
+body.is-resizing-columns .app-shell[data-theme="morning"] .column-resizer::before {
+  background: #31474b;
+}
+
 .app-shell[data-theme="morning"] .terminal-layout {
   color: #d9e5df;
 }
@@ -2611,30 +2681,42 @@ button.project-file-toggle:focus-visible {
 
 .app-shell[data-theme="morning"] .terminal-tab-add {
   color: #b7c7c2;
-  background: #223235;
-  border-color: #31474b;
+  background: transparent;
+  border-color: transparent;
 }
 
 .app-shell[data-theme="morning"] .terminal-tab-add:hover,
 .app-shell[data-theme="morning"] .terminal-tab-add:focus-visible {
   color: #ffffff;
-  background: #2d4448;
+  background: #223235;
 }
 
 .app-shell[data-theme="morning"] .terminal-tabs {
-  border-bottom-color: #263639;
+  background: #172022;
+  border-bottom: 0;
 }
 
 .app-shell[data-theme="morning"] .terminal-tab {
   color: #b9c9c4;
-  background: #1d2a2d;
-  border-color: #2c3c3f;
+  background: transparent;
+  border-color: transparent;
+}
+
+.app-shell[data-theme="morning"] .terminal-tab:not(.is-active)::after {
+  background: rgba(203, 217, 247, 0.16);
+}
+
+.app-shell[data-theme="morning"] .terminal-tab:not(.is-active):hover,
+.app-shell[data-theme="morning"] .terminal-tab:not(.is-active):focus-within {
+  color: #ffffff;
+  background: #223235;
 }
 
 .app-shell[data-theme="morning"] .terminal-tab.is-active {
   color: #ffffff;
-  background: #2b4448;
-  border-color: #4e6d73;
+  background: #101719;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .app-shell[data-theme="morning"] .terminal-state {

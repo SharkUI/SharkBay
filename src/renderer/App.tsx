@@ -745,6 +745,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const [spaces, setSpaces] = useState<Record<string, TerminalSpace>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const spacesRef = useRef<Record<string, TerminalSpace>>({});
+  const activeProjectIdRef = useRef<string | null>(null);
   const creatingProjects = useRef(new Set<string>());
   const quietTimers = useRef(new Map<string, ReturnType<typeof window.setTimeout>>());
   const selectedSpace = candidate?.id ? spaces[candidate.id] ?? null : null;
@@ -752,6 +753,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const services = candidate?.services ?? [];
 
   useEffect(() => { spacesRef.current = spaces; }, [spaces]);
+  useEffect(() => { activeProjectIdRef.current = activeProjectId; }, [activeProjectId]);
   useEffect(() => () => { for (const timer of quietTimers.current.values()) window.clearTimeout(timer); quietTimers.current.clear(); }, []);
 
   useEffect(() => {
@@ -894,7 +896,8 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     if (existingTimer) window.clearTimeout(existingTimer);
     const timer = window.setTimeout(() => {
       quietTimers.current.delete(sessionId);
-      setSpaces((current) => mapTerminalTab(current, sessionId, (currentTab) => ({ ...currentTab, activityState: "idle", outputBurstStartedAt: null })));
+      const isCurrentTab = isCurrentOpenTerminalTab(spacesRef.current, sessionId, activeProjectIdRef.current);
+      setSpaces((current) => mapTerminalTab(current, sessionId, (currentTab) => ({ ...currentTab, activityState: currentTab.activityState === "working" && !isCurrentTab ? "done" : "idle", outputBurstStartedAt: null })));
     }, terminalQuietDoneMs);
     quietTimers.current.set(sessionId, timer);
   }
@@ -1196,6 +1199,11 @@ function findTabWithSpace(spaces: Record<string, TerminalSpace>, tabId: string):
   return null;
 }
 
+function isCurrentOpenTerminalTab(spaces: Record<string, TerminalSpace>, sessionId: string, activeProjectId: string | null): boolean {
+  const match = findTerminalTabWithSpace(spaces, sessionId);
+  return Boolean(match && match.space.projectId === activeProjectId && match.space.activeId === sessionId);
+}
+
 function mapTerminalTab(spaces: Record<string, TerminalSpace>, sessionId: string, mapTab: (tab: TerminalShellTab) => TerminalShellTab): Record<string, TerminalSpace> {
   return mapTabById(spaces, sessionId, (tab) => tab.kind === "terminal" ? mapTab(tab) : tab);
 }
@@ -1292,7 +1300,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, runningServiceProje
         {candidates.map((candidate) => {
           const hasRunningService = runningServiceProjectIds.has(candidate.id);
           const terminalActivity = terminalActivityForCandidate(candidate, terminalActivityByProjectId);
-          const hasProjectStatus = Boolean(terminalActivity) || candidate.dirtyWorktree === true;
+          const hasProjectStatus = Boolean(terminalActivity);
           const subtitle = agentStatusByProjectPath[candidate.path] ?? candidate.path;
           return (
             <button className={cx("project-row", selectedId === candidate.id && "is-selected")} key={candidate.id} onClick={() => onSelect(candidate.id)}>
@@ -1307,9 +1315,8 @@ function ProjectList({ agentStatusByProjectPath, candidates, runningServiceProje
               {hasProjectStatus ? (
                 <span className="project-row-status">
                   {terminalActivity ? (
-                    <span className={cx("terminal-activity-pill", terminalActivity === "working" ? "is-working" : "is-idle")}>{terminalActivity}</span>
+                    <span className={cx("terminal-activity-pill", terminalActivity === "working" ? "is-working" : "is-attention")}>{terminalActivity === "working" ? "working" : "attention"}</span>
                   ) : null}
-                  {candidate.dirtyWorktree === true ? <span className="worktree-pill is-dirty">dirty</span> : null}
                 </span>
               ) : null}
             </button>
