@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SharkBay Tasks UI Mockup</title>
+    <link rel="stylesheet" href="../../src/styles/app.css" />
+    <style>
+      .mock-dashboard {
+        grid-template-columns: 300px 12px minmax(520px, 1fr) 12px 390px;
+      }
+
+      .mock-agent-icon {
+        display: grid;
+        place-items: center;
+        width: 16px;
+        height: 16px;
+        color: #203136;
+        background: #dbe9e4;
+        border: 1px solid #c9ddd6;
+        border-radius: 50%;
+        font-size: 9px;
+        font-weight: 800;
+      }
+
+      .xterm-surface.mock-xterm {
+        display: none;
+        padding: 14px;
+        color: #d9e5df;
+        background: #101719;
+        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.55;
+        white-space: pre-wrap;
+      }
+
+      .xterm-surface.mock-xterm.is-active {
+        display: block;
+      }
+
+      .mock-xterm .prompt {
+        color: #93d7a4;
+      }
+
+      .mock-xterm .muted {
+        color: #8fa2a0;
+      }
+
+      .task-list-direct {
+        margin-top: 2px;
+      }
+
+      .task-list-direct[hidden],
+      .mock-task-detail[hidden] {
+        display: none;
+      }
+
+      .task-main-line {
+        display: flex;
+        align-items: baseline;
+        gap: 7px;
+        min-width: 0;
+      }
+
+      .task-main-line strong {
+        flex: 0 0 auto;
+      }
+
+      .task-title {
+        min-width: 0;
+        overflow: hidden;
+        color: #203136;
+        font-weight: 700;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .phase-waiting {
+        color: #6f4c00;
+        background: #fff0b8;
+        border-color: #e4c96d;
+      }
+
+      .teamwork-attention {
+        color: #7e3028;
+        background: #fbebe6;
+        border-color: #edc7bf;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell" data-theme="day">
+      <main class="workspace">
+        <div class="workspace-body">
+          <div class="view-surface">
+            <div class="dashboard-grid mock-dashboard">
+              <section class="project-panel">
+                <div class="project-window-drag-strip" aria-hidden="true"></div>
+                <div class="project-sections">
+                  <section class="project-section">
+                    <div class="project-list" aria-label="Projects">
+                      <button class="project-row is-selected" type="button">
+                        <span class="project-icon is-default" aria-hidden="true">
+                          <img alt="" draggable="false" src="../../src/renderer/assets/shark-fin.png" />
+                        </span>
+                        <span class="project-row-main">
+                          <span class="cell-title">
+                            <span class="cell-title-text truncate">SharkBay</span>
+                          </span>
+                          <span class="cell-subtitle truncate">Codex: updated Tasks UI design</span>
+                        </span>
+                        <span class="project-row-status">
+                          <span class="terminal-activity-pill is-attention">attention</span>
+                        </span>
+                      </button>
+
+                      <button class="project-row" type="button">
+                        <span class="project-icon is-default" aria-hidden="true">
+                          <img alt="" draggable="false" src="../../src/renderer/assets/shark-fin.png" />
+                        </span>
+                        <span class="project-row-main">
+                          <span class="cell-title">
+                            <span class="cell-title-text truncate">Zygnal</span>
+                          </span>
+                          <span class="cell-subtitle truncate">Context synced 1h ago</span>
+                        </span>
+                        <span class="project-row-status">
+                          <span class="terminal-activity-pill is-idle">idle</span>
+                        </span>
+                      </button>
+                    </div>
+                  </section>
+                </div>
+              </section>
+
+              <div class="column-resizer project-column-resizer" role="separator" aria-label="Resize project and terminal columns"></div>
+
+              <section class="terminal-panel">
+                <div class="terminal-layout">
+                  <div class="terminal-header">
+                    <div>
+                      <h3>SharkBay</h3>
+                      <div class="path-line">/Users/shark/Projects/SharkBay-generic</div>
+                    </div>
+                  </div>
+
+                  <div class="terminal-space-stack">
+                    <div class="terminal-space is-active">
+                      <div class="terminal-tabs">
+                        <div class="terminal-tab-list" role="tablist" aria-label="Terminal tabs">
+                          <div class="terminal-tab is-active" role="tab" aria-selected="true">
+                            <button class="terminal-tab-main" type="button">
+                              <span class="terminal-state is-working"></span>
+                              <span class="truncate">Codex</span>
+                            </button>
+                            <button aria-label="Close Codex" class="terminal-tab-close" type="button">x</button>
+                          </div>
+                          <div class="terminal-tab" role="tab" aria-selected="false">
+                            <button class="terminal-tab-main" type="button">
+                              <span class="browser-tab-icon is-default" aria-hidden="true">◎</span>
+                              <span class="truncate">Browser</span>
+                            </button>
+                            <button aria-label="Close Browser" class="terminal-tab-close" type="button">x</button>
+                          </div>
+                        </div>
+                        <button aria-label="New terminal tab" class="icon-button terminal-tab-add" type="button">+</button>
+                        <button aria-label="Open browser" class="icon-button terminal-tab-add terminal-browser-button" type="button">◎</button>
+                        <button aria-label="Codex CLI" class="icon-button terminal-tab-add terminal-agent-button" type="button">
+                          <span class="mock-agent-icon">Cx</span>
+                        </button>
+                        <button aria-label="Claude Code" class="icon-button terminal-tab-add terminal-agent-button" type="button">
+                          <span class="mock-agent-icon">Cl</span>
+                        </button>
+                      </div>
+
+                      <div class="xterm-surface-stack">
+                        <div class="xterm-surface is-active mock-xterm" aria-hidden="false"><span class="muted">SHARKBAY_CONTEXT_FILE=.sharkbay/context/context-pack.md</span>
+<span class="prompt">$ codex</span>
+Read active tasks and file claims. Keep the UI design scoped to the existing Project detail tab.
+
+Changed:
+  docs/shared/teamwork-design.html
+  docs/shared/teamwork-ui-mockup.html
+
+Next:
+  verify the mockup matches SharkBay's three-column layout.</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <div class="column-resizer detail-column-resizer" role="separator" aria-label="Resize terminal and detail columns"></div>
+
+              <section class="detail-panel">
+                <div class="detail-layout">
+                  <div class="detail-tab-cards" role="tablist" aria-label="Project detail sections">
+                    <button class="detail-tab-card is-active" type="button">Tasks</button>
+                    <button class="detail-tab-card" type="button">Git</button>
+                    <button class="detail-tab-card" type="button">Files</button>
+                  </div>
+
+                  <div class="detail-tab-panel">
+                    <section class="subpanel project-facts-card">
+                      <div class="panel-title-row compact-title-row">
+                        <h4>Teamwork</h4>
+                        <span class="worktree-pill is-clean">connected</span>
+                      </div>
+                      <div class="project-facts-list">
+                        <div class="repository-fact"><span>Repo</span><strong>SharkUI/SharkBay · teamwork</strong></div>
+                        <div class="repository-fact"><span>GitHub</span><strong>SharkUI · admin</strong></div>
+                        <div class="repository-fact"><span>Context</span><strong>last synced 12m ago · 1 pending sync</strong></div>
+                        <div class="repository-fact"><span>Worktree</span><strong>SharkBay-generic · 3 active tasks · 2 claimed files · 1 unowned dirty</strong></div>
+                        <div class="repository-fact"><span>Harness</span><strong>claim guard active · .sharkbay ignored</strong></div>
+                      </div>
+                    </section>
+
+                    <div class="queue-list task-list-direct" id="task-list">
+                      <button class="queue-item" type="button" data-open-task="Q6">
+                        <span>
+                          <span class="task-main-line"><strong>Q6</strong><span class="task-title">Fix dirty file open fallback</span></span>
+                          <small>synced · d25881c · 5m ago</small>
+                        </span>
+                        <span class="phase-pill phase-done">Done</span>
+                      </button>
+                      <button class="queue-item" type="button" data-open-task="Q5">
+                        <span>
+                          <span class="task-main-line"><strong>Q5</strong><span class="task-title">Refine project selection and git history styling</span></span>
+                          <small>synced · 451cf56 · 24m ago</small>
+                        </span>
+                        <span class="phase-pill phase-done">Done</span>
+                      </button>
+                      <button class="queue-item" type="button" data-open-task="T4">
+                        <span>
+                          <span class="task-main-line"><strong>T4</strong><span class="task-title">Update keyboard hints</span></span>
+                          <small>paused · dirty unowned file src/renderer/shortcuts.ts</small>
+                        </span>
+                        <span class="phase-pill phase-blocked">Paused</span>
+                      </button>
+                      <button class="queue-item" type="button" data-open-task="Q3">
+                        <span>
+                          <span class="task-main-line"><strong>Q3</strong><span class="task-title">Browser fullscreen shortcut</span></span>
+                          <small>waiting for docs/shared/teamwork-design.html · blocked by T1</small>
+                        </span>
+                        <span class="phase-pill phase-waiting">Waiting</span>
+                      </button>
+                      <button class="queue-item" type="button" data-open-task="T2">
+                        <span>
+                          <span class="task-main-line"><strong>T2</strong><span class="task-title">Document teamwork context design</span></span>
+                          <small>synced · 9f20b30 · yesterday</small>
+                        </span>
+                        <span class="phase-pill phase-done">Done</span>
+                      </button>
+                      <button class="queue-item is-current" type="button" data-open-task="T1">
+                        <span>
+                          <span class="task-main-line"><strong>T1</strong><span class="task-title">Document Tasks UI</span></span>
+                          <small>sync failed · 2 files · combined verification</small>
+                        </span>
+                        <span class="phase-pill phase-coding">Sync failed</span>
+                      </button>
+                    </div>
+
+                    <section class="subpanel task-detail-page mock-task-detail" id="task-detail" hidden>
+                      <div class="detail-header task-detail-header">
+                        <button aria-label="Back to tasks" class="icon-button" id="task-detail-back" title="Back to tasks" type="button">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none">
+                            <path d="M15 18l-6-6 6-6"></path>
+                          </svg>
+                        </button>
+                        <div>
+                          <h3>T1 Document Tasks UI</h3>
+                          <div class="path-line">SharkBay · task · sync failed</div>
+                        </div>
+                      </div>
+                      <section class="subpanel artifact-panel">
+                        <div class="task-detail-compact">
+                          <div class="metadata-list">
+                            <div class="metadata-row"><span>Status</span><strong>sync failed · retry available</strong></div>
+                            <div class="metadata-row"><span>Mode</span><strong>task · branch teamwork · base 9f20b30</strong></div>
+                            <div class="metadata-row"><span>Verify</span><strong>not run · combined worktree</strong></div>
+                            <div class="metadata-row"><span>Next</span><strong>retry sync after context branch push rejection</strong></div>
+                          </div>
+                          <p class="teamwork-summary">Acceptance: Tasks is one list with T/Q numbering. Task details hold file claims, sync state, verification and related runs.</p>
+                          <div class="dirty-file-list task-detail-claims">
+                            <button class="dirty-file-row" type="button">
+                              <span class="dirty-file-status">M</span>
+                              <span class="dirty-file-path">claimed · docs/shared/teamwork-design.html</span>
+                            </button>
+                            <button class="dirty-file-row" type="button">
+                              <span class="dirty-file-status">M</span>
+                              <span class="dirty-file-path">claimed · docs/shared/teamwork-ui-mockup.html</span>
+                            </button>
+                            <button class="dirty-file-row" type="button">
+                              <span class="dirty-file-status">!</span>
+                              <span class="dirty-file-path">blocks Q3 · docs/shared/teamwork-design.html</span>
+                            </button>
+                          </div>
+                        </div>
+                      </section>
+                    </section>
+
+                    <section class="subpanel dirty-files-card teamwork-attention">
+                      <div class="panel-title-row compact-title-row">
+                        <h4>Attention</h4>
+                        <span class="form-note">1 issue</span>
+                      </div>
+                      <div class="dirty-file-list">
+                        <button class="dirty-file-row" type="button">
+                          <span class="dirty-file-status">!</span>
+                          <span class="dirty-file-path">Context branch is not protected.</span>
+                        </button>
+                      </div>
+                    </section>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+    <script>
+      const taskList = document.getElementById("task-list");
+      const taskDetail = document.getElementById("task-detail");
+      const taskBack = document.getElementById("task-detail-back");
+
+      document.querySelectorAll("[data-open-task]").forEach((button) => {
+        button.addEventListener("click", () => {
+          taskList.hidden = true;
+          taskDetail.hidden = false;
+        });
+      });
+
+      taskBack.addEventListener("click", () => {
+        taskDetail.hidden = true;
+        taskList.hidden = false;
+      });
+    </script>
+  </body>
+</html>
