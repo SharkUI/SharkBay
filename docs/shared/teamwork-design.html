@@ -226,68 +226,60 @@
       <header>
         <h1>SharkBay Teamwork Feature Design</h1>
         <p class="subtitle">
-          SharkBay 的 Teamwork 功能目标是让小团队成员各自电脑上的 agent
-          共享项目上下文、工作记录和交接信息，同时保持 local-first，不引入
-          SharkBay 自己的账号系统。
+          Teamwork 的目标是让小团队成员各自电脑里的 agent 共享足够的项目工作上下文。
+          MVP 采用 local-first 文件协议：清晰的本地 instruction、Markdown task files、
+          completed task records，以及一个统一的 Tasks UI。
         </p>
         <div class="meta">
-          <span class="pill">Status: proposal</span>
+          <span class="pill">Status: simplified proposal</span>
           <span class="pill">Branch: teamwork</span>
-          <span class="pill">Date: 2026-05-11</span>
-          <span class="pill">Storage: GitHub repo context branch</span>
+          <span class="pill">Date: 2026-05-15</span>
+          <span class="pill">MVP: local file protocol</span>
         </div>
       </header>
 
       <section class="section panel accent">
         <div class="callout-title">Core Decision</div>
         <p>
-          Teamwork mode 使用 <code>gh</code> 作为 GitHub 身份和权限入口，使用
-          worktree-local <code>.sharkbay/</code> 保存 active tasks、file claims 和 harness 状态；
-          任务结束后再把 compact task record 导出到 GitHub repo 的专用 context
-          分支。Harness 不是启动 agent 的 wrapper，而是为 agent 提供可读、可执行、
-          可验证、可反馈的项目工作环境。长期产品和开发决策进入 <code>docs/</code>，
-          human-readable help site 由 SharkBay 本地生成。
+          SharkBay teamwork harness 在 MVP 中由
+          <strong>local instructions + Markdown task files + team task records</strong> 组成。
+          Agent 负责理解用户意图并维护 task files；SharkBay 负责读取这些文件、展示
+          Tasks UI，并把完成的 task record 同步到 team context branch。
         </p>
-        <pre>Local SharkBay app:
-- no SharkBay login
-- requires gh auth for Teamwork
-- stores active task states and file claims in .sharkbay/
-- syncs completed task records to the context branch
-- reads source docs from the normal code branch
-- generates local help site outside the repo
-- exposes team context through MCP</pre>
+        <pre>MVP building blocks:
+- local ignored instruction files
+- local Markdown task files
+- optional root-level ignored instruction adapters
+- completed task records in context branch
+- Tasks UI from local and team Markdown</pre>
       </section>
 
       <section class="section grid">
         <article class="panel">
           <h2>Management Model</h2>
           <p>
-            团队工作中的 agent 调用记录属于工作职责的一部分，默认可以在团队内透明。
-            Teamwork 的主要边界不是个人隐私，而是 secrets、客户数据、production
-            credentials 和本地 token。
+            团队工作中的 agent 输出属于工作职责的一部分，默认可以在团队内透明。
+            共享的是 task-level 工作摘要、变更结果、验证和 commit evidence。各家 CLI 的
+            session/transcript 继续由对应 client 自己管理。
           </p>
           <ul>
-            <li>团队成员可以看到 completed tasks、final summaries、agent run summaries 和 commit evidence。</li>
-            <li>GitHub Issues 是 task 的可选来源，不是唯一任务系统。</li>
-            <li>重要产品和开发决策走 <code>docs/</code>。</li>
-            <li>高风险内容需要 redaction 规则，避免把 secret 写入共享 context。</li>
-            <li>审计记录应该标明 GitHub actor、agent、branch、commit 和时间。</li>
+            <li>GitHub 身份和 repo 权限复用 <code>gh</code>。</li>
+            <li>GitHub Issues 可以作为 task 的来源或背景。</li>
+            <li>重要产品和开发决策仍进入 <code>docs/</code>。</li>
+            <li>Shared context 只保存适合团队审计和复用的工作记录。</li>
           </ul>
         </article>
 
         <article class="panel">
           <h2>Identity Model</h2>
           <p>
-            SharkBay 不做成员注册。Teamwork 功能要求本机安装并登录
-            <code>gh</code>，成员身份和 repo 权限完全复用 GitHub。
+            Teamwork 写入使用 <code>gh</code> 验证本机 GitHub 身份和 repo 权限，
+            成员身份复用 GitHub Collaborators。
           </p>
           <ul>
-            <li><code>gh api user</code> 提供 verified GitHub login 和 user id。</li>
-            <li>
-              <code>gh api repos/OWNER/REPO/collaborators/LOGIN/permission</code>
-              提供 permission 和 role_name。
-            </li>
-            <li>本地 <code>git config user.name</code> 和 <code>user.email</code> 只作为辅助信息。</li>
+            <li><code>gh api user</code> 提供 GitHub login、user id 和 avatar URL。</li>
+            <li><code>gh api repos/OWNER/REPO/collaborators/LOGIN/permission</code> 提供 repo permission。</li>
+            <li><code>machineId</code> 是本机本地生成的短 id，用于区分同一用户多台电脑。</li>
           </ul>
         </article>
       </section>
@@ -296,1134 +288,543 @@
         <h2>Architecture</h2>
         <div class="flow" aria-label="Teamwork architecture flow">
           <div class="step">
-            <strong>1. Detect</strong>
-            解析 local repo 的 <code>origin</code>，识别 <code>owner/repo</code>、
-            branch、commit 和 dirty state。
+            <strong>1. Install</strong>
+            当前 worktree 生成本地 <code>.sharkbay/</code>，并把 harness 文件加入
+            local git ignore。
           </div>
           <div class="step">
-            <strong>2. Verify</strong>
-            使用 <code>gh</code> 验证 GitHub actor 和 repo permission。Teamwork 写入要求
-            permission 至少是 <code>write</code>。
+            <strong>2. Instruct</strong>
+            SharkBay 通过启动 prompt、root ignored instruction file，或 UI 复制文本告诉
+            agent 读取 harness protocol。
           </div>
           <div class="step">
-            <strong>3. Fetch</strong>
-            拉取共享 context 分支 <code>sharkbay-team-context</code>，读取
-            已完成 task 的摘要和历史 run summaries。
+            <strong>3. Work</strong>
+            Agent 按 protocol 工作并维护当前 task Markdown；SharkBay 读取并展示。
           </div>
           <div class="step">
-            <strong>4. Surface</strong>
-            把 <code>.sharkbay/tasks/*.json</code>、<code>.sharkbay/claims/file-claims.json</code>、
-            repo docs、GitHub Issues、commits 和历史 summaries 暴露为 MCP tools 和可搜索文件。
-            SharkBay 不替 agent 做语义裁剪。
+            <strong>4. Finish</strong>
+            Task 结束时在同一个 Markdown 文件里写 summary、verification、files 和 commit。
           </div>
           <div class="step">
-            <strong>5. Record</strong>
-            task 进行中只更新本地 <code>.sharkbay/</code>。task 结束并 commit 后，
-            导出 compact record 到 context branch。
+            <strong>5. Sync</strong>
+            Completed task record 写入 <code>sharkbay-team-context</code>，
+            并刷新本地 <code>.sharkbay/team-context/</code> mirror。
           </div>
         </div>
       </section>
 
-      <section class="section panel accent">
-        <div class="callout-title">Harness Reframe</div>
-        <p>
-          根据 OpenAI harness engineering 的思路，SharkBay harness 应被理解为
-          <strong>project-local agent operating environment</strong>，而不是简单的
-          agent launcher、task runner 或 dirty-file guard。它的职责是提升 agent 的杠杆：
-          帮 agent 找到上下文、使用工具、运行验证、读取反馈，并把有价值的结果沉淀回项目。
-          参考：<a href="https://openai.com/zh-Hans-CN/index/harness-engineering/">OpenAI Harness Engineering</a>。
-        </p>
-        <pre>Harness surfaces:
-- Context map: docs, AGENTS guide, active tasks, file claims, prior task summaries
-- Tool surface: git, gh, npm scripts, dev services, browser automation, logs
-- Verification surface: tests, builds, screenshots, console errors, app health
-- Feedback loop: task -> changes -> verification -> commit -> synced context
-- Maintenance loop: stale docs, abandoned .sharkbay state, failed context syncs, context hygiene</pre>
-        <p>
-          <code>.sharkbay/</code> task files 和 <code>sharkbay-team-context</code> 只是这个
-          harness 的 task context protocol。它们不等于 harness 本身。
-        </p>
-      </section>
-
-      <section class="section grid">
-        <article class="panel">
-          <h2>Task Model</h2>
-          <p>
-            <code>Task</code> 是可审计的工作单元，<code>Run</code> 是 task 期间某个
-            agent 做过的一段工作证据流水。用户接受的是 issue 或提出的是需求；
-            task 一定从用户和 agent client 的互动中产生，由所选 agent 按 SharkBay
-            protocol 调用 MCP tools 创建或继续。
-          </p>
-          <ul>
-            <li>Task 来源可以是用户自然需求、GitHub Issue、agent 建议或 repo owner 分配，但创建动作由 agent client 通过 harness MCP tools 完成。</li>
-            <li>默认 task 只有 brief、acceptance、runs、verification、final summary 和 commit。</li>
-            <li>Task 类型只有两种：<code>quick task</code> 和 <code>task</code>。</li>
-            <li><code>quick task</code> 不走重流程，但仍必须导出到 shared context，并标记 <code>mode: quick</code>。</li>
-            <li>同一 worktree 可以有多个 active editing tasks；隔离边界是文件级 ownership，而不是整个 worktree。</li>
-            <li>Task 只能以 committed+synced、blocked 或 abandoned 结束；file claims 按结束状态释放或保留。</li>
-          </ul>
-          <p>
-            Task identity 使用随机或 hash-derived 的 6 位短 tag，例如 <code>A7K3P9</code>。
-            <code>taskTag</code> 是 UI 和团队讨论里的短引用；完整 <code>taskId</code>
-            使用 <code>&lt;taskTag&gt;-u&lt;githubUserId&gt;-m&lt;machineId&gt;</code>，
-            例如 <code>A7K3P9-u3960864-m7f3a6</code>。不再使用顺序编号，因为
-            Teamwork 启用后 task list 会展示所有成员的 tasks，顺序编号没有团队语义。
-          </p>
-        </article>
-
-        <article class="panel">
-          <h2>MCP Role</h2>
-          <p>
-            MCP 是 agent 访问 team context 和 task lifecycle 的接口，不是 storage 本身。
-            Storage 是本地 <code>.sharkbay/</code> 文件、正常 repo docs 和 context branch
-            records 的组合；MCP 工具负责把这些文件整理成 agent 可用的上下文，并执行受控写入。
-          </p>
-          <ul>
-            <li><code>get_project_context</code> - MVP</li>
-            <li><code>search_team_context</code> - MVP</li>
-            <li><code>create_or_continue_task</code> - MVP</li>
-            <li><code>get_task</code> - MVP</li>
-            <li><code>update_task</code> - MVP</li>
-            <li><code>claim_files</code> - MVP</li>
-            <li><code>release_file_claims</code> - MVP</li>
-            <li><code>record_run_event</code> - MVP</li>
-            <li><code>prepare_task_export</code> - MVP</li>
-            <li><code>read_related_runs</code> - Post-MVP</li>
-          </ul>
-        </article>
-      </section>
-
-      <section class="section panel">
-        <h2>MCP Scope</h2>
-        <p>
-          MVP 必须包含 agent 获取跨成员上下文的入口，否则 Teamwork 只剩本地 task 文件协议。
-          因此 <code>get_project_context</code> 和 <code>search_team_context</code> 属于 MVP。
-        </p>
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Tool</th>
-              <th>Scope</th>
-              <th>Purpose</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code>get_project_context</code></td>
-              <td>MVP</td>
-              <td>返回 compact project context：active tasks、file claims、repo docs index、recent completed tasks、recent run summaries、GitHub issue/PR hints。</td>
-            </tr>
-            <tr>
-              <td><code>search_team_context</code></td>
-              <td>MVP</td>
-              <td>对 <code>docs/</code>、context branch records 和 local task summaries 做关键词搜索，返回短摘要和文件引用。</td>
-            </tr>
-            <tr>
-              <td><code>create_or_continue_task</code></td>
-              <td>MVP</td>
-              <td>由 agent 在理解用户意图后调用；根据 title/source/mode 创建 task，或根据 taskId/related issue/当前对话继续已有 task。</td>
-            </tr>
-            <tr>
-              <td><code>get_task</code></td>
-              <td>MVP</td>
-              <td>读取指定 <code>taskId</code> 的 compact task state。必须显式传入 <code>taskId</code>，不从 UI selection、terminal session 或 recent history 推断。</td>
-            </tr>
-            <tr>
-              <td><code>update_task</code></td>
-              <td>MVP</td>
-              <td>更新指定 <code>taskId</code> 的 brief、acceptance、summary、status 或 verification notes。</td>
-            </tr>
-            <tr>
-              <td><code>record_run_event</code></td>
-              <td>MVP</td>
-              <td>追加本地 run event 到 <code>.sharkbay/task-runs/</code>。</td>
-            </tr>
-            <tr>
-              <td><code>claim_files</code></td>
-              <td>MVP</td>
-              <td>原子 claim 一个或多个文件；成功后写入 <code>file-claims.json</code>，失败时返回 <code>waiting_for_file</code> 或 <code>dirty_unowned_file</code>。</td>
-            </tr>
-            <tr>
-              <td><code>release_file_claims</code></td>
-              <td>MVP</td>
-              <td>在 task commit/sync、blocked、abandon 或 recovery 时释放指定 task 的 file claims。</td>
-            </tr>
-            <tr>
-              <td><code>prepare_task_export</code></td>
-              <td>MVP</td>
-              <td>生成待用户确认的 compact export preview。</td>
-            </tr>
-            <tr>
-              <td><code>read_related_runs</code></td>
-              <td>Post-MVP</td>
-              <td>按 task、issue、file、agent 或 commit 聚合历史 runs；MVP 先由 <code>get_project_context</code> 和 search 覆盖。</td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
-
       <section class="section panel warn">
-        <div class="callout-title">Review Of Previous Design</div>
+        <div class="callout-title">Harness Boundary</div>
         <p>
-          前一版设计把 harness 写得过窄，主要像 task wrapper、agent launcher 和
-          worktree guard。这会把注意力放在“怎么启动 agent”和“怎么定义 run 边界”上，
-          而不是放在 agent 需要什么工作环境才能更可靠。
-        </p>
-        <ul>
-          <li>保留：<code>.sharkbay/</code> 作为 worktree-local active tasks 和 file claim protocol。</li>
-          <li>保留：completed task 导出到 <code>sharkbay-team-context</code>。</li>
-          <li>保留：<code>gh</code> 作为 Teamwork 身份和权限来源。</li>
-          <li>修正：harness 不是 agent 启动器，启动 agent 只是 harness 可选能力之一。</li>
-          <li>修正：不再设计 formal task；只有 <code>quick task</code> 和 <code>task</code>。</li>
-          <li>修正：review/spec/design 不作为默认强制状态机，只作为普通 task brief/acceptance 的可选内容。</li>
-          <li>修正：共享 context 不应记录冗长过程，只导出 compact outcome 和关键 evidence。</li>
-        </ul>
-      </section>
-
-      <section class="section panel accent">
-        <div class="callout-title">Why This Helps Team Agents</div>
-        <p>
-          最初目标是让不同成员本机上的不同厂商 agent 共享工作上下文。当前设计共享的是
-          source docs、tasks、runs、commits、GitHub Issues/PRs 和本地生成的 help site，
-          而不是同步各家 agent 的私有聊天意识。
-        </p>
-        <pre>Shared across team agents:
-- docs/: durable product and engineering decisions
-- completed tasks: compact task outcomes and commit links
-- run summaries: task-scoped agent evidence
-- GitHub Issues/PRs: external collaboration facts
-- commits: final code change facts
-- local help site: human-readable synthesis</pre>
-        <p>
-          这能减少重复解释上下文、避免不同 agent 重复踩坑，并把每个变更都绑定到
-          task、run、verification 和 commit。可靠性来自 file claim guard、
-          commit boundary、GitHub identity 和 cross-agent evidence。
+          并发和 dirty file 风险通过 instruction、Tasks UI 提醒、Git status、
+          commit review 和 LLM 自律来处理。SharkBay 的 guard 重点放在防止本地
+          teamwork harness 文件被提交。
         </p>
       </section>
 
       <section class="section panel">
-        <h2>Local Worktree State</h2>
+        <h2>Local Files</h2>
         <p>
-          不需要 SQLite。每个 worktree 使用本地 ignored <code>.sharkbay/</code>
-          目录保存 active tasks、file claims、harness events、tool manifest 和 protocol。
-          这个目录不进 repo，只服务当前 worktree。一个 worktree 可以同时有多个
-          active editing tasks，只要它们不 claim 同一个文件。
+          本地文件只保留 harness 必需入口和 task records。Root instruction files
+          是可选的 local ignored adapter。
         </p>
-        <pre>.sharkbay/
-  tasks/
-    A7K3P9-u3960864-m7f3a6.json
-    B4N8Q2-u3960864-m7f3a6.json
-  task-runs/
-    A7K3P9-u3960864-m7f3a6-r01HY.jsonl
-  task-packages/
-    A7K3P9-u3960864-m7f3a6-task-package.md
-  claims/
-    file-claims.json
-  cache/
-    github-users.json
-  harness/
-    protocol.md
-    tools.json
-    session.json
-    events.jsonl</pre>
-        <p>
-          Harness install 不修改 repo 文件，包括 <code>.gitignore</code>。SharkBay 应把
-          <code>.sharkbay/</code> 写入本地 <code>.git/info/exclude</code>，并在 stage/commit
-          前主动阻止 harness runtime files 进入 repo。这样每个项目成员可以有自己的
-          client、MCP 和 harness 配置。
-        </p>
-        <p>
-          这里的 repo 边界指正常代码分支和开发 worktree。团队共享记录仍写入专用
-          <code>sharkbay-team-context</code> 分支；它只保存 completed task packages，
-          不保存任何成员本机的 harness install/config/runtime files。
-        </p>
-      </section>
-
-      <section class="section panel">
-        <h2>Local Harness Entry Files</h2>
-        <p>
-          SharkBay 不能假设所有 agent client 都读同一个入口文件，也不能把 harness
-          instruction files 写进 repo。安装 harness 时，只在本地 <code>.sharkbay/</code>
-          里生成 client-specific entry files。它们不保存当前 task 状态，只负责把 agent
-          引导到同一个本地 runtime protocol。
-        </p>
-        <pre>normal code branch:
-  docs/
-    agents.md
-    roadmap.md
-    shared/
-      teamwork-design.html
-      teamwork-ui-mockup.html
-
-worktree-local ignored state:
+        <pre>repo/
+  AGENTS.md                 # optional, local ignored, generated by SharkBay
+  CLAUDE.md                 # optional, local ignored, generated by SharkBay
+  GEMINI.md                 # optional, local ignored, generated by SharkBay
+  .git/
+    info/
+      exclude               # local ignore only
   .sharkbay/
+    machine-id
     harness/
+      protocol.md
       instructions/
         codex.md
         claude.md
         gemini.md
-        kiro.md
-        deepseek.md
-      protocol.md
-      tools.json
-      session.json
-      events.jsonl
     tasks/
-      A7K3P9-u3960864-m7f3a6.json
-    claims/
-      file-claims.json
-    cache/
-      github-users.json</pre>
+      A7K3P9-u3960864-m7f3a6-update-teamwork-design.md
+    team-context/
+      project.md
+      tasks/
+        2026/
+          05/
+            B4N8Q2-u8123456-m91c0a2-browser-shortcuts.md</pre>
         <p>
-          这个分层避免把 harness 安装痕迹写进业务 repo。Agent 是否自动读这些入口文件，
-          由当前成员本机的 client adapter 决定；不支持自动 bootstrap 的 client 可以由用户
-          手动要求读取对应本地文件。
+          SharkBay 安装 harness 时写入本地 <code>.git/info/exclude</code>。
         </p>
-      </section>
-
-      <section class="section panel">
-        <h2>Installation Flow</h2>
-        <p>
-          Harness 安装只影响当前成员的本机项目配置，不产生需要 commit 的 repo 变更。
-          安装分三层：worktree-level runtime state、client-level project adapter、
-          run-level generated files。
-        </p>
-        <ol>
-          <li><strong>Open project</strong>: SharkBay 检测 repo root、Git remote、当前 branch、worktree path 和本机已安装的 agent clients。</li>
-          <li><strong>Protect repo</strong>: SharkBay 不修改 <code>.gitignore</code>，只把 <code>.sharkbay/</code> 写入本地 <code>.git/info/exclude</code>，并在 stage/commit guard 中阻止 harness files 进入 repo。</li>
-          <li><strong>Initialize local state</strong>: SharkBay 在当前 worktree 创建 ignored 的 <code>.sharkbay/</code> 目录、machine id、空的 <code>tasks/</code>、<code>claims/file-claims.json</code> 和 <code>harness/</code>。</li>
-          <li><strong>Prepare runtime protocol</strong>: SharkBay 生成或更新 <code>.sharkbay/harness/protocol.md</code>、<code>tools.json</code> 和 <code>instructions/*.md</code>。</li>
-          <li><strong>Configure local client adapters</strong>: SharkBay 只配置当前成员本机安装的 clients。优先使用 project/workspace-local 配置；如果某个 client 只能全局配置，则必须做 repo path gating，不能让其它项目看到本项目 harness。</li>
-          <li><strong>Enable team sync</strong>: 用户开启 Teamwork 时，SharkBay 用 <code>gh</code> 检查身份和 repo 权限，并创建或 fetch <code>sharkbay-team-context</code> 分支。</li>
-        </ol>
-        <pre>created locally per worktree:
-  .sharkbay/
-    config.json              # machine id, repo binding
-    tasks/
-    claims/file-claims.json
-    cache/github-users.json
-    harness/
-
-created locally for harness runtime:
-  .sharkbay/harness/protocol.md
-  .sharkbay/harness/tools.json
-  .sharkbay/harness/instructions/*.md
-  .sharkbay/harness/client-adapters.json
-  .sharkbay/harness/session.json
-  .sharkbay/task-runs/*.jsonl
-
-local git-only protection:
-  .git/info/exclude          # contains .sharkbay/</pre>
-      </section>
-
-      <section class="section panel">
-        <h2>File Contract</h2>
-        <p>
-          Harness 文件不进正常代码分支。普通 <code>docs/</code> 仍然是 repo source docs；
-          harness runtime files 留在本地 ignored <code>.sharkbay/</code>；completed context
-          写入独立 context branch。Agent 可以读大部分本地 harness 文件，但关键状态必须通过
-          SharkBay MCP/tool 修改。
-        </p>
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Path</th>
-              <th>Git</th>
-              <th>Writer</th>
-              <th>Reader</th>
-              <th>Role</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code>docs/</code></td>
-              <td>code branch</td>
-              <td>normal tasks</td>
-              <td>human, agent, help generator</td>
-              <td>source documentation and durable decisions</td>
-            </tr>
-            <tr>
-              <td><code>.sharkbay/harness/instructions/*.md</code></td>
-              <td>ignored</td>
-              <td>SharkBay</td>
-              <td>agent clients through local adapters</td>
-              <td>client-specific local bootstrap instructions pointing to SharkBay protocol</td>
-            </tr>
-            <tr>
-              <td><code>.sharkbay/harness/protocol.md</code></td>
-              <td>ignored</td>
-              <td>SharkBay</td>
-              <td>agent clients through local adapters</td>
-              <td>current run rules, task lifecycle, claim policy, commit boundary</td>
-            </tr>
-            <tr>
-              <td><code>.sharkbay/harness/tools.json</code></td>
-              <td>ignored</td>
-              <td>SharkBay</td>
-              <td>agent and MCP adapter</td>
-              <td>available tool manifest and write boundaries</td>
-            </tr>
-            <tr>
-              <td><code>.sharkbay/tasks/*.json</code></td>
-              <td>ignored</td>
-              <td>SharkBay</td>
-              <td>SharkBay and tools</td>
-              <td>one JSON source-of-truth per local task</td>
-            </tr>
-            <tr>
-              <td><code>.sharkbay/claims/file-claims.json</code></td>
-              <td>ignored</td>
-              <td>SharkBay</td>
-              <td>SharkBay and tools</td>
-              <td>cross-task file ownership and blockers inside this worktree</td>
-            </tr>
-            <tr>
-              <td><code>.sharkbay/cache/github-users.json</code></td>
-              <td>ignored</td>
-              <td>SharkBay</td>
-              <td>Tasks UI</td>
-              <td>cached GitHub login, id, and avatar URL for task owners</td>
-            </tr>
-            <tr>
-              <td><code>.sharkbay-team-context/</code></td>
-              <td><code>sharkbay-team-context</code></td>
-              <td>sync command</td>
-              <td>team SharkBay instances</td>
-              <td>completed compact task packages and searchable team context</td>
-            </tr>
-          </tbody>
-        </table>
+        <pre>/.sharkbay/
+/AGENTS.md
+/CLAUDE.md
+/GEMINI.md</pre>
       </section>
 
       <section class="section grid">
         <article class="panel">
-          <h2>Local Instruction Template</h2>
+          <h2>Instruction Discovery</h2>
           <p>
-            <code>.sharkbay/harness/instructions/*.md</code> 是本地生成文件，不进 repo。
-            它们应该短、稳定，只放当前项目的 SharkBay harness 入口，不放当前 task 细节。
+            SharkBay 为每个 agent client 准备本地 instruction 入口。支持启动 prompt 的
+            client 可以直接收到 bootstrap；偏好根目录约定文件的 client 可以读取本地 ignored
+            root adapter。
           </p>
-          <pre># SharkBay Agent Guide
-
-This repository uses the SharkBay harness for team task context.
-
-Before doing project work:
-1. Read `.sharkbay/harness/protocol.md` if it exists.
-2. Use SharkBay MCP tools for task lifecycle, team context search, file claims, run events, and sync preparation.
-3. If the user request is project work, create or continue a SharkBay task before editing.
-4. Do not edit files until the harness grants a file claim for your task.
-5. If a needed file is claimed by another task or dirty with no owner, stop and report the blocker.
-6. Commit only files owned by your task.
-
-Project rules:
-- Keep source documentation in `docs/`.
-- Keep runtime task state out of git; `.sharkbay/` must stay ignored.
-- Do not write secrets, credentials, customer data, or raw private transcripts into shared context.
-- Mark verification as `combined_worktree` unless SharkBay provides an isolated clean worktree.
-
-Useful commands:
-- Use project package scripts for build/test when available.
-- Use `rg` for local search.
-- Use `gh` for GitHub issue, PR, and permission checks when Teamwork is enabled.</pre>
+          <ol>
+            <li>优先：client 支持启动 prompt，SharkBay 传入一句 bootstrap。</li>
+            <li>次选：生成本地 ignored root instruction file，让 client 自己发现。</li>
+            <li>最后：UI 展示一条可复制 instruction，由用户手动发给 agent。</li>
+          </ol>
         </article>
 
         <article class="panel">
-          <h2>Protocol File</h2>
+          <h2>AGENTS.md Adapter</h2>
           <p>
-            <code>.sharkbay/harness/protocol.md</code> 是 SharkBay 本地生成的当前协议。
-            它比 client-specific instruction 更具体，包含当前 harness 状态和工具入口。
+            Root instruction file 是本地 adapter。SharkBay 只管理自己带 marker/checksum
+            生成的文件；已有同名 tracked 或 untracked 文件时进入用户确认流程。
+          </p>
+          <pre>&lt;!-- sharkbay-generated: true --&gt;
+&lt;!-- sharkbay-local-only: true --&gt;
+&lt;!-- sharkbay-project: SharkUI/SharkBay --&gt;
+&lt;!-- sharkbay-protocol: .sharkbay/harness/protocol.md --&gt;
+
+# SharkBay Local Agent Entry
+
+This worktree uses SharkBay Teamwork.
+
+Before making persistent project changes, read:
+
+`.sharkbay/harness/protocol.md`
+
+If the protocol file exists, follow it for task file naming, frontmatter,
+status updates, verification notes, and sync readiness.
+
+If the protocol file is missing or unreadable, ask the user whether to continue
+without SharkBay task tracking.</pre>
+        </article>
+      </section>
+
+      <section class="section panel">
+          <h2>protocol.md</h2>
+          <p>
+            Protocol 是 agent 维护 task Markdown 的 contract。它给 LLM 足够具体的模板和
+            状态规则，同时把业务判断留在 agent client 内。
           </p>
           <pre># SharkBay Harness Protocol
 
-Generated: 2026-05-15T10:35:00Z
-Project: SharkUI/SharkBay
-Worktree: /Users/shark/Projects/SharkBay-generic
-Branch: teamwork
-Implicit current task: none. Every task-specific tool call must include `taskId`.
+Project:
+- Repo: SharkUI/SharkBay
+- GitHub login: SharkUI
+- GitHub user id: 3960864
+- Machine id: m7f3a6
+- Agent: codex
+- Local tasks: .sharkbay/tasks/
+- Team context mirror: .sharkbay/team-context/
+- Team context branch: sharkbay-team-context
 
-## Required Flow
-1. Load project context with `get_project_context`.
-2. If the user request is project work, call `create_or_continue_task`.
-3. Read the returned task with `get_task(taskId)`.
-4. Search team context with `search_team_context` when prior work matters.
-5. Before editing, call `claim_files` for every target file.
-6. If claim fails, pause and record a blocker with `record_run_event`.
-7. After edits, record verification scope and result.
-8. Prepare a task package with `prepare_task_export`.
+## Agent Responsibility
 
-## File Claim Outcomes
-- `granted`: edit is allowed for this task.
-- `waiting_for_file`: file belongs to another active task.
-- `dirty_unowned_file`: file is dirty but has no known task owner.
-- `stale_claim`: SharkBay needs user recovery before editing.
+You maintain SharkBay task files directly.
+SharkBay reads and displays them.
 
-## Commit Boundary
-- Stage only files owned by the task.
-- Do not include unrelated dirty files.
-- Do not start sync until the task has a commit, blocked summary, or abandon decision.</pre>
+## Team Context
+
+Synced task records from the team are available in:
+.sharkbay/team-context/tasks/**/*.md
+
+Treat .sharkbay/team-context/ as read-only. Write only your own task records
+under .sharkbay/tasks/.
+
+Before editing files, making design decisions, or continuing work that may
+overlap with prior team work, search the team context mirror.
+
+Useful searches:
+- rg "browser fullscreen" .sharkbay/team-context/tasks
+- rg "docs/shared/teamwork-design.html" .sharkbay/team-context/tasks
+- rg "issue #123" .sharkbay/team-context/tasks
+
+If a previous task affects the current work, read that task record and mention
+its taskId in the current task's Work Summary or Notes For Future Agents.
+
+## When To Create Or Update A Task
+
+Create or update a SharkBay task file before performing a persistent
+project-changing unit of work.
+
+Project-changing work includes:
+- editing files
+- generating a persisted project artifact
+- running a multi-step implementation or verification workflow
+- preparing a commit
+- turning an accepted issue or request into local work
+
+Discussion, explanation, code reading, and design exploration can remain outside
+task tracking until the user asks to record it or implementation begins.
+
+## Task Identity
+
+Use one task file per logical task.
+
+- taskTag: 6 uppercase characters, for example A7K3P9
+- taskId: &lt;taskTag&gt;-u&lt;githubUserId&gt;-m&lt;machineId&gt;
+- filename: .sharkbay/tasks/&lt;taskId&gt;-&lt;slug&gt;.md
+- slug: short lowercase words joined with hyphens
+
+Example:
+.sharkbay/tasks/A7K3P9-u3960864-m7f3a6-update-teamwork-design.md
+
+## Mode
+
+Use mode: quick for small, direct edits.
+Use mode: task for broader work that needs a clearer summary, verification,
+or commit context.
+
+## Status
+
+Use one of:
+- active
+- paused
+- completed
+- blocked
+- abandoned
+
+## Required Frontmatter
+
+---
+kind: sharkbay_task
+taskId: A7K3P9-u3960864-m7f3a6
+taskTag: A7K3P9
+mode: task
+title: Update teamwork design
+status: active
+actor: SharkUI
+githubUserId: 3960864
+machine: m7f3a6
+agent: codex
+createdAt: 2026-05-15T10:30:00Z
+updatedAt: 2026-05-15T10:30:00Z
+---
+
+When the task is ready for team sync, add:
+
+status: completed
+completedAt: 2026-05-15T11:40:00Z
+commit: abc1234
+
+## Required Sections
+
+## Summary
+One or two sentences describing the task outcome.
+
+## Files
+- path/to/changed-file
+
+## Work
+- Concise bullet describing meaningful work.
+- Concise bullet describing meaningful decision or result.
+
+## Verification
+- Command, check, review, or reason verification was not run.
+
+## Notes
+- Context useful to future agents.
+
+## Update Rules
+
+Update the task file when:
+- the task starts
+- changed files become clear
+- the work summary changes materially
+- verification is run or intentionally skipped
+- the task becomes blocked, abandoned, or ready to sync
+
+Keep task files concise. Summarize work; keep raw chat transcripts in the CLI's
+own session history.
+
+## Sync Readiness
+
+Before setting status: completed, make sure:
+- Summary describes the outcome
+- Files lists changed project files
+- Work captures the important steps or decisions
+- Verification is filled
+- commit is present when the task produced a commit
+
+## Safety
+
+Keep unrelated dirty files untouched.
+Ask the user when task boundaries are unclear.
+Keep secrets, credentials, tokens, customer data, and private transcripts out of
+task files.</pre>
+      </section>
+
+      <section class="section grid">
+        <article class="panel">
+          <h2>Task Types</h2>
+          <p>
+            Task 类型只有两种：<code>quick</code> 和 <code>task</code>。Quick task 是快速修改，
+            过程更短，但仍生成 task record。普通 task 只比 quick 多一些 brief、
+            work summary 和 verification 要求。
+          </p>
+          <ul>
+            <li>Task 从用户和 agent client 的互动中产生。</li>
+            <li>Tasks tab 展示和恢复 tasks；task 创建来自 agent client 中的工作互动。</li>
+            <li>一个 worktree 可以有多个 active tasks，LLM 和用户共同保持文件边界清晰。</li>
+          </ul>
         </article>
       </section>
 
       <section class="section panel">
-        <h2>Harness Files</h2>
+        <h2>Task File</h2>
         <p>
-          <code>.sharkbay/</code> 是 worktree-local runtime state，不进 repo。
-          它保存当前 task、file claim、run events、client-independent protocol 和工具 manifest。
-          SharkBay 可以直接读写这些文件；agent 主要通过 MCP/tool 访问它们。
+          Task file 是 agent 维护的 Markdown 文件。Frontmatter 提供 Tasks UI 需要的
+          结构化字段，正文提供人类和未来 agent 可读的工作上下文。
         </p>
-        <pre>.sharkbay/
+        <pre>---
+kind: sharkbay_task
+taskId: A7K3P9-u3960864-m7f3a6
+taskTag: A7K3P9
+mode: task
+title: Update teamwork design
+status: active
+actor: SharkUI
+githubUserId: 3960864
+machine: m7f3a6
+agent: codex
+createdAt: 2026-05-15T10:30:00Z
+updatedAt: 2026-05-15T11:20:00Z
+---
+
+## Summary
+Update the teamwork harness design around local instruction files and Markdown task records.
+
+## Files
+- docs/shared/teamwork-design.html
+
+## Work
+- Defined local instruction discovery.
+- Defined Markdown task files as the local and team data format.
+- Defined taskId-based deduplication between local and team context.
+
+## Verification
+- Pending.
+
+## Notes
+- Keep this file concise and useful for future agents.</pre>
+      </section>
+
+      <section class="section grid">
+        <article class="panel">
+          <h2>Local State</h2>
+          <p>
+            本地保存当前机器的 task Markdown files。CLI session/transcript 由对应
+            agent client 自己管理。
+          </p>
+          <pre>.sharkbay/
+  machine-id
   tasks/
-    A7K3P9-u3960864-m7f3a6.json
-    B4N8Q2-u3960864-m7f3a6.json
-  task-runs/
-    A7K3P9-u3960864-m7f3a6-r01HY.jsonl
-  task-packages/
-    A7K3P9-u3960864-m7f3a6-task-package.md
-  claims/
-    file-claims.json
+    A7K3P9-u3960864-m7f3a6-update-teamwork-design.md
   harness/
     protocol.md
-    tools.json
-    session.json
-    events.jsonl</pre>
-        <table class="table">
-          <thead>
-            <tr>
-              <th>File</th>
-              <th>Owner</th>
-              <th>Purpose</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code>tasks/*.json</code></td>
-              <td>SharkBay harness</td>
-              <td>每个本地 task 一个状态文件，是 task 状态 source of truth。</td>
-            </tr>
-            <tr>
-              <td><code>claims/file-claims.json</code></td>
-              <td>SharkBay harness only</td>
-              <td>文件级 ownership。必须原子更新，agent 不能直接手写。</td>
-            </tr>
-            <tr>
-              <td><code>task-runs/*.jsonl</code></td>
-              <td>SharkBay harness</td>
-              <td>append-only run events，记录 agent 做过的关键动作和摘要。</td>
-            </tr>
-            <tr>
-              <td><code>harness/protocol.md</code></td>
-              <td>SharkBay harness</td>
-              <td>client-independent 操作协议，承接 instruction files，说明 task lifecycle、tool flow 和 claim outcomes。</td>
-            </tr>
-            <tr>
-              <td><code>harness/tools.json</code></td>
-              <td>SharkBay harness</td>
-              <td>MCP/tool manifest，列出本项目可用 harness tools、参数和只读/写入边界。</td>
-            </tr>
-            <tr>
-              <td><code>harness/session.json</code></td>
-              <td>SharkBay harness</td>
-              <td>当前 terminal/agent session 的 repo、actor、branch、worktree 和 agent client metadata。</td>
-            </tr>
-            <tr>
-              <td><code>harness/events.jsonl</code></td>
-              <td>SharkBay harness</td>
-              <td>SharkBay 自身事件，例如 task created、claim denied、sync failed、recovery chosen。</td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
+    instructions/
+  team-context/
+    project.md
+    tasks/
+      2026/
+        05/
+          B4N8Q2-u8123456-m91c0a2-browser-shortcuts.md</pre>
+        </article>
 
-      <section class="section grid">
         <article class="panel">
-          <h2>Tools Manifest</h2>
+          <h2>Team Context</h2>
           <p>
-            <code>tools.json</code> 是给 MCP adapter 和 agent client 的可读 manifest。
-            真正执行仍由 MCP server 或 SharkBay 本地 harness 完成；manifest 只描述能力和边界。
+            Team context branch 是远端同步存储；<code>.sharkbay/team-context/</code>
+            是 SharkBay 刷新的本地 mirror。Agent 不需要 MCP，也不直接读取远端 branch；
+            它只需要按 protocol 搜索和阅读这个本地 mirror。
           </p>
-          <pre>{
-  "schema": 1,
-  "server": "sharkbay-harness",
-  "tools": [
-    {
-      "name": "get_project_context",
-      "mode": "read",
-      "returns": ["repo", "branch", "actor", "localTasks", "recentContext"]
-    },
-    {
-      "name": "search_team_context",
-      "mode": "read",
-      "inputs": ["query", "limit"],
-      "sources": ["docs", "tasks", "runs", "commits"]
-    },
-    {
-      "name": "create_or_continue_task",
-      "mode": "write",
-      "inputs": ["mode", "title", "source", "relatedIssue", "relatedTaskId"],
-      "writes": [".sharkbay/tasks/&lt;taskId&gt;.json", ".sharkbay/harness/events.jsonl"]
-    },
-    {
-      "name": "get_task",
-      "mode": "read",
-      "inputs": ["taskId"],
-      "returns": ["task", "claims", "blockers", "sync"]
-    },
-    {
-      "name": "update_task",
-      "mode": "write",
-      "inputs": ["taskId", "patch"],
-      "writes": [".sharkbay/tasks/&lt;taskId&gt;.json"]
-    },
-    {
-      "name": "claim_files",
-      "mode": "write",
-      "inputs": ["taskId", "paths"],
-      "writes": [".sharkbay/claims/file-claims.json"],
-      "atomic": true
-    },
-    {
-      "name": "release_file_claims",
-      "mode": "write",
-      "inputs": ["taskId", "paths"],
-      "writes": [".sharkbay/claims/file-claims.json"],
-      "atomic": true
-    },
-    {
-      "name": "record_run_event",
-      "mode": "append",
-      "writes": [".sharkbay/task-runs/*.jsonl"]
-    },
-    {
-      "name": "prepare_task_export",
-      "mode": "write",
-      "writes": [".sharkbay/task-packages/*.md"]
-    }
-  ]
-}</pre>
-        </article>
-
-        <article class="panel">
-          <h2>Agent Client Adapter</h2>
-          <p>
-            当前 SharkBay 支持多个 agent CLI。Tasks UI 不展示某个 client 的 bootstrap
-            能力；只有用户点击具体 agent button 时，SharkBay 才应用该 client adapter。
-            Adapter 负责选择启动命令、可选 initial prompt、本地 instruction file 和本机
-            project-scoped MCP 配置方式。
-          </p>
-          <pre>Agent client adapter fields:
-- id: codex | claude | gemini | kiro | deepseek | qwen | opencode
-- command: executable path
-- instructionFiles: .sharkbay/harness/instructions/&lt;client&gt;.md
-- initialPrompt: supported | unsupported | unknown
-- mcpConfig: project-local | workspace-local | gated user config | unsupported
-- statusLogs: how SharkBay reads progress, if known
-
-Launch behavior:
-1. User clicks a specific agent button.
-2. SharkBay starts that CLI in repo root.
-3. If the client supports an initial prompt, adapter may pass a short bootstrap prompt that only points to instruction files and MCP tools.
-4. If not, user can manually tell the agent to read `.sharkbay/harness/instructions/&lt;client&gt;.md`.
-5. SharkBay never writes harness instruction files into the repo.
-6. The agent creates/continues tasks through SharkBay MCP tools.</pre>
-          <p>
-            Bootstrap prompt 不能包含当前 task、文件列表、Issue 摘要或裁剪后的项目上下文；
-            这些信息必须由 agent 读 instruction files 后通过 MCP 显式获取。
-          </p>
-        </article>
-      </section>
-
-      <section class="section grid">
-        <article class="panel">
-          <h2>Task State File</h2>
-          <p>
-            每个 task 一个 JSON 文件，放在 <code>.sharkbay/tasks/</code>。
-            <code>taskTag</code> 是 6 位短引用；<code>taskId</code> 用于团队引用、runs、
-            file claims、sync package 和审计。
-          </p>
-          <pre>{
-  "schema": 1,
-  "taskId": "A7K3P9-u3960864-m7f3a6",
-  "taskTag": "A7K3P9",
-  "mode": "task",
-  "title": "Document Tasks UI",
-  "status": "pending_sync",
-  "source": { "type": "user_request" },
-  "actor": {
-    "githubLogin": "SharkUI",
-    "githubUserId": 3960864,
-    "avatarUrl": "https://avatars.githubusercontent.com/u/3960864?v=4"
-  },
-  "machine": { "shortId": "m7f3a6" },
-  "branch": "teamwork",
-  "baseCommit": "9f20b30",
-  "createdAt": "2026-05-15T09:40:00Z",
-  "updatedAt": "2026-05-15T10:32:00Z",
-  "summary": "Updated the teamwork task list mockup and design notes.",
-  "verification": {
-    "scope": "combined_worktree",
-    "status": "not_run",
-    "note": "doc-only change"
-  },
-  "sync": {
-    "status": "failed",
-    "reason": "context branch push rejected"
-  }
-}</pre>
-        </article>
-
-        <article class="panel">
-          <h2>File Claims File</h2>
-          <p>
-            <code>file-claims.json</code> 只由 harness 写入。每次 claim 更新必须检查
-            <code>revision</code>，避免两个 agent 同时取得同一个文件。
-          </p>
-          <pre>{
-  "schema": 1,
-  "revision": 42,
-  "updatedAt": "2026-05-15T10:35:00Z",
-  "claims": {
-    "docs/shared/teamwork-design.html": {
-      "taskId": "A7K3P9-u3960864-m7f3a6",
-      "runId": "r01HY",
-      "status": "dirty",
-      "claimedAt": "2026-05-15T10:12:00Z",
-      "baseHash": "sha256:..."
-    },
-    "docs/shared/teamwork-ui-mockup.html": {
-      "taskId": "A7K3P9-u3960864-m7f3a6",
-      "runId": "r01HY",
-      "status": "dirty",
-      "claimedAt": "2026-05-15T10:18:00Z",
-      "baseHash": "sha256:..."
-    }
-  },
-  "waiting": [
-    {
-      "taskId": "B4N8Q2-u3960864-m7f3a6",
-      "path": "docs/shared/teamwork-design.html",
-      "blockedByTaskId": "A7K3P9-u3960864-m7f3a6",
-      "since": "2026-05-15T10:21:00Z"
-    }
-  ],
-  "dirtyUnowned": [
-    {
-      "path": "src/renderer/shortcuts.ts",
-      "detectedAt": "2026-05-15T10:22:00Z"
-    }
-  ]
-}</pre>
-        </article>
-      </section>
-
-      <section class="section grid">
-        <article class="panel">
-          <h2>Harness Session</h2>
-          <pre>{
-  "schema": 1,
-  "sessionId": "s01HZ",
-  "project": "SharkUI/SharkBay",
-  "worktreePath": "/Users/shark/Projects/SharkBay-generic",
-  "worktreeId": "wt-a8f31d",
-  "branch": "teamwork",
-  "headCommit": "bb7a13d",
-  "github": {
-    "login": "SharkUI",
-    "userId": 3960864,
-    "permission": "admin"
-  },
-  "machine": {
-    "shortId": "m7f3a6"
-  },
-  "startedAt": "2026-05-15T10:30:00Z"
-}</pre>
-        </article>
-
-        <article class="panel">
-          <h2>Run Events</h2>
-          <pre>{"kind":"run_started","runId":"r01HY","taskId":"A7K3P9-u3960864-m7f3a6","agent":"codex","createdAt":"2026-05-15T10:30:00Z"}
-{"kind":"project_context_read","runId":"r01HY","taskId":"A7K3P9-u3960864-m7f3a6","sources":["docs","local_tasks","team_context"],"createdAt":"2026-05-15T10:30:02Z"}
-{"kind":"file_claimed","runId":"r01HY","taskId":"A7K3P9-u3960864-m7f3a6","path":"docs/shared/teamwork-design.html","createdAt":"2026-05-15T10:31:00Z"}
-{"kind":"verification","runId":"r01HY","taskId":"A7K3P9-u3960864-m7f3a6","scope":"combined_worktree","status":"not_run","note":"doc-only change","createdAt":"2026-05-15T10:38:00Z"}
-{"kind":"run_summary","runId":"r01HY","taskId":"A7K3P9-u3960864-m7f3a6","body":"Updated teamwork harness design and task UI mockup.","createdAt":"2026-05-15T10:42:00Z"}</pre>
-        </article>
-      </section>
-
-      <section class="section panel accent">
-        <div class="callout-title">File Claim Guard</div>
-        <p>
-          并行 task 的冲突边界是文件。agent 准备修改文件前，必须先通过 harness
-          claim 文件；harness 检查 Git dirty state 和 <code>file-claims.json</code> 后决定是否允许。
-          这个规则必须在工具层执行，不能只靠 prompt 约束 agent。<code>file-claims.json</code>
-          只能由 SharkBay harness 写入；claim 更新必须是原子的，写入前读取当前 revision，
-          写入时用 compare-and-swap 或 lock file 防止两个 agent 同时 claim 同一个 clean file。
-        </p>
-        <pre>Claim rules:
-- clean + unclaimed file: allow, then add to requesting task ownedFiles
-- already claimed by requesting task: allow
-- claimed by another active task: pause requesting task as waiting_for_file
-- dirty + no known owner: pause requesting task as dirty_unowned_file
-- deleted/renamed file: require explicit claim for old path and new path
-- generated files: claim only if they will be committed with this task</pre>
-        <p>
-          Task commit 时只 stage 自己的 <code>ownedFiles</code>。如果 verification 在同一个
-          worktree 中运行，结果必须标记为 <code>combined worktree</code>；需要更强保证时，
-          SharkBay 应提示用户在 clean temporary worktree 或独立 worktree 中做 isolated verification。
-        </p>
-      </section>
-
-      <section class="section grid">
-        <article class="panel">
-          <h2>Task Conflict Flow</h2>
-          <p>
-            当 task 要修改被其他 task claim 的文件时，暂停的是当前 task，不是整个
-            worktree。用户可以继续推进其它不相关 task；等占用文件的 task commit/sync
-            或释放 claim 后，再回到暂停 task 点击 continue。
-          </p>
-          <pre>Task B wants src/browser/fullscreen.ts
--> file claimed by Task A
--> Task B status: waiting_for_file
--> user finishes Task A and commits ownedFiles
--> SharkBay sees file clean/unclaimed
--> user continues Task B
--> agent refreshes task/context through MCP and continues</pre>
-        </article>
-
-        <article class="panel">
-          <h2>File Claim State</h2>
-          <p>
-            <code>file-claims.json</code> 是 worktree-local 的轻量 lock table，不是团队级锁。
-            它只用于防止同一个 worktree 内多个本地 agent 互相覆盖 dirty files。
-          </p>
-          <pre>{
-  "claims": {
-    "docs/shared/teamwork-design.html": {
-      "taskId": "A7K3P9-u3960864-m7f3a6",
-      "status": "dirty",
-      "claimedAt": "2026-05-15T10:12:00Z"
-    },
-    "src/renderer/browser.ts": {
-      "taskId": "B4N8Q2-u3960864-m7f3a6",
-      "status": "clean",
-      "claimedAt": "2026-05-15T10:18:00Z"
-    }
-  }
-}</pre>
-        </article>
-      </section>
-
-      <section class="section panel">
-        <h2>Active Task Recovery</h2>
-        <p>
-          SharkBay 启动或进入项目时必须检查 <code>.sharkbay/tasks/*.json</code>、
-          <code>.sharkbay/claims/file-claims.json</code> 和 <code>.sharkbay/harness/events.jsonl</code>。
-          如果某个 active task 超过默认 24 小时没有 event 更新，或上次 session 没有正常关闭，
-          就标记为 stale。
-        </p>
-        <p>
-          术语边界：<code>export</code> 是生成 compact task package；<code>sync</code>
-          是把 package 写入并推送到 <code>sharkbay-team-context</code>。UI 只向用户暴露
-          sync 状态，例如 <code>pending sync</code> 或 <code>sync failed</code>。
-        </p>
-        <ul>
-          <li><code>resume</code>: 继续指定 task，保留它的 owned files 和 run logs。</li>
-          <li><code>finish/sync</code>: 用户确认 summary、verification 和 commit 后生成 package 并同步到 context branch。</li>
-          <li><code>mark blocked</code>: 生成 blocked task package 并 sync；释放或保留 file claims 由用户决定。</li>
-          <li><code>abandon</code>: 只有该 task 的 owned files clean，或用户明确 stash/clean 后才允许。</li>
-        </ul>
-        <p>
-          Sync 或 abandon 失败必须保持 active task 文件不删除，UI 显示明确的 pending/recovery 状态。
-          不允许静默丢弃 <code>.sharkbay/</code> 状态。
-        </p>
-      </section>
-
-      <section class="section panel">
-        <h2>Shared Storage</h2>
-        <p>
-          共享 context 使用普通文件保存，放在独立分支
-          <code>sharkbay-team-context</code>。它只接收完成后的 compact task package，
-          不保存 active tasks 的频繁过程更新。不使用 SharkBay backend；搜索直接依赖
-          <code>rg</code>、<code>jq</code> 和文件读取。
-        </p>
-        <pre>.sharkbay-team-context/
+          <pre>.sharkbay/team-context/
   project.md
   tasks/
     2026/
       05/
-        A7K3P9-u3960864-m7f3a6-browser-fullscreen.md
-  runs/
-    2026/
-      05/
-        11/
-          A7K3P9-u3960864-m7f3a6-r01HY.jsonl</pre>
-        <p>
-          文件名规则：
-          <code>&lt;taskId&gt;-&lt;slug&gt;.&lt;ext&gt;</code> 或
-          <code>&lt;taskId&gt;-&lt;runId&gt;.jsonl</code>。<code>taskId</code>
-          已包含 6 位短 tag、GitHub user id 和 machine id，避免不同成员的
-          tag 碰撞影响引用。permission、branch、commit 和 timestamps 放进 frontmatter
-          或 JSONL metadata。
-        </p>
-      </section>
-
-      <section class="section grid">
-        <article class="panel">
-          <h2>Task Records</h2>
+        B4N8Q2-u8123456-m91c0a2-browser-shortcuts.md</pre>
           <p>
-            Task 可以来自用户直接提出的需求，也可以来自 GitHub Issue。Issue 是团队级请求；
-            task 是某个用户在某台机器上通过 agent client 执行这个请求时，由 agent
-            client 调用 MCP 后落盘的可审计工作单元；harness 只负责原子写入 task state
-            并记录事件。
-            进行中状态保存在 <code>.sharkbay/tasks/&lt;taskId&gt;.json</code>，
-            文件 ownership 保存在 <code>.sharkbay/claims/file-claims.json</code>；
-            完成后导出到 context branch。
+            同步后，同一个 taskId 可以同时存在于本地 <code>.sharkbay/tasks/</code>
+            和 <code>.sharkbay/team-context/tasks/</code>；它们是同一个 logical task
+            的两个 physical copies。
           </p>
-          <pre>---
-kind: task_completed
-taskId: A7K3P9-u3960864-m7f3a6
-taskTag: A7K3P9
-global identity: taskTag + githubUserId + machine shortId
-mode: task
-title: Browser fullscreen keyboard shortcut
-project: SharkUI/SharkBay
-owner:
-  githubLogin: SharkUI
-  githubUserId: 3960864
-machine:
-  shortId: m7f3a6
-source:
-  type: user_request
-baseCommit: 451cf567
-finalCommit: abc1234
-createdAt: 2026-05-11T20:00:00Z
-completedAt: 2026-05-11T22:00:00Z
----
-
-# Browser fullscreen keyboard shortcut
-
-## Brief
-Add a keyboard shortcut to toggle fullscreen for the active SharkBay browser view.
-
-## Acceptance
-- Shortcut toggles fullscreen for the active browser.
-- Existing browser shortcuts still work.
-- Relevant tests pass.
-
-## Summary
-Implemented shortcut handling and added browser tab tests.
-
-## Verification
-- npm test passed
-
-## Commit
-abc1234</pre>
-        </article>
-
-        <article class="panel">
-          <h2>Task Modes</h2>
-          <p>
-            Harness 应该按改动规模降级，但所有修改都应该留下 shared context。
-            <code>quick task</code> 是快速修改，<code>task</code> 是普通工作。
-          </p>
-          <pre>Quick task:
-- mode: quick
-- direct edit, test, commit
-- commit message carries the explanation
-- synced to shared context with compact summary
-
-Task:
-- mode: task
-- brief
-- acceptance
-- run summaries
-- verification
-- final summary
-- commit</pre>
         </article>
       </section>
 
-      <section class="section grid">
-        <article class="panel">
-          <h2>Run Records</h2>
-          <p>
-            Agent run 使用 append-only JSONL，先写入 <code>.sharkbay/task-runs/</code>。
-            Task 完成时只导出摘要和关键证据到 context branch，避免共享上下文被过程噪音污染。
-          </p>
-          <pre>{"kind":"run_started","taskId":"A7K3P9-u3960864-m7f3a6","runId":"r01HY","project":"SharkUI/SharkBay","branch":"browser-fullscreen-shortcut","commit":"451cf567","author":{"githubLogin":"SharkUI","githubUserId":3960864},"machine":{"shortId":"m7f3a6"},"agent":{"id":"codex"},"createdAt":"2026-05-11T20:40:00Z"}
-{"kind":"shell_command","taskId":"A7K3P9-u3960864-m7f3a6","runId":"r01HY","cmd":"npm test","exitCode":0,"createdAt":"2026-05-11T21:10:00Z"}
-{"kind":"files_touched","taskId":"A7K3P9-u3960864-m7f3a6","runId":"r01HY","files":["src/main/browser-tabs.ts","tests/browser-tabs.test.ts"],"createdAt":"2026-05-11T21:12:00Z"}
-{"kind":"run_summary","taskId":"A7K3P9-u3960864-m7f3a6","runId":"r01HY","body":"Implemented fullscreen shortcut handling for SharkBay browser and verified browser-tabs tests.","createdAt":"2026-05-11T21:20:00Z"}</pre>
-        </article>
-      </section>
-
-      <section class="section panel accent">
-        <div class="callout-title">Source Of Truth Split</div>
-        <p>
-          Repo 中的 <code>docs/</code> 是源头文档，保存重要产品、架构和开发决策。
-          Local <code>.sharkbay/</code> 保存 active tasks、file claims 和过程事件。Runtime context 分支只保存
-          completed task packages 和关键 run summaries。Human-readable help site
-          由 SharkBay 从 <code>docs/</code> 和 runtime context 本地生成，不进 repo。
-        </p>
-        <pre>normal code branch:
-  docs/
-    agents.md
-    roadmap.md
-    teamwork.md
-
-worktree-local ignored state:
-  .sharkbay/
-    tasks/
-      A7K3P9-u3960864-m7f3a6.json
-    claims/
-      file-claims.json
-    task-runs/
-
-context branch: sharkbay-team-context
-  .sharkbay-team-context/
-    tasks/
-    runs/
-
-local generated artifact:
-  ~/Library/Application Support/SharkBay/help-sites/&lt;project-id&gt;/
-    index.html
-    tasks.html
-    runs.html
-    task-A7K3P9-u3960864-m7f3a6.html</pre>
-      </section>
-
       <section class="section panel">
-        <h2>Help Site</h2>
+        <h2>Context Branch Creation</h2>
         <p>
-          Help site 是 post-MVP 的本地生成物，不进 repo。MVP 可以先在 Tasks tab
-          直接展示 active tasks、file claims、completed task summaries 和 search results。
-        </p>
-        <ul>
-          <li>触发：MVP 后先支持用户手动生成；后续可在 fetch context branch、完成 sync、或打开 Tasks tab 时增量刷新。</li>
-          <li>内容：默认包含 active tasks、file claim 状态、最近 50 个 completed tasks、最近 90 天 run summaries、相关 docs index、open GitHub issues/PRs 摘要。</li>
-          <li>范围：完整历史不默认渲染，可通过 search 或 archive page 按需展开。</li>
-          <li>位置：<code>~/Library/Application Support/SharkBay/help-sites/&lt;project-id&gt;/</code>。</li>
-        </ul>
-      </section>
-
-      <section class="section panel">
-        <h2>Member Information</h2>
-        <p>
-          不按成员建目录。成员身份放在每条 context record 的 metadata 中，而不是塞进长文件名。
-          这样文件仍然按类型和时间聚合，同时 UI 可以按成员、机器、agent、branch、时间和状态过滤。
-        </p>
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Field</th>
-              <th>Purpose</th>
-              <th>Source</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code>githubLogin</code>, <code>githubUserId</code></td>
-              <td>团队视角下的可信 actor identity。</td>
-              <td><code>gh api user</code></td>
-            </tr>
-            <tr>
-              <td><code>permission</code>, <code>roleName</code></td>
-              <td>记录写入时该成员对 repo 的权限。</td>
-              <td>GitHub collaborators permission API</td>
-            </tr>
-            <tr>
-              <td><code>gitName</code>, <code>gitEmail</code></td>
-              <td>辅助对照 commit author。</td>
-              <td><code>git config</code></td>
-            </tr>
-            <tr>
-              <td><code>hostname</code>, <code>machineId</code></td>
-              <td>标明哪台开发机启动了 agent。同一 GitHub 用户多台电脑时用于区分写入来源。</td>
-              <td>local machine</td>
-            </tr>
-          </tbody>
-        </table>
-        <p>
-          <code>machineId</code> 由 SharkBay 在每台机器首次启用 Teamwork 时生成 UUID，
-          保存在本机 app config 中。短码例如 <code>m7f3a6</code> 只用于 UI 展示；
-          完整 UUID 或稳定 short id 写入 metadata，避免 hostname 变更或重复导致身份不稳。
-        </p>
-      </section>
-
-      <section class="section panel">
-        <h2>Conflict Policy</h2>
-        <p>
-          Teamwork context 的冲突策略是 append-only、unique file 和 duplicate-on-conflict。
-          SharkBay 不做 destructive merge，不覆盖其他成员写入，也不把 Git conflict 暴露给用户。
+          <code>sharkbay-team-context</code> 由 SharkBay 在用户第一次为当前 repo 启用
+          Teamwork 时创建。创建动作属于 Git transport 初始化，不创建 task，也不写入业务
+          context。
         </p>
         <ol>
-          <li>写入前 fetch 最新 <code>sharkbay-team-context</code>。</li>
-          <li>在临时 worktree 中新增唯一文件并 commit。</li>
-          <li>push 成功则完成。</li>
-          <li>如果 push rejected，fetch 最新后 rebase 并重试。</li>
-          <li>如果 rebase 真的发生文件冲突，abort rebase，基于最新远程重新生成唯一文件名，再 commit + push。</li>
-          <li>如果仍失败，将待同步文件保存到本机 pending queue，UI 显示 <code>Team context pending sync</code>。</li>
+          <li>解析当前 repo 的 <code>origin</code>，得到 <code>OWNER/REPO</code>。</li>
+          <li>使用 <code>gh</code> 检查当前 GitHub user 和 repo permission。</li>
+          <li>写入 context branch 要求 permission 至少是 <code>write</code>。</li>
+          <li>检查远端是否已有 <code>sharkbay-team-context</code>。</li>
+          <li>如果已存在，直接 fetch 并刷新 <code>.sharkbay/team-context/</code>。</li>
+          <li>如果不存在，由 SharkBay 创建 branch、写入最小目录结构并 push。</li>
+          <li>如果没有权限，Teamwork sync 不启用；本地 task files 和 Tasks UI 仍可使用。</li>
         </ol>
+        <pre>branch: sharkbay-team-context
+
+.sharkbay-team-context/
+  project.md
+  tasks/
+    .gitkeep</pre>
+        <pre>---
+kind: sharkbay_team_context
+repo: OWNER/REPO
+createdAt: 2026-05-15T00:00:00Z
+createdBy: github-login
+---</pre>
+      </section>
+
+      <section class="section panel">
+        <h2>Sync Loop</h2>
         <p>
-          语义冲突不在 Git 层解决。例如两个 agent runs 对同一个 issue 给出互相矛盾的建议，
-          SharkBay 保留两条记录。真正的产品或架构结论应该通过 GitHub Issue/PR 讨论后进入
-          <code>docs/</code>，而不是在 runtime context 分支里合并成 decision。
+          Teamwork 启用后，SharkBay 每分钟运行一次 sync tick。这个 loop 只做文件传输和
+          mirror 刷新，不修改 task 的业务内容。
         </p>
+        <p>
+          Sync 只有一个触发机制：每分钟 tick。UI 展示上一次 tick 时间、pending 数量和
+          最近一次 transport error。
+        </p>
+        <ol>
+          <li>Fetch <code>sharkbay-team-context</code>。</li>
+          <li>刷新本地只读 mirror：<code>.sharkbay/team-context/</code>。</li>
+          <li>扫描本地 <code>.sharkbay/tasks/**/*.md</code>。</li>
+          <li>找出 <code>status: completed</code> 且 mirror 中没有相同 <code>taskId</code> 的 task。</li>
+          <li>把这些 completed task files 复制到 context branch 的 <code>tasks/YYYY/MM/</code>。</li>
+          <li>Commit and push。</li>
+          <li>Push 成功后再次刷新 mirror；push rejected 时 fetch/rebase/retry。</li>
+        </ol>
+        <pre>local completed + mirror missing = pending sync
+local completed + mirror exists  = synced
+last transport failed            = sync failed in UI</pre>
+      </section>
+
+      <section class="section panel">
+        <h2>Completed Record</h2>
+        <p>
+          Completed record 与本地 task file 使用同一种 Markdown 格式。Agent 完成 task
+          后更新 status、commit、completedAt 和正文 sections；SharkBay sync 时复制这个文件到
+          context branch 的日期目录。
+        </p>
+        <pre>---
+kind: sharkbay_task
+taskId: A7K3P9-u3960864-m7f3a6
+taskTag: A7K3P9
+mode: task
+title: Update teamwork design
+actor: SharkUI
+githubUserId: 3960864
+machine: m7f3a6
+agent: codex
+status: completed
+commit: abc1234
+createdAt: 2026-05-15T10:30:00Z
+completedAt: 2026-05-15T11:40:00Z
+---
+
+## Summary
+Updated the teamwork harness design around local instructions and Markdown task files.
+
+## Work Summary
+- Defined local instruction discovery.
+- Defined Markdown task files as both local and team context format.
+- Defined taskId-based deduplication between local and team copies.
+- Updated Tasks UI to read local and team Markdown through one view model.
+
+## Files
+- docs/shared/teamwork-design.html
+- docs/shared/teamwork-ui-mockup.html
+
+## Verification
+- `git diff --check` passed.
+- Documentation-only change.
+
+## Notes For Future Agents
+- Local root instruction files are generated adapters.
+- Team context uses completed task records.
+- Keep task records concise and useful for future agents.</pre>
+      </section>
+
+      <section class="section panel">
+        <h2>Tasks UI Data</h2>
+        <p>
+          UI 同时读取本地 task Markdown 和 team context Markdown，但 UI 层只消费统一的
+          <code>TaskViewModel</code>。本地文件代表当前机器工作副本；team 文件代表已同步团队记录。
+        </p>
+        <pre>local .sharkbay/tasks/**/*.md
+        -> parse frontmatter + sections
+team .sharkbay/team-context/tasks/**/*.md
+        -> parse frontmatter + sections
+        -> TaskViewModel[]
+        -> Tasks UI</pre>
+        <pre>type TaskViewModel = {
+  taskId: string
+  taskTag: string
+  title: string
+  mode: "quick" | "task"
+  status: "active" | "paused" | "completed" | "blocked" | "abandoned"
+  sync: "local" | "pending" | "synced" | "failed"
+  owner: { githubLogin: string; githubUserId?: number; avatarUrl?: string }
+  agent?: string
+  machine?: string
+  createdAt?: string
+  updatedAt?: string
+  completedAt?: string
+  files?: string[]
+  summary?: string
+  verification?: string
+  sourceKind: "local-md" | "team-md"
+  readOnly: boolean
+}</pre>
       </section>
 
       <section class="section grid">
         <article class="panel">
-          <h2>Search</h2>
-          <p>
-            团队小的时候不需要数据库索引服务。SharkBay 可以直接用
-            <code>rg</code> 搜索文件，再按 frontmatter 或 JSONL 字段解析结果。
-          </p>
-        <pre>rg "harness|MCP|team sync" .sharkbay-team-context
-rg '"kind":"run_summary"' .sharkbay-team-context/runs
-rg "taskId: A7K3P9-u3960864-m7f3a6" .sharkbay-team-context/tasks
-rg '"taskId":"A7K3P9-u3960864-m7f3a6"' .sharkbay-team-context/runs
-rg "githubUserId: 3960864" .sharkbay-team-context
-rg "shortId: m7f3a6" .sharkbay-team-context
-rg '"githubLogin":"SharkUI"' .sharkbay-team-context/runs</pre>
+          <h2>Merge Rules</h2>
+          <ul>
+            <li>先读本地 <code>.sharkbay/tasks/**/*.md</code>。</li>
+            <li>再读本地 mirror 的 <code>.sharkbay/team-context/tasks/**/*.md</code>。</li>
+            <li>按 <code>taskId</code> 去重。</li>
+            <li><code>sync</code> 是 UI derived field，不写入 task Markdown。</li>
+            <li>local active / pending sync / failed sync 优先显示本地副本。</li>
+            <li>local completed 且 team copy 存在时，优先显示 team copy。</li>
+            <li>team exists, local missing 时显示 team copy，作为只读历史记录。</li>
+          </ul>
         </article>
 
         <article class="panel">
-          <h2>Tasks UI</h2>
-          <p>
-            现有 SharkBay 是三栏工作台：左侧项目列表、中间 terminal/browser、右侧 detail panel。
-            Tasks 应作为 Project detail 的第一个 tab，放在 Git 左边，不新增独立 dashboard。
-          </p>
+          <h2>Task List</h2>
           <ul>
-            <li><strong>Tab and panel title</strong>: Tab title 永远是 <code>Tasks</code>。Harness 未安装或 Teamwork 未启用时 panel title 是 <code>Harness</code>；Teamwork sync 启用后 panel title 是 <code>Teamwork</code>。</li>
-            <li><strong>Status subpanel</strong>: 一行 facts，显示 repo、branch、worktree、<code>gh</code> actor、repo permission、context sync、active task count、claimed files count。</li>
-            <li><strong>Task list</strong>: Tasks 是一个一体化列表，不按 active/completed 拆 panel，也不再套一个写着 <code>Tasks / All</code> 的 subpanel 标题框。列表直接出现在 Teamwork status 下方。</li>
-            <li><strong>Task tag</strong>: 不使用顺序编号。每个 task 生成一个 6 位 <code>taskTag</code>，例如 <code>A7K3P9</code>。完整 <code>taskId</code> 使用 <code>A7K3P9-u3960864-m7f3a6</code>。</li>
-            <li><strong>Task order</strong>: task 按状态优先级和更新时间排序，不按 tag 排序。</li>
-            <li><strong>Task row</strong>: Teamwork 启用时左侧显示 GitHub 头像，头像 URL 来自 <code>gh api</code> 并缓存到 <code>.sharkbay/cache/github-users.json</code>；未启用 Teamwork 时左侧不显示编号，列表直接以 title 开始。title 是主视觉，subtitle 显示 <code>taskTag</code>、owner、sync result、blocking file、commit/time 或 verification scope；task list 不显示 machine。<code>sync failed</code>、<code>waiting_for_file</code>、<code>dirty_unowned_file</code> 都是 task row 状态；<code>waiting</code> 使用黄色 warning 状态。</li>
-            <li><strong>Task detail</strong>: 点击 task 后列表消失，右侧 panel 进入 task detail drilldown。Detail 顶部有 back button 返回 task list；标题下不重复 project/type/status。详情只展示任务事实，例如 status、branch/base、verification、sync result、blocked-by 文件和 related runs。正常 claimed files 默认不展示，只有 claim 冲突、dirty unowned 或阻塞其它 task 时才露出。</li>
-            <li><strong>Task creation</strong>: Tasks tab 不负责创建 task，也不放 <code>Quick task</code>、<code>Task</code>、<code>Create from issue</code> 这类按钮。task 从 agent client 里的工作互动产生；Tasks tab 只展示、切换、恢复和查看详情。</li>
-            <li><strong>Attention rows</strong>: 只显示非 task 归属的风险，例如 context branch risk、gh readiness 问题；task 自身问题留在对应 task row 和 task detail。</li>
+            <li>Tasks tab 是 Project detail 的第一个 tab，放在 Git 左边。</li>
+            <li>Tasks 是一体化列表，按状态和更新时间排序。</li>
+            <li>Teamwork 启用时左侧显示 GitHub avatar；本地模式下直接以 title 开始。</li>
+            <li>每个 task 有 6 位 <code>taskTag</code>，例如 <code>A7K3P9</code>。</li>
+            <li>Task detail 点击后 drilldown，返回按钮回到列表。</li>
           </ul>
-          <p>
-            Issues 和 Help site 不进入 MVP 首屏：Issue 可以作为 agent client 对话里的上下文来源，
-            但不在 Tasks tab 里提供独立 task 创建按钮；
-            Help site 是 post-MVP 本地生成物。
-          </p>
         </article>
       </section>
 
       <section class="section panel warn">
         <div class="callout-title">Boundaries</div>
         <ul>
-          <li>基础 SharkBay 不要求 <code>gh</code>，扫描项目、开终端、本地 agent run 仍可用。</li>
-          <li>Teamwork 功能要求 <code>gh</code> authenticated。</li>
-          <li>写入共享 context 要求 GitHub repo permission 至少是 <code>write</code>。</li>
-          <li>Policy 配置建议要求 <code>maintain</code> 或 <code>admin</code>。</li>
-          <li><code>.sharkbay/</code> 保存本地 active tasks、file claims 和 harness state，必须通过本地 <code>.git/info/exclude</code> 或 SharkBay commit guard 排除，不能要求修改 repo <code>.gitignore</code>。</li>
-          <li>同一 worktree 可以有多个 active editing tasks；并发边界是文件 claim，不是 worktree clean。</li>
-          <li>agent 修改文件前必须 claim file；遇到被其他 task claim 或 dirty 但无 owner 的文件时，当前 task 暂停。</li>
-          <li>同一用户可以在多个 worktree 有多个 active tasks，但 UI 必须显式展示 repo、branch、worktree 和 claimed files。</li>
-          <li>Runtime context 分支只保存完成后的 <code>tasks/</code> 和关键 <code>runs/</code> 摘要。</li>
-          <li>GitHub Issues 是 task 的可选来源；重要决策使用 <code>docs/</code>。</li>
-          <li>Raw transcript 可以后续再做，MVP 先记录可审计摘要和关键 events。</li>
-          <li>严肃审计如果未来变强，再引入 SharkBay backend 或 GitHub App。</li>
+          <li>基础 SharkBay 可在本地使用；Teamwork sync 使用 authenticated <code>gh</code>。</li>
+          <li>Context branch 在用户第一次启用 Teamwork 时由 SharkBay 创建；已有 branch 时只 fetch。</li>
+          <li>写入 context branch 要求 GitHub repo permission 至少是 <code>write</code>。</li>
+          <li>Teamwork 启用后通过每分钟 tick 自动 sync。</li>
+          <li>Task records 使用 compact Markdown，适合搜索、阅读和 agent context reuse。</li>
+          <li>本地和团队 task records 使用同一种 Markdown 格式，frontmatter 供 UI 解析。</li>
+          <li><code>.sharkbay/team-context/</code> 是 SharkBay 管理的只读 mirror，供 UI 和 agent 搜索。</li>
+          <li>Agent 原始 session/transcript 留在对应 CLI 的存储中。</li>
+          <li>SharkBay 可以阻止自己提交 <code>.sharkbay/</code> 和 generated root instruction files。</li>
         </ul>
       </section>
 
@@ -1439,24 +840,24 @@ rg '"githubLogin":"SharkUI"' .sharkbay-team-context/runs</pre>
           </thead>
           <tbody>
             <tr>
+              <td>Instruction adherence drift</td>
+              <td>Task file 缺少 summary、verification，或 changed files 需要用户复核</td>
+              <td>Tasks UI 暴露 missing fields / dirty state；commit 前由 SharkBay 展示 changed files，用户确认。</td>
+            </tr>
+            <tr>
               <td>Context branch 被 force-push 或删除</td>
-              <td>团队历史丢失或不可追溯</td>
-              <td>创建 <code>sharkbay-team-context</code> 时提示配置 branch protection；SharkBay 检测 protected 状态并在未保护时显示风险。</td>
+              <td>团队历史需要从成员本地 task files 或 Git history 恢复</td>
+              <td>创建 <code>sharkbay-team-context</code> 时提示 branch protection；sync 失败必须显示。</td>
             </tr>
             <tr>
               <td><code>gh</code> token 过期或权限变化</td>
               <td>用户以为 context 已同步，但实际失败</td>
-              <td>每次 sync 前运行 readiness check；失败时保留 pending sync，UI 明确显示未同步，不删除 active task。</td>
+              <td>每次 sync 前 readiness check；失败状态只显示在 UI，不回写 task Markdown。</td>
             </tr>
             <tr>
-              <td>同一 worktree 多个 active tasks 的验证被污染</td>
-              <td>Task A 的测试可能在 Task A + Task B 的组合状态下通过，不能证明单独提交 A 后通过</td>
-              <td>verification 记录必须标注 <code>combined worktree</code> 或 <code>isolated clean state</code>；高风险 task 提示使用独立 worktree 验证。</td>
-            </tr>
-            <tr>
-              <td>File claim stale 或 SharkBay 崩溃</td>
-              <td>文件被旧 task claim，导致新 task 无法继续</td>
-              <td>启动时检测 stale active tasks 和 file claims，提供 resume、release claim、finish/sync、mark blocked、abandon recovery options。</td>
+              <td>Root ignored instruction file 与用户文件冲突</td>
+              <td>覆盖用户自己的 <code>AGENTS.md</code> 等文件</td>
+              <td>只管理带 SharkBay marker 的文件；已有 tracked 或 untracked 同名文件时提示用户。</td>
             </tr>
           </tbody>
         </table>
@@ -1465,18 +866,14 @@ rg '"githubLogin":"SharkUI"' .sharkbay-team-context/runs</pre>
       <section class="section panel">
         <h2>MVP Plan</h2>
         <ol>
-          <li>实现 Teamwork readiness check：<code>gh</code> path、auth user、repo permission、current branch、current commit。</li>
-          <li>实现 install flow：只生成本地 <code>.sharkbay/harness/instructions/*.md</code> 和 client adapters；不写 <code>AGENTS.md</code>、<code>CLAUDE.md</code>、<code>GEMINI.md</code>、<code>.mcp.json</code> 或 <code>.gitignore</code> 进 repo。</li>
-          <li>定义 <code>.sharkbay/config.json</code>、<code>.sharkbay/tasks/*.json</code> 和 <code>.sharkbay/claims/file-claims.json</code>。</li>
-          <li>定义 <code>sharkbay-team-context</code> 分支、<code>.sharkbay-team-context/</code> 根目录、task package 文件格式、filename identity 规则和 machine id。</li>
-          <li>实现 harness surfaces：local instruction files、project-local MCP tool surface、verification surface、feedback loop。</li>
-          <li>实现 task lifecycle MCP：agent 在对话中理解用户请求后调用 <code>create_or_continue_task</code> 创建或继续本地 task；SharkBay host 不替 agent 做语义识别。dirty worktree 可创建新 task，但不能 claim dirty/unowned files。</li>
-          <li>实现 task modes：<code>quick task</code> 和 <code>task</code>。</li>
-          <li>实现 file claim guard：写入前 claim file；冲突时暂停当前 task，并显示 blocking task 或 dirty unowned file。</li>
-          <li>实现 MCP MVP 工具：<code>get_project_context</code>、<code>search_team_context</code>、<code>create_or_continue_task</code>、<code>get_task</code>、<code>update_task</code>、<code>claim_files</code>、<code>release_file_claims</code>、<code>record_run_event</code>、<code>prepare_task_export</code>。</li>
-          <li>实现 active task recovery：stale detection、resume、release stale claims、finish/sync、mark blocked、abandon。</li>
-          <li>实现 completion sync：commit 后生成 compact task package，写入 context branch 并 push。</li>
-          <li>Help site 标记为 post-MVP；MVP 只需要 Tasks tab 直接展示 compact summaries 和 search results。</li>
+          <li>实现 project-local teamwork install：写 <code>.sharkbay/</code> 和本地 <code>.git/info/exclude</code>。</li>
+          <li>实现 Teamwork enable flow：检查 <code>gh</code>、repo permission，并创建或 fetch <code>sharkbay-team-context</code>。</li>
+          <li>生成 local instruction files 和可选 root ignored adapters。</li>
+          <li>实现 Markdown task file parser：frontmatter + sections。</li>
+          <li>实现 agent-maintained task file protocol：create/update/finish。</li>
+          <li>实现每分钟 context branch sync：只写 <code>tasks/**/*.md</code>，并刷新本地 mirror。</li>
+          <li>实现 Tasks UI view model：合并 local Markdown 和 <code>.sharkbay/team-context/</code> Markdown。</li>
+          <li>实现 SharkBay commit guard：阻止提交 harness local files。</li>
         </ol>
       </section>
 
@@ -1492,19 +889,10 @@ Verified actor:
 - login: SharkUI
 - id: 3960864
 
-Machine:
-- machine id: generated by SharkBay on first Teamwork use
-- UI short id example: m7f3a6
-
 Repo:
 - SharkUI/SharkBay
-- default branch: main
 - current local branch: teamwork
-- current commit: 451cf567a6e543e9b8faa717c6e64a6357be5659
-- permission: admin
-- PR for SharkUI:teamwork: none
-- open issues: none
-- recent GitHub Actions runs: none</pre>
+- permission: admin</pre>
       </section>
     </main>
   </body>
