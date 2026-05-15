@@ -839,7 +839,7 @@ rg '"githubLogin":"SharkUI"' .sharkbay-team-context/runs</pre>
             <li><strong>Task numbering</strong>: 显示编号使用全项目递增序号，前缀表示类型：<code>T1</code>、<code>T2</code>、<code>Q3</code>、<code>T4</code>、<code>Q5</code>。<code>T</code> 是 task，<code>Q</code> 是 quick task；数字不按类型分别计数。</li>
             <li><strong>Task order</strong>: task 按创建时间倒序显示，最新的在最上面；编号仍然保持创建时分配的全局序号。</li>
             <li><strong>Task row</strong>: 编号和 title 必须在同一行作为主视觉，title 不应被弱化成小字。第二行才显示状态、owner/agent、claimed files count 和 verification scope。<code>sync failed</code>、<code>waiting_for_file</code>、<code>dirty_unowned_file</code> 都是 task row 状态；<code>waiting</code> 使用黄色 warning 状态。</li>
-            <li><strong>Task detail</strong>: 点击 task 后列表消失，右侧 panel 进入 task detail drilldown。Detail 顶部有 back button 返回 task list；详情里展示 brief、summary、verification、commit/sync、file claims、blocked-by 文件和 related runs，不放 <code>Record summary</code>、<code>Open runs</code>、<code>Retry sync</code> 这种表意不明的底部按钮组。</li>
+            <li><strong>Task detail</strong>: 点击 task 后列表消失，右侧 panel 进入 task detail drilldown。Detail 顶部有 back button 返回 task list；标题下不重复 project/type/status。详情只展示任务事实，例如 status、branch/base、verification、sync result、blocked-by 文件和 related runs。正常 claimed files 默认不展示，只有 claim 冲突、dirty unowned 或阻塞其它 task 时才露出。</li>
             <li><strong>Task creation</strong>: MVP mockup 不放 <code>Quick task</code>、<code>Task</code>、<code>Create from issue</code> 三个并列表意不明的按钮；创建入口后续需要重新设计。</li>
             <li><strong>Attention rows</strong>: 只显示非 task 归属的风险，例如 context branch risk、gh readiness 问题；task 自身问题留在对应 task row 和 task detail。</li>
           </ul>

@@ -47,7 +47,8 @@
       }
 
       .task-list-direct {
-        margin-top: 2px;
+        gap: 8px;
+        margin-top: 4px;
       }
 
       .task-list-direct[hidden],
@@ -55,22 +56,12 @@
         display: none;
       }
 
-      .task-main-line {
-        display: flex;
-        align-items: baseline;
-        gap: 7px;
-        min-width: 0;
-      }
-
-      .task-main-line strong {
-        flex: 0 0 auto;
-      }
-
       .task-title {
         min-width: 0;
         overflow: hidden;
         color: #203136;
-        font-weight: 700;
+        font-size: 12px;
+        font-weight: 680;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
@@ -79,6 +70,47 @@
         color: #6f4c00;
         background: #fff0b8;
         border-color: #e4c96d;
+      }
+
+      .teamwork-facts-card {
+        padding: 11px 12px 12px;
+      }
+
+      .teamwork-facts-card .project-facts-list {
+        gap: 7px;
+      }
+
+      .task-list-direct .queue-item {
+        grid-template-columns: 44px minmax(0, 1fr) auto;
+        min-height: 46px;
+        padding: 9px 10px;
+      }
+
+      .task-id-badge {
+        display: grid;
+        place-items: center;
+        min-width: 42px;
+        height: 26px;
+        color: #fffdfa;
+        background: #245b9f;
+        border: 1px solid #1d4e8d;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+      }
+
+      .task-id-badge.is-quick {
+        color: #173f47;
+        background: #cfe6f6;
+        border-color: #a8cfe8;
+      }
+
+      .task-row-main {
+        display: grid;
+        gap: 3px;
+        min-width: 0;
       }
 
       .teamwork-attention {
@@ -201,7 +233,7 @@ Next:
                   </div>
 
                   <div class="detail-tab-panel">
-                    <section class="subpanel project-facts-card">
+                    <section class="subpanel project-facts-card teamwork-facts-card">
                       <div class="panel-title-row compact-title-row">
                         <h4>Teamwork</h4>
                         <span class="worktree-pill is-clean">connected</span>
@@ -217,46 +249,52 @@ Next:
 
                     <div class="queue-list task-list-direct" id="task-list">
                       <button class="queue-item" type="button" data-open-task="Q6">
-                        <span>
-                          <span class="task-main-line"><strong>Q6</strong><span class="task-title">Fix dirty file open fallback</span></span>
+                        <span class="task-id-badge is-quick">Q322</span>
+                        <span class="task-row-main">
+                          <span class="task-title">Fix dirty file open fallback</span>
                           <small>synced · d25881c · 5m ago</small>
                         </span>
                         <span class="phase-pill phase-done">Done</span>
                       </button>
                       <button class="queue-item" type="button" data-open-task="Q5">
-                        <span>
-                          <span class="task-main-line"><strong>Q5</strong><span class="task-title">Refine project selection and git history styling</span></span>
+                        <span class="task-id-badge is-quick">Q87</span>
+                        <span class="task-row-main">
+                          <span class="task-title">Refine project selection and git history styling</span>
                           <small>synced · 451cf56 · 24m ago</small>
                         </span>
                         <span class="phase-pill phase-done">Done</span>
                       </button>
                       <button class="queue-item" type="button" data-open-task="T4">
-                        <span>
-                          <span class="task-main-line"><strong>T4</strong><span class="task-title">Update keyboard hints</span></span>
+                        <span class="task-id-badge">T21</span>
+                        <span class="task-row-main">
+                          <span class="task-title">Update keyboard hints</span>
                           <small>paused · dirty unowned file src/renderer/shortcuts.ts</small>
                         </span>
                         <span class="phase-pill phase-blocked">Paused</span>
                       </button>
                       <button class="queue-item" type="button" data-open-task="Q3">
-                        <span>
-                          <span class="task-main-line"><strong>Q3</strong><span class="task-title">Browser fullscreen shortcut</span></span>
+                        <span class="task-id-badge is-quick">Q12</span>
+                        <span class="task-row-main">
+                          <span class="task-title">Browser fullscreen shortcut</span>
                           <small>waiting for docs/shared/teamwork-design.html · blocked by T1</small>
                         </span>
                         <span class="phase-pill phase-waiting">Waiting</span>
                       </button>
                       <button class="queue-item" type="button" data-open-task="T2">
-                        <span>
-                          <span class="task-main-line"><strong>T2</strong><span class="task-title">Document teamwork context design</span></span>
+                        <span class="task-id-badge">T2</span>
+                        <span class="task-row-main">
+                          <span class="task-title">Document teamwork context design</span>
                           <small>synced · 9f20b30 · yesterday</small>
                         </span>
                         <span class="phase-pill phase-done">Done</span>
                       </button>
-                      <button class="queue-item is-current" type="button" data-open-task="T1">
-                        <span>
-                          <span class="task-main-line"><strong>T1</strong><span class="task-title">Document Tasks UI</span></span>
+                      <button class="queue-item" type="button" data-open-task="T1">
+                        <span class="task-id-badge">T1</span>
+                        <span class="task-row-main">
+                          <span class="task-title">Document Tasks UI</span>
                           <small>sync failed · 2 files · combined verification</small>
                         </span>
-                        <span class="phase-pill phase-coding">Sync failed</span>
+                        <span class="phase-pill phase-blocked">Sync failed</span>
                       </button>
                     </div>
 
@@ -269,34 +307,20 @@ Next:
                         </button>
                         <div>
                           <h3>T1 Document Tasks UI</h3>
-                          <div class="path-line">SharkBay · task · sync failed</div>
                         </div>
                       </div>
-                      <section class="subpanel artifact-panel">
-                        <div class="task-detail-compact">
-                          <div class="metadata-list">
-                            <div class="metadata-row"><span>Status</span><strong>sync failed · retry available</strong></div>
-                            <div class="metadata-row"><span>Mode</span><strong>task · branch teamwork · base 9f20b30</strong></div>
-                            <div class="metadata-row"><span>Verify</span><strong>not run · combined worktree</strong></div>
-                            <div class="metadata-row"><span>Next</span><strong>retry sync after context branch push rejection</strong></div>
-                          </div>
-                          <p class="teamwork-summary">Acceptance: Tasks is one list with T/Q numbering. Task details hold file claims, sync state, verification and related runs.</p>
-                          <div class="dirty-file-list task-detail-claims">
-                            <button class="dirty-file-row" type="button">
-                              <span class="dirty-file-status">M</span>
-                              <span class="dirty-file-path">claimed · docs/shared/teamwork-design.html</span>
-                            </button>
-                            <button class="dirty-file-row" type="button">
-                              <span class="dirty-file-status">M</span>
-                              <span class="dirty-file-path">claimed · docs/shared/teamwork-ui-mockup.html</span>
-                            </button>
-                            <button class="dirty-file-row" type="button">
-                              <span class="dirty-file-status">!</span>
-                              <span class="dirty-file-path">blocks Q3 · docs/shared/teamwork-design.html</span>
-                            </button>
-                          </div>
+                      <div class="task-detail-compact">
+                        <div class="metadata-list">
+                          <div class="metadata-row"><span>Status</span><strong>sync failed</strong></div>
+                          <div class="metadata-row"><span>Branch</span><strong>teamwork · base 9f20b30</strong></div>
+                          <div class="metadata-row"><span>Verify</span><strong>not run · combined worktree</strong></div>
+                          <div class="metadata-row"><span>Sync</span><strong>context branch push rejected</strong></div>
                         </div>
-                      </section>
+                        <button class="dirty-file-row" type="button">
+                          <span class="dirty-file-status">!</span>
+                          <span class="dirty-file-path">blocks Q3 · docs/shared/teamwork-design.html</span>
+                        </button>
+                      </div>
                     </section>
 
                     <section class="subpanel dirty-files-card teamwork-attention">
