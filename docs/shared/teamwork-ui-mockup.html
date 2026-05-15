@@ -81,36 +81,44 @@
       }
 
       .task-list-direct .queue-item {
-        grid-template-columns: 44px minmax(0, 1fr) auto;
+        grid-template-columns: 34px minmax(0, 1fr) auto;
         min-height: 46px;
         padding: 9px 10px;
       }
 
-      .task-id-badge {
+      .task-avatar {
         display: grid;
         place-items: center;
-        min-width: 42px;
-        height: 26px;
-        color: #fffdfa;
-        background: #245b9f;
-        border: 1px solid #1d4e8d;
-        border-radius: 6px;
-        font-size: 11px;
+        width: 28px;
+        height: 28px;
+        overflow: hidden;
+        color: #ffffff;
+        background: #325768;
+        border: 1px solid #d6e0df;
+        border-radius: 50%;
+        font-size: 10px;
         font-weight: 800;
         letter-spacing: 0;
-        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+        box-shadow: 0 1px 2px rgba(20, 32, 34, 0.14);
       }
 
-      .task-id-badge.is-quick {
-        color: #173f47;
-        background: #cfe6f6;
-        border-color: #a8cfe8;
+      .task-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
       }
 
       .task-row-main {
         display: grid;
         gap: 3px;
         min-width: 0;
+      }
+
+      .task-row-main small {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .teamwork-attention {
@@ -206,9 +214,9 @@
                       </div>
 
                       <div class="xterm-surface-stack">
-                        <div class="xterm-surface is-active mock-xterm" aria-hidden="false"><span class="muted">SHARKBAY_CONTEXT_FILE=.sharkbay/context/context-pack.md</span>
+                        <div class="xterm-surface is-active mock-xterm" aria-hidden="false"><span class="muted">repo: SharkBay-generic · branch: teamwork</span>
 <span class="prompt">$ codex</span>
-Read active tasks and file claims. Keep the UI design scoped to the existing Project detail tab.
+Read .sharkbay/harness/instructions/codex.md and follow the SharkBay harness protocol before editing.
 
 Changed:
   docs/shared/teamwork-design.html
@@ -248,51 +256,57 @@ Next:
                     </section>
 
                     <div class="queue-list task-list-direct" id="task-list">
-                      <button class="queue-item" type="button" data-open-task="Q6">
-                        <span class="task-id-badge is-quick">Q322</span>
+                      <button class="queue-item" type="button" data-open-task="F8M2QA">
+                        <span class="task-avatar" aria-hidden="true">
+                          <img alt="" src="https://avatars.githubusercontent.com/u/3960864?v=4" />
+                        </span>
                         <span class="task-row-main">
                           <span class="task-title">Fix dirty file open fallback</span>
-                          <small>synced · d25881c · 5m ago</small>
+                          <small>F8M2QA · SharkUI · synced · d25881c · 5m ago</small>
                         </span>
                         <span class="phase-pill phase-done">Done</span>
                       </button>
-                      <button class="queue-item" type="button" data-open-task="Q5">
-                        <span class="task-id-badge is-quick">Q87</span>
+                      <button class="queue-item" type="button" data-open-task="C6R9VX">
+                        <span class="task-avatar" aria-hidden="true">AL</span>
                         <span class="task-row-main">
                           <span class="task-title">Refine project selection and git history styling</span>
-                          <small>synced · 451cf56 · 24m ago</small>
+                          <small>C6R9VX · alex · synced · 451cf56 · 24m ago</small>
                         </span>
                         <span class="phase-pill phase-done">Done</span>
                       </button>
-                      <button class="queue-item" type="button" data-open-task="T4">
-                        <span class="task-id-badge">T21</span>
+                      <button class="queue-item" type="button" data-open-task="H2K7MD">
+                        <span class="task-avatar" aria-hidden="true">JL</span>
                         <span class="task-row-main">
                           <span class="task-title">Update keyboard hints</span>
-                          <small>paused · dirty unowned file src/renderer/shortcuts.ts</small>
+                          <small>H2K7MD · jo · paused · dirty unowned file src/renderer/shortcuts.ts</small>
                         </span>
                         <span class="phase-pill phase-blocked">Paused</span>
                       </button>
-                      <button class="queue-item" type="button" data-open-task="Q3">
-                        <span class="task-id-badge is-quick">Q12</span>
+                      <button class="queue-item" type="button" data-open-task="B4N8Q2">
+                        <span class="task-avatar" aria-hidden="true">
+                          <img alt="" src="https://avatars.githubusercontent.com/u/3960864?v=4" />
+                        </span>
                         <span class="task-row-main">
                           <span class="task-title">Browser fullscreen shortcut</span>
-                          <small>waiting for docs/shared/teamwork-design.html · blocked by T1</small>
+                          <small>B4N8Q2 · SharkUI · waiting for docs/shared/teamwork-design.html · blocked by A7K3P9</small>
                         </span>
                         <span class="phase-pill phase-waiting">Waiting</span>
                       </button>
-                      <button class="queue-item" type="button" data-open-task="T2">
-                        <span class="task-id-badge">T2</span>
+                      <button class="queue-item" type="button" data-open-task="R5V1CN">
+                        <span class="task-avatar" aria-hidden="true">AL</span>
                         <span class="task-row-main">
                           <span class="task-title">Document teamwork context design</span>
-                          <small>synced · 9f20b30 · yesterday</small>
+                          <small>R5V1CN · alex · synced · 9f20b30 · yesterday</small>
                         </span>
                         <span class="phase-pill phase-done">Done</span>
                       </button>
-                      <button class="queue-item" type="button" data-open-task="T1">
-                        <span class="task-id-badge">T1</span>
+                      <button class="queue-item" type="button" data-open-task="A7K3P9">
+                        <span class="task-avatar" aria-hidden="true">
+                          <img alt="" src="https://avatars.githubusercontent.com/u/3960864?v=4" />
+                        </span>
                         <span class="task-row-main">
                           <span class="task-title">Document Tasks UI</span>
-                          <small>sync failed · 2 files · combined verification</small>
+                          <small>A7K3P9 · SharkUI · sync failed · 2 files · combined verification</small>
                         </span>
                         <span class="phase-pill phase-blocked">Sync failed</span>
                       </button>
@@ -306,11 +320,12 @@ Next:
                           </svg>
                         </button>
                         <div>
-                          <h3>T1 Document Tasks UI</h3>
+                          <h3>Document Tasks UI</h3>
                         </div>
                       </div>
                       <div class="task-detail-compact">
                         <div class="metadata-list">
+                          <div class="metadata-row"><span>Tag</span><strong>A7K3P9 · SharkUI · m7f3a6</strong></div>
                           <div class="metadata-row"><span>Status</span><strong>sync failed</strong></div>
                           <div class="metadata-row"><span>Branch</span><strong>teamwork · base 9f20b30</strong></div>
                           <div class="metadata-row"><span>Verify</span><strong>not run · combined worktree</strong></div>
@@ -318,7 +333,7 @@ Next:
                         </div>
                         <button class="dirty-file-row" type="button">
                           <span class="dirty-file-status">!</span>
-                          <span class="dirty-file-path">blocks Q3 · docs/shared/teamwork-design.html</span>
+                          <span class="dirty-file-path">blocks B4N8Q2 · docs/shared/teamwork-design.html</span>
                         </button>
                       </div>
                     </section>
