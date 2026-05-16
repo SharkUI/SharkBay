@@ -20,6 +20,8 @@ import type {
   RootRecord,
   ScanResult,
   SharkBayBridge,
+  TaskViewModel,
+  TeamworkStatus,
   TerminalDataEvent,
   TerminalExitEvent,
   TerminalCreateInput,
@@ -38,7 +40,7 @@ import {
 import type { WorkflowProjectTerminalActivityState } from "./workflow";
 
 type View = "dashboard" | "settings";
-type DetailTab = "git" | "files";
+type DetailTab = "tasks" | "git" | "files";
 type SettingsSection = "projects" | "project-roots" | "project-status";
 
 type Toast = {
@@ -105,6 +107,7 @@ const columnResizeStep = 40;
 const detailColumnStorageKey = "sharkbay.detailColumnWidth.v2";
 const projectColumnStorageKey = "sharkbay.projectColumnWidth.v2";
 const detailTabs: Array<{ id: DetailTab; label: string }> = [
+  { id: "tasks", label: "Tasks" },
   { id: "git", label: "Git" },
   { id: "files", label: "Files" },
 ];
@@ -1420,9 +1423,9 @@ function ProjectDetailPane({ detail, candidate, setToast, onRefresh, onOpenFileI
   onOpenFileInEditor: (relativePath: string) => Promise<void>;
   onOpenGitDiff: (relativePath: string) => Promise<void>;
 }) {
-  const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>("git");
+  const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>("tasks");
 
-  useEffect(() => { setActiveDetailTab("git"); }, [candidate.id]);
+  useEffect(() => { setActiveDetailTab("tasks"); }, [candidate.id]);
 
   function handleDetailTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, tab: DetailTab) {
     const currentIndex = detailTabs.findIndex((item) => item.id === tab);
@@ -1445,6 +1448,9 @@ function ProjectDetailPane({ detail, candidate, setToast, onRefresh, onOpenFileI
           </button>
         ))}
       </div>
+      <div aria-labelledby="project-detail-tab-tasks" className="detail-tab-panel" hidden={activeDetailTab !== "tasks"} id="project-detail-tabpanel-tasks" role="tabpanel">
+        <TasksDetailTab candidate={candidate} setToast={setToast} />
+      </div>
       <div aria-labelledby="project-detail-tab-git" className="detail-tab-panel" hidden={activeDetailTab !== "git"} id="project-detail-tabpanel-git" role="tabpanel">
         <GitDetailTab detail={detail} candidate={candidate} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} />
       </div>
@@ -1452,6 +1458,179 @@ function ProjectDetailPane({ detail, candidate, setToast, onRefresh, onOpenFileI
         <FilesDetailTab active={activeDetailTab === "files"} candidate={candidate} detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} />
       </div>
     </div>
+  );
+}
+
+function taskPill(task: TaskViewModel): { label: string; cls: string } {
+  if (task.status === "completed" && task.sync === "synced") return { label: "Done", cls: "phase-done" };
+  if (task.status === "completed" && task.sync === "pending") return { label: "Pending", cls: "phase-waiting" };
+  if (task.status === "completed" && task.sync === "failed") return { label: "Sync failed", cls: "phase-blocked" };
+  if (task.status === "active") return { label: "Active", cls: "phase-done" };
+  if (task.status === "paused") return { label: "Paused", cls: "phase-blocked" };
+  if (task.status === "blocked") return { label: "Blocked", cls: "phase-blocked" };
+  if (task.status === "abandoned") return { label: "Dropped", cls: "phase-blocked" };
+  return { label: task.status, cls: "phase-waiting" };
+}
+
+function TasksDetailTab({ candidate, setToast }: { candidate: ProjectCandidate; setToast: (toast: Toast) => void }) {
+  const [tasks, setTasks] = useState<TaskViewModel[]>([]);
+  const [status, setStatus] = useState<TeamworkStatus | null>(null);
+  const [selected, setSelected] = useState<TaskViewModel | null>(null);
+  const [busyAction, setBusyAction] = useState<"install" | "enable" | null>(null);
+  const [teamworkError, setTeamworkError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSelected(null);
+    setTeamworkError(null);
+    const teamwork = window.sharkBay?.teamwork;
+    if (!teamwork?.getTasks || !teamwork?.getStatus) {
+      const message = "Teamwork APIs are not exposed by the preload bridge.";
+      setTeamworkError(message);
+      setToast({ tone: "error", message });
+      return;
+    }
+    void teamwork.getTasks({ repoPath: candidate.path })
+      .then((updated) => { if (!cancelled) setTasks(updated); })
+      .catch((error) => {
+        if (cancelled) return;
+        setTasks([]);
+        const message = asMessage(error);
+        setTeamworkError(message);
+        setToast({ tone: "error", message });
+      });
+    void teamwork.getStatus({ repoPath: candidate.path })
+      .then((updated) => { if (!cancelled) setStatus(updated); })
+      .catch((error) => {
+        if (cancelled) return;
+        const message = asMessage(error);
+        setTeamworkError(message);
+        setToast({ tone: "error", message });
+      });
+    const unsub = window.sharkBay?.teamwork?.onTasksChanged?.((event) => {
+      if (event.repoPath === candidate.path) setTasks(event.tasks);
+    });
+    return () => { cancelled = true; unsub?.(); };
+  }, [candidate.path, setToast]);
+
+  async function refreshTeamworkStatus(): Promise<TeamworkStatus> {
+    const getStatus = window.sharkBay?.teamwork?.getStatus;
+    if (!getStatus) throw new Error("Teamwork status API is not available.");
+    const updated = await getStatus({ repoPath: candidate.path });
+    setStatus(updated);
+    return updated;
+  }
+
+  async function installTeamworkHarness(): Promise<void> {
+    setBusyAction("install");
+    setTeamworkError(null);
+    try {
+      const install = window.sharkBay?.teamwork?.install;
+      if (!install) throw new Error("Teamwork install API is not available.");
+      const machineId = Math.random().toString(36).slice(2, 8);
+      await install({ repoPath: candidate.path, githubLogin: "", githubUserId: 0, machineId, agent: "" });
+      await refreshTeamworkStatus();
+      setToast({ tone: "success", message: "Teamwork harness installed." });
+    } catch (error) {
+      const message = asMessage(error);
+      setTeamworkError(message);
+      setToast({ tone: "error", message });
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function enableTeamwork(): Promise<void> {
+    setBusyAction("enable");
+    setTeamworkError(null);
+    try {
+      const enable = window.sharkBay?.teamwork?.enable;
+      if (!enable) throw new Error("Teamwork enable API is not available.");
+      const updated = await enable({ repoPath: candidate.path });
+      setStatus(updated);
+      setToast({ tone: "success", message: "Teamwork enabled." });
+    } catch (error) {
+      const message = asMessage(error);
+      setTeamworkError(message);
+      setToast({ tone: "error", message });
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  if (selected) {
+    const pill = taskPill(selected);
+    return (
+      <div className="mock-task-detail">
+        <div className="task-detail-header">
+          <button className="icon-button" type="button" onClick={() => setSelected(null)} aria-label="Back to task list">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          <h3 style={{ fontSize: 13, fontWeight: 680, margin: 0 }}>{selected.title}</h3>
+        </div>
+        <div className="task-detail-compact">
+          <div className="metadata-list">
+            <div className="metadata-row"><span>Tag</span><strong>{selected.taskTag}</strong></div>
+            <div className="metadata-row"><span>Status</span><strong className={cx("phase-pill", pill.cls)}>{pill.label}</strong></div>
+            {selected.agent && <div className="metadata-row"><span>Agent</span><strong>{selected.agent}</strong></div>}
+            {selected.verification && <div className="metadata-row"><span>Verify</span><strong>{selected.verification}</strong></div>}
+            <div className="metadata-row"><span>Sync</span><strong>{selected.sync}</strong></div>
+            {selected.files && selected.files.length > 0 && <div className="metadata-row"><span>Files</span><strong>{selected.files.length}</strong></div>}
+          </div>
+          {selected.files && selected.files.length > 0 && (
+            <div className="dirty-files-list">
+              {selected.files.map((f) => (
+                <button className="dirty-file-row" key={f} type="button">{f}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="teamwork-facts-card detail-card">
+        <div className="project-facts-list">
+          {status?.repo && <div className="repository-fact"><span className="fact-label">Repo</span><span className="fact-value">{status.repo}</span></div>}
+          {status?.githubLogin && <div className="repository-fact"><span className="fact-label">User</span><span className="fact-value">{status.githubLogin}</span></div>}
+          {status?.branch && <div className="repository-fact"><span className="fact-label">Branch</span><span className="fact-value">{status.branch}</span></div>}
+          <div className="repository-fact"><span className="fact-label">Harness</span><span className="fact-value">{status?.installed ? "Installed" : "Not installed"}</span></div>
+          {(teamworkError || status?.lastError) && <div className="repository-fact is-warn"><span>Error</span><strong>{teamworkError || status?.lastError}</strong></div>}
+          {status && !status.installed && (
+            <button className="worktree-pill" disabled={busyAction !== null} type="button" style={{ cursor: busyAction ? "default" : "pointer", marginTop: 4 }} onClick={() => void installTeamworkHarness()}>
+              {busyAction === "install" ? "Installing..." : "Install harness"}
+            </button>
+          )}
+          {status?.installed && !status.syncEnabled && (
+            <button className="worktree-pill" disabled={busyAction !== null} type="button" style={{ cursor: busyAction ? "default" : "pointer", marginTop: 4 }} onClick={() => void enableTeamwork()}>
+              {busyAction === "enable" ? "Enabling..." : "Enable teamwork"}
+            </button>
+          )}
+          {status?.lastSyncAt && <div className="repository-fact"><span className="fact-label">Last sync</span><span className="fact-value">{status.lastSyncAt}</span></div>}
+          {status?.pendingCount != null && status.pendingCount > 0 && <div className="repository-fact"><span className="fact-label">Pending</span><span className={cx("worktree-pill", "teamwork-attention")}>{status.pendingCount}</span></div>}
+        </div>
+      </div>
+      <div className="queue-list task-list-direct">
+        {tasks.map((task) => {
+          const pill = taskPill(task);
+          return (
+            <button className="queue-item" key={task.taskId} type="button" onClick={() => setSelected(task)}>
+              <span className="task-avatar">
+                {task.owner.avatarUrl ? <img alt="" src={task.owner.avatarUrl} /> : task.owner.githubLogin.slice(0, 2).toUpperCase()}
+              </span>
+              <span className="task-row-main">
+                <span className="task-title">{task.title}</span>
+                <small>{task.taskTag} · {task.owner.githubLogin}</small>
+              </span>
+              <span className={cx("phase-pill", pill.cls)}>{pill.label}</span>
+            </button>
+          );
+        })}
+        {tasks.length === 0 && <p style={{ padding: "12px", fontSize: 12, color: "var(--muted)" }}>No tasks found.</p>}
+      </div>
+    </>
   );
 }
 

@@ -243,3 +243,61 @@ export type BrowserSession = {
 export type BrowserUpdateEvent = {
   browser: BrowserSession;
 };
+
+export type TaskViewModel = {
+  taskId: string;
+  taskTag: string;
+  title: string;
+  mode: "quick" | "task";
+  status: "active" | "paused" | "completed" | "blocked" | "abandoned";
+  sync: "local" | "pending" | "synced" | "failed";
+  owner: { githubLogin: string; githubUserId?: number; avatarUrl?: string };
+  agent?: string;
+  machine?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  completedAt?: string;
+  commit?: string;
+  files?: string[];
+  summary?: string;
+  verification?: string;
+  work?: string;
+  notes?: string;
+  sourceKind: "local-md" | "team-md";
+  readOnly: boolean;
+};
+
+export type TeamworkStatus = {
+  installed: boolean;
+  syncEnabled: boolean;
+  lastSyncAt: string | null;
+  pendingCount: number;
+  lastError: string | null;
+  repo?: string;
+  branch?: string;
+  githubLogin?: string;
+  permission?: string;
+};
+
+export type GitHubIdentity = {
+  login: string;
+  id: number;
+  avatarUrl: string;
+};
+
+export type TeamworkInstallInput = {
+  repoPath: string;
+  githubLogin: string;
+  githubUserId: number;
+  machineId: string;
+  agent: string;
+};
+
+export type TeamworkGetTasksInput = {
+  repoPath: string;
+};
+
+export type TeamworkTasksChangedEvent = {
+  repoPath: string;
+  tasks: TaskViewModel[];
+};

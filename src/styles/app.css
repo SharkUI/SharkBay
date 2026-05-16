@@ -2901,3 +2901,22 @@ body.is-resizing-columns .app-shell[data-theme="morning"] .column-resizer::befor
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.task-list-direct { gap: 8px; margin-top: 4px; }
+.task-list-direct[hidden], .mock-task-detail[hidden] { display: none; }
+.task-title { min-width: 0; overflow: hidden; color: var(--ink); font-size: 12px; font-weight: 680; text-overflow: ellipsis; white-space: nowrap; }
+.task-avatar { display: grid; place-items: center; width: 28px; height: 28px; overflow: hidden; color: #ffffff; background: #325768; border: 1px solid var(--line); border-radius: 50%; font-size: 10px; font-weight: 800; box-shadow: 0 1px 2px rgba(20, 32, 34, 0.14); }
+.task-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.task-row-main { display: grid; gap: 3px; min-width: 0; }
+.task-row-main small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.teamwork-facts-card { padding: 11px 12px 12px; }
+.teamwork-facts-card .project-facts-list { gap: 7px; }
+.task-list-direct .queue-item { grid-template-columns: 34px minmax(0, 1fr) auto; min-height: 46px; padding: 9px 10px; }
+.phase-waiting { color: #6f4c00; background: #fff0b8; border-color: #e4c96d; }
+.teamwork-attention { color: #7e3028; background: #fbebe6; border-color: #edc7bf; }
+.task-detail-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
+.task-detail-compact { padding: 0 12px 12px; }
+.task-detail-compact .metadata-list { display: grid; gap: 6px; margin-bottom: 10px; }
+.task-detail-compact .metadata-row { display: flex; gap: 8px; font-size: 12px; }
+.task-detail-compact .metadata-row span { color: var(--muted); min-width: 52px; }
+.task-detail-compact .metadata-row strong { font-weight: 600; }

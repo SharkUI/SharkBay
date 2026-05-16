@@ -7,6 +7,9 @@ describe("IPC channels", () => {
       listRoots: "config:listRoots",
       addRoot: "config:addRoot",
       removeRoot: "config:removeRoot",
+      pickProjectFolder: "config:pickProjectFolder",
+      addProject: "config:addProject",
+      removeProject: "config:removeProject",
       setAppearanceTheme: "config:setAppearanceTheme",
       scanProjects: "projects:scan",
       getProjectDetail: "projects:getDetail",
@@ -28,7 +31,13 @@ describe("IPC channels", () => {
       browserUpdate: "browser:update",
       listAgentClis: "agents:listClis",
       agentStatus: "agents:status",
+      teamworkGetTasks: "teamwork:getTasks",
+      teamworkGetStatus: "teamwork:getStatus",
+      teamworkInstall: "teamwork:install",
+      teamworkEnable: "teamwork:enable",
+      teamworkResolveIdentity: "teamwork:resolveIdentity",
+      teamworkSyncNow: "teamwork:syncNow",
+      teamworkTasksChanged: "teamwork:tasksChanged",
     });
-    expect(Object.values(ipcChannels).some((channel) => channel.startsWith("harness:"))).toBe(false);
   });
 });

@@ -26,4 +26,11 @@ export const ipcChannels = {
   browserUpdate: "browser:update",
   listAgentClis: "agents:listClis",
   agentStatus: "agents:status",
+  teamworkGetTasks: "teamwork:getTasks",
+  teamworkGetStatus: "teamwork:getStatus",
+  teamworkInstall: "teamwork:install",
+  teamworkEnable: "teamwork:enable",
+  teamworkResolveIdentity: "teamwork:resolveIdentity",
+  teamworkSyncNow: "teamwork:syncNow",
+  teamworkTasksChanged: "teamwork:tasksChanged",
 } as const;

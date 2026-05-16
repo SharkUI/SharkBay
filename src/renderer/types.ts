@@ -207,6 +207,60 @@ export type BrowserUpdateEvent = {
   browser: BrowserSession;
 };
 
+export type TaskViewModel = {
+  taskId: string;
+  taskTag: string;
+  title: string;
+  mode: "quick" | "task";
+  status: "active" | "paused" | "completed" | "blocked" | "abandoned";
+  sync: "local" | "pending" | "synced" | "failed";
+  owner: { githubLogin: string; githubUserId?: number; avatarUrl?: string };
+  agent?: string;
+  machine?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  completedAt?: string;
+  commit?: string;
+  files?: string[];
+  summary?: string;
+  verification?: string;
+  work?: string;
+  notes?: string;
+  sourceKind: "local-md" | "team-md";
+  readOnly: boolean;
+};
+
+export type GitHubIdentity = {
+  login: string;
+  id: number;
+  avatarUrl: string;
+};
+
+export type TeamworkStatus = {
+  installed: boolean;
+  syncEnabled: boolean;
+  lastSyncAt: string | null;
+  pendingCount: number;
+  lastError: string | null;
+  repo?: string;
+  branch?: string;
+  githubLogin?: string;
+  permission?: string;
+};
+
+export type TeamworkInstallInput = {
+  repoPath: string;
+  githubLogin: string;
+  githubUserId: number;
+  machineId: string;
+  agent: string;
+};
+
+export type TeamworkTasksChangedEvent = {
+  repoPath: string;
+  tasks: TaskViewModel[];
+};
+
 export type SharkBayBridge = {
   app?: {
     onOpenSettings?: (callback: () => void) => () => void;
@@ -247,5 +301,14 @@ export type SharkBayBridge = {
   agents?: {
     listClis?: () => Promise<AgentCli[]>;
     onStatus?: (callback: (event: AgentProjectStatusEvent) => void) => () => void;
+  };
+  teamwork?: {
+    getTasks?: (input: { repoPath: string }) => Promise<TaskViewModel[]>;
+    getStatus?: (input: { repoPath: string }) => Promise<TeamworkStatus>;
+    install?: (input: TeamworkInstallInput) => Promise<void>;
+    enable?: (input: { repoPath: string }) => Promise<TeamworkStatus>;
+    resolveIdentity?: () => Promise<GitHubIdentity>;
+    syncNow?: (input: { repoPath: string }) => Promise<void>;
+    onTasksChanged?: (callback: (event: TeamworkTasksChangedEvent) => void) => () => void;
   };
 };
