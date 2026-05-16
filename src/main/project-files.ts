@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { loadRuntimeConfig } from "./config.js";
-import { isPathInside, resolveRepoPath } from "./path-safety.js";
+import { getConfiguredRoots } from "./config.js";
+import { isPathInside, resolveProjectUri } from "./path-safety.js";
 import type { IpcRuntimeLike, ProjectFileTreeItem, ProjectFilesInput, ProjectFilesResult } from "../shared/types.js";
 
 const editableExtensions = new Set([
@@ -52,14 +52,16 @@ const editableFilenames = new Set([
 
 export async function listProjectFiles(runtime: IpcRuntimeLike, input: ProjectFilesInput): Promise<ProjectFilesResult> {
   try {
-    const config = await loadRuntimeConfig(runtime);
-    const safeRepo = await resolveRepoPath(input.repoPath, config.configuredProjects);
+    const config = input.configuredRoots ? null : await getConfiguredRoots(runtime);
+    const configuredRoots = input.configuredRoots ?? config?.configuredRoots ?? [];
+    const configuredProjects = input.configuredProjects ?? config?.configuredProjects ?? [];
+    const safeRepo = await resolveProjectUri(input.projectUri, configuredRoots, configuredProjects);
     const directoryPath = await resolveRequestedDirectory(safeRepo.repoPath, safeRepo.containingRoot, input.directoryPath);
     const files = await listDirectory(safeRepo.repoPath, directoryPath, safeRepo.containingRoot);
-    return { ok: true, repoPath: safeRepo.repoPath, files };
+    return { ok: true, projectUri: safeRepo.projectUri, files };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const reason = message.includes("outside configured projects") || message.includes("No configured projects") || message.includes("outside the allowed project boundary")
+    const reason = message.includes("outside configured roots") || message.includes("No configured roots")
       ? "unsafe-path"
       : "io-error";
     return { ok: false, reason, message };
@@ -79,7 +81,7 @@ async function resolveRequestedDirectory(repoPath: string, containingRoot: strin
     throw new Error("Requested path is not a directory");
   }
   if (!isPathInside(repoPath, realPath) || !isPathInside(containingRoot, realPath)) {
-    throw new Error("Requested directory is outside the allowed project boundary");
+    throw new Error("Requested directory is outside configured roots");
   }
   return realPath;
 }

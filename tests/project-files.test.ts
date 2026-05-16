@@ -1,12 +1,12 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { getRuntimeConfigPath } from "../src/main/config.js";
 import { isEditableProjectFile, listProjectFiles } from "../src/main/project-files.js";
-import { makeTempRoot, writeJson, writeText } from "./helpers.js";
+import { toLocalProjectUri } from "../src/main/core/project-uri.js";
+import { makeTempRoot, writeText } from "./helpers.js";
 
 describe("project file listing", () => {
-  it("returns a sorted editable project file tree inside a configured project", async () => {
+  it("returns a sorted editable project file tree inside configured roots", async () => {
     const root = await makeTempRoot("project-files");
     const repo = path.join(root, "Fixture");
     await writeText(path.join(repo, ".env"), "SECRET=test\n");
@@ -19,13 +19,8 @@ describe("project file listing", () => {
     await writeText(path.join(root, "outside", "secret.md"), "secret\n");
     await fs.symlink(path.join(root, "outside"), path.join(repo, "linked-outside"));
     await fs.symlink(path.join(root, "outside", "secret.md"), path.join(repo, "linked-secret.md"));
-    await writeJson(getRuntimeConfigPath({ userDataPath: root }), {
-      schemaVersion: 1,
-      configuredProjects: [repo],
-      updatedAt: "2026-05-16",
-    });
 
-    const result = await listProjectFiles({ userDataPath: root }, { repoPath: repo });
+    const result = await listProjectFiles({ userDataPath: root }, { projectUri: toLocalProjectUri(repo), configuredRoots: [root] });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -49,53 +44,29 @@ describe("project file listing", () => {
     const src = result.files.find((item) => item.path === "src");
     expect(src?.children).toBeUndefined();
 
-    const srcResult = await listProjectFiles({ userDataPath: root }, { repoPath: repo, directoryPath: "src" });
+    const srcResult = await listProjectFiles({ userDataPath: root }, { projectUri: toLocalProjectUri(repo), configuredRoots: [root], directoryPath: "src" });
     expect(srcResult.ok).toBe(true);
     if (!srcResult.ok) return;
     expect(srcResult.files.map((item) => item.path)).toEqual(["src/App.tsx", "src/logo.png"]);
     expect(srcResult.files.find((item) => item.path === "src/App.tsx")?.editable).toBe(true);
     expect(srcResult.files.find((item) => item.path === "src/logo.png")?.editable).toBe(false);
 
-    const nodeModulesResult = await listProjectFiles({ userDataPath: root }, { repoPath: repo, directoryPath: "node_modules" });
+    const nodeModulesResult = await listProjectFiles({ userDataPath: root }, { projectUri: toLocalProjectUri(repo), configuredRoots: [root], directoryPath: "node_modules" });
     expect(nodeModulesResult.ok).toBe(true);
     if (!nodeModulesResult.ok) return;
     expect(nodeModulesResult.files.map((item) => item.path)).toEqual(["node_modules/ignored"]);
   });
 
-  it("rejects repositories outside configured projects", async () => {
+  it("rejects repositories outside configured roots", async () => {
     const root = await makeTempRoot("project-files-root");
-    const allowed = path.join(root, "Allowed");
     const outside = await makeTempRoot("project-files-outside");
-    await writeText(path.join(allowed, "README.md"), "# Allowed\n");
     await writeText(path.join(outside, "README.md"), "# Outside\n");
-    await writeJson(getRuntimeConfigPath({ userDataPath: root }), {
-      schemaVersion: 1,
-      configuredProjects: [allowed],
-      updatedAt: "2026-05-16",
-    });
 
-    const result = await listProjectFiles({ userDataPath: root }, { repoPath: outside });
+    const result = await listProjectFiles({ userDataPath: root }, { projectUri: toLocalProjectUri(outside), configuredRoots: [root] });
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe("unsafe-path");
-  });
-
-  it("allows repositories from manually configured projects", async () => {
-    const userDataPath = await makeTempRoot("project-files-manual-config");
-    const repo = await makeTempRoot("project-files-manual-repo");
-    await writeText(path.join(repo, "README.md"), "# Manual\n");
-    await writeJson(getRuntimeConfigPath({ userDataPath }), {
-      schemaVersion: 1,
-      configuredProjects: [repo],
-      updatedAt: "2026-05-16",
-    });
-
-    const result = await listProjectFiles({ userDataPath }, { repoPath: repo });
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.files.map((item) => item.path)).toEqual(["README.md"]);
   });
 
   it("classifies common editable file names and extensions", () => {

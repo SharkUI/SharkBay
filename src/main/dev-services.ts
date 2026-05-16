@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { ProjectDevService } from "../shared/types.js";
+import { toLocalProjectUri } from "./core/project-uri.js";
 
 type PackageJson = {
   packageManager?: unknown;
@@ -72,7 +73,7 @@ async function servicesFromPackage(projectPath: string, idPrefix: string): Promi
       label: scriptName === "dev" ? `dev: ${script.trim()}` : scriptName,
       command: await scriptCommandForProject(projectPath, packageJson ?? {}, scriptName),
       script,
-      cwd: projectPath,
+      cwdUri: toLocalProjectUri(projectPath),
     });
   }
 
@@ -107,7 +108,7 @@ async function servicesFromPythonCliWeb(projectPath: string): Promise<ProjectDev
       label: `web: ${scriptName}`,
       command,
       script: `${scriptName} web`,
-      cwd: projectPath,
+      cwdUri: toLocalProjectUri(projectPath),
     });
   }
 

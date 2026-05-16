@@ -1,11 +1,16 @@
+import { execFile } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { promises as fs } from "node:fs";
+import { constants as fsConstants, promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { resolveCommandPath } from "./command-path.js";
-import type { AgentCli, AgentProjectStatusEvent } from "../shared/types.js";
+import { promisify } from "node:util";
+import { getConfiguredRoots } from "./config.js";
+import { parseProjectUri } from "./core/project-uri.js";
+import { quoteForRemoteShell, runSshCommand, sshArgsForRemoteMachine, type SshCommandRunner } from "./remote-machines.js";
+import { createDefaultSecretStore, type SecretStore } from "./secrets.js";
+import type { AgentCli, AgentProjectStatusEvent, IpcRuntimeLike, RemoteMachine } from "../shared/types.js";
 
-export { resolveCommandPath } from "./command-path.js";
+const execFileAsync = promisify(execFile);
 
 export type AgentSessionState = {
   agentId: string;
@@ -52,9 +57,114 @@ const agentCliDefinitions: AgentCliDefinition[] = [
   { id: "opencode", label: "OpenCode", commands: ["opencode"], shortLabel: "O" },
 ];
 
+const fallbackCommandDirectories = [
+  ".local/bin",
+  ".bun/bin",
+  ".nvm/current/bin",
+  "/opt/homebrew/bin",
+  "/opt/homebrew/sbin",
+  "/usr/local/bin",
+  "/usr/bin",
+  "/bin",
+  "/usr/sbin",
+  "/sbin",
+];
+
 export async function listAvailableAgentClis(): Promise<AgentCli[]> {
   const results = await Promise.all(agentCliDefinitions.map((definition) => resolveAgentCli(definition)));
   return results.filter((result): result is AgentCli => Boolean(result));
+}
+
+export async function listAgentClisForUri(
+  runtime: IpcRuntimeLike,
+  cwdUri: string | undefined,
+  options: {
+    secretStore?: SecretStore;
+    runner?: SshCommandRunner;
+  } = {},
+): Promise<AgentCli[]> {
+  if (!cwdUri || !cwdUri.startsWith("ssh://")) {
+    return listAvailableAgentClis();
+  }
+  try {
+    const parsed = parseProjectUri(cwdUri);
+    if (parsed.kind !== "ssh") return listAvailableAgentClis();
+    const config = await getConfiguredRoots(runtime);
+    const machine = config.configuredRemoteMachines.find((item) => item.id === parsed.machineId);
+    if (!machine) return [];
+    return await detectRemoteAgentClis(machine, {
+      secretStore: options.secretStore ?? createDefaultSecretStore(),
+      runner: options.runner ?? runSshCommand,
+    });
+  } catch {
+    return [];
+  }
+}
+
+export async function detectRemoteAgentClis(
+  machine: RemoteMachine,
+  options: {
+    secretStore: SecretStore;
+    runner: SshCommandRunner;
+    timeoutMs?: number;
+  },
+): Promise<AgentCli[]> {
+  const password = machine.authMode === "password" && machine.passwordSecretId
+    ? (await options.secretStore.get(machine.passwordSecretId)) ?? null
+    : null;
+  const sshArgs = sshArgsForRemoteMachine(machine, Boolean(password));
+  if (!sshArgs.length) return [];
+
+  const commands = agentCliDefinitions.flatMap((definition) => definition.commands);
+  if (!commands.length) return [];
+  const probeScript = commands
+    .map((command) => `printf '%s\\t%s\\n' ${shellQuote(command)} "$(command -v ${shellQuote(command)} 2>/dev/null || true)"`)
+    .join("; ");
+
+  const runnerArgs = [
+    "-o", password ? "BatchMode=no" : "BatchMode=yes",
+    "-o", "ConnectTimeout=5",
+    ...sshArgs,
+    "--",
+    `sh -l -c ${quoteForRemoteShell(probeScript)}`,
+  ];
+
+  let result: { stdout: string; stderr: string };
+  try {
+    result = await options.runner(runnerArgs, options.timeoutMs ?? 8000, password ? { password } : undefined);
+  } catch {
+    return [];
+  }
+
+  const foundPaths = new Map<string, string>();
+  for (const line of result.stdout.split(/\r?\n/u)) {
+    if (!line.trim()) continue;
+    const [command, ...rest] = line.split("\t");
+    const remotePath = rest.join("\t").trim();
+    if (command && remotePath) foundPaths.set(command, remotePath);
+  }
+
+  const detected: AgentCli[] = [];
+  for (const definition of agentCliDefinitions) {
+    for (const command of definition.commands) {
+      const remotePath = foundPaths.get(command);
+      if (remotePath) {
+        detected.push({
+          id: definition.id,
+          label: definition.label,
+          command,
+          executablePath: remotePath,
+          shortLabel: definition.shortLabel,
+        });
+        break;
+      }
+    }
+  }
+  return detected;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
 export class AgentSessionWatcher extends EventEmitter<AgentSessionWatcherEvents> {
@@ -254,6 +364,42 @@ async function resolveAgentCli(definition: AgentCliDefinition): Promise<AgentCli
     }
   }
   return null;
+}
+
+export async function resolveCommandPath(
+  command: string,
+  fallbackDirectories = fallbackCommandDirectories,
+  homeDirectory = os.homedir()
+): Promise<string | null> {
+  if (!/^[\w.-]+$/u.test(command)) return null;
+  try {
+    const result = await execFileAsync("/bin/zsh", ["-lc", `command -v ${command}`], { timeout: 3000 });
+    const firstPath = result.stdout.trim().split(/\r?\n/u)[0] ?? null;
+    if (firstPath) return firstPath;
+  } catch {
+    // Finder-launched macOS apps often start with a sparse PATH. Fall through to
+    // common install locations used by local developer CLIs.
+  }
+
+  for (const directory of fallbackDirectories) {
+    const executablePath = directory.startsWith("/")
+      ? path.join(directory, command)
+      : path.join(homeDirectory, directory, command);
+    if (await isExecutableFile(executablePath)) {
+      return executablePath;
+    }
+  }
+  return null;
+}
+
+async function isExecutableFile(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath, fsConstants.X_OK);
+    const stat = await fs.stat(filePath);
+    return stat.isFile();
+  } catch {
+    return false;
+  }
 }
 
 async function recentCodexSessionFiles(root: string, now: Date): Promise<AgentLogFile[]> {

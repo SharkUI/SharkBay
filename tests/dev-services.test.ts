@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { devCommandForProject, discoverProjectDevServices } from "../src/main/dev-services.js";
+import { toLocalProjectUri } from "../src/main/core/project-uri.js";
 import { makeTempRoot, writeJson } from "./helpers.js";
 
 describe("project dev service discovery", () => {
@@ -19,7 +20,7 @@ describe("project dev service discovery", () => {
         label: "dev: vite --host 127.0.0.1",
         command: "npm run dev",
         script: "vite --host 127.0.0.1",
-        cwd: repo,
+        cwdUri: toLocalProjectUri(repo),
       },
     ]);
   });
@@ -40,14 +41,14 @@ describe("project dev service discovery", () => {
         label: "dev:server",
         command: "pnpm dev:server",
         script: "pnpm --filter @itsmy-life/server dev",
-        cwd: repo,
+        cwdUri: toLocalProjectUri(repo),
       },
       {
         id: "root:dev:web",
         label: "dev:web",
         command: "pnpm dev:web",
         script: "pnpm --filter @itsmy-life/web dev",
-        cwd: repo,
+        cwdUri: toLocalProjectUri(repo),
       },
     ]);
   });
@@ -71,14 +72,14 @@ describe("project dev service discovery", () => {
         label: "dev: next dev",
         command: "npm run dev",
         script: "next dev",
-        cwd: site,
+        cwdUri: toLocalProjectUri(site),
       },
       {
         id: "interaction-api:dev",
         label: "dev: node src/server.js",
         command: "npm run dev",
         script: "node src/server.js",
-        cwd: api,
+        cwdUri: toLocalProjectUri(api),
       },
     ]);
   });
@@ -120,7 +121,7 @@ describe("project dev service discovery", () => {
         label: "web: wechat-cli",
         command: "source .venv/bin/activate && wechat-cli web --host 127.0.0.1 --port 8765 --no-token",
         script: "wechat-cli web",
-        cwd: repo,
+        cwdUri: toLocalProjectUri(repo),
       },
     ]);
   });

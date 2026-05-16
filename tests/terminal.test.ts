@@ -1,29 +1,19 @@
-import { execFile } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { getRuntimeConfigPath } from "../src/main/config.js";
-import { installHarness, TEAMWORK_BOOTSTRAP_PROMPT } from "../src/main/teamwork-harness.js";
 import {
   applyTerminalInputData,
+  buildInteractiveSshArgs,
+  remoteInteractiveShellCommand,
   resolveTerminalCwd,
   terminalCommand,
   terminalDisplayTitle,
   terminalShellEnvironment,
   TerminalManager,
 } from "../src/main/terminal.js";
-import { createGitRepoFixture, makeTempRoot, writeJson } from "./helpers.js";
-
-const execFileAsync = promisify(execFile);
-
-const harnessOptions = {
-  githubLogin: "SharkUI",
-  githubUserId: 3960864,
-  machineId: "abcdef",
-  agent: "codex",
-  repo: "SharkUI/AIBF",
-};
+import { toLocalProjectUri } from "../src/main/core/project-uri.js";
+import { createGitRepoFixture, makeTempRoot, makeTestRuntime, writeJson } from "./helpers.js";
 
 describe("terminal cwd validation", () => {
   it("starts shells without interactive TTY-only flags or Apple session restore", () => {
@@ -35,17 +25,33 @@ describe("terminal cwd validation", () => {
     });
   });
 
-  it("allows manually configured project directories", async () => {
-    const userDataPath = await makeTempRoot("terminal-config");
+  it("builds remote interactive ssh commands without sending -- to the remote shell", () => {
+    const command = remoteInteractiveShellCommand("/Users/jerry/Code/Veridia");
+    expect(command).toBe("cd '/Users/jerry/Code/Veridia' && exec ${SHELL:-/bin/sh} -l");
+    expect(buildInteractiveSshArgs(["jerry@60.165.239.32"], command)).toEqual([
+      "-tt",
+      "-o", "BatchMode=yes",
+      "-o", "ConnectTimeout=8",
+      "jerry@60.165.239.32",
+      "cd '/Users/jerry/Code/Veridia' && exec ${SHELL:-/bin/sh} -l",
+    ]);
+  });
+
+  it("allows project directories inside configured roots", async () => {
+    const runtime = await makeTestRuntime("terminal-config");
     const root = await makeTempRoot("terminal-root");
     const repo = await createGitRepoFixture(root, "TerminalRepo");
-    await writeJson(getRuntimeConfigPath({ userDataPath }), {
+    await writeJson(getRuntimeConfigPath(runtime), {
       schemaVersion: 1,
-      configuredProjects: [repo],
+      configuredRoots: [root],
       updatedAt: "2026-05-06",
     });
 
-    await expect(resolveTerminalCwd({ userDataPath }, repo)).resolves.toBe(await fs.realpath(repo));
+    const realRepo = await fs.realpath(repo);
+    await expect(resolveTerminalCwd(runtime, toLocalProjectUri(repo))).resolves.toEqual({
+      cwd: realRepo,
+      cwdUri: toLocalProjectUri(realRepo),
+    });
   });
 
   it("derives titles from project-relative cwd and foreground commands", () => {
@@ -81,29 +87,6 @@ describe("terminal cwd validation", () => {
       projectRoot: root,
       currentCwd: root,
       shell: "/bin/zsh",
-      foregroundProcess: "zsh",
-      activeCommandLine: "codex",
-      activeCommandTitle: "Codex CLI",
-    })).toBe("Codex CLI");
-    expect(terminalDisplayTitle({
-      projectRoot: root,
-      currentCwd: root,
-      shell: "/bin/zsh",
-      foregroundProcess: "zsh",
-      activeCommandTitle: "Codex CLI",
-    })).toBe(".");
-    expect(terminalDisplayTitle({
-      projectRoot: root,
-      currentCwd: root,
-      shell: "/bin/zsh",
-      foregroundProcess: "codex",
-      activeCommandLine: "10;rgb:d9d9/e5e5/dfdf",
-      activeCommandTitle: "Codex CLI",
-    })).toBe("Codex CLI");
-    expect(terminalDisplayTitle({
-      projectRoot: root,
-      currentCwd: root,
-      shell: "/bin/zsh",
       foregroundProcess: "codex",
       activeCommandLine: "10;rgb:d9d9/e5e5/dfdf",
     })).toBe("codex");
@@ -120,7 +103,6 @@ describe("terminal cwd validation", () => {
       shell: "/bin/zsh",
       foregroundProcess: "node",
       activeCommandLine: "pnpm dev",
-      activeCommandTitle: "Codex CLI",
       serviceLabel: "dev",
     })).toBe("dev");
   });
@@ -152,37 +134,36 @@ describe("terminal cwd validation", () => {
     });
   });
 
-  it("rejects directories outside configured projects", async () => {
-    const userDataPath = await makeTempRoot("terminal-config");
+  it("rejects directories outside configured roots", async () => {
+    const runtime = await makeTestRuntime("terminal-config");
     const root = await makeTempRoot("terminal-root");
-    const repo = await createGitRepoFixture(root, "AllowedRepo");
     const outsideRoot = await makeTempRoot("terminal-outside");
     const outsideRepo = path.join(outsideRoot, "OutsideRepo");
     await fs.mkdir(outsideRepo);
-    await writeJson(getRuntimeConfigPath({ userDataPath }), {
+    await writeJson(getRuntimeConfigPath(runtime), {
       schemaVersion: 1,
-      configuredProjects: [repo],
+      configuredRoots: [root],
       updatedAt: "2026-05-06",
     });
 
-    await expect(resolveTerminalCwd({ userDataPath }, outsideRepo)).rejects.toThrow(/outside configured projects/);
+    await expect(resolveTerminalCwd(runtime, toLocalProjectUri(outsideRepo))).rejects.toThrow(/outside configured roots/);
   });
 
   it("creates and closes a terminal session in a safe cwd", async () => {
-    const userDataPath = await makeTempRoot("terminal-config");
+    const runtime = await makeTestRuntime("terminal-config");
     const root = await makeTempRoot("terminal-root");
     const repo = await createGitRepoFixture(root, "TerminalRepo");
-    await writeJson(getRuntimeConfigPath({ userDataPath }), {
+    await writeJson(getRuntimeConfigPath(runtime), {
       schemaVersion: 1,
-      configuredProjects: [repo],
+      configuredRoots: [root],
       updatedAt: "2026-05-06",
     });
 
     const manager = new TerminalManager();
-    const session = await manager.create({ userDataPath }, { cwd: repo, title: "TerminalRepo" });
+    const session = await manager.create(runtime, { cwdUri: toLocalProjectUri(repo), title: "TerminalRepo" });
 
     try {
-      expect(session.cwd).toBe(await fs.realpath(repo));
+      expect(session.cwdUri).toBe(toLocalProjectUri(await fs.realpath(repo)));
       expect(session.title).toBe(".");
       expect(session.status).toBe("running");
       expect(manager.list()).toHaveLength(1);
@@ -194,17 +175,17 @@ describe("terminal cwd validation", () => {
   });
 
   it("ignores invalid resize dimensions without surfacing node-pty errors", async () => {
-    const userDataPath = await makeTempRoot("terminal-config");
+    const runtime = await makeTestRuntime("terminal-config");
     const root = await makeTempRoot("terminal-root");
     const repo = await createGitRepoFixture(root, "TerminalRepo");
-    await writeJson(getRuntimeConfigPath({ userDataPath }), {
+    await writeJson(getRuntimeConfigPath(runtime), {
       schemaVersion: 1,
-      configuredProjects: [repo],
+      configuredRoots: [root],
       updatedAt: "2026-05-07",
     });
 
     const manager = new TerminalManager();
-    const session = await manager.create({ userDataPath }, { cwd: repo, title: "TerminalRepo" });
+    const session = await manager.create(runtime, { cwdUri: toLocalProjectUri(repo), title: "TerminalRepo" });
 
     try {
       expect(() => manager.resize({ sessionId: session.id, cols: Number.NaN, rows: 24 })).not.toThrow();
@@ -219,17 +200,17 @@ describe("terminal cwd validation", () => {
   });
 
   it("accepts input and streams command output", async () => {
-    const userDataPath = await makeTempRoot("terminal-config");
+    const runtime = await makeTestRuntime("terminal-config");
     const root = await makeTempRoot("terminal-root");
     const repo = await createGitRepoFixture(root, "TerminalRepo");
-    await writeJson(getRuntimeConfigPath({ userDataPath }), {
+    await writeJson(getRuntimeConfigPath(runtime), {
       schemaVersion: 1,
-      configuredProjects: [repo],
+      configuredRoots: [root],
       updatedAt: "2026-05-06",
     });
 
     const manager = new TerminalManager();
-    const session = await manager.create({ userDataPath }, { cwd: repo, title: "TerminalRepo" });
+    const session = await manager.create(runtime, { cwdUri: toLocalProjectUri(repo), title: "TerminalRepo" });
     const output = new Promise<string>((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error("terminal output timed out")), 3000);
       manager.on("data", (event) => {
@@ -249,12 +230,12 @@ describe("terminal cwd validation", () => {
   });
 
   it("can start a service session with an initial command and service metadata", async () => {
-    const userDataPath = await makeTempRoot("terminal-service-config");
+    const runtime = await makeTestRuntime("terminal-service-config");
     const root = await makeTempRoot("terminal-service-root");
     const repo = await createGitRepoFixture(root, "TerminalServiceRepo");
-    await writeJson(getRuntimeConfigPath({ userDataPath }), {
+    await writeJson(getRuntimeConfigPath(runtime), {
       schemaVersion: 1,
-      configuredProjects: [repo],
+      configuredRoots: [root],
       updatedAt: "2026-05-08",
     });
 
@@ -278,8 +259,8 @@ describe("terminal cwd validation", () => {
         }
       });
     });
-    const session = await manager.create({ userDataPath }, {
-      cwd: repo,
+    const session = await manager.create(runtime, {
+      cwdUri: toLocalProjectUri(repo),
       initialCommand: "printf 'sharkbay-service-ok\\n'",
       service: { id: "dev", label: "dev", command: "npm run dev" },
     });
@@ -290,47 +271,6 @@ describe("terminal cwd validation", () => {
       expect(session.service).toEqual({ id: "dev", label: "dev", command: "npm run dev" });
       await expect(output).resolves.toContain("sharkbay-service-ok");
       await expect(exited).resolves.toBeUndefined();
-    } finally {
-      manager.close({ sessionId: session.id });
-    }
-  });
-
-  it("injects the Teamwork bootstrap prompt into agent launch commands", async () => {
-    const userDataPath = await makeTempRoot("terminal-agent-bootstrap-config");
-    const root = await makeTempRoot("terminal-agent-bootstrap-root");
-    const repo = await createGitRepoFixture(root, "TerminalAgentRepo");
-    await execFileAsync("git", ["init"], { cwd: repo });
-    await installHarness(repo, harnessOptions);
-    await writeJson(getRuntimeConfigPath({ userDataPath }), {
-      schemaVersion: 1,
-      configuredProjects: [repo],
-      updatedAt: "2026-05-18",
-    });
-
-    const manager = new TerminalManager();
-    let sessionId: string | null = null;
-    const output = new Promise<string>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error("agent bootstrap output timed out")), 3000);
-      manager.on("data", (event) => {
-        if ((!sessionId || event.sessionId === sessionId) && event.data.includes("SharkBay Teamwork mode")) {
-          clearTimeout(timeout);
-          resolve(event.data);
-        }
-      });
-    });
-    const session = await manager.create({ userDataPath }, {
-      cwd: repo,
-      agentId: "codex",
-      initialCommand: "printf '%s\\n'",
-      initialCommandTitle: "Codex CLI",
-    });
-    sessionId = session.id;
-
-    try {
-      expect(session.title).toBe("Codex CLI");
-      await expect(output).resolves.toContain("SharkBay Teamwork mode");
-      await expect(fs.stat(path.join(repo, "AGENTS.md")).catch(() => null)).resolves.toBeNull();
-      expect(TEAMWORK_BOOTSTRAP_PROMPT).toContain("After reading the protocol, wait for my next instruction.");
     } finally {
       manager.close({ sessionId: session.id });
     }

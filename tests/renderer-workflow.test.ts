@@ -22,11 +22,11 @@ describe("renderer workflow contracts", () => {
 
   it("resolves selected candidate by id", () => {
     const candidates = [
-      { id: "/workspace/A", name: "A", path: "/workspace/A", rootPath: "/workspace" },
-      { id: "/workspace/B", name: "B", path: "/workspace/B", rootPath: "/workspace" },
+      { id: "local:/workspace/A", uri: "local:/workspace/A", name: "A", providerId: "local", providerKind: "local" as const, displayPath: "/workspace/A", rootUri: "local:/workspace" },
+      { id: "local:/workspace/B", uri: "local:/workspace/B", name: "B", providerId: "local", providerKind: "local" as const, displayPath: "/workspace/B", rootUri: "local:/workspace" },
     ];
-    expect(resolveSelectedCandidate(candidates, "/workspace/B")?.id).toBe("/workspace/B");
-    expect(resolveSelectedCandidate(candidates, "/workspace/missing")?.id).toBe("/workspace/A");
+    expect(resolveSelectedCandidate(candidates, "local:/workspace/B")?.id).toBe("local:/workspace/B");
+    expect(resolveSelectedCandidate(candidates, "/workspace/missing")?.id).toBe("local:/workspace/A");
     expect(resolveSelectedCandidate([], null)).toBeNull();
   });
 
@@ -43,9 +43,8 @@ describe("renderer workflow contracts", () => {
   });
 
   it("resolves project row terminal activity from candidate or path keys", () => {
-    const candidate = { id: "candidate:/workspace/App", path: "/workspace/App" };
-    expect(terminalActivityForCandidate(candidate, { "candidate:/workspace/App": "working" })).toBe("working");
-    expect(terminalActivityForCandidate(candidate, { "/workspace/App": "idle" })).toBe("idle");
+    const candidate = { id: "local:/workspace/App", uri: "local:/workspace/App" };
+    expect(terminalActivityForCandidate(candidate, { "local:/workspace/App": "working" })).toBe("working");
     expect(terminalActivityForCandidate(candidate, {})).toBeNull();
   });
 

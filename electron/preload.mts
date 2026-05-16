@@ -13,21 +13,27 @@ import type {
   BrowserResizeInput,
   BrowserSession,
   BrowserUpdateEvent,
-  KnowledgeSiteResult,
+  CreatePortForwardInput,
+  ListPortForwardsInput,
+  PortForwardEvent,
   ProjectConfigInput,
+  ProjectScanInput,
   ProjectDetail,
   ProjectFilesInput,
   ProjectFilesResult,
+  ReadFileInput,
+  ReadFileResult,
+  WriteFileInput,
+  WriteFileResult,
+  RemoteMachineInput,
+  RemoteMachineTestResult,
+  RemotePortForward,
   RemoveProjectInput,
+  RemovePortForwardInput,
+  RemoveRemoteMachineInput,
+  RemoveRootInput,
+  RootConfigInput,
   ScanProjectsResult,
-  TaskViewModel,
-  TeamworkGetTasksInput,
-  TeamworkInstallInput,
-  TeamworkStatus,
-  TeamworkTasksChangedEvent,
-  TeamworkUninstallInput,
-  TeamworkUninstallResult,
-  GitHubIdentity,
   TerminalCloseInput,
   TerminalCreateInput,
   TerminalDataEvent,
@@ -65,16 +71,23 @@ const sharkBayApi = {
     }
   },
   config: {
-    listConfig: () => invoke<AppConfig>(channels.listConfig),
+    listRoots: () => invoke<AppConfig>(channels.listRoots),
+    addRoot: (input: RootConfigInput) => invoke<AppConfig>(channels.addRoot, input),
+    removeRoot: (input: RemoveRootInput) => invoke<AppConfig>(channels.removeRoot, input),
     addProject: (input: ProjectConfigInput) => invoke<AppConfig>(channels.addProject, input),
     removeProject: (input: RemoveProjectInput) => invoke<AppConfig>(channels.removeProject, input),
+    addRemoteMachine: (input: RemoteMachineInput) => invoke<AppConfig>(channels.addRemoteMachine, input),
+    removeRemoteMachine: (input: RemoveRemoteMachineInput) => invoke<AppConfig>(channels.removeRemoteMachine, input),
+    testRemoteMachine: (input: { id: string } | RemoteMachineInput) => invoke<RemoteMachineTestResult>(channels.testRemoteMachine, input),
     pickProjectFolder: () => invoke<{ cancelled: boolean; paths: string[] }>(channels.pickProjectFolder),
     setAppearanceTheme: (input: AppearanceThemeInput) => invoke<AppConfig>(channels.setAppearanceTheme, input)
   },
   projects: {
-    scan: () => invoke<ScanProjectsResult>(channels.scanProjects),
-    getDetail: (input: { repoPath: string }) => invoke<ProjectDetail>(channels.getProjectDetail, input),
-    listFiles: (input: ProjectFilesInput) => invoke<ProjectFilesResult>(channels.listProjectFiles, input)
+    scan: (input?: ProjectScanInput) => invoke<ScanProjectsResult>(channels.scanProjects, input),
+    getDetail: (input: { projectUri: string }) => invoke<ProjectDetail>(channels.getProjectDetail, input),
+    listFiles: (input: ProjectFilesInput) => invoke<ProjectFilesResult>(channels.listProjectFiles, input),
+    readFile: (input: ReadFileInput) => invoke<ReadFileResult>(channels.readProjectFile, input),
+    writeFile: (input: WriteFileInput) => invoke<WriteFileResult>(channels.writeProjectFile, input)
   },
   terminal: {
     create: (input: TerminalCreateInput) => invoke<TerminalSession>(channels.createTerminal, input),
@@ -112,30 +125,22 @@ const sharkBayApi = {
     }
   },
   agents: {
-    listClis: () => invoke<AgentCli[]>(channels.listAgentClis),
+    listClis: (input?: { cwdUri?: string }) => invoke<AgentCli[]>(channels.listAgentClis, input),
     onStatus: (callback: (event: AgentProjectStatusEvent) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: AgentProjectStatusEvent) => callback(payload);
       ipcRenderer.on(channels.agentStatus, listener);
       return () => ipcRenderer.removeListener(channels.agentStatus, listener);
     }
   },
-  teamwork: {
-    getTasks: (input: TeamworkGetTasksInput) => invoke<TaskViewModel[]>(channels.teamworkGetTasks, input),
-    getStatus: (input: { repoPath: string }) => invoke<TeamworkStatus>(channels.teamworkGetStatus, input),
-    install: (input: TeamworkInstallInput) => invoke<TeamworkStatus>(channels.teamworkInstall, input),
-    enable: (input: { repoPath: string }) => invoke<TeamworkStatus>(channels.teamworkEnable, input),
-    uninstall: (input: TeamworkUninstallInput) => invoke<TeamworkUninstallResult>(channels.teamworkUninstall, input),
-    resolveIdentity: () => invoke<GitHubIdentity>(channels.teamworkResolveIdentity),
-    syncNow: (input: { repoPath: string }) => invoke<void>(channels.teamworkSyncNow, input),
-    onTasksChanged: (callback: (event: TeamworkTasksChangedEvent) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, payload: TeamworkTasksChangedEvent) => callback(payload);
-      ipcRenderer.on(channels.teamworkTasksChanged, listener);
-      return () => ipcRenderer.removeListener(channels.teamworkTasksChanged, listener);
+  portForwards: {
+    list: (input?: ListPortForwardsInput) => invoke<RemotePortForward[]>(channels.listPortForwards, input),
+    create: (input: CreatePortForwardInput) => invoke<RemotePortForward>(channels.createPortForward, input),
+    remove: (input: RemovePortForwardInput) => invoke<{ ok: true }>(channels.removePortForward, input),
+    onUpdate: (callback: (event: PortForwardEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: PortForwardEvent) => callback(payload);
+      ipcRenderer.on(channels.portForwardUpdate, listener);
+      return () => ipcRenderer.removeListener(channels.portForwardUpdate, listener);
     }
-  },
-  knowledgeSite: {
-    generate: (input: { repoPath: string }) => invoke<KnowledgeSiteResult>(channels.knowledgeSiteGenerate, input),
-    getPath: (input: { repoPath: string }) => invoke<string>(channels.knowledgeSiteGetPath, input),
   }
 };
 

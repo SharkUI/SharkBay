@@ -1,9 +1,18 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { IpcRuntimeLike } from "../src/shared/types.js";
 
 export async function makeTempRoot(prefix: string): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), `sharkbay-${prefix}-`));
+}
+
+export async function makeTestRuntime(prefix: string): Promise<IpcRuntimeLike> {
+  const root = await makeTempRoot(prefix);
+  return {
+    userDataPath: path.join(root, "electron-user-data"),
+    configPath: path.join(root, ".sharkbay", "config.json"),
+  };
 }
 
 export async function writeJson(filePath: string, data: unknown): Promise<void> {

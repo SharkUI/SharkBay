@@ -2,25 +2,92 @@ export type AppearanceTheme = "day" | "night" | "morning";
 
 export type AppConfig = {
   schemaVersion: 1;
+  configuredRoots: string[];
   configuredProjects: string[];
+  configuredRemoteProjects: string[];
+  configuredRemoteMachines: RemoteMachine[];
   appearanceTheme: AppearanceTheme;
   updatedAt: string;
 };
 
 export type IpcRuntimeLike = {
   userDataPath: string;
+  configPath?: string;
 };
 
+export type RootConfigInput = {
+  path?: string;
+  rootPath?: string;
+};
+
+export type RemoveRootInput = RootConfigInput;
+
 export type ProjectConfigInput = {
-  path: string;
+  path?: string;
+  uri?: string;
 };
 
 export type RemoveProjectInput = {
-  path: string;
+  path?: string;
+  uri?: string;
 };
 
 export type AppearanceThemeInput = {
   theme: AppearanceTheme;
+};
+
+export type RemoteMachineAuthMode = "system-ssh-config" | "ssh-agent" | "key-file" | "password";
+
+export type RemoteMachine = {
+  id: string;
+  label: string;
+  host: string;
+  port: number;
+  username?: string;
+  sshConfigHost?: string;
+  authMode: RemoteMachineAuthMode;
+  keyPath?: string;
+  passwordSecretId?: string;
+  hasPassword?: boolean;
+  defaultProjectPath?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RemoteMachineInput = {
+  label: string;
+  authMode: RemoteMachineAuthMode;
+  sshConfigHost?: string;
+  host?: string;
+  port?: number;
+  username?: string;
+  keyPath?: string;
+  password?: string;
+  defaultProjectPath?: string;
+};
+
+export type RemoveRemoteMachineInput = {
+  id: string;
+};
+
+export type TestRemoteMachineInput =
+  | { id: string }
+  | RemoteMachineInput;
+
+export type RemoteMachineTestResult =
+  | { ok: true; message: string }
+  | { ok: false; message: string };
+
+export type ProjectScanInput = {
+  configuredRoots?: string[];
+  maxDepth?: number;
+};
+
+export type RootScanResult = {
+  inputPath: string;
+  path: string | null;
+  available: boolean;
+  error: string | null;
 };
 
 export type ProjectIconSource = {
@@ -34,7 +101,7 @@ export type ProjectDevService = {
   label: string;
   command: string;
   script: string;
-  cwd: string;
+  cwdUri: string;
 };
 
 export type ProjectFileTreeItem = {
@@ -46,19 +113,47 @@ export type ProjectFileTreeItem = {
 };
 
 export type ProjectFilesInput = {
-  repoPath: string;
+  projectUri: string;
+  configuredRoots?: string[];
+  configuredProjects?: string[];
   directoryPath?: string;
 };
 
 export type ProjectFilesResult =
-  | { ok: true; repoPath: string; files: ProjectFileTreeItem[] }
+  | { ok: true; projectUri: string; files: ProjectFileTreeItem[] }
   | { ok: false; reason: "unsafe-path" | "io-error"; message: string };
+
+export type ReadFileInput = {
+  projectUri: string;
+  relativePath: string;
+};
+
+export type ReadFileFailureReason = "not-found" | "permission" | "unsafe-path" | "too-large" | "binary" | "io-error";
+
+export type ReadFileResult =
+  | { ok: true; content: string; size: number; relativePath: string }
+  | { ok: false; reason: ReadFileFailureReason; message: string };
+
+export type WriteFileInput = {
+  projectUri: string;
+  relativePath: string;
+  content: string;
+};
+
+export type WriteFileFailureReason = "not-found" | "permission" | "unsafe-path" | "too-large" | "io-error";
+
+export type WriteFileResult =
+  | { ok: true; size: number; relativePath: string }
+  | { ok: false; reason: WriteFileFailureReason; message: string };
 
 export type ProjectCandidate = {
   id: string;
+  uri: string;
   name: string;
-  path: string;
-  rootPath: string;
+  providerId: string;
+  providerKind: "local" | "ssh" | "container" | "wsl";
+  displayPath: string;
+  rootUri: string;
   iconSources: ProjectIconSource[];
   services: ProjectDevService[];
   dirtyWorktree: boolean | null;
@@ -90,8 +185,11 @@ export type GitDirtyFile = {
 
 export type ProjectSummary = {
   id: string;
+  uri: string;
   name: string;
-  path: string;
+  providerId: string;
+  providerKind: "local" | "ssh" | "container" | "wsl";
+  displayPath: string;
   iconSources: ProjectIconSource[];
   repoUrl: string | null;
   currentBranch: string | null;
@@ -104,17 +202,16 @@ export type ProjectDetail = ProjectSummary & {
 };
 
 export type ScanProjectsResult = {
+  roots: RootScanResult[];
   candidates: ProjectCandidate[];
 };
 
 export type TerminalSessionStatus = "running" | "exited";
 
 export type TerminalCreateInput = {
-  cwd: string;
+  cwdUri: string;
   title?: string;
   initialCommand?: string;
-  initialCommandTitle?: string;
-  agentId?: string;
   service?: { id: string; label: string; command: string };
   cols?: number;
   rows?: number;
@@ -122,7 +219,7 @@ export type TerminalCreateInput = {
 
 export type TerminalSession = {
   id: string;
-  cwd: string;
+  cwdUri: string;
   title: string;
   shell: string;
   pid: number | null;
@@ -178,6 +275,39 @@ export type AgentProjectStatusEvent = {
   timestamp: string;
 };
 
+export type PortForwardStatus = "starting" | "running" | "stopped" | "error";
+
+export type RemotePortForward = {
+  id: string;
+  machineId: string;
+  remoteHost: string;
+  remotePort: number;
+  localPort: number;
+  status: PortForwardStatus;
+  error: string | null;
+  pid: number | null;
+  createdAt: string;
+};
+
+export type CreatePortForwardInput = {
+  machineId: string;
+  remotePort: number;
+  localPort: number;
+  remoteHost?: string;
+};
+
+export type RemovePortForwardInput = {
+  id: string;
+};
+
+export type ListPortForwardsInput = {
+  machineId?: string;
+};
+
+export type PortForwardEvent = {
+  forward: RemotePortForward;
+};
+
 export type BrowserBounds = {
   x: number;
   y: number;
@@ -221,85 +351,4 @@ export type BrowserSession = {
 
 export type BrowserUpdateEvent = {
   browser: BrowserSession;
-};
-
-export type TaskViewModel = {
-  taskId: string;
-  taskTag: string;
-  title: string;
-  mode: "quick" | "task";
-  status: "active" | "paused" | "completed" | "blocked" | "abandoned";
-  sync: "local" | "pending" | "synced" | "failed";
-  owner: { githubLogin: string; githubUserId?: number; avatarUrl?: string };
-  agent?: string;
-  machine?: string;
-  createdAt?: string;
-  updatedAt?: string;
-  completedAt?: string;
-  commit?: string;
-  files?: string[];
-  summary?: string;
-  verification?: string;
-  work?: string;
-  notes?: string;
-  sourcePath: string;
-  frontmatter: Record<string, string>;
-  bodyMarkdown: string;
-  rawMarkdown: string;
-  sourceKind: "local-md" | "team-md";
-  readOnly: boolean;
-};
-
-export type TeamworkStatus = {
-  installed: boolean;
-  harnessInstalled: boolean;
-  syncEnabled: boolean;
-  lastSyncAt: string | null;
-  pendingCount: number;
-  lastError: string | null;
-  repo?: string;
-  branch?: string;
-  githubLogin?: string;
-  permission?: string;
-};
-
-export type GitHubIdentity = {
-  login: string;
-  id: number;
-  avatarUrl: string;
-};
-
-export type TeamworkInstallInput = {
-  repoPath: string;
-  githubLogin?: string;
-  githubUserId?: number;
-  machineId?: string;
-  agent?: string;
-};
-
-export type TeamworkUninstallInput = {
-  repoPath: string;
-  cleanTeamContext?: boolean;
-};
-
-export type TeamworkUninstallResult = {
-  removedPaths: string[];
-  skippedPaths: string[];
-  excludeRemovedLines: string[];
-  contextBranchDeleted: boolean;
-};
-
-export type TeamworkGetTasksInput = {
-  repoPath: string;
-};
-
-export type TeamworkTasksChangedEvent = {
-  repoPath: string;
-  tasks: TaskViewModel[];
-};
-
-export type KnowledgeSiteResult = {
-  generated: boolean;
-  sitePath: string;
-  reason?: string;
 };

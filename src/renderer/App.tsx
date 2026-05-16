@@ -5,6 +5,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal as XTerm } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import defaultProjectIconUrl from "./assets/shark-fin.png";
+import { CodeEditor } from "./code-editor";
 import type {
   AgentCli,
   AgentProjectStatusEvent,
@@ -17,10 +18,13 @@ import type {
   ProjectDetail,
   ProjectFileTreeItem,
   ProjectSummary,
+  RemoteMachine,
+  RemoteMachineInput,
+  RemoteMachineTestResult,
+  RemotePortForward,
+  RootRecord,
   ScanResult,
   SharkBayBridge,
-  TaskViewModel,
-  TeamworkStatus,
   TerminalDataEvent,
   TerminalExitEvent,
   TerminalCreateInput,
@@ -28,7 +32,7 @@ import type {
   TerminalUpdateEvent,
 } from "./types";
 import {
-  observeServiceUrl,
+  firstHttpUrl,
   projectTerminalActivityStates,
   resolveSelectedCandidate,
   shouldKeepCurrentServiceUrl,
@@ -39,7 +43,30 @@ import {
 import type { WorkflowProjectTerminalActivityState } from "./workflow";
 
 type View = "dashboard" | "settings";
-type DetailTab = "tasks" | "git" | "files";
+type DetailTab = "git" | "files" | "forwards";
+type SettingsSection = "local-machine" | "appearance" | `remote-machine:${string}`;
+
+const remoteConnectionMethods: Array<{
+  id: RemoteMachineInput["authMode"];
+  label: string;
+  description: string;
+}> = [
+  {
+    id: "system-ssh-config",
+    label: "Use my SSH config",
+    description: "Best if you already run ssh server-name in Terminal.",
+  },
+  {
+    id: "ssh-agent",
+    label: "Enter server address",
+    description: "Use host, port, username, and optionally a saved password.",
+  },
+  {
+    id: "key-file",
+    label: "Use a specific key file",
+    description: "Choose this when the server needs a particular private key path.",
+  },
+];
 
 type Toast = {
   tone: "info" | "error" | "success";
@@ -74,22 +101,36 @@ type BrowserTab = {
   addressValue: string;
 };
 
-type TerminalTab = TerminalShellTab | BrowserTab;
+type EditorTab = {
+  kind: "editor";
+  id: string;
+  projectUri: string;
+  relativePath: string;
+  name: string;
+  content: string;
+  savedContent: string;
+  loading: boolean;
+  saving: boolean;
+  error: string | null;
+  readOnly: boolean;
+};
+
+type TerminalTab = TerminalShellTab | BrowserTab | EditorTab;
 type ActiveTerminalTabKind = TerminalTab["kind"] | null;
 
 type TerminalSpace = {
   projectId: string;
   projectName: string;
-  path: string;
+  uri: string;
+  displayPath: string;
   tabs: TerminalTab[];
   activeId: string | null;
   serviceUrl: string | null;
 };
 
 type TerminalPaneHandle = {
-  openFileInEditor: (projectPath: string, projectName: string, relativePath: string) => Promise<void>;
-  openGitDiff: (projectPath: string, projectName: string, relativePath: string) => Promise<void>;
-  openBrowserTab: (projectPath: string, projectName: string, url: string) => Promise<void>;
+  openFileInEditor: (projectUri: string, projectName: string, relativePath: string) => Promise<void>;
+  openGitDiff: (projectUri: string, projectName: string, relativePath: string) => Promise<void>;
 };
 
 type AgentStatusByProjectPath = Record<string, string>;
@@ -105,13 +146,11 @@ const resizerColumnWidth = 12;
 const columnResizeStep = 40;
 const detailColumnStorageKey = "sharkbay.detailColumnWidth.v2";
 const projectColumnStorageKey = "sharkbay.projectColumnWidth.v2";
-const detailTabs: Array<{ id: DetailTab; label: string }> = [
-  { id: "tasks", label: "TEAM" },
+const detailTabs: Array<{ id: DetailTab; label: string; remoteOnly?: boolean }> = [
   { id: "git", label: "Git" },
   { id: "files", label: "Files" },
+  { id: "forwards", label: "Port forwards", remoteOnly: true },
 ];
-
-
 const appearanceThemes: Array<{ id: AppearanceTheme; label: string }> = [
   { id: "morning", label: "Morning" },
   { id: "day", label: "Day" },
@@ -182,10 +221,8 @@ function asMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function suppressToast(_toast: Toast): void {}
-
 function isAppConfig(value: unknown): value is AppConfig {
-  return Boolean(value && typeof value === "object" && "configuredProjects" in value);
+  return Boolean(value && typeof value === "object" && "configuredRoots" in value);
 }
 
 function normalizeAppearanceTheme(value: unknown): AppearanceTheme {
@@ -193,18 +230,25 @@ function normalizeAppearanceTheme(value: unknown): AppearanceTheme {
   return value === "night" ? "night" : "day";
 }
 
+function normalizeRoots(raw: AppConfig | RootRecord[] | string[] | undefined): RootRecord[] {
+  if (!raw) return [];
+  if (isAppConfig(raw)) return raw.configuredRoots.map((root) => ({ path: root }));
+  return raw.map((root) => {
+    if (typeof root === "string") return { path: root };
+    return { ...root, path: root.path || root.inputPath || "", unavailable: root.unavailable ?? root.available === false };
+  });
+}
+
 function normalizeScan(raw: ScanResult | ProjectCandidate[]): ScanResult {
   if (Array.isArray(raw)) return { candidates: raw };
   return { ...raw, candidates: raw.candidates ?? [] };
 }
 
-async function listConfig(): Promise<AppConfig> {
+async function listRoots(): Promise<RootRecord[]> {
   const bridge = getBridge();
-  const handler = bridge.config?.listConfig;
-  if (!handler) throw new Error("Project configuration is not exposed by the preload API.");
-  const config = await handler();
-  if (!isAppConfig(config)) throw new Error("Project configuration is unavailable.");
-  return config;
+  const handler = bridge.config?.listRoots;
+  if (!handler) throw new Error("Root listing is not exposed by the preload API.");
+  return normalizeRoots(await handler());
 }
 
 async function updateAppearanceTheme(theme: AppearanceTheme): Promise<AppConfig> {
@@ -213,10 +257,52 @@ async function updateAppearanceTheme(theme: AppearanceTheme): Promise<AppConfig>
   return handler({ theme });
 }
 
-async function removeProject(path: string): Promise<void> {
+async function addRoot(path: string): Promise<void> {
+  const handler = getBridge().config?.addRoot;
+  if (!handler) throw new Error("Root add is not exposed by the preload API.");
+  await handler({ path, rootPath: path });
+}
+
+async function removeRoot(path: string): Promise<void> {
+  const handler = getBridge().config?.removeRoot;
+  if (!handler) throw new Error("Root remove is not exposed by the preload API.");
+  await handler({ path, rootPath: path });
+}
+
+async function addProject(path: string): Promise<void> {
+  const handler = getBridge().config?.addProject;
+  if (!handler) throw new Error("Project add is not exposed by the preload API.");
+  await handler({ path });
+}
+
+async function addProjectUri(uri: string): Promise<void> {
+  const handler = getBridge().config?.addProject;
+  if (!handler) throw new Error("Project add is not exposed by the preload API.");
+  await handler({ uri });
+}
+
+async function removeProject(pathOrUri: string): Promise<void> {
   const handler = getBridge().config?.removeProject;
   if (!handler) throw new Error("Project remove is not exposed by the preload API.");
-  await handler({ path });
+  await handler(pathOrUri.startsWith("ssh://") ? { uri: pathOrUri } : { path: pathOrUri });
+}
+
+async function addRemoteMachine(input: RemoteMachineInput): Promise<AppConfig> {
+  const handler = getBridge().config?.addRemoteMachine;
+  if (!handler) throw new Error("Remote machine add is not exposed by the preload API.");
+  return handler(input);
+}
+
+async function removeRemoteMachine(id: string): Promise<AppConfig> {
+  const handler = getBridge().config?.removeRemoteMachine;
+  if (!handler) throw new Error("Remote machine remove is not exposed by the preload API.");
+  return handler({ id });
+}
+
+async function testRemoteMachine(input: { id: string } | RemoteMachineInput): Promise<RemoteMachineTestResult> {
+  const handler = getBridge().config?.testRemoteMachine;
+  if (!handler) throw new Error("Remote machine connection testing is not exposed by the preload API.");
+  return handler(input);
 }
 
 async function pickAndAddProjects(): Promise<string[]> {
@@ -241,57 +327,23 @@ async function scanProjects(): Promise<ScanResult> {
 async function getProjectDetail(candidate: ProjectCandidate): Promise<ProjectDetail> {
   const handler = getBridge().projects?.getDetail;
   if (!handler) throw new Error("Project detail is not exposed by the preload API.");
-  return handler({ repoPath: candidate.path });
-}
-
-async function getTeamworkStatus(candidate: ProjectCandidate): Promise<TeamworkStatus> {
-  const handler = getBridge().teamwork?.getStatus;
-  if (!handler) throw new Error("Teamwork status is not exposed by the preload API.");
-  return handler({ repoPath: candidate.path });
-}
-
-async function resolveTeamworkIdentity() {
-  const handler = getBridge().teamwork?.resolveIdentity;
-  if (!handler) throw new Error("GitHub identity lookup is not exposed by the preload API.");
-  return handler();
-}
-
-async function uninstallTeamwork(candidate: ProjectCandidate, cleanTeamContext: boolean) {
-  const handler = getBridge().teamwork?.uninstall;
-  if (!handler) throw new Error("Teamwork uninstall is not exposed by the preload API.");
-  return handler({ repoPath: candidate.path, cleanTeamContext });
-}
-
-function githubOwnerFromRemote(remoteOrigin: string | null): string | null {
-  const repo = remoteOrigin?.match(/github\.com[:/]([^/\s]+)\/[^/\s]+?(?:\.git)?$/)?.[1];
-  return repo ?? null;
-}
-
-function projectContextMenuPosition(clientX: number, clientY: number): { x: number; y: number } {
-  if (typeof window === "undefined") return { x: clientX, y: clientY };
-  const margin = 8;
-  const menuWidth = 194;
-  const menuHeight = 92;
-  return {
-    x: clamp(clientX, margin, window.innerWidth - menuWidth - margin),
-    y: clamp(clientY, margin, window.innerHeight - menuHeight - margin),
-  };
+  return handler({ projectUri: candidate.uri });
 }
 
 async function listProjectFiles(project: ProjectCandidate | ProjectDetail, directoryPath?: string) {
   const handler = getBridge().projects?.listFiles;
   if (!handler) throw new Error("Project files are not exposed by the preload API.");
-  return handler({ repoPath: project.path, directoryPath });
+  return handler({ projectUri: project.uri, directoryPath });
 }
 
 async function createTerminal(
-  cwd: string,
+  cwdUri: string,
   title?: string,
-  options: Pick<TerminalCreateInput, "initialCommand" | "initialCommandTitle" | "service"> = {},
+  options: Pick<TerminalCreateInput, "initialCommand" | "service"> = {},
 ): Promise<TerminalSession> {
   const handler = getBridge().terminal?.create;
   if (!handler) throw new Error("Terminal sessions are not exposed by the preload API.");
-  return handler({ cwd, title, ...options });
+  return handler({ cwdUri, title, ...options });
 }
 
 async function sendTerminalInput(sessionId: string, data: string): Promise<void> {
@@ -345,7 +397,7 @@ async function browserAction(action: "goBack" | "goForward" | "reload", browserI
 
 function editorCommandFor(relativePath: string): string {
   const quotedPath = shellQuote(relativePath);
-  return `nano -- ${quotedPath}`;
+  return `if command -v vim >/dev/null 2>&1; then vim -- ${quotedPath}; else nano -- ${quotedPath}; fi`;
 }
 
 function gitDiffCommandFor(relativePath: string): string {
@@ -371,7 +423,10 @@ function storedColumnWidth(key: string, fallback: number, min: number): number {
   return Number.isFinite(saved) && saved >= min ? saved : fallback;
 }
 
-
+function formatScanTime(value: string | null): string {
+  if (!value) return "never";
+  return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date(value));
+}
 
 function formatHistoryTime(value: string): string {
   const parsed = new Date(value);
@@ -401,29 +456,48 @@ function formatRelativeTime(value: string): string {
   return new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(Math.round(diffSeconds / secondsPerUnit), unit);
 }
 
+function appearanceDescription(theme: AppearanceTheme): string {
+  if (theme === "morning") return "Morning icon and original dark terminal";
+  if (theme === "night") return "Night icon and dark colors";
+  return "Day icon and colors";
+}
 
-function projectNameFromPath(projectPath: string): string {
-  return projectPath.split(/[\\/]+/).filter(Boolean).pop() || projectPath;
+function toRemoteProjectUri(machineId: string, remotePath: string): string {
+  return `ssh://${encodeURIComponent(machineId)}${encodeURI(remotePath)}`;
+}
+
+function remoteProjectLabel(uri: string, machines: RemoteMachine[]): string {
+  const match = /^ssh:\/\/([^/]+)(\/.*)$/.exec(uri);
+  if (!match) return uri;
+  const machineId = decodeURIComponent(match[1] ?? "");
+  const remotePath = decodeURI(match[2] ?? "");
+  const machine = machines.find((item) => item.id === machineId);
+  return `${machine?.label ?? machineId}:${remotePath}`;
 }
 
 export function App() {
   const [view, setView] = useState<View>("dashboard");
+  const [roots, setRoots] = useState<RootRecord[]>([]);
   const [configuredProjects, setConfiguredProjects] = useState<string[]>([]);
+  const [configuredRemoteProjects, setConfiguredRemoteProjects] = useState<string[]>([]);
+  const [remoteMachines, setRemoteMachines] = useState<RemoteMachine[]>([]);
   const [candidates, setCandidates] = useState<ProjectCandidate[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(false);
-  const setToast = suppressToast;
+  const [toast, setToast] = useState<Toast | null>(null);
   const [scanErrors, setScanErrors] = useState<string[]>([]);
   const [lastScanAt, setLastScanAt] = useState<string | null>(null);
   const [appearanceTheme, setAppearanceTheme] = useState<AppearanceTheme>("day");
-  const [projectRemoveDialog, setProjectRemoveDialog] = useState<{ path: string; name: string } | null>(null);
-  const [projectRemoveBusy, setProjectRemoveBusy] = useState(false);
   const refreshInFlight = useRef(false);
 
   const bridgeAvailable = typeof window !== "undefined" && Boolean(window.sharkBay);
 
   const selectedCandidate = useMemo(() => resolveSelectedCandidate(candidates, selectedId), [candidates, selectedId]);
+
+  async function refreshRoots() {
+    setRoots(await listRoots());
+  }
 
   async function refreshProjects(options: RefreshOptions = {}): Promise<{ candidates: ProjectCandidate[] }> {
     const setBusy = options.setBusy ?? true;
@@ -431,13 +505,28 @@ export function App() {
     setScanErrors([]);
 
     try {
-      const [config, scan] = await Promise.all([listConfig(), scanProjects()]);
-      setAppearanceTheme(normalizeAppearanceTheme(config.appearanceTheme));
-      setConfiguredProjects(config.configuredProjects ?? []);
+      const bridge = getBridge();
+      const configHandler = bridge.config?.listRoots;
+      if (!configHandler) throw new Error("Root listing is not exposed by the preload API.");
+      const [rootConfig, scan] = await Promise.all([configHandler(), scanProjects()]);
+      const rootList = normalizeRoots(rootConfig);
+      if (isAppConfig(rootConfig)) {
+        setAppearanceTheme(normalizeAppearanceTheme(rootConfig.appearanceTheme));
+        setConfiguredProjects(rootConfig.configuredProjects ?? []);
+        setConfiguredRemoteProjects(rootConfig.configuredRemoteProjects ?? []);
+        setRemoteMachines(rootConfig.configuredRemoteMachines ?? []);
+      }
       const nextCandidates = scan.candidates ?? [];
+      const normalizedRootErrors = normalizeRoots(scan.roots);
+      const rootErrors = [
+        ...(scan.errors ?? []),
+        ...normalizedRootErrors.filter((r) => r.unavailable).map((root) => `${root.path}: ${root.error ?? "unavailable"}`),
+      ];
+      const nextRoots = scan.roots ? normalizeRoots(scan.roots) : rootList;
 
+      setRoots(nextRoots);
       setCandidates(nextCandidates);
-      setScanErrors(scan.errors ?? []);
+      setScanErrors(rootErrors);
       setLastScanAt(new Date().toISOString());
       setSelectedId((current) => {
         if (current && nextCandidates.some((c) => c.id === current)) return current;
@@ -474,25 +563,6 @@ export function App() {
     }
   }
 
-  function requestRemoveProject(project: { path: string; name?: string }) {
-    setProjectRemoveDialog({ path: project.path, name: project.name ?? projectNameFromPath(project.path) });
-  }
-
-  async function confirmRemoveProject() {
-    if (!projectRemoveDialog || projectRemoveBusy) return;
-    setProjectRemoveBusy(true);
-    try {
-      await removeProject(projectRemoveDialog.path);
-      setToast({ tone: "success", message: "Project removed." });
-      setProjectRemoveDialog(null);
-      await refreshProjects({ showToast: true });
-    } catch (error) {
-      setToast({ tone: "error", message: asMessage(error) });
-    } finally {
-      setProjectRemoveBusy(false);
-    }
-  }
-
   useEffect(() => {
     if (!bridgeAvailable) return;
     void refreshProjects();
@@ -517,54 +587,83 @@ export function App() {
     if (selectedCandidate) void refreshDetail(selectedCandidate);
   }, [selectedCandidate?.id]);
 
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 5200);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
   return (
     <div className="app-shell" data-theme={appearanceTheme}>
       <main className="workspace">
         <div className="workspace-body">
-          <div className="view-surface">
+          <div aria-hidden={view !== "dashboard"} className={cx("view-surface", view !== "dashboard" && "is-hidden")}>
             <DashboardView
               appearanceTheme={appearanceTheme}
               bridgeAvailable={bridgeAvailable}
               detail={detail}
               filteredCandidates={candidates}
-              isVisible={true}
+              isVisible={view === "dashboard"}
               loading={loading}
+              remoteMachines={remoteMachines}
               scanErrors={scanErrors}
               selectedCandidate={selectedCandidate}
               setSelectedId={setSelectedId}
               setToast={setToast}
               onRefresh={refreshWorkspace}
               onOpenSettings={() => setView("settings")}
+              onAddProject={async (pathOrUri) => { pathOrUri.startsWith("ssh://") ? await addProjectUri(pathOrUri) : await addProject(pathOrUri); await refreshProjects({ showToast: true }); }}
               onPickProject={async () => { const paths = await pickAndAddProjects(); if (paths.length) await refreshProjects({ showToast: true }); }}
-              onRequestRemoveProject={requestRemoveProject}
             />
           </div>
           {view === "settings" ? (
-            <div className="settings-backdrop" role="presentation" onMouseDown={() => setView("dashboard")}>
-              <div className="settings-dialog" role="dialog" aria-modal="true" aria-label="Settings" onMouseDown={(e) => e.stopPropagation()}>
-                <SettingsView
-                  appearanceTheme={appearanceTheme}
-                  setToast={setToast}
-                  onBack={() => setView("dashboard")}
-                  onThemeChange={async (theme) => {
-                    const config = await updateAppearanceTheme(theme);
-                    setAppearanceTheme(normalizeAppearanceTheme(config.appearanceTheme));
-                  }}
-                />
-              </div>
+            <div className="view-surface settings-surface">
+              <SettingsView
+                appearanceTheme={appearanceTheme}
+                roots={roots}
+                configuredProjects={configuredProjects}
+                configuredRemoteProjects={configuredRemoteProjects}
+                remoteMachines={remoteMachines}
+                bridgeAvailable={bridgeAvailable}
+                lastScanAt={lastScanAt}
+                loading={loading}
+                candidates={candidates}
+                scanErrors={scanErrors}
+                setToast={setToast}
+                onBack={() => setView("dashboard")}
+                onScan={async () => { await refreshProjects({ showToast: true }); }}
+                onAdd={async (path) => { await addRoot(path); await refreshRoots(); await refreshProjects({ showToast: true }); }}
+                onRemove={async (path) => { await removeRoot(path); await refreshRoots(); await refreshProjects({ showToast: true }); }}
+                onRemoveProject={async (path) => { await removeProject(path); await refreshProjects({ showToast: true }); }}
+                onAddRemoteMachine={async (input) => {
+                  const config = await addRemoteMachine(input);
+                  setRemoteMachines(config.configuredRemoteMachines ?? []);
+                  await refreshProjects({ showToast: false, setBusy: false });
+                }}
+                onRemoveRemoteMachine={async (id) => {
+                  const config = await removeRemoteMachine(id);
+                  setRemoteMachines(config.configuredRemoteMachines ?? []);
+                }}
+                onTestRemoteMachine={testRemoteMachine}
+                onThemeChange={async (theme) => {
+                  const config = await updateAppearanceTheme(theme);
+                  setAppearanceTheme(normalizeAppearanceTheme(config.appearanceTheme));
+                }}
+              />
             </div>
-          ) : null}
-          {projectRemoveDialog ? (
-            <ProjectRemoveDialog
-              busy={projectRemoveBusy}
-              name={projectRemoveDialog.name}
-              path={projectRemoveDialog.path}
-              onCancel={() => { if (!projectRemoveBusy) setProjectRemoveDialog(null); }}
-              onConfirm={() => void confirmRemoveProject()}
-            />
           ) : null}
         </div>
       </main>
+      {toast ? <ToastBanner toast={toast} onClose={() => setToast(null)} /> : null}
+    </div>
+  );
+}
+
+function ToastBanner({ toast, onClose }: { toast: Toast; onClose: () => void }) {
+  return (
+    <div className={cx("toast-banner", `is-${toast.tone}`)} role="status" aria-live="polite">
+      <span>{toast.message}</span>
+      <button aria-label="Dismiss notification" type="button" onClick={onClose}>x</button>
     </div>
   );
 }
@@ -576,14 +675,15 @@ function DashboardView({
   filteredCandidates,
   isVisible,
   loading,
+  remoteMachines,
   scanErrors,
   selectedCandidate,
   setSelectedId,
   setToast,
   onRefresh,
   onOpenSettings,
+  onAddProject,
   onPickProject,
-  onRequestRemoveProject,
 }: {
   appearanceTheme: AppearanceTheme;
   bridgeAvailable: boolean;
@@ -591,17 +691,19 @@ function DashboardView({
   filteredCandidates: ProjectCandidate[];
   isVisible: boolean;
   loading: boolean;
+  remoteMachines: RemoteMachine[];
   scanErrors: string[];
   selectedCandidate: ProjectCandidate | null;
   setSelectedId: (value: string) => void;
   setToast: (toast: Toast) => void;
   onRefresh: () => Promise<void>;
   onOpenSettings: () => void;
+  onAddProject: (pathOrUri: string) => Promise<void>;
   onPickProject: () => Promise<void>;
-  onRequestRemoveProject: (project: ProjectCandidate) => void;
 }) {
   const gridRef = useRef<HTMLDivElement | null>(null);
   const terminalPaneRef = useRef<TerminalPaneHandle | null>(null);
+  const [addProjectDialogOpen, setAddProjectDialogOpen] = useState(false);
   const [runningServiceProjectIds, setRunningServiceProjectIds] = useState<Set<string>>(() => new Set());
   const [terminalActivityByProjectId, setTerminalActivityByProjectId] = useState<Record<string, ProjectTerminalActivityState>>({});
   const [agentClis, setAgentClis] = useState<AgentCli[]>([]);
@@ -613,15 +715,6 @@ function DashboardView({
   const [detailColumnWidth, setDetailColumnWidth] = useState(() =>
     storedColumnWidth(detailColumnStorageKey, defaultDetailColumnWidth, minDetailColumnWidth),
   );
-  const [projectMenu, setProjectMenu] = useState<{ candidate: ProjectCandidate; x: number; y: number; canTurnOffTeamwork: boolean } | null>(null);
-  const [teamworkRevision, setTeamworkRevision] = useState(0);
-  const [uninstallDialog, setUninstallDialog] = useState<{
-    candidate: ProjectCandidate;
-    canCleanTeamContext: boolean;
-    cleanTeamContext: boolean;
-    ownerCheckError: string | null;
-  } | null>(null);
-  const [uninstallBusy, setUninstallBusy] = useState(false);
   const detailPanelHidden = activeTerminalTabKind === "browser";
 
   function normalizeColumnWidths(projectWidth: number, detailWidth: number, gridWidth: number, detailHidden = detailPanelHidden) {
@@ -690,11 +783,12 @@ function DashboardView({
     let cancelled = false;
     const listClis = getBridge().agents?.listClis;
     if (!listClis) return;
-    void listClis()
+    setAgentClis([]);
+    void listClis({ cwdUri: selectedCandidate?.uri })
       .then((clis) => { if (!cancelled) setAgentClis(clis); })
       .catch((error) => { if (!cancelled) setToast({ tone: "error", message: asMessage(error) }); });
     return () => { cancelled = true; };
-  }, [bridgeAvailable, setToast]);
+  }, [bridgeAvailable, selectedCandidate?.uri, setToast]);
 
   useEffect(() => {
     if (!bridgeAvailable) return;
@@ -706,73 +800,6 @@ function DashboardView({
     return () => unsubscribe?.();
   }, [bridgeAvailable]);
 
-  useEffect(() => {
-    if (!projectMenu) return;
-    const close = () => setProjectMenu(null);
-    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") setProjectMenu(null);
-    };
-    window.addEventListener("click", close);
-    window.addEventListener("keydown", closeOnEscape);
-    return () => {
-      window.removeEventListener("click", close);
-      window.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [projectMenu]);
-
-  async function openTurnOffTeamworkDialog(candidate: ProjectCandidate) {
-    setProjectMenu(null);
-    let canCleanTeamContext = false;
-    let ownerCheckError: string | null = null;
-    try {
-      const projectDetail = detail?.path === candidate.path ? detail : await getProjectDetail(candidate);
-      const owner = githubOwnerFromRemote(projectDetail.repoUrl);
-      if (owner) {
-        const identity = await resolveTeamworkIdentity();
-        canCleanTeamContext = owner.toLowerCase() === identity.login.toLowerCase();
-      }
-    } catch (error) {
-      ownerCheckError = asMessage(error);
-    }
-    setUninstallDialog({ candidate, canCleanTeamContext, cleanTeamContext: false, ownerCheckError });
-  }
-
-  async function openProjectContextMenu(candidate: ProjectCandidate, event: ReactMouseEvent<HTMLButtonElement>) {
-    event.preventDefault();
-    const position = projectContextMenuPosition(event.clientX, event.clientY);
-    setProjectMenu({ candidate, ...position, canTurnOffTeamwork: false });
-    try {
-      const status = await getTeamworkStatus(candidate);
-      if (status.harnessInstalled) {
-        setProjectMenu((current) => current?.candidate.id === candidate.id
-          ? { ...current, canTurnOffTeamwork: true }
-          : current
-        );
-      }
-    } catch (error) {
-      setToast({ tone: "error", message: asMessage(error) });
-    }
-  }
-
-  async function confirmTurnOffTeamwork() {
-    if (!uninstallDialog || uninstallBusy) return;
-    setUninstallBusy(true);
-    try {
-      const result = await uninstallTeamwork(uninstallDialog.candidate, uninstallDialog.cleanTeamContext);
-      setToast({
-        tone: "success",
-        message: result.contextBranchDeleted ? "Teamwork turned off and task records cleaned." : "Teamwork turned off.",
-      });
-      setUninstallDialog(null);
-      setTeamworkRevision((value) => value + 1);
-      await onRefresh();
-    } catch (error) {
-      setToast({ tone: "error", message: asMessage(error) });
-    } finally {
-      setUninstallBusy(false);
-    }
-  }
-
   const gridStyle = {
     gridTemplateColumns: detailPanelHidden
       ? `${projectColumnWidth}px ${resizerColumnWidth}px minmax(${minTerminalColumnWidth}px, 1fr) 0px 0px`
@@ -783,9 +810,9 @@ function DashboardView({
     <div className={cx("dashboard-grid", detailPanelHidden && "is-detail-hidden")} ref={gridRef} style={gridStyle}>
       <section className="project-panel">
         <div className="project-window-drag-strip" aria-hidden="true" />
-        <div className="project-panel-header">
-          <span className="project-panel-title">Projects</span>
-          <button aria-label="Add project" className="icon-button" title="Add project folder" type="button" onClick={() => void onPickProject()}>
+        <div className="project-panel-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px 4px" }}>
+          <span style={{ fontSize: "11px", fontWeight: 600, textTransform: "uppercase", opacity: 0.6 }}>Projects</span>
+          <button aria-label="Add project" className="icon-button" title="Add project" type="button" onClick={() => setAddProjectDialogOpen(true)}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
           </button>
         </div>
@@ -803,13 +830,12 @@ function DashboardView({
               terminalActivityByProjectId={terminalActivityByProjectId}
               selectedId={selectedCandidate?.id ?? null}
               onSelect={setSelectedId}
-              onContextMenu={(candidate, event) => void openProjectContextMenu(candidate, event)}
             />
           ) : (
             <div className="empty-state compact-title-row" style={{ padding: "24px 16px" }}>
               <strong>No projects</strong>
               <span>Add a project directory to get started.</span>
-              <button className="button" type="button" style={{ marginTop: "12px" }} onClick={() => void onPickProject()}>Add Project</button>
+              <button className="button" type="button" style={{ marginTop: "12px" }} onClick={() => setAddProjectDialogOpen(true)}>Add Project</button>
             </div>
           )}
         </div>
@@ -853,58 +879,24 @@ function DashboardView({
             setToast={setToast}
             onRefresh={onRefresh}
             onOpenFileInEditor={(relativePath) =>
-              terminalPaneRef.current?.openFileInEditor(selectedCandidate.path, selectedCandidate.name, relativePath) ?? Promise.resolve()
+              terminalPaneRef.current?.openFileInEditor(selectedCandidate.uri, selectedCandidate.name, relativePath) ?? Promise.resolve()
             }
             onOpenGitDiff={(relativePath) =>
-              terminalPaneRef.current?.openGitDiff(selectedCandidate.path, selectedCandidate.name, relativePath) ?? Promise.resolve()
+              terminalPaneRef.current?.openGitDiff(selectedCandidate.uri, selectedCandidate.name, relativePath) ?? Promise.resolve()
             }
-            onOpenBrowserTab={(url) =>
-              terminalPaneRef.current?.openBrowserTab(selectedCandidate.path, selectedCandidate.name, url) ?? Promise.resolve()
-            }
-            teamworkRevision={teamworkRevision}
           />
         ) : (
-          <EmptyState title="No project selected" body="Add a project folder to get started." />
+          <EmptyState title="No project selected" body="Select a project to get started." />
         )}
       </section>
-      {projectMenu ? (
-        <div
-          className="project-context-menu"
-          role="menu"
-          style={{ left: projectMenu.x, top: projectMenu.y }}
-          onClick={(event) => event.stopPropagation()}
-        >
-          <button
-            autoFocus
-            className="project-context-menu-item"
-            role="menuitem"
-            type="button"
-            onClick={() => { setProjectMenu(null); onRequestRemoveProject(projectMenu.candidate); }}
-          >
-            Remove Project
-          </button>
-          {projectMenu.canTurnOffTeamwork ? (
-            <button
-              className="project-context-menu-item is-danger"
-              role="menuitem"
-              type="button"
-              onClick={() => void openTurnOffTeamworkDialog(projectMenu.candidate)}
-            >
-              Turn Off Teamwork
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-      {uninstallDialog ? (
-        <TeamworkUninstallDialog
-          busy={uninstallBusy}
-          candidate={uninstallDialog.candidate}
-          canCleanTeamContext={uninstallDialog.canCleanTeamContext}
-          cleanTeamContext={uninstallDialog.cleanTeamContext}
-          ownerCheckError={uninstallDialog.ownerCheckError}
-          onCancel={() => { if (!uninstallBusy) setUninstallDialog(null); }}
-          onChangeCleanTeamContext={(cleanTeamContext) => setUninstallDialog((current) => current ? { ...current, cleanTeamContext } : current)}
-          onConfirm={() => void confirmTurnOffTeamwork()}
+
+      {addProjectDialogOpen ? (
+        <AddProjectDialog
+          remoteMachines={remoteMachines}
+          setToast={setToast}
+          onAdd={async (pathOrUri) => { await onAddProject(pathOrUri); setAddProjectDialogOpen(false); }}
+          onClose={() => setAddProjectDialogOpen(false)}
+          onPickLocal={async () => { await onPickProject(); setAddProjectDialogOpen(false); }}
         />
       ) : null}
     </div>
@@ -928,18 +920,26 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const activeProjectIdRef = useRef<string | null>(null);
   const creatingProjects = useRef(new Set<string>());
   const quietTimers = useRef(new Map<string, ReturnType<typeof window.setTimeout>>());
-  const serviceOutputBuffers = useRef(new Map<string, string>());
   const selectedSpace = candidate?.id ? spaces[candidate.id] ?? null : null;
-  const canCreate = bridgeAvailable && Boolean(candidate?.path);
+  const canCreate = bridgeAvailable && Boolean(candidate?.uri) && (candidate?.providerKind === "local" || candidate?.providerKind === "ssh");
   const services = candidate?.services ?? [];
 
   useEffect(() => { spacesRef.current = spaces; }, [spaces]);
   useEffect(() => { activeProjectIdRef.current = activeProjectId; }, [activeProjectId]);
-  useEffect(() => () => {
-    for (const timer of quietTimers.current.values()) window.clearTimeout(timer);
-    quietTimers.current.clear();
-    serviceOutputBuffers.current.clear();
-  }, []);
+  useEffect(() => () => { for (const timer of quietTimers.current.values()) window.clearTimeout(timer); quietTimers.current.clear(); }, []);
+
+  useEffect(() => {
+    const hasDirtyEditor = Object.values(spaces).some((space) =>
+      space.tabs.some((tab) => tab.kind === "editor" && tab.content !== tab.savedContent),
+    );
+    if (!hasDirtyEditor) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [spaces]);
 
   useEffect(() => {
     const runningProjectIds = new Set(
@@ -976,81 +976,156 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   }, [bridgeAvailable]);
 
   useEffect(() => {
-    if (!candidate?.path || !bridgeAvailable) { if (!candidate) setActiveProjectId(null); return; }
+    if (!candidate?.uri || !bridgeAvailable) { if (!candidate) setActiveProjectId(null); return; }
     setActiveProjectId(candidate.id);
     setSpaces((current) => {
       if (current[candidate.id]) return current;
-      return { ...current, [candidate.id]: { projectId: candidate.id, projectName: candidate.name, path: candidate.path, tabs: [], activeId: null, serviceUrl: null } };
+      return { ...current, [candidate.id]: { projectId: candidate.id, projectName: candidate.name, uri: candidate.uri, displayPath: candidate.displayPath, tabs: [], activeId: null, serviceUrl: null } };
     });
     if (!isVisible) return;
     const existing = spacesRef.current[candidate.id];
     if (existing?.tabs.length) return;
     if (creatingProjects.current.has(candidate.id)) return;
     creatingProjects.current.add(candidate.id);
-    void openProjectTab(candidate.id, candidate.path, candidate.name, true).finally(() => { creatingProjects.current.delete(candidate.id); });
-  }, [bridgeAvailable, candidate?.id, candidate?.path, isVisible]);
+    void openProjectTab(candidate.id, candidate.uri, candidate.name, candidate.displayPath, true).finally(() => { creatingProjects.current.delete(candidate.id); });
+  }, [bridgeAvailable, candidate?.id, candidate?.uri, isVisible]);
 
   async function openCurrentProjectTab() {
-    if (!candidate?.path) return;
-    await openProjectTab(candidate.id, candidate.path, candidate.name);
+    if (!candidate?.uri) return;
+    await openProjectTab(candidate.id, candidate.uri, candidate.name, candidate.displayPath);
   }
 
   async function openAgentProjectTab(agent: AgentCli) {
-    if (!candidate?.path) return;
-    await openProjectTab(candidate.id, candidate.path, candidate.name, false, { agentId: agent.id, initialCommand: shellQuote(agent.executablePath || agent.command), initialCommandTitle: agent.label });
+    if (!candidate?.uri) return;
+    const isRemote = candidate.providerKind === "ssh";
+    const launchCommand = isRemote ? agent.command : (agent.executablePath || agent.command);
+    await openProjectTab(candidate.id, candidate.uri, candidate.name, candidate.displayPath, false, { initialCommand: shellQuote(launchCommand) });
   }
 
   async function openBrowserProjectTab() {
-    if (!candidate?.path) return;
-    let initialUrl = "about:blank";
-    if (selectedSpace?.tabs.some((tab) => isRunningServiceTab(tab))) {
-      initialUrl = selectedSpace.serviceUrl ?? "about:blank";
-    } else {
-      try {
-        const getPath = window.sharkBay?.knowledgeSite?.getPath;
-        if (getPath) {
-          const sitePath = await getPath({ repoPath: candidate.path });
-          if (sitePath) initialUrl = `file://${sitePath}`;
-        }
-      } catch { /* fall back to about:blank */ }
-    }
-    await openBrowserTab(candidate.id, candidate.path, candidate.name, initialUrl);
+    if (!candidate?.uri) return;
+    const initialUrl = selectedSpace?.tabs.some((tab) => isRunningServiceTab(tab)) ? selectedSpace.serviceUrl ?? "about:blank" : "about:blank";
+    await openBrowserTab(candidate.id, candidate.uri, candidate.name, candidate.displayPath, initialUrl);
   }
 
   useImperativeHandle(ref, () => ({
-    openFileInEditor: async (projectPath, projectName, relativePath) => {
-      await openProjectTab(projectPath, projectPath, projectName, false, { initialCommand: editorCommandFor(relativePath) });
+    openFileInEditor: async (projectUri, projectName, relativePath) => {
+      await openEditorTab(projectUri, projectName, selectedSpace?.displayPath ?? projectUri, relativePath);
     },
-    openGitDiff: async (projectPath, projectName, relativePath) => {
-      await openProjectTab(projectPath, projectPath, projectName, false, { initialCommand: gitDiffCommandFor(relativePath) });
-    },
-    openBrowserTab: async (projectPath, projectName, url) => {
-      await openBrowserTab(projectPath, projectPath, projectName, url);
+    openGitDiff: async (projectUri, projectName, relativePath) => {
+      await openProjectTab(projectUri, projectUri, projectName, selectedSpace?.displayPath ?? projectUri, false, { initialCommand: gitDiffCommandFor(relativePath) });
     },
   }));
 
-  async function openProjectTab(projectId: string, cwd: string, projectName: string, quiet = false, options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "initialCommandTitle" | "service"> = {}) {
+  async function openEditorTab(projectUri: string, projectName: string, displayPath: string, relativePath: string) {
+    const editorTabId = `editor:${projectUri}:${relativePath}`;
+    const existingSpace = spacesRef.current[projectUri];
+    const existingTab = existingSpace?.tabs.find((tab): tab is EditorTab => tab.kind === "editor" && tab.id === editorTabId);
+    if (existingTab) {
+      setActiveTab(projectUri, editorTabId);
+      setActiveProjectId(projectUri);
+      onActiveTabKindChange("editor");
+      return;
+    }
+    const baseName = relativePath.split("/").pop() ?? relativePath;
+    const tab: EditorTab = {
+      kind: "editor",
+      id: editorTabId,
+      projectUri,
+      relativePath,
+      name: baseName,
+      content: "",
+      savedContent: "",
+      loading: true,
+      saving: false,
+      error: null,
+      readOnly: false,
+    };
+    onActiveTabKindChange("editor");
+    setSpaces((current) => {
+      const existing = current[projectUri] ?? { projectId: projectUri, projectName, uri: projectUri, displayPath, tabs: [], activeId: null, serviceUrl: null };
+      return { ...current, [projectUri]: { ...existing, projectName, uri: projectUri, displayPath, tabs: [...existing.tabs, tab], activeId: editorTabId } };
+    });
+    setActiveProjectId(projectUri);
+
+    const reader = getBridge().projects?.readFile;
+    if (!reader) {
+      updateEditorTab(projectUri, editorTabId, { loading: false, error: "File reading is not available", readOnly: true });
+      return;
+    }
     try {
-      const session = await createTerminal(cwd, projectName, options);
+      const result = await reader({ projectUri, relativePath });
+      if (result.ok) {
+        updateEditorTab(projectUri, editorTabId, { loading: false, content: result.content, savedContent: result.content, error: null });
+      } else {
+        const readOnly = result.reason === "binary" || result.reason === "too-large";
+        updateEditorTab(projectUri, editorTabId, { loading: false, error: result.message, readOnly });
+      }
+    } catch (error) {
+      updateEditorTab(projectUri, editorTabId, { loading: false, error: asMessage(error), readOnly: true });
+    }
+  }
+
+  function updateEditorTab(projectUri: string, tabId: string, patch: Partial<EditorTab>) {
+    setSpaces((current) => {
+      const space = current[projectUri];
+      if (!space) return current;
+      const nextTabs = space.tabs.map((tab) => (tab.kind === "editor" && tab.id === tabId ? { ...tab, ...patch } : tab));
+      return { ...current, [projectUri]: { ...space, tabs: nextTabs } };
+    });
+  }
+
+  function updateEditorContent(projectUri: string, tabId: string, content: string) {
+    updateEditorTab(projectUri, tabId, { content });
+  }
+
+  async function saveEditorTab(projectUri: string, tabId: string) {
+    const space = spacesRef.current[projectUri];
+    const tab = space?.tabs.find((item): item is EditorTab => item.kind === "editor" && item.id === tabId);
+    if (!tab || tab.saving || tab.readOnly) return;
+    const writer = getBridge().projects?.writeFile;
+    if (!writer) {
+      setToast({ tone: "error", message: "File writing is not available" });
+      return;
+    }
+    updateEditorTab(projectUri, tabId, { saving: true });
+    try {
+      const result = await writer({ projectUri, relativePath: tab.relativePath, content: tab.content });
+      if (result.ok) {
+        updateEditorTab(projectUri, tabId, { saving: false, savedContent: tab.content, error: null });
+        setToast({ tone: "success", message: `Saved ${tab.relativePath}` });
+      } else {
+        updateEditorTab(projectUri, tabId, { saving: false, error: result.message });
+        setToast({ tone: "error", message: result.message });
+      }
+    } catch (error) {
+      updateEditorTab(projectUri, tabId, { saving: false, error: asMessage(error) });
+      setToast({ tone: "error", message: asMessage(error) });
+    }
+  }
+
+  async function openProjectTab(projectId: string, cwdUri: string, projectName: string, displayPath: string, quiet = false, options: Pick<TerminalCreateInput, "initialCommand" | "service"> = {}) {
+    try {
+      const session = await createTerminal(cwdUri, projectName, options);
       const terminal = createXTerm(session.id, appearanceTheme, setToast, recordTerminalInputActivity);
       const tab: TerminalTab = { kind: "terminal", session, terminal: terminal.instance, fitAddon: terminal.fitAddon, disposables: terminal.disposables, activityState: "idle", outputBurstStartedAt: null };
       onActiveTabKindChange("terminal");
       setSpaces((current) => {
-        const existing = current[projectId] ?? { projectId, projectName, path: cwd, tabs: [], activeId: null, serviceUrl: null };
-        return { ...current, [projectId]: { ...existing, projectName, path: cwd, tabs: [...existing.tabs, tab], activeId: session.id } };
+        const existing = current[projectId] ?? { projectId, projectName, uri: cwdUri, displayPath, tabs: [], activeId: null, serviceUrl: null };
+        return { ...current, [projectId]: { ...existing, projectName, uri: cwdUri, displayPath, tabs: [...existing.tabs, tab], activeId: session.id } };
       });
       setActiveProjectId(projectId);
     } catch (error) { if (!quiet) setToast({ tone: "error", message: asMessage(error) }); }
   }
 
-  async function openBrowserTab(projectId: string, cwd: string, projectName: string, initialUrl: string) {
+  async function openBrowserTab(projectId: string, uri: string, projectName: string, displayPath: string, initialUrl: string) {
     try {
       const browser = await createBrowser(initialUrl);
       const tab: TerminalTab = { kind: "browser", browser, addressValue: browser.url === "about:blank" ? "" : browser.url };
       onActiveTabKindChange("browser");
       setSpaces((current) => {
-        const existing = current[projectId] ?? { projectId, projectName, path: cwd, tabs: [], activeId: null, serviceUrl: null };
-        return { ...current, [projectId]: { ...existing, projectName, path: cwd, tabs: [...existing.tabs, tab], activeId: browser.id } };
+        const existing = current[projectId] ?? { projectId, projectName, uri, displayPath, tabs: [], activeId: null, serviceUrl: null };
+        return { ...current, [projectId]: { ...existing, projectName, uri, displayPath, tabs: [...existing.tabs, tab], activeId: browser.id } };
       });
       setActiveProjectId(projectId);
     } catch (error) {
@@ -1059,10 +1134,10 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   }
 
   async function toggleService(service: NonNullable<ProjectCandidate["services"]>[number]) {
-    if (!candidate?.path) return;
+    if (!candidate?.uri) return;
     const existing = selectedSpace?.tabs.find((tab): tab is TerminalShellTab => tab.kind === "terminal" && tab.session.service?.id === service.id && tab.session.status === "running");
     if (existing) { await closeTab(existing.session.id); return; }
-    await openProjectTab(candidate.id, service.cwd, candidate.name, false, { initialCommand: service.command, service: { id: service.id, label: service.label, command: service.command } });
+    await openProjectTab(candidate.id, service.cwdUri, candidate.name, candidate.displayPath, false, { initialCommand: service.command, service: { id: service.id, label: service.label, command: service.command } });
   }
 
   function appendTerminalOutput(event: TerminalDataEvent) {
@@ -1116,7 +1191,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
 
   function markTerminalExit(event: TerminalExitEvent) {
     clearTerminalQuietTimer(event.sessionId);
-    serviceOutputBuffers.current.delete(event.sessionId);
     const message = `\r\n[process exited${event.exitCode === null ? "" : ` with code ${event.exitCode}`}${event.signal ? `, signal ${event.signal}` : ""}]\r\n`;
     const match = findTerminalTabWithSpace(spacesRef.current, event.sessionId);
     match?.tab.terminal.write(message);
@@ -1140,9 +1214,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   }
 
   function recordServiceUrl(sessionId: string, data: string) {
-    const observation = observeServiceUrl(serviceOutputBuffers.current.get(sessionId), data);
-    serviceOutputBuffers.current.set(sessionId, observation.output);
-    const url = observation.url;
+    const url = firstHttpUrl(data);
     if (!url) return;
     const match = findTerminalTabWithSpace(spacesRef.current, sessionId);
     if (!match?.tab.session.service) return;
@@ -1155,6 +1227,15 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
 
   async function closeTab(tabId: string) {
     const match = findTabWithSpace(spacesRef.current, tabId);
+    if (match?.tab.kind === "editor") {
+      const tab = match.tab;
+      if (tab.content !== tab.savedContent) {
+        const confirmed = window.confirm(`${tab.name} has unsaved changes. Close without saving?`);
+        if (!confirmed) return;
+      }
+      removeTab(tabId, match);
+      return;
+    }
     try {
       if (match?.tab.kind === "browser") await closeBrowser(tabId);
       else await closeTerminal(tabId);
@@ -1168,7 +1249,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   function removeTab(tabId: string, match: ReturnType<typeof findTabWithSpace>) {
     if (match?.tab.kind === "terminal") {
       clearTerminalQuietTimer(tabId);
-      serviceOutputBuffers.current.delete(tabId);
       match.tab.disposables.forEach((d) => d.dispose());
       match.tab.terminal.dispose();
     }
@@ -1200,7 +1280,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       <div className="terminal-header">
         <div>
           <h3>{terminalHeading}</h3>
-          <div className="path-line">{selectedSpace?.path ?? candidate?.path ?? "Select a project"}</div>
+          <div className="path-line">{selectedSpace?.displayPath ?? candidate?.displayPath ?? "Select a project"}</div>
         </div>
         {services.length ? (
           <div className="service-actions" aria-label="Project services">
@@ -1231,10 +1311,12 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                         <button className="terminal-tab-main" type="button" onClick={() => { setActiveTab(space.projectId, tabId); if (tab.kind === "terminal") clearTerminalDoneState(tab.session.id); }}>
                           {tab.kind === "terminal" ? (
                             <span className={cx("terminal-state", tab.session.service && tab.session.status === "running" && "is-service-running", tab.activityState === "working" && "is-working", !isActiveTab && tab.activityState === "done" && "is-done", tab.session.status === "exited" && "is-exited")} />
-                          ) : (
+                          ) : tab.kind === "browser" ? (
                             <BrowserTabIcon browser={tab.browser} />
+                          ) : (
+                            <EditorTabIcon dirty={tab.content !== tab.savedContent} />
                           )}
-                          <span className="truncate">{tabTitle}</span>
+                          <span className="truncate">{tabTitle}{tab.kind === "editor" && tab.content !== tab.savedContent ? " •" : ""}</span>
                         </button>
                         <button aria-label={`Close ${tabTitle}`} className="terminal-tab-close" type="button" onClick={(event) => { event.stopPropagation(); void closeTab(tabId); }}>x</button>
                       </div>
@@ -1253,10 +1335,21 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
             <div className="xterm-surface-stack">
               {space.tabs.map((tab) => {
                 const active = isVisible && space.projectId === activeProjectId && tabIdForTab(tab) === space.activeId;
-                return tab.kind === "terminal" ? (
-                  <XTermSurface active={active} key={tab.session.id} tab={tab} onResize={(cols, rows) => void resizeTerminal(tab.session.id, cols, rows).catch((error) => setToast({ tone: "error", message: asMessage(error) }))} />
-                ) : (
-                  <BrowserSurface active={active} key={tab.browser.id} setToast={setToast} tab={tab} onAddressChange={(value) => updateBrowserAddress(tab.browser.id, value)} onBrowserUpdate={(browser) => updateBrowserSession(browser)} />
+                if (tab.kind === "terminal") {
+                  return <XTermSurface active={active} key={tab.session.id} tab={tab} onResize={(cols, rows) => void resizeTerminal(tab.session.id, cols, rows).catch((error) => setToast({ tone: "error", message: asMessage(error) }))} />;
+                }
+                if (tab.kind === "browser") {
+                  return <BrowserSurface active={active} key={tab.browser.id} setToast={setToast} tab={tab} onAddressChange={(value) => updateBrowserAddress(tab.browser.id, value)} onBrowserUpdate={(browser) => updateBrowserSession(browser)} />;
+                }
+                return (
+                  <EditorSurface
+                    active={active}
+                    appearanceTheme={appearanceTheme}
+                    key={tab.id}
+                    tab={tab}
+                    onChange={(content) => updateEditorContent(tab.projectUri, tab.id, content)}
+                    onSave={() => void saveEditorTab(tab.projectUri, tab.id)}
+                  />
                 );
               })}
               {!space.tabs.length ? (<div className="xterm-empty-state"><EmptyState title="No terminal open" body="Open a tab for the selected project." /></div>) : null}
@@ -1444,11 +1537,15 @@ function isRunningServiceTab(tab: TerminalTab): boolean {
 }
 
 function tabIdForTab(tab: TerminalTab): string {
-  return tab.kind === "terminal" ? tab.session.id : tab.browser.id;
+  if (tab.kind === "terminal") return tab.session.id;
+  if (tab.kind === "browser") return tab.browser.id;
+  return tab.id;
 }
 
 function titleForTab(tab: TerminalTab): string {
-  return tab.kind === "terminal" ? tab.session.title : tab.browser.title || "Browser";
+  if (tab.kind === "terminal") return tab.session.title;
+  if (tab.kind === "browser") return tab.browser.title || "Browser";
+  return tab.name;
 }
 
 function activeTabKindForProject(spaces: Record<string, TerminalSpace>, activeProjectId: string | null): ActiveTerminalTabKind {
@@ -1488,13 +1585,12 @@ function sameProjectTerminalActivityStates(left: Record<string, ProjectTerminalA
   return leftKeys.every((key) => left[key] === right[key]);
 }
 
-function ProjectList({ agentStatusByProjectPath, candidates, runningServiceProjectIds, terminalActivityByProjectId, selectedId, onContextMenu, onSelect }: {
+function ProjectList({ agentStatusByProjectPath, candidates, runningServiceProjectIds, terminalActivityByProjectId, selectedId, onSelect }: {
   agentStatusByProjectPath: AgentStatusByProjectPath;
   candidates: ProjectCandidate[];
   runningServiceProjectIds: Set<string>;
   terminalActivityByProjectId: Record<string, ProjectTerminalActivityState>;
   selectedId: string | null;
-  onContextMenu?: (candidate: ProjectCandidate, event: ReactMouseEvent<HTMLButtonElement>) => void;
   onSelect: (id: string) => void;
 }) {
   if (!candidates.length) return null;
@@ -1505,9 +1601,9 @@ function ProjectList({ agentStatusByProjectPath, candidates, runningServiceProje
           const hasRunningService = runningServiceProjectIds.has(candidate.id);
           const terminalActivity = terminalActivityForCandidate(candidate, terminalActivityByProjectId);
           const hasProjectStatus = Boolean(terminalActivity);
-          const subtitle = agentStatusByProjectPath[candidate.path] ?? candidate.path;
+          const subtitle = agentStatusByProjectPath[candidate.displayPath] ?? candidate.displayPath;
           return (
-            <button className={cx("project-row", selectedId === candidate.id && "is-selected")} key={candidate.id} onClick={() => onSelect(candidate.id)} onContextMenu={onContextMenu ? (event) => onContextMenu(candidate, event) : undefined}>
+            <button className={cx("project-row", selectedId === candidate.id && "is-selected")} key={candidate.id} onClick={() => onSelect(candidate.id)}>
               <ProjectIcon name={candidate.name} sources={candidate.iconSources ?? []} />
               <span className="project-row-main">
                 <span className="cell-title">
@@ -1528,106 +1624,6 @@ function ProjectList({ agentStatusByProjectPath, candidates, runningServiceProje
         })}
       </div>
     </section>
-  );
-}
-
-function ProjectRemoveDialog({
-  busy,
-  name,
-  path,
-  onCancel,
-  onConfirm,
-}: {
-  busy: boolean;
-  name: string;
-  path: string;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <div className="teamwork-uninstall-backdrop" role="presentation" onMouseDown={onCancel}>
-      <section
-        aria-modal="true"
-        aria-labelledby="project-remove-title"
-        className="subpanel confirm-panel teamwork-uninstall-dialog"
-        role="dialog"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div>
-          <h4 id="project-remove-title">Remove Project</h4>
-          <p className="summary-text">
-            Remove {name} from SharkBay? This only removes the project from the workspace. It does not delete files from disk.
-          </p>
-          <p className="teamwork-owner-note">{path}</p>
-        </div>
-        <div className="button-row">
-          <button className="button secondary compact" disabled={busy} type="button" onClick={onCancel}>Cancel</button>
-          <button className="button compact danger-button" disabled={busy} type="button" onClick={onConfirm}>
-            {busy ? "Removing..." : "Remove Project"}
-          </button>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function TeamworkUninstallDialog({
-  busy,
-  candidate,
-  canCleanTeamContext,
-  cleanTeamContext,
-  ownerCheckError,
-  onCancel,
-  onChangeCleanTeamContext,
-  onConfirm,
-}: {
-  busy: boolean;
-  candidate: ProjectCandidate;
-  canCleanTeamContext: boolean;
-  cleanTeamContext: boolean;
-  ownerCheckError: string | null;
-  onCancel: () => void;
-  onChangeCleanTeamContext: (value: boolean) => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <div className="teamwork-uninstall-backdrop" role="presentation" onMouseDown={onCancel}>
-      <section
-        aria-modal="true"
-        aria-labelledby="teamwork-uninstall-title"
-        className="subpanel confirm-panel teamwork-uninstall-dialog"
-        role="dialog"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div>
-          <h4 id="teamwork-uninstall-title">Turn Off Teamwork</h4>
-          <p className="summary-text">
-            {cleanTeamContext
-              ? `Remove local Teamwork harness files from ${candidate.name} and delete the shared team context branch.`
-              : `Remove local Teamwork harness files from ${candidate.name}. The team context branch will be kept.`}
-          </p>
-        </div>
-        {canCleanTeamContext ? (
-          <label className="checkbox-row teamwork-clean-checkbox">
-            <input
-              checked={cleanTeamContext}
-              disabled={busy}
-              type="checkbox"
-              onChange={(event) => onChangeCleanTeamContext(event.currentTarget.checked)}
-            />
-            <span>Also clean all task records</span>
-          </label>
-        ) : ownerCheckError ? (
-          <p className="teamwork-owner-note">Owner check unavailable.</p>
-        ) : null}
-        <div className="button-row">
-          <button className="button secondary compact" disabled={busy} type="button" onClick={onCancel}>Cancel</button>
-          <button className="button compact danger-button" disabled={busy} type="button" onClick={onConfirm}>
-            {busy ? "Turning off..." : "Turn Off Teamwork"}
-          </button>
-        </div>
-      </section>
-    </div>
   );
 }
 
@@ -1664,24 +1660,74 @@ function BrowserTabIcon({ browser }: { browser: BrowserSession }) {
   );
 }
 
-function ProjectDetailPane({ detail, candidate, setToast, onRefresh, onOpenFileInEditor, onOpenGitDiff, onOpenBrowserTab, teamworkRevision }: {
+function EditorTabIcon({ dirty }: { dirty: boolean }) {
+  return (
+    <span className={cx("editor-tab-icon", dirty && "is-dirty")} aria-hidden="true">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+        <path d="M3 2.5h6.5L13 6v7.5a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.2" />
+        <path d="M9.5 2.5V6H13" stroke="currentColor" strokeWidth="1.2" />
+      </svg>
+    </span>
+  );
+}
+
+function EditorSurface({ active, appearanceTheme, tab, onChange, onSave }: {
+  active: boolean;
+  appearanceTheme: AppearanceTheme;
+  tab: EditorTab;
+  onChange: (content: string) => void;
+  onSave: () => void;
+}) {
+  const dirty = tab.content !== tab.savedContent;
+  return (
+    <div aria-hidden={!active} className={cx("editor-surface", active && "is-active")}>
+      <div className="editor-toolbar">
+        <span className="editor-path truncate" title={tab.relativePath}>{tab.relativePath}</span>
+        <div className="editor-toolbar-spacer" />
+        {tab.error ? <span className="editor-error truncate" title={tab.error}>{tab.error}</span> : null}
+        {tab.readOnly ? <span className="editor-badge">Read-only</span> : null}
+        <button className="button compact" disabled={!dirty || tab.saving || tab.readOnly || tab.loading} type="button" onClick={onSave}>
+          {tab.saving ? "Saving" : dirty ? "Save" : "Saved"}
+        </button>
+      </div>
+      <div className="editor-body">
+        {tab.loading ? (
+          <div className="editor-loading">Loading…</div>
+        ) : (
+          <CodeEditor
+            appearanceTheme={appearanceTheme}
+            initialContent={tab.content}
+            relativePath={tab.relativePath}
+            readOnly={tab.readOnly}
+            onChange={onChange}
+            onSave={onSave}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProjectDetailPane({ detail, candidate, setToast, onRefresh, onOpenFileInEditor, onOpenGitDiff }: {
   detail: ProjectDetail | null;
   candidate: ProjectCandidate;
   setToast: (toast: Toast) => void;
   onRefresh: () => Promise<void>;
   onOpenFileInEditor: (relativePath: string) => Promise<void>;
   onOpenGitDiff: (relativePath: string) => Promise<void>;
-  onOpenBrowserTab: (url: string) => Promise<void>;
-  teamworkRevision: number;
 }) {
-  const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>("tasks");
+  const isRemote = candidate.providerKind === "ssh";
+  const availableTabs = detailTabs.filter((tab) => !tab.remoteOnly || isRemote);
+  const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>("git");
+
+  useEffect(() => { setActiveDetailTab("git"); }, [candidate.id]);
 
   function handleDetailTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, tab: DetailTab) {
-    const currentIndex = detailTabs.findIndex((item) => item.id === tab);
-    const lastIndex = detailTabs.length - 1;
+    const currentIndex = availableTabs.findIndex((item) => item.id === tab);
+    const lastIndex = availableTabs.length - 1;
     let nextTab: DetailTab | null = null;
-    if (event.key === "ArrowRight" || event.key === "ArrowDown") nextTab = detailTabs[currentIndex === lastIndex ? 0 : currentIndex + 1]?.id ?? "git";
-    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextTab = detailTabs[currentIndex <= 0 ? lastIndex : currentIndex - 1]?.id ?? "git";
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") nextTab = availableTabs[currentIndex === lastIndex ? 0 : currentIndex + 1]?.id ?? "git";
+    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextTab = availableTabs[currentIndex <= 0 ? lastIndex : currentIndex - 1]?.id ?? "git";
     if (!nextTab) return;
     event.preventDefault();
     setActiveDetailTab(nextTab);
@@ -1691,15 +1737,11 @@ function ProjectDetailPane({ detail, candidate, setToast, onRefresh, onOpenFileI
   return (
     <div className="detail-layout">
       <div className="detail-tab-cards" role="tablist" aria-label="Project detail sections">
-        {detailTabs.map((tab) => (
+        {availableTabs.map((tab) => (
           <button aria-controls={`project-detail-tabpanel-${tab.id}`} aria-selected={activeDetailTab === tab.id} className={cx("detail-tab-card", activeDetailTab === tab.id && "is-active")} id={`project-detail-tab-${tab.id}`} key={tab.id} role="tab" tabIndex={activeDetailTab === tab.id ? 0 : -1} type="button" onKeyDown={(event) => handleDetailTabKeyDown(event, tab.id)} onClick={() => setActiveDetailTab(tab.id)}>
             {tab.label}
-            {tab.id === "git" && (detail?.gitDirtyFiles?.length ?? 0) > 0 && <span className="tab-badge">{detail!.gitDirtyFiles!.length}</span>}
           </button>
         ))}
-      </div>
-      <div aria-labelledby="project-detail-tab-tasks" className="detail-tab-panel" hidden={activeDetailTab !== "tasks"} id="project-detail-tabpanel-tasks" role="tabpanel">
-        <TasksDetailTab candidate={candidate} setToast={setToast} teamworkRevision={teamworkRevision} onOpenBrowserTab={onOpenBrowserTab} />
       </div>
       <div aria-labelledby="project-detail-tab-git" className="detail-tab-panel" hidden={activeDetailTab !== "git"} id="project-detail-tabpanel-git" role="tabpanel">
         <GitDetailTab detail={detail} candidate={candidate} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} />
@@ -1707,220 +1749,12 @@ function ProjectDetailPane({ detail, candidate, setToast, onRefresh, onOpenFileI
       <div aria-labelledby="project-detail-tab-files" className="detail-tab-panel" hidden={activeDetailTab !== "files"} id="project-detail-tabpanel-files" role="tabpanel">
         <FilesDetailTab active={activeDetailTab === "files"} candidate={candidate} detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} />
       </div>
-    </div>
-  );
-}
-
-function taskPill(task: TaskViewModel): { label: string; cls: string } {
-  if (task.status === "completed" && task.sync === "synced") return { label: "Done", cls: "phase-done" };
-  if (task.status === "completed" && task.sync === "pending") return { label: "Done", cls: "phase-done" };
-  if (task.status === "completed" && task.sync === "failed") return { label: "Sync failed", cls: "phase-blocked" };
-  if (task.status === "active") return { label: "Active", cls: "phase-done" };
-  if (task.status === "paused") return { label: "Paused", cls: "phase-blocked" };
-  if (task.status === "blocked") return { label: "Blocked", cls: "phase-blocked" };
-  if (task.status === "abandoned") return { label: "Dropped", cls: "phase-blocked" };
-  return { label: task.status, cls: "phase-waiting" };
-}
-
-function TasksDetailTab({ candidate, setToast, teamworkRevision, onOpenBrowserTab }: { candidate: ProjectCandidate; setToast: (toast: Toast) => void; teamworkRevision: number; onOpenBrowserTab: (url: string) => Promise<void> }) {
-  const [tasks, setTasks] = useState<TaskViewModel[]>([]);
-  const [status, setStatus] = useState<TeamworkStatus | null>(null);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [busyAction, setBusyAction] = useState<"install" | null>(null);
-  const [taskLoadError, setTaskLoadError] = useState<string | null>(null);
-  const [statusLoadError, setStatusLoadError] = useState<string | null>(null);
-  const teamworkError = taskLoadError || statusLoadError;
-  const selected = useMemo(
-    () => selectedTaskId ? tasks.find((task) => task.taskId === selectedTaskId) ?? null : null,
-    [selectedTaskId, tasks],
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    setSelectedTaskId(null);
-    setTaskLoadError(null);
-    setStatusLoadError(null);
-    const teamwork = window.sharkBay?.teamwork;
-    const getTasks = teamwork?.getTasks;
-    const getStatus = teamwork?.getStatus;
-    if (!getTasks || !getStatus) {
-      const message = "Teamwork APIs are not exposed by the preload bridge.";
-      setTaskLoadError(message);
-      setToast({ tone: "error", message });
-      return;
-    }
-    const getTasksHandler: NonNullable<NonNullable<SharkBayBridge["teamwork"]>["getTasks"]> = getTasks;
-    const getStatusHandler: NonNullable<NonNullable<SharkBayBridge["teamwork"]>["getStatus"]> = getStatus;
-
-    function applyTasks(updated: TaskViewModel[]) {
-      setTasks(updated);
-      setSelectedTaskId((current) => current && updated.some((task) => task.taskId === current) ? current : null);
-    }
-
-    async function refreshTasks(showToast: boolean) {
-      try {
-        const updated = await getTasksHandler({ repoPath: candidate.path });
-        if (cancelled) return;
-        applyTasks(updated);
-        setTaskLoadError(null);
-      } catch (error) {
-        if (cancelled) return;
-        const message = asMessage(error);
-        setTasks([]);
-        setTaskLoadError(message);
-        if (showToast) setToast({ tone: "error", message });
-      }
-    }
-
-    async function refreshStatus(showToast: boolean) {
-      try {
-        const updated = await getStatusHandler({ repoPath: candidate.path });
-        if (cancelled) return;
-        setStatus(updated);
-        setStatusLoadError(null);
-      } catch (error) {
-        if (cancelled) return;
-        const message = asMessage(error);
-        setStatusLoadError(message);
-        if (showToast) setToast({ tone: "error", message });
-      }
-    }
-
-    void refreshTasks(true);
-    void refreshStatus(true);
-    const refreshTimer = window.setInterval(() => {
-      void refreshTasks(false);
-      void refreshStatus(false);
-    }, 2000);
-    const unsub = window.sharkBay?.teamwork?.onTasksChanged?.((event) => {
-      if (event.repoPath === candidate.path) {
-        applyTasks(event.tasks);
-        setTaskLoadError(null);
-      }
-    });
-    return () => { cancelled = true; window.clearInterval(refreshTimer); unsub?.(); };
-  }, [candidate.path, setToast, teamworkRevision]);
-
-  async function installTeamworkHarness(): Promise<void> {
-    setBusyAction("install");
-    setStatusLoadError(null);
-    try {
-      const install = window.sharkBay?.teamwork?.install;
-      if (!install) throw new Error("Teamwork install API is not available.");
-      const updated = await install({ repoPath: candidate.path });
-      setStatus(updated);
-      setToast({ tone: "success", message: "Teamwork installed." });
-    } catch (error) {
-      const message = asMessage(error);
-      setStatusLoadError(message);
-      setToast({ tone: "error", message });
-    } finally {
-      setBusyAction(null);
-    }
-  }
-
-  async function openKnowledgeSite(): Promise<void> {
-    try {
-      const generate = window.sharkBay?.knowledgeSite?.generate;
-      const getPath = window.sharkBay?.knowledgeSite?.getPath;
-      if (!generate || !getPath) throw new Error("Knowledge Site API is not available.");
-      await generate({ repoPath: candidate.path });
-      const sitePath = await getPath({ repoPath: candidate.path });
-      await onOpenBrowserTab(`file://${sitePath}`);
-    } catch (error) {
-      setToast({ tone: "error", message: asMessage(error) });
-    }
-  }
-
-  if (selected) {
-    const pill = taskPill(selected);
-    return (
-      <div className="mock-task-detail">
-        <div className="task-detail-header">
-          <button className="icon-button" type="button" onClick={() => setSelectedTaskId(null)} aria-label="Back to task list">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-          <span className="task-avatar task-detail-avatar">
-            {selected.owner.avatarUrl ? <img alt="" src={selected.owner.avatarUrl} /> : selected.owner.githubLogin.slice(0, 2).toUpperCase()}
-          </span>
-          <div className="task-detail-title">
-            <h3>{selected.title}</h3>
-            <span>{selected.taskTag} · {selected.owner.githubLogin}</span>
-          </div>
-          <strong className={cx("phase-pill", pill.cls)}>{pill.label}</strong>
-        </div>
-        <div className="task-detail-compact">
-          <pre className="task-detail-pre">{selected.rawMarkdown}</pre>
-        </div>
-      </div>
-    );
-  }
-
-  const showTeamworkFacts = Boolean(
-    status?.repo ||
-    status?.githubLogin ||
-    status?.branch ||
-    teamworkError ||
-    status?.lastError,
-  );
-
-  return (
-    <>
-      {showTeamworkFacts ? (
-        <div className="teamwork-facts-card detail-card">
-          <div className="project-facts-list">
-            {status?.repo && <div className="repository-fact"><span className="fact-label">Repo</span><span className="fact-value">{status.repo}</span></div>}
-            {status?.githubLogin && <div className="repository-fact"><span className="fact-label">User</span><span className="fact-value">{status.githubLogin}</span></div>}
-            {status?.branch && <div className="repository-fact"><span className="fact-label">Branch</span><span className="fact-value">{status.branch}</span></div>}
-            {(teamworkError || status?.lastError) && <div className="repository-fact is-warn"><span>Error</span><strong>{teamworkError || status?.lastError}</strong></div>}
-          </div>
+      {isRemote ? (
+        <div aria-labelledby="project-detail-tab-forwards" className="detail-tab-panel" hidden={activeDetailTab !== "forwards"} id="project-detail-tabpanel-forwards" role="tabpanel">
+          <PortForwardsDetailTab active={activeDetailTab === "forwards"} candidate={candidate} setToast={setToast} />
         </div>
       ) : null}
-      {status && !status.installed && (
-        <section className="subpanel confirm-panel teamwork-action-card">
-          <div>
-            <h4>Install Teamwork</h4>
-            <p className="summary-text">Requires a GitHub origin and write access. Installation creates the local harness and enables team sync in one step.</p>
-          </div>
-          <div className="button-row">
-            <button className="button compact" disabled={busyAction !== null} type="button" onClick={() => void installTeamworkHarness()}>
-              {busyAction === "install" ? "Installing..." : "Install Teamwork"}
-            </button>
-          </div>
-        </section>
-      )}
-      {status?.installed && (
-        <section className="subpanel confirm-panel teamwork-action-card">
-          <div>
-            <h4>Knowledge Site</h4>
-            <p className="summary-text">Browse project docs and team task history as a local site.</p>
-          </div>
-          <div className="button-row">
-            <button className="button compact" type="button" onClick={() => void openKnowledgeSite()}>
-              Open Site
-            </button>
-          </div>
-        </section>
-      )}
-      <div className="queue-list task-list-direct">
-        {tasks.map((task) => {
-          const pill = taskPill(task);
-          const createdTime = task.createdAt ? formatRelativeTime(task.createdAt) : null;
-          return (
-            <button className="queue-item" key={task.taskId} type="button" onClick={() => setSelectedTaskId(task.taskId)}>
-              <span className="task-avatar">
-                {task.owner.avatarUrl ? <img alt="" src={task.owner.avatarUrl} /> : task.owner.githubLogin.slice(0, 2).toUpperCase()}
-              </span>
-              <span className="task-row-main">
-                <span className="task-title">{task.title}</span>
-                <small>{task.taskTag} · {task.owner.githubLogin}{createdTime ? ` · ${createdTime}` : ""}</small>
-              </span>
-              <span className={cx("phase-pill", pill.cls)}>{pill.label}</span>
-            </button>
-          );
-        })}
-      </div>
-    </>
+    </div>
   );
 }
 
@@ -1929,12 +1763,10 @@ function GitDetailTab({ detail, candidate, setToast, onOpenFileInEditor, onOpenG
     <>
       <ProjectFactsCard detail={detail} candidate={candidate} />
       <DirtyFilesPanel detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} />
-      {detail?.gitHistory?.length ? (
+      {detail?.gitHistory?.length || detail?.currentBranch ? (
         <GitHistoryItems events={detail?.gitHistory ?? []} />
-      ) : detail ? (
-        <EmptyState title="No commits yet" body="Create the first commit to populate Git history." />
       ) : (
-        <EmptyState title="No git history" body="Git history has not loaded yet." />
+        <EmptyState title="No git history" body="Restart SharkBay once to load Git history." />
       )}
     </>
   );
@@ -1943,7 +1775,8 @@ function GitDetailTab({ detail, candidate, setToast, onOpenFileInEditor, onOpenG
 function ProjectFactsCard({ detail, candidate }: { detail: ProjectDetail | null; candidate: ProjectCandidate }) {
   const worktree = detail?.dirtyWorktree === null ? null : detail?.dirtyWorktree ? "Dirty" : "Clean";
   const facts = [
-    { label: "Path", value: detail?.path ?? candidate.path },
+    { label: "Path", value: detail?.displayPath ?? candidate.displayPath },
+    { label: "URI", value: detail?.uri ?? candidate.uri },
     { label: "Repo URL", value: detail?.repoUrl },
     { label: "Branch", value: detail?.currentBranch },
     { label: "Worktree", value: worktree, tone: detail?.dirtyWorktree ? "warn" as const : undefined },
@@ -2016,8 +1849,130 @@ function GitHistoryItems({ events }: { events: NonNullable<ProjectDetail["gitHis
           </div>
         );
       })}
-      {!visible.length ? <div className="muted-row">No commits yet.</div> : null}
+      {!visible.length ? <div className="muted-row">Restart SharkBay once to load Git history.</div> : null}
     </div>
+  );
+}
+
+function PortForwardsDetailTab({ active, candidate, setToast }: {
+  active: boolean;
+  candidate: ProjectCandidate;
+  setToast: (toast: Toast) => void;
+}) {
+  const machineId = candidate.providerId;
+  const [forwards, setForwards] = useState<RemotePortForward[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [remotePort, setRemotePort] = useState("8080");
+  const [localPort, setLocalPort] = useState("8080");
+  const [busy, setBusy] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+
+  async function refresh() {
+    const handler = getBridge().portForwards?.list;
+    if (!handler) return;
+    setLoading(true);
+    try {
+      const items = await handler({ machineId });
+      setForwards(items);
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { if (active) void refresh(); }, [active, machineId]);
+  useEffect(() => {
+    const unsubscribe = getBridge().portForwards?.onUpdate?.((event) => {
+      if (event.forward.machineId !== machineId) return;
+      setForwards((current) => {
+        const exists = current.some((item) => item.id === event.forward.id);
+        if (event.forward.status === "stopped" && !exists) return current;
+        if (!exists) return [...current, event.forward];
+        return current.map((item) => (item.id === event.forward.id ? event.forward : item));
+      });
+    });
+    return () => unsubscribe?.();
+  }, [machineId]);
+
+  async function addForward(event: FormEvent) {
+    event.preventDefault();
+    const handler = getBridge().portForwards?.create;
+    if (!handler) return;
+    const remote = Number.parseInt(remotePort, 10);
+    const local = Number.parseInt(localPort, 10);
+    if (!Number.isInteger(remote) || remote < 1 || remote > 65535 || !Number.isInteger(local) || local < 1 || local > 65535) {
+      setToast({ tone: "error", message: "Ports must be integers between 1 and 65535." });
+      return;
+    }
+    setBusy(true);
+    try {
+      await handler({ machineId, remotePort: remote, localPort: local });
+      setToast({ tone: "success", message: `Forwarding localhost:${local} → ${candidate.providerId}:${remote}` });
+      await refresh();
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeForward(id: string) {
+    const handler = getBridge().portForwards?.remove;
+    if (!handler) return;
+    setRemovingId(id);
+    try {
+      await handler({ id });
+      setForwards((current) => current.filter((item) => item.id !== id));
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      setRemovingId(null);
+    }
+  }
+
+  return (
+    <>
+      <section className="subpanel port-forwards-card">
+        <header className="subpanel-header">
+          <h4>Add port forward</h4>
+          <span className="form-note">Tunnel a remote port through SSH to your local machine.</span>
+        </header>
+        <form className="port-forward-form" onSubmit={(event) => void addForward(event)}>
+          <label><span>Remote port</span><input className="input" inputMode="numeric" value={remotePort} onChange={(event) => setRemotePort(event.target.value)} placeholder="8080" /></label>
+          <label><span>Local port</span><input className="input" inputMode="numeric" value={localPort} onChange={(event) => setLocalPort(event.target.value)} placeholder="8080" /></label>
+          <div className="port-forward-actions">
+            <button className="button" disabled={busy} type="submit">{busy ? "Starting" : "Forward"}</button>
+          </div>
+        </form>
+      </section>
+      <section className="subpanel port-forwards-card">
+        <header className="subpanel-header">
+          <h4>Active forwards</h4>
+          <span className="form-note">{forwards.length} forward{forwards.length === 1 ? "" : "s"}</span>
+        </header>
+        {loading && !forwards.length ? (
+          <p style={{ padding: "12px", opacity: 0.6 }}>Loading…</p>
+        ) : forwards.length ? (
+          <div className="port-forward-list">
+            {forwards.map((forward) => (
+              <div className={cx("port-forward-row", `is-${forward.status}`)} key={forward.id}>
+                <div className="port-forward-row-main">
+                  <span className="port-forward-arrow">localhost:{forward.localPort} → {forward.remoteHost}:{forward.remotePort}</span>
+                  <span className={cx("port-forward-status", `is-${forward.status}`)}>{forward.status}</span>
+                </div>
+                {forward.error ? <div className="port-forward-error">{forward.error}</div> : null}
+                <button className="button secondary compact" disabled={removingId === forward.id} type="button" onClick={() => void removeForward(forward.id)}>
+                  {removingId === forward.id ? "Stopping" : "Stop"}
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={{ padding: "12px", opacity: 0.6 }}>No active forwards.</p>
+        )}
+      </section>
+    </>
   );
 }
 
@@ -2031,12 +1986,12 @@ function FilesDetailTab({ active, candidate, detail, setToast, onOpenFileInEdito
   const [state, setState] = useState<{ loading: boolean; error: string | null; files: ProjectFileTreeItem[] }>({ loading: false, error: null, files: [] });
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(() => new Set());
   const [loadingDirectories, setLoadingDirectories] = useState<Set<string>>(() => new Set());
-  const activeFilesProjectPath = useRef(candidate.path);
+  const activeFilesProjectUri = useRef(candidate.uri);
 
   useEffect(() => {
     if (!active) return;
     let cancelled = false;
-    activeFilesProjectPath.current = candidate.path;
+    activeFilesProjectUri.current = candidate.uri;
     setExpandedDirectories(new Set());
     setLoadingDirectories(new Set());
     setState({ loading: true, error: null, files: [] });
@@ -2046,10 +2001,10 @@ function FilesDetailTab({ active, candidate, detail, setToast, onOpenFileInEdito
       setState({ loading: false, error: null, files: result.files });
     }).catch((error) => { if (!cancelled) setState({ loading: false, error: asMessage(error), files: [] }); });
     return () => { cancelled = true; };
-  }, [active, candidate.id, candidate.path]);
+  }, [active, candidate.id, candidate.uri]);
 
   async function openFile(item: ProjectFileTreeItem) {
-    if (item.kind !== "file" || !item.editable) return;
+    if (item.kind !== "file") return;
     try { await onOpenFileInEditor(item.path); } catch (error) { setToast({ tone: "error", message: asMessage(error) }); }
   }
 
@@ -2064,14 +2019,14 @@ function FilesDetailTab({ active, candidate, detail, setToast, onOpenFileInEdito
       setLoadingDirectories((current) => new Set(current).add(item.path));
       try {
         const result = await listProjectFiles(candidate, item.path);
-        if (activeFilesProjectPath.current !== candidate.path) return;
+        if (activeFilesProjectUri.current !== candidate.uri) return;
         if (!result.ok) throw new Error(result.message);
         setState((current) => ({ ...current, files: updateProjectFileChildren(current.files, item.path, result.files) }));
       } catch (error) {
         setToast({ tone: "error", message: asMessage(error) });
         return;
       } finally {
-        if (activeFilesProjectPath.current === candidate.path) {
+        if (activeFilesProjectUri.current === candidate.uri) {
           setLoadingDirectories((current) => { const next = new Set(current); next.delete(item.path); return next; });
         }
       }
@@ -2102,7 +2057,7 @@ function ProjectFileTreeItemRow({ item, level, expandedDirectories, loadingDirec
   const expandable = item.kind === "directory" && (item.children === undefined || item.children.length > 0);
   const expanded = expandable && expandedDirectories.has(item.path);
   const loading = loadingDirectories.has(item.path);
-  const disabled = item.kind === "file" && !item.editable;
+  const disabled = false;
 
   return (
     <>
@@ -2192,94 +2147,511 @@ function updateProjectFileChildren(items: ProjectFileTreeItem[], targetPath: str
   });
 }
 
-type SettingsTab = "appearance" | "about";
-
-function SettingsView({ appearanceTheme, setToast, onBack, onThemeChange }: {
-  appearanceTheme: AppearanceTheme; setToast: (toast: Toast) => void;
-  onBack: () => void; onThemeChange: (theme: AppearanceTheme) => Promise<void>;
+function SettingsView({ appearanceTheme, roots, configuredProjects, configuredRemoteProjects, remoteMachines, bridgeAvailable, lastScanAt, loading, candidates, scanErrors, setToast, onBack, onScan, onAdd, onRemove, onRemoveProject, onAddRemoteMachine, onRemoveRemoteMachine, onTestRemoteMachine, onThemeChange }: {
+  appearanceTheme: AppearanceTheme; roots: RootRecord[]; configuredProjects: string[]; configuredRemoteProjects: string[]; remoteMachines: RemoteMachine[]; bridgeAvailable: boolean; lastScanAt: string | null; loading: boolean; candidates: ProjectCandidate[]; scanErrors: string[]; setToast: (toast: Toast) => void;
+  onBack: () => void; onScan: () => Promise<void>; onAdd: (path: string) => Promise<void>; onRemove: (path: string) => Promise<void>; onRemoveProject: (path: string) => Promise<void>;
+  onAddRemoteMachine: (input: RemoteMachineInput) => Promise<void>; onRemoveRemoteMachine: (id: string) => Promise<void>; onTestRemoteMachine: (input: { id: string } | RemoteMachineInput) => Promise<RemoteMachineTestResult>; onThemeChange: (theme: AppearanceTheme) => Promise<void>;
 }) {
+  const unavailableRootCount = roots.filter((root) => root.unavailable || root.available === false).length;
+  const [activeSection, setActiveSection] = useState<SettingsSection>("local-machine");
+  const [remoteMachineModalOpen, setRemoteMachineModalOpen] = useState(false);
+  const activeRemoteMachineId = activeSection.startsWith("remote-machine:") ? activeSection.slice("remote-machine:".length) : null;
+  const activeRemoteMachine = activeRemoteMachineId ? remoteMachines.find((machine) => machine.id === activeRemoteMachineId) ?? null : null;
+
+  function sectionMeta(section: SettingsSection): string {
+    if (section === "local-machine") {
+      const projectCount = configuredProjects.length + configuredRemoteProjects.length;
+      const projectLabel = `${projectCount} project${projectCount === 1 ? "" : "s"}`;
+      const rootLabel = `${roots.length} root${roots.length === 1 ? "" : "s"}`;
+      return `${projectLabel}, ${rootLabel}`;
+    }
+    if (section.startsWith("remote-machine:")) return "Remote";
+    return appearanceThemes.find((theme) => theme.id === appearanceTheme)?.label ?? "Theme";
+  }
+
+  async function addRemoteMachine(input: RemoteMachineInput): Promise<void> {
+    await onAddRemoteMachine(input);
+    setRemoteMachineModalOpen(false);
+  }
+
+  return (
+    <div className="settings-layout">
+      <div className="detail-header settings-header">
+        <button aria-label="Back to projects" className="icon-button" title="Back to projects" type="button" onClick={onBack}><ArrowLeftIcon /></button>
+        <div><h3>Settings</h3><div className="path-line">Manage local and remote machines</div></div>
+      </div>
+      <div className="settings-shell">
+        <aside className="settings-nav" aria-label="Settings sections">
+          <div className="settings-nav-group">
+            <button aria-current={activeSection === "local-machine" ? "page" : undefined} className={cx("settings-nav-item", activeSection === "local-machine" && "is-selected")} type="button" onClick={() => setActiveSection("local-machine")}>
+              <span>Local Machine</span><small>{sectionMeta("local-machine")}</small>
+            </button>
+            {remoteMachines.map((machine) => {
+              const sectionId = `remote-machine:${machine.id}` as const;
+              return (
+                <button aria-current={sectionId === activeSection ? "page" : undefined} className={cx("settings-nav-item", "is-remote-machine", sectionId === activeSection && "is-selected")} key={machine.id} type="button" onClick={() => setActiveSection(sectionId)}>
+                  <span>{machine.label}</span><small><span className="machine-tag">Remote</span>{machine.sshConfigHost ?? machine.host}</small>
+                </button>
+              );
+            })}
+            <button className="settings-add-remote-button" disabled={!bridgeAvailable} type="button" onClick={() => setRemoteMachineModalOpen(true)}>
+              <PlusIcon />
+              <span>Add Remote Machine</span>
+            </button>
+          </div>
+          <div className="settings-nav-group">
+            <button aria-current={activeSection === "appearance" ? "page" : undefined} className={cx("settings-nav-item", activeSection === "appearance" && "is-selected")} type="button" onClick={() => setActiveSection("appearance")}>
+              <span>Appearance</span><small>{sectionMeta("appearance")}</small>
+            </button>
+          </div>
+        </aside>
+        <section className="settings-content" aria-label="Settings content">
+          <div className="settings-section-panel" hidden={activeSection !== "local-machine"}>
+            <div className="settings-section-heading"><h4>Local Machine</h4><span>{configuredProjects.length + configuredRemoteProjects.length} project{configuredProjects.length + configuredRemoteProjects.length === 1 ? "" : "s"}, {roots.length} root{roots.length === 1 ? "" : "s"}</span></div>
+            <ProjectWorkflowPanel configuredProjects={configuredProjects} configuredRemoteProjects={configuredRemoteProjects} remoteMachines={remoteMachines} onRemoveProject={onRemoveProject} setToast={setToast} />
+            <RootWorkflowPanel bridgeAvailable={bridgeAvailable} lastScanAt={lastScanAt} loading={loading} candidates={candidates} roots={roots} scanErrors={scanErrors} unavailableRootCount={unavailableRootCount} onAdd={onAdd} onRemove={onRemove} onScan={onScan} setToast={setToast} />
+            <SettingsStatusPanel candidates={candidates} roots={roots} scanErrors={scanErrors} unavailableRootCount={unavailableRootCount} />
+          </div>
+          {activeRemoteMachine ? (
+            <div className="settings-section-panel">
+              <RemoteMachineDetailPanel machine={activeRemoteMachine} setToast={setToast} onRemove={async (id) => { await onRemoveRemoteMachine(id); setActiveSection("local-machine"); }} onTest={onTestRemoteMachine} />
+            </div>
+          ) : null}
+          <div className="settings-section-panel" hidden={activeSection !== "appearance"}>
+            <div className="settings-section-heading"><h4>Appearance</h4><span>{appearanceDescription(appearanceTheme)}</span></div>
+            <AppearanceSettingsPanel appearanceTheme={appearanceTheme} setToast={setToast} onThemeChange={onThemeChange} />
+          </div>
+        </section>
+      </div>
+      {remoteMachineModalOpen ? (
+        <RemoteMachineDialog
+          setToast={setToast}
+          onAdd={addRemoteMachine}
+          onClose={() => setRemoteMachineModalOpen(false)}
+          onTest={onTestRemoteMachine}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function AppearanceSettingsPanel({ appearanceTheme, setToast, onThemeChange }: { appearanceTheme: AppearanceTheme; setToast: (toast: Toast) => void; onThemeChange: (theme: AppearanceTheme) => Promise<void> }) {
   const [savingTheme, setSavingTheme] = useState<AppearanceTheme | null>(null);
-  const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
   async function chooseTheme(theme: AppearanceTheme) {
     if (theme === appearanceTheme || savingTheme) return;
     setSavingTheme(theme);
     try { await onThemeChange(theme); } catch (error) { setToast({ tone: "error", message: asMessage(error) }); } finally { setSavingTheme(null); }
   }
+  return (
+    <section className="subpanel appearance-panel">
+      <div className="compact-title-row"><h4>Appearance</h4><span className="path-line">{appearanceDescription(appearanceTheme)}</span></div>
+      <div className="segmented-control" role="radiogroup" aria-label="Appearance theme">
+        {appearanceThemes.map((theme) => {
+          const selected = theme.id === appearanceTheme;
+          return (
+            <button aria-checked={selected} className={cx("segmented-option", selected && "is-selected")} disabled={Boolean(savingTheme)} key={theme.id} role="radio" type="button" onClick={() => void chooseTheme(theme.id)}>
+              <span className={cx("theme-swatch", `theme-swatch-${theme.id}`)} aria-hidden="true" /><span>{savingTheme === theme.id ? "Saving" : theme.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
-  useEffect(() => {
-    const onKeyDown = (e: globalThis.KeyboardEvent) => { if (e.key === "Escape") onBack(); };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onBack]);
+function RootWorkflowPanel({ bridgeAvailable, lastScanAt, loading, candidates, roots, scanErrors, unavailableRootCount, onAdd, onRemove, onScan, setToast }: {
+  bridgeAvailable: boolean; lastScanAt: string | null; loading: boolean; candidates: ProjectCandidate[]; roots: RootRecord[]; scanErrors: string[]; unavailableRootCount: number;
+  onAdd: (path: string) => Promise<void>; onRemove: (path: string) => Promise<void>; onScan: () => Promise<void>; setToast: (toast: Toast) => void;
+}) {
+  const [path, setPath] = useState("");
+  const [busyPath, setBusyPath] = useState<string | null>(null);
+  const firstRun = roots.length === 0;
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const nextPath = path.trim();
+    if (!nextPath) { setToast({ tone: "error", message: "Enter a configured root path before adding it." }); return; }
+    setBusyPath(nextPath);
+    try { await onAdd(nextPath); setPath(""); setToast({ tone: "success", message: "Root added and scanned." }); } catch (error) { setToast({ tone: "error", message: asMessage(error) }); } finally { setBusyPath(null); }
+  }
+
+  async function remove(pathToRemove: string) {
+    setBusyPath(pathToRemove);
+    try { await onRemove(pathToRemove); setToast({ tone: "success", message: "Root removed." }); } catch (error) { setToast({ tone: "error", message: asMessage(error) }); } finally { setBusyPath(null); }
+  }
 
   return (
-    <>
-      <button aria-label="Close settings" className="settings-close-button" title="Close settings" type="button" onClick={onBack}>
-        <XIcon />
-      </button>
-      <div className="settings-tab-bar">
-        <button className={cx("settings-tab", activeTab === "appearance" && "is-active")} type="button" onClick={() => setActiveTab("appearance")}>Appearance</button>
-        <button className={cx("settings-tab", activeTab === "about" && "is-active")} type="button" onClick={() => setActiveTab("about")}>About</button>
+    <section className={cx("workflow-panel", firstRun && "is-first-run")}>
+      <div className="workflow-copy">
+        <div className="eyebrow">{firstRun ? "First run" : "Configured roots"}</div>
+        <h3>{firstRun ? "Choose a parent folder to scan" : "Scan roots"}</h3>
+        <p>Add one or more parent folders. The Projects view scans only these locations.</p>
       </div>
-      {activeTab === "appearance" ? (
-        <div className="settings-theme-grid" role="radiogroup" aria-label="Appearance theme">
-          {appearanceThemes.map((theme) => {
-            const selected = theme.id === appearanceTheme;
-            return (
-              <button aria-checked={selected} className={cx("settings-theme-card", selected && "is-selected")} disabled={Boolean(savingTheme)} key={theme.id} role="radio" type="button" onClick={() => void chooseTheme(theme.id)}>
-                <ThemePreviewSvg theme={theme.id} />
-                <span className="settings-theme-label">{theme.label}</span>
-              </button>
-            );
-          })}
+      <form className="root-form dashboard-root-form" onSubmit={(event) => void submit(event)}>
+        <label><span>Folder path</span><input className="input" placeholder="/path/to/projects" value={path} onChange={(event) => setPath(event.target.value)} /></label>
+        <button className="button" disabled={!bridgeAvailable || !path.trim() || Boolean(busyPath)} type="submit">{firstRun ? "Add root" : "Add another root"}</button>
+      </form>
+      <div className="scan-strip" aria-live="polite">
+        {lastScanAt ? <span>Last scan: {formatScanTime(lastScanAt)}</span> : null}
+        <span>{candidates.length} project{candidates.length === 1 ? "" : "s"}</span>
+        {unavailableRootCount ? <span>{unavailableRootCount} unavailable root{unavailableRootCount === 1 ? "" : "s"}</span> : null}
+        {scanErrors.length ? <span>{scanErrors.length} scan issue{scanErrors.length === 1 ? "" : "s"}</span> : null}
+        <button className="button secondary compact" disabled={!bridgeAvailable || loading || roots.length === 0} type="button" onClick={() => void onScan()}>{loading ? "Scanning" : "Scan all roots"}</button>
+      </div>
+      {roots.length ? (
+        <div className="root-list" aria-label="Configured scan roots">
+          {roots.map((root) => (
+            <div className={cx("root-row", (root.unavailable || root.available === false) && "is-unavailable")} key={root.path}>
+              <span className="truncate" title={root.path}>{root.path}</span>
+              {root.unavailable || root.available === false ? <span className="root-state">Unavailable</span> : null}
+              <button className="button secondary compact" disabled={busyPath === root.path} type="button" onClick={() => void remove(root.path)}>Remove</button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function ProjectWorkflowPanel({ configuredProjects, configuredRemoteProjects, remoteMachines, onRemoveProject, setToast }: {
+  configuredProjects: string[]; configuredRemoteProjects: string[]; remoteMachines: RemoteMachine[];
+  onRemoveProject: (path: string) => Promise<void>; setToast: (toast: Toast) => void;
+}) {
+  const [busyPath, setBusyPath] = useState<string | null>(null);
+  const projectEntries = [
+    ...configuredProjects.map((value) => ({ value, label: value, machine: "Local" })),
+    ...configuredRemoteProjects.map((value) => ({ value, label: remoteProjectLabel(value, remoteMachines), machine: "Remote" })),
+  ];
+
+  async function remove(pathToRemove: string) {
+    setBusyPath(pathToRemove);
+    try { await onRemoveProject(pathToRemove); setToast({ tone: "success", message: "Project removed." }); } catch (error) { setToast({ tone: "error", message: asMessage(error) }); } finally { setBusyPath(null); }
+  }
+
+  return (
+    <section className="workflow-panel">
+      <div className="workflow-copy">
+        <div className="eyebrow">Configured projects</div>
+        <h3>Manage projects</h3>
+        <p>Use the <strong>+</strong> button on the main screen to add local or remote projects.</p>
+      </div>
+      {projectEntries.length ? (
+        <div className="root-list" aria-label="Configured projects">
+          {projectEntries.map((project) => (
+            <div className="root-row" key={project.value}>
+              <span className="truncate" title={project.value}>{project.label}</span>
+              <span className="machine-tag">{project.machine}</span>
+              <button className="button secondary compact" disabled={busyPath === project.value} type="button" onClick={() => void remove(project.value)}>Remove</button>
+            </div>
+          ))}
         </div>
       ) : (
-        <div className="settings-about">
-          <p><a href="https://github.com/SharkUI/SharkBay" target="_blank" rel="noopener noreferrer">github.com/SharkUI/SharkBay</a></p>
-          <p><a href="mailto:admin@sharkbay.xyz">admin@sharkbay.xyz</a></p>
-        </div>
+        <p style={{ padding: "0 16px 16px", opacity: 0.6, fontSize: "13px" }}>No projects configured yet.</p>
       )}
+    </section>
+  );
+}
+
+function AddProjectDialog({ remoteMachines, setToast, onAdd, onClose, onPickLocal }: {
+  remoteMachines: RemoteMachine[];
+  setToast: (toast: Toast) => void;
+  onAdd: (pathOrUri: string) => Promise<void>;
+  onClose: () => void;
+  onPickLocal: () => Promise<void>;
+}) {
+  const [machineId, setMachineId] = useState("local");
+  const [remotePath, setRemotePath] = useState("");
+  const [busy, setBusy] = useState(false);
+  const selectedRemoteMachine = remoteMachines.find((machine) => machine.id === machineId) ?? remoteMachines[0] ?? null;
+  const isLocal = machineId === "local";
+  const canAddRemote = Boolean(selectedRemoteMachine && remotePath.trim().startsWith("/") && !busy);
+
+  async function chooseLocal() {
+    setBusy(true);
+    try {
+      await onPickLocal();
+      onClose();
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addRemote(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedRemoteMachine || !remotePath.trim().startsWith("/")) {
+      setToast({ tone: "error", message: "Enter an absolute remote project path." });
+      return;
+    }
+    setBusy(true);
+    try {
+      await onAdd(toRemoteProjectUri(selectedRemoteMachine.id, remotePath.trim()));
+      setToast({ tone: "success", message: "Remote project added." });
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section aria-modal="true" className="modal-panel add-project-dialog" role="dialog" aria-labelledby="add-project-dialog-title">
+        <div className="modal-header">
+          <div>
+            <h3 id="add-project-dialog-title">Add Project</h3>
+            <p>Choose where the project lives, then add its directory.</p>
+          </div>
+          <button aria-label="Close" className="icon-button" type="button" onClick={onClose}>x</button>
+        </div>
+        <form className="remote-machine-form" onSubmit={(event) => void addRemote(event)}>
+          <label className="remote-machine-wide-field"><span>Machine</span>
+            <select className="input" value={machineId} onChange={(event) => setMachineId(event.target.value)}>
+              <option value="local">Local Machine</option>
+              {remoteMachines.map((machine) => <option key={machine.id} value={machine.id}>{machine.label}</option>)}
+            </select>
+          </label>
+          {isLocal ? (
+            <div className="remote-machine-form-actions">
+              <button className="button" disabled={busy} type="button" onClick={() => void chooseLocal()}>{busy ? "Selecting" : "Choose Local Folder…"}</button>
+            </div>
+          ) : (
+            <>
+              <label className="remote-machine-wide-field"><span>Remote project path</span><input className="input" placeholder={selectedRemoteMachine?.defaultProjectPath ?? "/home/app/project"} value={remotePath} onChange={(event) => setRemotePath(event.target.value)} /></label>
+              <div className="remote-machine-form-note">Remote project browsing comes next; for now enter the absolute path on the selected machine.</div>
+              <div className="remote-machine-form-actions">
+                <button className="button" disabled={!canAddRemote} type="submit">{busy ? "Adding" : "Add Remote Project"}</button>
+              </div>
+            </>
+          )}
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function RemoteMachineDialog({ setToast, onAdd, onClose, onTest }: {
+  setToast: (toast: Toast) => void;
+  onAdd: (input: RemoteMachineInput) => Promise<void>;
+  onClose: () => void;
+  onTest: (input: { id: string } | RemoteMachineInput) => Promise<RemoteMachineTestResult>;
+}) {
+  const [label, setLabel] = useState("");
+  const [authMode, setAuthMode] = useState<RemoteMachineInput["authMode"]>("system-ssh-config");
+  const [sshConfigHost, setSshConfigHost] = useState("");
+  const [host, setHost] = useState("");
+  const [port, setPort] = useState("22");
+  const [username, setUsername] = useState("");
+  const [keyPath, setKeyPath] = useState("");
+  const [password, setPassword] = useState("");
+  const [defaultProjectPath, setDefaultProjectPath] = useState("");
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [connectionResult, setConnectionResult] = useState<RemoteMachineTestResult | null>(null);
+  const connectionReady = authMode === "system-ssh-config"
+    ? Boolean(sshConfigHost.trim())
+    : Boolean(host.trim())
+      && (authMode !== "key-file" || Boolean(keyPath.trim()));
+  const canTest = Boolean(connectionReady && !busyAction);
+  const canSubmit = Boolean(label.trim() && connectionReady && !busyAction);
+
+  function input(): RemoteMachineInput {
+    return {
+      label: label.trim(),
+      authMode: authMode === "ssh-agent" && password ? "password" : authMode,
+      sshConfigHost: authMode === "system-ssh-config" ? sshConfigHost.trim() : undefined,
+      host: authMode === "system-ssh-config" ? undefined : host.trim(),
+      port: authMode === "system-ssh-config" ? undefined : Number.parseInt(port, 10) || 22,
+      username: authMode === "system-ssh-config" ? undefined : username.trim() || undefined,
+      keyPath: authMode === "key-file" ? keyPath.trim() : undefined,
+      password: authMode === "ssh-agent" && password ? password : undefined,
+      defaultProjectPath: defaultProjectPath.trim() || undefined,
+    };
+  }
+
+  async function testDraft() {
+    setBusyAction("test-draft");
+    setConnectionResult(null);
+    try {
+      const result = await onTest({ ...input(), label: label.trim() || "Remote machine" });
+      setConnectionResult(result);
+      setToast({ tone: result.ok ? "success" : "error", message: result.message });
+    } catch (error) {
+      const message = asMessage(error);
+      setConnectionResult({ ok: false, message });
+      setToast({ tone: "error", message });
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!canSubmit) return;
+    setBusyAction("save");
+    try {
+      await onAdd(input());
+      setToast({ tone: "success", message: "Remote machine saved." });
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section aria-modal="true" className="modal-panel remote-machine-dialog" role="dialog" aria-labelledby="remote-machine-dialog-title">
+        <div className="modal-header">
+          <div>
+            <h3 id="remote-machine-dialog-title">Add Remote Machine</h3>
+            <p>Connect through SSH. Passwords are saved in the system Keychain; private key contents are never stored.</p>
+          </div>
+          <button aria-label="Close" className="icon-button" type="button" onClick={onClose}>x</button>
+        </div>
+        <form className="remote-machine-form" onSubmit={(event) => void submit(event)}>
+          <label><span>Machine name</span><input className="input" placeholder="GPU Worker" value={label} onChange={(event) => setLabel(event.target.value)} /></label>
+          <div className="remote-machine-wide-field remote-connection-methods">
+            <div className="remote-machine-field-label">How do you connect to this server?</div>
+            <div className="remote-connection-method-grid">
+              {remoteConnectionMethods.map((method) => (
+                <button
+                  aria-pressed={authMode === method.id}
+                  className={cx("remote-connection-method", authMode === method.id && "is-selected")}
+                  key={method.id}
+                  type="button"
+                  onClick={() => setAuthMode(method.id)}
+                >
+                  <strong>{method.label}</strong>
+                  <span>{method.description}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          {authMode === "system-ssh-config" ? (
+            <label className="remote-machine-wide-field"><span>Server name in SSH config</span><input className="input" placeholder="gpu-01" value={sshConfigHost} onChange={(event) => setSshConfigHost(event.target.value)} /></label>
+          ) : (
+            <>
+              <label><span>Server address</span><input className="input" placeholder="1.2.3.4 or server.example.com" value={host} onChange={(event) => setHost(event.target.value)} /></label>
+              <label><span>Port</span><input className="input" inputMode="numeric" placeholder="22" value={port} onChange={(event) => setPort(event.target.value)} /></label>
+              <label><span>Username</span><input className="input" placeholder="ubuntu" value={username} onChange={(event) => setUsername(event.target.value)} /></label>
+              {authMode === "key-file" ? <label><span>Key file path</span><input className="input" placeholder="~/.ssh/id_ed25519" value={keyPath} onChange={(event) => setKeyPath(event.target.value)} /></label> : null}
+              {authMode === "ssh-agent" ? <label><span>Password optional</span><input className="input" type="password" placeholder="Leave empty to use SSH agent/keychain" value={password} onChange={(event) => setPassword(event.target.value)} /></label> : null}
+            </>
+          )}
+          <label className="remote-machine-wide-field"><span>Default project path</span><input className="input" placeholder="/home/app" value={defaultProjectPath} onChange={(event) => setDefaultProjectPath(event.target.value)} /></label>
+          <div className="remote-machine-form-note">
+            {authMode === "system-ssh-config"
+              ? "Enter the name you already use after ssh, for example gpu-01 from ssh gpu-01."
+              : authMode === "ssh-agent"
+                ? "Leave password empty to use SSH agent/keychain. If provided, SharkBay stores it in the system Keychain."
+                : authMode === "key-file"
+                  ? "SharkBay stores only the key file path, never the private key contents."
+                  : "SharkBay stores the password in the system Keychain and keeps only a secret reference in app config."}
+          </div>
+          {connectionResult ? (
+            <div className={cx("inline-connection-result", connectionResult.ok ? "is-success" : "is-error")} role="status" aria-live="polite">
+              {connectionResult.message}
+            </div>
+          ) : null}
+          <div className="remote-machine-form-actions">
+            <button className="button secondary" disabled={!canTest} type="button" onClick={() => void testDraft()}>{busyAction === "test-draft" ? "Testing" : "Test Connection"}</button>
+            <button className="button" disabled={!canSubmit} type="submit">{busyAction === "save" ? "Saving" : "Save"}</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function RemoteMachineDetailPanel({ machine, setToast, onRemove, onTest }: {
+  machine: RemoteMachine;
+  setToast: (toast: Toast) => void;
+  onRemove: (id: string) => Promise<void>;
+  onTest: (input: { id: string }) => Promise<RemoteMachineTestResult>;
+}) {
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [connectionResult, setConnectionResult] = useState<RemoteMachineTestResult | null>(null);
+  async function test() {
+    setBusyAction("test");
+    setConnectionResult(null);
+    try {
+      const result = await onTest({ id: machine.id });
+      setConnectionResult(result);
+      setToast({ tone: result.ok ? "success" : "error", message: `${machine.label}: ${result.message}` });
+    } catch (error) {
+      const message = asMessage(error);
+      setConnectionResult({ ok: false, message });
+      setToast({ tone: "error", message });
+    } finally {
+      setBusyAction(null);
+    }
+  }
+  async function remove() {
+    setBusyAction("remove");
+    try {
+      await onRemove(machine.id);
+      setToast({ tone: "success", message: "Remote machine removed." });
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      setBusyAction(null);
+    }
+  }
+  return (
+    <>
+      <div className="settings-section-heading"><h4>{machine.label}</h4><span className="machine-tag">Remote</span></div>
+      <section className="workflow-panel remote-machines-panel">
+        <div className="settings-facts-grid">
+          <Fact label="Method" value={remoteMachineAuthLabel(machine.authMode)} />
+          <Fact label="Host" value={machine.sshConfigHost ?? machine.host} />
+          <Fact label="Port" value={String(machine.port)} />
+          <Fact label="Default path" value={machine.defaultProjectPath ?? "-"} />
+        </div>
+        <div className="remote-machine-detail-actions">
+          <button className="button secondary" disabled={Boolean(busyAction)} type="button" onClick={() => void test()}>{busyAction === "test" ? "Testing" : "Test Connection"}</button>
+          <button className="button secondary" disabled={Boolean(busyAction)} type="button" onClick={() => void remove()}>{busyAction === "remove" ? "Removing" : "Remove"}</button>
+        </div>
+        {connectionResult ? (
+          <div className={cx("inline-connection-result", connectionResult.ok ? "is-success" : "is-error")} role="status" aria-live="polite">
+            {connectionResult.message}
+          </div>
+        ) : null}
+      </section>
     </>
   );
 }
 
-function ThemePreviewSvg({ theme }: { theme: AppearanceTheme }) {
-  const colors = {
-    day: { bg: "#f4f1eb", panel: "#fffdfa", terminal: "#f7f1e4", border: "#dedad1", text: "#263235", textMuted: "#a09a90" },
-    night: { bg: "#101719", panel: "#1a2628", terminal: "#101719", border: "#32474b", text: "#d9e5df", textMuted: "#4a5c5f" },
-    morning: { bg: "#f4f1eb", panel: "#fffdfa", terminal: "#172022", border: "#dedad1", text: "#263235", textMuted: "#4a5c5f" },
-  }[theme];
+function remoteMachineAuthLabel(authMode: RemoteMachine["authMode"]): string {
+  if (authMode === "ssh-agent") return "SSH agent";
+  if (authMode === "key-file") return "Key file";
+  if (authMode === "password") return "Password";
+  return "SSH config";
+}
+
+function SettingsStatusPanel({ candidates, roots, scanErrors, unavailableRootCount }: { candidates: ProjectCandidate[]; roots: RootRecord[]; scanErrors: string[]; unavailableRootCount: number }) {
+  const unavailableRoots = roots.filter((root) => root.unavailable || root.available === false);
   return (
-    <svg className="settings-theme-preview" viewBox="0 0 120 80" aria-hidden="true">
-      <rect width="120" height="80" rx="4" fill={colors.bg} />
-      {/* Left panel - project cards */}
-      <rect x="4" y="8" width="28" height="68" rx="3" fill={colors.panel} stroke={colors.border} strokeWidth="0.5" />
-      <rect x="7" y="12" width="22" height="8" rx="1.5" fill={colors.border} />
-      <rect x="7" y="23" width="22" height="8" rx="1.5" fill={colors.border} />
-      <rect x="7" y="34" width="22" height="8" rx="1.5" fill={colors.border} />
-      {/* Center - terminal */}
-      <rect x="35" y="8" width="50" height="68" rx="3" fill={colors.terminal} stroke={colors.border} strokeWidth="0.5" />
-      <rect x="39" y="14" width="18" height="2" rx="1" fill={colors.textMuted} />
-      <rect x="39" y="19" width="24" height="2" rx="1" fill={colors.textMuted} />
-      <rect x="39" y="24" width="14" height="2" rx="1" fill={colors.textMuted} />
-      <rect x="39" y="29" width="20" height="2" rx="1" fill={colors.textMuted} />
-      {/* Right panel - detail/files */}
-      <rect x="88" y="8" width="28" height="68" rx="3" fill={colors.panel} stroke={colors.border} strokeWidth="0.5" />
-      <rect x="91" y="12" width="22" height="3" rx="1" fill={colors.border} />
-      <rect x="91" y="18" width="16" height="2" rx="1" fill={colors.textMuted} />
-      <rect x="91" y="23" width="19" height="2" rx="1" fill={colors.textMuted} />
-      <rect x="91" y="28" width="12" height="2" rx="1" fill={colors.textMuted} />
-      <rect x="91" y="33" width="17" height="2" rx="1" fill={colors.textMuted} />
-      <rect x="91" y="38" width="14" height="2" rx="1" fill={colors.textMuted} />
-    </svg>
+    <section className="workflow-panel settings-status-panel">
+      <div className="settings-facts-grid">
+        <Fact label="Roots" value={String(roots.length)} />
+        <Fact label="Projects" value={String(candidates.length)} />
+        <Fact label="Unavailable" value={String(unavailableRootCount)} tone={unavailableRootCount ? "warn" : undefined} />
+      </div>
+      {unavailableRoots.length ? (
+        <section className="subpanel settings-list-panel"><h4>Unavailable roots</h4><div className="settings-list">{unavailableRoots.map((root) => (<div className="settings-list-row" key={root.path}><span className="truncate">{root.path}</span><small className="truncate">{root.error ?? "Unavailable"}</small></div>))}</div></section>
+      ) : null}
+      {scanErrors.length ? (
+        <section className="subpanel settings-list-panel"><h4>Scan issues</h4><div className="settings-list">{scanErrors.map((error) => (<div className="settings-list-row" key={error}><span className="truncate">{error}</span></div>))}</div></section>
+      ) : null}
+      {!unavailableRoots.length && !scanErrors.length ? (<div className="empty-state compact-title-row"><strong>No issues</strong><span>Settings status is clear.</span></div>) : null}
+    </section>
   );
 }
 
-
-
-
-
-
+function Fact({ label, value, tone }: { label: string; value: string; tone?: "warn" }) {
+  return <div className={cx("fact", tone === "warn" && "is-warn")}><span>{label}</span><strong>{value}</strong></div>;
+}
 
 function ArrowLeftIcon() {
   return <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16"><path d="m15 18-6-6 6-6" /></svg>;
@@ -2299,10 +2671,6 @@ function RefreshIcon() {
 
 function GlobeIcon() {
   return <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16"><circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a15.3 15.3 0 0 1 0 20" /><path d="M12 2a15.3 15.3 0 0 0 0 20" /></svg>;
-}
-
-function XIcon() {
-  return <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>;
 }
 
 function AgentCliIcon({ agent }: { agent: AgentCli }) {

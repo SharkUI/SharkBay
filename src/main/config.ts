@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { AppearanceTheme, AppearanceThemeInput, AppConfig, IpcRuntimeLike, ProjectConfigInput, RemoveProjectInput } from "../shared/types.js";
+import type { AppearanceTheme, AppearanceThemeInput, AppConfig, IpcRuntimeLike, ProjectConfigInput, RemoteMachine, RemoteMachineInput, RemoveProjectInput, RemoveRemoteMachineInput, RemoveRootInput, RootConfigInput } from "../shared/types.js";
 import { isRecord } from "../shared/schema.js";
 import { writeJsonAtomic, readJsonFile } from "./json-file.js";
 
@@ -12,13 +12,16 @@ export function getConfigPath(explicitPath = process.env.SHARKBAY_CONFIG_PATH): 
 }
 
 export function getRuntimeConfigPath(runtime: IpcRuntimeLike): string {
-  return path.join(runtime.userDataPath, "config.json");
+  return getConfigPath(runtime.configPath);
 }
 
 export function createDefaultConfig(): AppConfig {
   return {
     schemaVersion: 1,
+    configuredRoots: [],
     configuredProjects: [],
+    configuredRemoteProjects: [],
+    configuredRemoteMachines: [],
     appearanceTheme: "day",
     updatedAt: today(),
   };
@@ -35,7 +38,7 @@ export async function loadAppConfig(configPath = getConfigPath()): Promise<AppCo
   return normalizeAppConfig(result.data);
 }
 
-export async function loadRuntimeConfig(runtime: IpcRuntimeLike): Promise<AppConfig> {
+export async function getConfiguredRoots(runtime: IpcRuntimeLike): Promise<AppConfig> {
   return loadAppConfig(getRuntimeConfigPath(runtime));
 }
 
@@ -44,15 +47,49 @@ export async function saveAppConfig(config: AppConfig, configPath = getConfigPat
   await writeJsonAtomic(configPath, normalizeAppConfig(config));
 }
 
+export async function addConfiguredRoot(rootPath: string, configPath?: string): Promise<AppConfig>;
+export async function addConfiguredRoot(runtime: IpcRuntimeLike, input: RootConfigInput): Promise<AppConfig>;
+export async function addConfiguredRoot(first: string | IpcRuntimeLike, second?: string | RootConfigInput): Promise<AppConfig> {
+  const rootPath = typeof first === "string" ? first : rootFromInput(second);
+  const configPath = typeof first === "string" ? second as string | undefined : getRuntimeConfigPath(first);
+  const config = await loadAppConfig(configPath);
+  const absolute = path.resolve(rootPath);
+  if (!config.configuredRoots.includes(absolute)) {
+    config.configuredRoots.push(absolute);
+  }
+  config.updatedAt = today();
+  await saveAppConfig(config, configPath);
+  return config;
+}
+
+export async function removeConfiguredRoot(rootPath: string, configPath?: string): Promise<AppConfig>;
+export async function removeConfiguredRoot(runtime: IpcRuntimeLike, input: RemoveRootInput): Promise<AppConfig>;
+export async function removeConfiguredRoot(first: string | IpcRuntimeLike, second?: string | RemoveRootInput): Promise<AppConfig> {
+  const rootPath = typeof first === "string" ? first : rootFromInput(second);
+  const configPath = typeof first === "string" ? second as string | undefined : getRuntimeConfigPath(first);
+  const config = await loadAppConfig(configPath);
+  const absolute = path.resolve(rootPath);
+  config.configuredRoots = config.configuredRoots.filter((root) => root !== absolute);
+  config.updatedAt = today();
+  await saveAppConfig(config, configPath);
+  return config;
+}
+
 export async function addConfiguredProject(projectPath: string, configPath?: string): Promise<AppConfig>;
 export async function addConfiguredProject(runtime: IpcRuntimeLike, input: ProjectConfigInput): Promise<AppConfig>;
 export async function addConfiguredProject(first: string | IpcRuntimeLike, second?: string | ProjectConfigInput): Promise<AppConfig> {
-  const projectPath = typeof first === "string" ? first : projectFromInput(second);
+  const projectValue = typeof first === "string" ? first : projectFromInput(second);
   const configPath = typeof first === "string" ? second as string | undefined : getRuntimeConfigPath(first);
   const config = await loadAppConfig(configPath);
-  const absolute = path.resolve(projectPath);
-  if (!config.configuredProjects.includes(absolute)) {
-    config.configuredProjects.push(absolute);
+  if (projectValue.startsWith("ssh://")) {
+    if (!config.configuredRemoteProjects.includes(projectValue)) {
+      config.configuredRemoteProjects.push(projectValue);
+    }
+  } else {
+    const absolute = path.resolve(projectValue);
+    if (!config.configuredProjects.includes(absolute)) {
+      config.configuredProjects.push(absolute);
+    }
   }
   config.updatedAt = today();
   await saveAppConfig(config, configPath);
@@ -62,11 +99,62 @@ export async function addConfiguredProject(first: string | IpcRuntimeLike, secon
 export async function removeConfiguredProject(projectPath: string, configPath?: string): Promise<AppConfig>;
 export async function removeConfiguredProject(runtime: IpcRuntimeLike, input: RemoveProjectInput): Promise<AppConfig>;
 export async function removeConfiguredProject(first: string | IpcRuntimeLike, second?: string | RemoveProjectInput): Promise<AppConfig> {
-  const projectPath = typeof first === "string" ? first : projectFromInput(second);
+  const projectValue = typeof first === "string" ? first : projectFromInput(second);
   const configPath = typeof first === "string" ? second as string | undefined : getRuntimeConfigPath(first);
   const config = await loadAppConfig(configPath);
-  const absolute = path.resolve(projectPath);
-  config.configuredProjects = config.configuredProjects.filter((p) => p !== absolute);
+  if (projectValue.startsWith("ssh://")) {
+    config.configuredRemoteProjects = config.configuredRemoteProjects.filter((p) => p !== projectValue);
+  } else {
+    const absolute = path.resolve(projectValue);
+    config.configuredProjects = config.configuredProjects.filter((p) => p !== absolute);
+  }
+  config.updatedAt = today();
+  await saveAppConfig(config, configPath);
+  return config;
+}
+
+export async function addConfiguredRemoteMachine(runtime: IpcRuntimeLike, input: RemoteMachineInput): Promise<AppConfig> {
+  return (await upsertConfiguredRemoteMachine(runtime, input)).config;
+}
+
+export async function upsertConfiguredRemoteMachine(runtime: IpcRuntimeLike, input: RemoteMachineInput): Promise<{ config: AppConfig; machine: RemoteMachine }> {
+  const configPath = getRuntimeConfigPath(runtime);
+  const config = await loadAppConfig(configPath);
+  const machine = remoteMachineFromInput(input, config.configuredRemoteMachines);
+  const existingIndex = config.configuredRemoteMachines.findIndex((item) => item.id === machine.id);
+  const existing = existingIndex >= 0 ? config.configuredRemoteMachines[existingIndex] : null;
+  const passwordSecretId = machine.authMode === "password" ? remoteMachinePasswordSecretId(machine.id) : undefined;
+  const nextMachine = {
+    ...machine,
+    passwordSecretId,
+    hasPassword: machine.authMode === "password" ? Boolean(input.password || existing?.hasPassword) : undefined,
+  };
+  if (existingIndex >= 0) {
+    config.configuredRemoteMachines[existingIndex] = {
+      ...nextMachine,
+      createdAt: existing?.createdAt ?? machine.createdAt,
+      updatedAt: now(),
+    };
+  } else {
+    config.configuredRemoteMachines.push(nextMachine);
+  }
+  config.updatedAt = today();
+  await saveAppConfig(config, configPath);
+  const savedMachine = config.configuredRemoteMachines[existingIndex >= 0 ? existingIndex : config.configuredRemoteMachines.length - 1];
+  if (!savedMachine) {
+    throw new Error("Remote machine was not saved");
+  }
+  return { config, machine: savedMachine };
+}
+
+export async function removeConfiguredRemoteMachine(runtime: IpcRuntimeLike, input: RemoveRemoteMachineInput): Promise<AppConfig> {
+  const id = input.id?.trim();
+  if (!id) {
+    throw new Error("Remote machine id is required");
+  }
+  const configPath = getRuntimeConfigPath(runtime);
+  const config = await loadAppConfig(configPath);
+  config.configuredRemoteMachines = config.configuredRemoteMachines.filter((machine) => machine.id !== id);
   config.updatedAt = today();
   await saveAppConfig(config, configPath);
   return config;
@@ -84,9 +172,18 @@ export async function setAppearanceTheme(first: AppearanceTheme | IpcRuntimeLike
   return config;
 }
 
+function rootFromInput(input: string | RootConfigInput | RemoveRootInput | undefined): string {
+  if (typeof input === "string") return input;
+  const rootPath = input?.path || input?.rootPath;
+  if (!rootPath) {
+    throw new Error("Root path is required");
+  }
+  return rootPath;
+}
+
 function projectFromInput(input: string | ProjectConfigInput | RemoveProjectInput | undefined): string {
   if (typeof input === "string") return input;
-  const projectPath = input?.path;
+  const projectPath = input?.uri || input?.path;
   if (!projectPath) {
     throw new Error("Project path is required");
   }
@@ -97,12 +194,124 @@ function normalizeAppConfig(value: unknown): AppConfig {
   if (!isRecord(value)) return createDefaultConfig();
   return {
     schemaVersion: 1,
+    configuredRoots: Array.isArray(value.configuredRoots)
+      ? [...new Set(value.configuredRoots.filter((item): item is string => typeof item === "string").map((item) => path.resolve(item)))]
+      : [],
     configuredProjects: Array.isArray(value.configuredProjects)
       ? [...new Set(value.configuredProjects.filter((item): item is string => typeof item === "string").map((item) => path.resolve(item)))]
       : [],
+    configuredRemoteProjects: Array.isArray(value.configuredRemoteProjects)
+      ? [...new Set(value.configuredRemoteProjects.filter((item): item is string => typeof item === "string" && item.startsWith("ssh://")))]
+      : [],
+    configuredRemoteMachines: normalizeRemoteMachines(value.configuredRemoteMachines),
     appearanceTheme: normalizeAppearanceTheme(value.appearanceTheme),
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : today(),
   };
+}
+
+function normalizeRemoteMachines(value: unknown): RemoteMachine[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const machines: RemoteMachine[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) continue;
+    const label = normalizeOptionalString(item.label);
+    const sshConfigHost = normalizeOptionalString(item.sshConfigHost);
+    const host = normalizeOptionalString(item.host) || sshConfigHost;
+    const id = normalizeRemoteMachineId(normalizeOptionalString(item.id) || sshConfigHost || host || label);
+    if (!id || !label || !host || seen.has(id)) continue;
+    seen.add(id);
+    const port = typeof item.port === "number" && Number.isInteger(item.port) && item.port > 0 ? item.port : 22;
+    const authMode = normalizeRemoteMachineAuthMode(item.authMode);
+    const passwordSecretId = normalizeOptionalString(item.passwordSecretId);
+    machines.push({
+      id,
+      label,
+      host,
+      port,
+      username: normalizeOptionalString(item.username) || undefined,
+      sshConfigHost: sshConfigHost || undefined,
+      authMode,
+      keyPath: normalizeOptionalString(item.keyPath) || undefined,
+      passwordSecretId: authMode === "password" ? passwordSecretId || remoteMachinePasswordSecretId(id) : undefined,
+      hasPassword: authMode === "password" ? Boolean(item.hasPassword || passwordSecretId) : undefined,
+      defaultProjectPath: normalizeOptionalString(item.defaultProjectPath) || undefined,
+      createdAt: normalizeOptionalString(item.createdAt) || now(),
+      updatedAt: normalizeOptionalString(item.updatedAt) || now(),
+    });
+  }
+  return machines;
+}
+
+function remoteMachineFromInput(input: RemoteMachineInput, existing: RemoteMachine[]): RemoteMachine {
+  const label = input.label.trim();
+  const authMode = input.password && input.authMode === "ssh-agent" ? "password" : normalizeRemoteMachineAuthMode(input.authMode);
+  const sshConfigHost = normalizeOptionalString(input.sshConfigHost);
+  const host = normalizeOptionalString(input.host) || sshConfigHost;
+  const username = normalizeOptionalString(input.username);
+  const keyPath = normalizeOptionalString(input.keyPath);
+  const port = typeof input.port === "number" && Number.isInteger(input.port) && input.port > 0 ? input.port : 22;
+  if (!label) {
+    throw new Error("Remote machine label is required");
+  }
+  if (authMode === "system-ssh-config" && !sshConfigHost) {
+    throw new Error("SSH config host is required");
+  }
+  if (authMode !== "system-ssh-config" && !host) {
+    throw new Error("Host is required");
+  }
+  if (authMode === "key-file" && !keyPath) {
+    throw new Error("Key path is required");
+  }
+  if (authMode === "password" && !username) {
+    throw new Error("Username is required for password login");
+  }
+  const idSource = sshConfigHost || host || label;
+  const id = uniqueRemoteMachineId(normalizeRemoteMachineId(idSource), existing);
+  const timestamp = now();
+  return {
+    id,
+    label,
+    host,
+    port,
+    username: username || undefined,
+    sshConfigHost: sshConfigHost || undefined,
+    authMode,
+    keyPath: keyPath || undefined,
+    passwordSecretId: authMode === "password" ? remoteMachinePasswordSecretId(id) : undefined,
+    hasPassword: authMode === "password" ? Boolean(input.password) : undefined,
+    defaultProjectPath: normalizeOptionalString(input.defaultProjectPath) || undefined,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+function normalizeRemoteMachineAuthMode(value: unknown): RemoteMachine["authMode"] {
+  if (value === "ssh-agent" || value === "key-file" || value === "password") return value;
+  return "system-ssh-config";
+}
+
+export function remoteMachinePasswordSecretId(machineId: string): string {
+  return `remote-machine:${normalizeRemoteMachineId(machineId)}:password`;
+}
+
+function uniqueRemoteMachineId(baseId: string, existing: RemoteMachine[]): string {
+  const fallback = baseId || "remote";
+  const existingIds = new Set(existing.map((machine) => machine.id));
+  if (!existingIds.has(fallback)) return fallback;
+  for (let index = 2; index < 1000; index += 1) {
+    const candidate = `${fallback}-${index}`;
+    if (!existingIds.has(candidate)) return candidate;
+  }
+  return `${fallback}-${Date.now().toString(36)}`;
+}
+
+function normalizeRemoteMachineId(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function normalizeOptionalString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function normalizeAppearanceTheme(value: unknown): AppearanceTheme {
@@ -119,4 +328,8 @@ function themeFromInput(input: string | AppearanceThemeInput | undefined): Appea
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+function now(): string {
+  return new Date().toISOString();
 }

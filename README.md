@@ -40,6 +40,22 @@ Project metadata is discovered from ordinary repository files and local tools:
 
 The app is local-first by default. It reads local files and spawns local shells inside configured project boundaries. Network and remote Git operations are limited to explicit features such as Teamwork install/sync and web content opened in embedded or external browsers.
 
+## Data Directory
+
+SharkBay stores product data in the user's SharkBay home directory:
+
+```text
+~/.sharkbay/
+```
+
+Current client configuration is stored at:
+
+```text
+~/.sharkbay/config.json
+```
+
+That file contains scan roots, manually added projects, appearance theme, and config metadata. Electron may still use its platform `userData` directory for Chromium/runtime state, but SharkBay workspace data should live under `~/.sharkbay`.
+
 ## Tech Stack
 
 - Electron

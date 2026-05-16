@@ -1,10 +1,13 @@
 export type WorkflowProjectCandidate = {
   id: string;
+  uri: string;
   name: string;
-  path: string;
-  rootPath: string;
+  providerId: string;
+  providerKind: "local" | "ssh" | "container" | "wsl";
+  displayPath: string;
+  rootUri: string;
   iconSources?: Array<{ kind: "local" | "favicon"; url: string; label: string }>;
-  services?: Array<{ id: string; label: string; command: string; script: string; cwd: string }>;
+  services?: Array<{ id: string; label: string; command: string; script: string; cwdUri: string }>;
   dirtyWorktree?: boolean | null;
 };
 
@@ -56,10 +59,10 @@ export function projectTerminalActivityStates(
 }
 
 export function terminalActivityForCandidate(
-  candidate: Pick<WorkflowProjectCandidate, "id" | "path">,
+  candidate: Pick<WorkflowProjectCandidate, "id" | "uri">,
   statesByProjectId: Record<string, WorkflowProjectTerminalActivityState>,
 ): WorkflowProjectTerminalActivityState | null {
-  return statesByProjectId[candidate.id] ?? statesByProjectId[candidate.path] ?? null;
+  return statesByProjectId[candidate.id] ?? statesByProjectId[candidate.uri] ?? null;
 }
 
 export function firstHttpUrl(data: string): string | null {
