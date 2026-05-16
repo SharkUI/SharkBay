@@ -1,13 +1,19 @@
-import { mkdir, readFile, writeFile, access } from "node:fs/promises";
+import { access, mkdir, readFile, rm, rmdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { randomBytes } from "node:crypto";
 
 const execFileAsync = promisify(execFile);
-const ROOT_ADAPTER_FILES = ["AGENTS.md", "CLAUDE.md", "GEMINI.md"] as const;
+const ROOT_ADAPTER_FILES = ["AGENTS.md"] as const;
+const LEGACY_ROOT_ADAPTER_FILES = ["CLAUDE.md", "GEMINI.md"] as const;
+const LEGACY_INSTRUCTION_FILES = ["codex.md", "claude.md", "gemini.md"] as const;
 const GENERATED_MARKER = "<!-- sharkbay-generated: true -->";
 const EXCLUDE_ENTRIES = ["/.sharkbay/", ...ROOT_ADAPTER_FILES.map((name) => `/${name}`)];
+const LEGACY_EXCLUDE_ENTRIES = LEGACY_ROOT_ADAPTER_FILES.map((name) => `/${name}`);
+const EXCLUDE_REMOVAL_ENTRIES = new Set([...EXCLUDE_ENTRIES, ...LEGACY_EXCLUDE_ENTRIES]);
+const EXCLUDE_BACKUP_FILE = "git-info-exclude.backup";
+const EXCLUDE_MISSING_MARKER = "git-info-exclude.missing";
 
 export type GitHubIdentity = {
   login: string;
@@ -35,35 +41,35 @@ export async function installHarness(
   repoPath: string,
   options: { githubLogin: string; githubUserId: number; machineId: string; agent: string; repo?: string },
 ): Promise<void> {
-  await assertGitWorktree(repoPath);
+  await assertHarnessInstallable(repoPath);
   const adapterContent = generateAdapterMd(options.repo ?? "");
-  await assertRootAdaptersCanBeManaged(repoPath);
 
   const sbDir = join(repoPath, ".sharkbay");
   const harnessDir = join(sbDir, "harness");
-  const instructionsDir = join(harnessDir, "instructions");
   const tasksDir = join(sbDir, "tasks");
   const teamContextDir = join(sbDir, "team-context");
 
-  await mkdir(instructionsDir, { recursive: true });
+  await mkdir(harnessDir, { recursive: true });
   await mkdir(tasksDir, { recursive: true });
   await mkdir(teamContextDir, { recursive: true });
 
   await writeFile(join(sbDir, "machine-id"), options.machineId, "utf-8");
   await writeFile(join(harnessDir, "protocol.md"), generateProtocol(options), "utf-8");
 
-  // Per-agent instruction files
-  const instructionContent = (agent: string) => `# SharkBay ${agent} Instructions\n\nRead and follow: .sharkbay/harness/protocol.md\n`;
-  await writeFile(join(instructionsDir, "codex.md"), instructionContent("Codex"), "utf-8");
-  await writeFile(join(instructionsDir, "claude.md"), instructionContent("Claude"), "utf-8");
-  await writeFile(join(instructionsDir, "gemini.md"), instructionContent("Gemini"), "utf-8");
-
   // Root adapter files. Only SharkBay-generated adapters are overwritten.
   for (const name of ROOT_ADAPTER_FILES) {
     await writeFile(join(repoPath, name), adapterContent, "utf-8");
   }
+  await cleanupLegacyAdapters(repoPath);
+  await cleanupLegacyInstructionFiles(harnessDir);
 
+  await backupLocalExclude(repoPath, harnessDir);
   await ensureLocalExclude(repoPath);
+}
+
+export async function assertHarnessInstallable(repoPath: string): Promise<void> {
+  await assertGitWorktree(repoPath);
+  await assertRootAdaptersCanBeManaged(repoPath);
 }
 
 async function assertGitWorktree(repoPath: string): Promise<void> {
@@ -115,6 +121,124 @@ export async function getMachineId(repoPath: string): Promise<string | null> {
   }
 }
 
+export type TeamworkUninstallResult = {
+  removedPaths: string[];
+  skippedPaths: string[];
+  excludeRemovedLines: string[];
+};
+
+export async function uninstallHarness(repoPath: string): Promise<TeamworkUninstallResult> {
+  const removedPaths: string[] = [];
+  const skippedPaths: string[] = [];
+
+  for (const name of [...ROOT_ADAPTER_FILES, ...LEGACY_ROOT_ADAPTER_FILES]) {
+    const removed = await removeGeneratedAdapter(repoPath, name);
+    if (removed === "removed") removedPaths.push(name);
+    else if (removed === "skipped") skippedPaths.push(name);
+  }
+
+  const excludeRemovedLines = await restoreLocalExclude(repoPath);
+  const sharkbayDir = join(repoPath, ".sharkbay");
+  try {
+    await access(sharkbayDir);
+    await rm(sharkbayDir, { recursive: true, force: true });
+    removedPaths.push(".sharkbay");
+  } catch {
+    skippedPaths.push(".sharkbay");
+  }
+
+  return { removedPaths: removedPaths.sort(), skippedPaths: skippedPaths.sort(), excludeRemovedLines };
+}
+
+async function removeGeneratedAdapter(repoPath: string, name: string): Promise<"removed" | "skipped" | "missing"> {
+  const filePath = join(repoPath, name);
+  let existing: string;
+  try {
+    existing = await readFile(filePath, "utf-8");
+  } catch {
+    return "missing";
+  }
+  if (!existing.includes(GENERATED_MARKER)) return "skipped";
+  await rm(filePath, { force: true });
+  return "removed";
+}
+
+async function backupLocalExclude(repoPath: string, harnessDir: string): Promise<void> {
+  const backupPath = join(harnessDir, EXCLUDE_BACKUP_FILE);
+  try {
+    await access(backupPath);
+    return;
+  } catch {
+    // First install in this worktree; capture the current local exclude state.
+  }
+
+  const excludePath = join(repoPath, ".git", "info", "exclude");
+  try {
+    const content = await readFile(excludePath, "utf-8");
+    await writeFile(backupPath, content, "utf-8");
+    await rm(join(harnessDir, EXCLUDE_MISSING_MARKER), { force: true });
+  } catch {
+    await writeFile(backupPath, "", "utf-8");
+    await writeFile(join(harnessDir, EXCLUDE_MISSING_MARKER), "true\n", "utf-8");
+  }
+}
+
+async function restoreLocalExclude(repoPath: string): Promise<string[]> {
+  const backupPath = join(repoPath, ".sharkbay", "harness", EXCLUDE_BACKUP_FILE);
+  const excludePath = join(repoPath, ".git", "info", "exclude");
+  let content: string;
+  try {
+    content = await readFile(excludePath, "utf-8");
+  } catch {
+    content = "";
+  }
+
+  try {
+    const backup = await readFile(backupPath, "utf-8");
+    const cleaned = cleanLocalExcludeContent(content);
+    try {
+      await access(join(repoPath, ".sharkbay", "harness", EXCLUDE_MISSING_MARKER));
+      await rm(excludePath, { force: true });
+    } catch {
+      await writeFile(excludePath, backup, "utf-8");
+    }
+    return cleaned.removedLines;
+  } catch {
+    return cleanLocalExclude(repoPath, content);
+  }
+}
+
+async function cleanLocalExclude(repoPath: string, content?: string): Promise<string[]> {
+  const excludePath = join(repoPath, ".git", "info", "exclude");
+  const original = content ?? await readFile(excludePath, "utf-8").catch(() => "");
+  const cleaned = cleanLocalExcludeContent(original);
+  if (cleaned.removedLines.length > 0) {
+    await writeFile(excludePath, cleaned.content, "utf-8");
+  }
+  return cleaned.removedLines;
+}
+
+export function cleanLocalExcludeContent(content: string): { content: string; removedLines: string[] } {
+  const normalized = content.replace(/\r\n/g, "\n");
+  const hadFinalNewline = normalized.endsWith("\n");
+  const lines = normalized.split("\n");
+  if (hadFinalNewline) lines.pop();
+
+  const removedLines: string[] = [];
+  const kept = lines.filter((line) => {
+    if (EXCLUDE_REMOVAL_ENTRIES.has(line.trim())) {
+      removedLines.push(line);
+      return false;
+    }
+    return true;
+  });
+
+  return {
+    content: kept.length ? `${kept.join("\n")}${hadFinalNewline ? "\n" : ""}` : "",
+    removedLines,
+  };
+}
+
 export async function ensureLocalExclude(repoPath: string): Promise<void> {
   const excludePath = join(repoPath, ".git", "info", "exclude");
   await mkdir(join(repoPath, ".git", "info"), { recursive: true });
@@ -124,11 +248,40 @@ export async function ensureLocalExclude(repoPath: string): Promise<void> {
     content = await readFile(excludePath, "utf-8");
   } catch { /* file may not exist */ }
 
-  const missing = EXCLUDE_ENTRIES.filter((e) => !content.includes(e));
+  content = content
+    .split("\n")
+    .filter((line) => !LEGACY_EXCLUDE_ENTRIES.includes(line.trim()))
+    .join("\n");
+
+  const missing = EXCLUDE_ENTRIES.filter((e) => !content.split("\n").includes(e));
   if (missing.length > 0) {
     const suffix = (content.endsWith("\n") || content === "" ? "" : "\n") + missing.join("\n") + "\n";
     await writeFile(excludePath, content + suffix, "utf-8");
+  } else {
+    await writeFile(excludePath, content.endsWith("\n") || content === "" ? content : `${content}\n`, "utf-8");
   }
+}
+
+async function cleanupLegacyAdapters(repoPath: string): Promise<void> {
+  for (const name of LEGACY_ROOT_ADAPTER_FILES) {
+    const filePath = join(repoPath, name);
+    try {
+      const existing = await readFile(filePath, "utf-8");
+      if (existing.includes(GENERATED_MARKER)) {
+        await rm(filePath);
+      }
+    } catch {
+      // Missing legacy adapter is fine.
+    }
+  }
+}
+
+async function cleanupLegacyInstructionFiles(harnessDir: string): Promise<void> {
+  const instructionsDir = join(harnessDir, "instructions");
+  await Promise.all(
+    LEGACY_INSTRUCTION_FILES.map((name) => rm(join(instructionsDir, name), { force: true })),
+  );
+  await rmdir(instructionsDir).catch(() => {});
 }
 
 function generateAdapterMd(repo: string): string {

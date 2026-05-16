@@ -386,7 +386,37 @@ body.is-resizing-columns * {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding-top: 34px;
+  padding-top: var(--workbench-edge-inset);
+}
+
+.project-panel-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  background: #f4f1eb;
+  border-bottom: 1px solid #e1ddd4;
+}
+
+.project-panel-title {
+  display: inline-flex;
+  align-items: center;
+  min-height: 47px;
+  color: #5f6c6e;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 18px 1px 7px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.4;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.project-panel-header .icon-button {
+  flex: 0 0 auto;
+  margin-bottom: 9px;
 }
 
 .detail-panel {
@@ -654,7 +684,12 @@ body.is-resizing-columns * {
 .project-context-menu {
   position: fixed;
   z-index: 30;
+  display: block;
+  width: max-content;
   min-width: 178px;
+  height: auto;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
   padding: 5px;
   background: #fffdfa;
   border: 1px solid #d7d2c8;
@@ -687,6 +722,49 @@ body.is-resizing-columns * {
 .project-context-menu-item.is-danger:hover,
 .project-context-menu-item.is-danger:focus-visible {
   background: #f7e7e4;
+}
+
+.teamwork-uninstall-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(24, 32, 34, 0.28);
+}
+
+.teamwork-uninstall-dialog {
+  width: min(420px, 100%);
+  padding: 12px;
+  box-shadow: 0 22px 60px rgba(32, 42, 45, 0.22);
+}
+
+.teamwork-uninstall-dialog .button-row {
+  justify-content: flex-end;
+}
+
+.teamwork-clean-checkbox {
+  align-items: flex-start;
+  padding: 7px 8px;
+  background: #fff8ee;
+  border: 1px solid #ead8ba;
+  border-radius: 6px;
+}
+
+.teamwork-owner-note {
+  margin: 0;
+  color: #687477;
+  font-size: 11px;
+}
+
+.button.danger-button {
+  background: #a53b35;
+  border-color: #8f332e;
+}
+
+.button.danger-button:hover:not(:disabled) {
+  background: #8f332e;
 }
 
 .project-row-main,
@@ -838,12 +916,11 @@ body.is-resizing-columns * {
 
 .detail-layout {
   display: grid;
-  align-content: start;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 10px;
   flex: 1 1 auto;
   min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
   padding-right: 2px;
   scrollbar-width: none;
 }
@@ -1094,7 +1171,9 @@ body.is-resizing-columns * {
   display: grid;
   align-content: start;
   gap: 10px;
+  min-height: 0;
   min-width: 0;
+  overflow: auto;
 }
 
 .detail-tab-panel[hidden] {
@@ -2655,6 +2734,15 @@ body.is-resizing-columns .app-shell[data-theme="night"] .column-resizer::before 
   border-bottom-color: #263639;
 }
 
+.app-shell[data-theme="night"] .project-panel-header {
+  background: #101719;
+  border-bottom-color: #263639;
+}
+
+.app-shell[data-theme="night"] .project-panel-title {
+  color: #9fb0ac;
+}
+
 .app-shell[data-theme="night"] .detail-tab-card,
 .app-shell[data-theme="night"] .tab-button {
   color: #9fb0ac;
@@ -2904,6 +2992,8 @@ body.is-resizing-columns .app-shell[data-theme="morning"] .column-resizer::befor
 
 .task-list-direct { gap: 8px; margin-top: 4px; }
 .task-list-direct[hidden], .mock-task-detail[hidden] { display: none; }
+.mock-task-detail { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; min-height: 0; overflow: hidden; }
+.detail-tab-panel:has(.mock-task-detail) { align-content: stretch; grid-template-rows: minmax(0, 1fr); overflow: hidden; }
 .task-title { min-width: 0; overflow: hidden; color: var(--ink); font-size: 12px; font-weight: 680; text-overflow: ellipsis; white-space: nowrap; }
 .task-avatar { display: grid; place-items: center; width: 28px; height: 28px; overflow: hidden; color: #ffffff; background: #325768; border: 1px solid var(--line); border-radius: 50%; font-size: 10px; font-weight: 800; box-shadow: 0 1px 2px rgba(20, 32, 34, 0.14); }
 .task-avatar img { width: 100%; height: 100%; object-fit: cover; }
@@ -2911,12 +3001,23 @@ body.is-resizing-columns .app-shell[data-theme="morning"] .column-resizer::befor
 .task-row-main small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .teamwork-facts-card { padding: 11px 12px 12px; }
 .teamwork-facts-card .project-facts-list { gap: 7px; }
+.teamwork-action-card { padding: 11px 12px 12px; }
+.teamwork-action-card .summary-text { margin-top: 3px; }
+.teamwork-action-card .button-row { justify-content: flex-end; }
 .task-list-direct .queue-item { grid-template-columns: 34px minmax(0, 1fr) auto; min-height: 46px; padding: 9px 10px; }
+.task-list-direct .phase-pill,
+.task-detail-header .phase-pill {
+  min-height: 18px;
+  padding: 1px 5px;
+  font-size: 9px;
+  font-weight: 750;
+}
 .phase-waiting { color: #6f4c00; background: #fff0b8; border-color: #e4c96d; }
 .teamwork-attention { color: #7e3028; background: #fbebe6; border-color: #edc7bf; }
-.task-detail-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
-.task-detail-compact { padding: 0 12px 12px; }
-.task-detail-compact .metadata-list { display: grid; gap: 6px; margin-bottom: 10px; }
-.task-detail-compact .metadata-row { display: flex; gap: 8px; font-size: 12px; }
-.task-detail-compact .metadata-row span { color: var(--muted); min-width: 52px; }
-.task-detail-compact .metadata-row strong { font-weight: 600; }
+.task-detail-header { display: grid; grid-template-columns: 28px 34px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 10px 12px; }
+.task-detail-avatar { width: 30px; height: 30px; }
+.task-detail-title { display: grid; gap: 2px; min-width: 0; }
+.task-detail-title h3 { min-width: 0; margin: 0; overflow: hidden; color: var(--ink); font-size: 13px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.task-detail-title span { min-width: 0; overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.task-detail-compact { display: grid; min-height: 0; padding: 0 12px 12px; }
+.task-detail-pre { width: 100%; height: 100%; max-height: none; min-height: 0; margin: 0; padding: 10px 11px; overflow: auto; color: #243034; background: rgba(255, 255, 255, 0.72); border: 1px solid var(--line); border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: 11px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }

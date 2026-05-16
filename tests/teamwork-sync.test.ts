@@ -4,7 +4,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { installHarness } from "../src/main/teamwork-harness.js";
-import { hasLocalContextBranch, TeamworkSync } from "../src/main/teamwork-sync.js";
+import { deleteTeamContextBranch, hasLocalContextBranch, TeamworkSync } from "../src/main/teamwork-sync.js";
 import { makeTempRoot, writeText } from "./helpers.js";
 
 const execFileAsync = promisify(execFile);
@@ -92,6 +92,11 @@ describe("teamwork context sync", () => {
       const mirroredTask = await findFile(path.join(repo, ".sharkbay", "team-context", "tasks"), taskFilename);
       expect(mirroredTask).not.toBeNull();
       await expect(fs.readFile(mirroredTask!, "utf8")).resolves.toContain("title: Sync completed task");
+
+      await expect(deleteTeamContextBranch(repo)).resolves.toBe(true);
+      await expect(hasLocalContextBranch(repo)).resolves.toBe(false);
+      const { stdout: deletedBranchList } = await execFileAsync("git", ["-C", repo, "ls-remote", "--heads", "origin", "sharkbay-team-context"]);
+      expect(deletedBranchList).toBe("");
     } finally {
       restoreGitEnv(originalGitEnv);
     }

@@ -30,6 +30,7 @@ export const ipcChannels = {
   teamworkGetStatus: "teamwork:getStatus",
   teamworkInstall: "teamwork:install",
   teamworkEnable: "teamwork:enable",
+  teamworkUninstall: "teamwork:uninstall",
   teamworkResolveIdentity: "teamwork:resolveIdentity",
   teamworkSyncNow: "teamwork:syncNow",
   teamworkTasksChanged: "teamwork:tasksChanged",

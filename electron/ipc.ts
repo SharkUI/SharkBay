@@ -11,9 +11,9 @@ import { listProjectFiles } from "../src/main/project-files.js";
 import { scanProjects } from "../src/main/scanner.js";
 import { readGitMetadata, readGitHistory, readGitDirtyFiles } from "../src/main/git.js";
 import { TerminalManager } from "../src/main/terminal.js";
-import { installHarness, isHarnessInstalled, resolveGitHubIdentity, generateMachineId, checkRepoPermission } from "../src/main/teamwork-harness.js";
+import { assertHarnessInstallable, getMachineId, installHarness, isHarnessInstalled, resolveGitHubIdentity, generateMachineId, checkRepoPermission, uninstallHarness } from "../src/main/teamwork-harness.js";
 import { scanTasks, watchTasks } from "../src/main/teamwork-tasks.js";
-import { hasLocalContextBranch, TeamworkSync } from "../src/main/teamwork-sync.js";
+import { deleteTeamContextBranch, hasLocalContextBranch, TeamworkSync } from "../src/main/teamwork-sync.js";
 import type {
   AgentCli,
   AgentProjectStatusEvent,
@@ -42,6 +42,8 @@ import type {
   TeamworkInstallInput,
   TeamworkStatus,
   TeamworkTasksChangedEvent,
+  TeamworkUninstallInput,
+  TeamworkUninstallResult,
   TerminalCloseInput,
   TerminalCreateInput,
   TerminalInput,
@@ -79,6 +81,80 @@ async function syncForStatus(repoPath: string, installed: boolean): Promise<Team
   sync.start();
   teamworkSyncInstances.set(repoPath, sync);
   return sync;
+}
+
+async function getTeamworkStatus(repoPath: string): Promise<TeamworkStatus> {
+  const harnessInstalled = await isHarnessInstalled(repoPath);
+  const contextAvailable = await hasLocalContextBranch(repoPath);
+  const installed = harnessInstalled && contextAvailable;
+  const sync = await syncForStatus(repoPath, installed);
+  const syncStatus = sync?.getStatus();
+  return {
+    installed,
+    harnessInstalled,
+    syncEnabled: syncStatus?.enabled ?? false,
+    lastSyncAt: syncStatus?.lastSyncAt ?? null,
+    pendingCount: syncStatus?.pendingCount ?? 0,
+    lastError: syncStatus?.lastError ?? null,
+  };
+}
+
+async function installTeamwork(repoPath: string): Promise<TeamworkStatus> {
+  await assertHarnessInstallable(repoPath);
+  const identity = await resolveGitHubIdentity();
+  const gitMeta = await readGitMetadata(repoPath);
+  const repo = githubRepoFromRemote(gitMeta.remoteOrigin);
+  if (!repo) {
+    throw new Error("Teamwork requires a GitHub origin remote. Configure remote.origin.url before installing Teamwork.");
+  }
+
+  const permission = await checkRepoPermission(repo, identity.login);
+  if (permission !== "admin" && permission !== "write") {
+    throw new Error(`Insufficient permission: ${permission}. Need at least write.`);
+  }
+
+  const sync = teamworkSyncInstances.get(repoPath) ?? new TeamworkSync(repoPath);
+  await sync.ensureContextBranch(repo, identity.login);
+
+  const machineId = await getMachineId(repoPath) ?? generateMachineId();
+  await installHarness(repoPath, {
+    githubLogin: identity.login,
+    githubUserId: identity.id,
+    machineId,
+    agent: "",
+    repo,
+  });
+
+  sync.start();
+  teamworkSyncInstances.set(repoPath, sync);
+  const syncStatus = sync.getStatus();
+  return {
+    installed: true,
+    harnessInstalled: true,
+    syncEnabled: syncStatus.enabled,
+    lastSyncAt: syncStatus.lastSyncAt,
+    pendingCount: syncStatus.pendingCount,
+    lastError: syncStatus.lastError,
+    githubLogin: identity.login,
+    repo,
+    branch: gitMeta.currentBranch ?? undefined,
+    permission,
+  };
+}
+
+async function assertContextCleanupOwner(repoPath: string): Promise<void> {
+  const identity = await resolveGitHubIdentity();
+  const gitMeta = await readGitMetadata(repoPath);
+  const repo = githubRepoFromRemote(gitMeta.remoteOrigin);
+  const owner = repo?.split("/")[0] ?? "";
+  if (!repo || owner.toLowerCase() !== identity.login.toLowerCase()) {
+    throw new Error("Only the repository owner can clean all Teamwork task records.");
+  }
+}
+
+function githubRepoFromRemote(remoteOrigin: string | null): string | null {
+  const match = remoteOrigin?.match(/github\.com[:/]([^/\s]+\/[^/\s]+?)(?:\.git)?$/);
+  return match?.[1] ?? null;
 }
 
 export function closeAllTerminalSessions(): void {
@@ -253,72 +329,48 @@ export function registerIpcHandlers(
   handle<{ repoPath: string }, TeamworkStatus>(channels.teamworkGetStatus, async (payload) => {
     const config = await getConfiguredRoots(runtime);
     const safe = await resolveRepoPath(payload.repoPath, config.configuredRoots, config.configuredProjects);
-    const repoPath = safe.repoPath;
-    const installed = await isHarnessInstalled(repoPath);
-    const sync = await syncForStatus(repoPath, installed);
-    const syncStatus = sync?.getStatus();
-    return {
-      installed,
-      syncEnabled: syncStatus?.enabled ?? false,
-      lastSyncAt: syncStatus?.lastSyncAt ?? null,
-      pendingCount: syncStatus?.pendingCount ?? 0,
-      lastError: syncStatus?.lastError ?? null,
-    };
+    return getTeamworkStatus(safe.repoPath);
   });
 
   handle<void, GitHubIdentity>(channels.teamworkResolveIdentity, async () => {
     return resolveGitHubIdentity();
   });
 
-  handle<TeamworkInstallInput, void>(channels.teamworkInstall, async (payload) => {
+  handle<TeamworkInstallInput, TeamworkStatus>(channels.teamworkInstall, async (payload) => {
     const config = await getConfiguredRoots(runtime);
     const safe = await resolveRepoPath(payload.repoPath, config.configuredRoots, config.configuredProjects);
-    const repoPath = safe.repoPath;
-    await installHarness(repoPath, {
-      githubLogin: payload.githubLogin,
-      githubUserId: payload.githubUserId,
-      machineId: payload.machineId,
-      agent: payload.agent,
-    });
+    return installTeamwork(safe.repoPath);
   });
 
   handle<{ repoPath: string }, TeamworkStatus>(channels.teamworkEnable, async (payload) => {
     const config = await getConfiguredRoots(runtime);
     const safe = await resolveRepoPath(payload.repoPath, config.configuredRoots, config.configuredProjects);
+    return installTeamwork(safe.repoPath);
+  });
+
+  handle<TeamworkUninstallInput, TeamworkUninstallResult>(channels.teamworkUninstall, async (payload) => {
+    const config = await getConfiguredRoots(runtime);
+    const safe = await resolveRepoPath(payload.repoPath, config.configuredRoots, config.configuredProjects);
     const repoPath = safe.repoPath;
-    const identity = await resolveGitHubIdentity();
+    const sync = teamworkSyncInstances.get(repoPath);
+    sync?.stop();
+    teamworkSyncInstances.delete(repoPath);
 
-    // Derive OWNER/REPO from git remote
-    const { readGitMetadata } = await import("../src/main/git.js");
-    const gitMeta = await readGitMetadata(repoPath);
-    const repoMatch = gitMeta.remoteOrigin?.match(/github\.com[:/](.+?)(?:\.git)?$/);
-    const repo = repoMatch?.[1] ?? "";
-    if (!repo) {
-      throw new Error("Teamwork sync requires a GitHub origin remote. Configure remote.origin.url or enable Teamwork from the repository that owns the GitHub remote.");
+    let contextBranchDeleted = false;
+    if (payload.cleanTeamContext) {
+      await assertContextCleanupOwner(repoPath);
+      contextBranchDeleted = await deleteTeamContextBranch(repoPath);
     }
 
-    // Check permission
-    const permission = await checkRepoPermission(repo, identity.login);
-    if (permission !== "admin" && permission !== "write") {
-      throw new Error(`Insufficient permission: ${permission}. Need at least write.`);
-    }
-
-    // Update protocol with real identity
-    const { getMachineId } = await import("../src/main/teamwork-harness.js");
-    const machineId = await getMachineId(repoPath) ?? generateMachineId();
-    await installHarness(repoPath, { githubLogin: identity.login, githubUserId: identity.id, machineId, agent: "", repo });
-
-    // Ensure context branch exists (create if needed)
-    const sync = new TeamworkSync(repoPath);
-    await sync.ensureContextBranch(repo, identity.login);
-
-    // Start sync loop
-    if (!teamworkSyncInstances.has(repoPath)) {
-      sync.start();
-      teamworkSyncInstances.set(repoPath, sync);
-    }
-    const syncStatus = teamworkSyncInstances.get(repoPath)!.getStatus();
-    return { installed: true, syncEnabled: true, lastSyncAt: syncStatus.lastSyncAt, pendingCount: syncStatus.pendingCount, lastError: syncStatus.lastError, githubLogin: identity.login, repo, permission };
+    const result = await uninstallHarness(repoPath);
+    const cleanup = teamworkWatcherCleanups.get(repoPath);
+    cleanup?.();
+    teamworkWatcherCleanups.delete(repoPath);
+    const event: TeamworkTasksChangedEvent = { repoPath, tasks: [] };
+    BrowserWindow.getAllWindows().forEach((w) => {
+      w.webContents.send(channels.teamworkTasksChanged, event);
+    });
+    return { ...result, contextBranchDeleted };
   });
 
   handle<{ repoPath: string }, void>(channels.teamworkSyncNow, async (payload) => {

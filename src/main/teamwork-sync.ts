@@ -291,6 +291,22 @@ export async function hasLocalContextBranch(repoPath: string): Promise<boolean> 
   }
 }
 
+export async function deleteTeamContextBranch(repoPath: string): Promise<boolean> {
+  let exists = false;
+  try {
+    await execFileAsync("git", ["-C", repoPath, "ls-remote", "--exit-code", "origin", `refs/heads/${BRANCH}`], { timeout: 10_000 });
+    exists = true;
+  } catch {
+    exists = false;
+  }
+
+  if (exists) {
+    await execFileAsync("git", ["-C", repoPath, "push", "origin", `:refs/heads/${BRANCH}`], { timeout: 15_000, maxBuffer: 4 * 1024 * 1024 });
+  }
+  await execFileAsync("git", ["-C", repoPath, "update-ref", "-d", REMOTE_REF], { timeout: 3_000 }).catch(() => {});
+  return exists;
+}
+
 /** Extract taskId from filename: <taskTag>-u<userId>-m<machineId>-<slug> → <taskTag>-u<userId>-m<machineId> */
 function extractTaskId(basename: string): string | null {
   const match = basename.match(/^([A-Z0-9]{6}-u\d+-m[A-Za-z0-9]+)(?:-|$)/);

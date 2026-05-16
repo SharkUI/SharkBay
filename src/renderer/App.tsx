@@ -107,7 +107,7 @@ const columnResizeStep = 40;
 const detailColumnStorageKey = "sharkbay.detailColumnWidth.v2";
 const projectColumnStorageKey = "sharkbay.projectColumnWidth.v2";
 const detailTabs: Array<{ id: DetailTab; label: string }> = [
-  { id: "tasks", label: "Tasks" },
+  { id: "tasks", label: "TEAM" },
   { id: "git", label: "Git" },
   { id: "files", label: "Files" },
 ];
@@ -272,6 +272,38 @@ async function getProjectDetail(candidate: ProjectCandidate): Promise<ProjectDet
   const handler = getBridge().projects?.getDetail;
   if (!handler) throw new Error("Project detail is not exposed by the preload API.");
   return handler({ repoPath: candidate.path });
+}
+
+async function getTeamworkStatus(candidate: ProjectCandidate): Promise<TeamworkStatus> {
+  const handler = getBridge().teamwork?.getStatus;
+  if (!handler) throw new Error("Teamwork status is not exposed by the preload API.");
+  return handler({ repoPath: candidate.path });
+}
+
+async function resolveTeamworkIdentity() {
+  const handler = getBridge().teamwork?.resolveIdentity;
+  if (!handler) throw new Error("GitHub identity lookup is not exposed by the preload API.");
+  return handler();
+}
+
+async function uninstallTeamwork(candidate: ProjectCandidate, cleanTeamContext: boolean) {
+  const handler = getBridge().teamwork?.uninstall;
+  if (!handler) throw new Error("Teamwork uninstall is not exposed by the preload API.");
+  return handler({ repoPath: candidate.path, cleanTeamContext });
+}
+
+function githubOwnerFromRemote(remoteOrigin: string | null): string | null {
+  const repo = remoteOrigin?.match(/github\.com[:/]([^/\s]+)\/[^/\s]+?(?:\.git)?$/)?.[1];
+  return repo ?? null;
+}
+
+function projectContextMenuPosition(clientX: number, clientY: number): { x: number; y: number } {
+  if (typeof window === "undefined") return { x: clientX, y: clientY };
+  const margin = 8;
+  return {
+    x: clamp(clientX, margin, window.innerWidth - 194 - margin),
+    y: clamp(clientY, margin, window.innerHeight - 46 - margin),
+  };
 }
 
 async function listProjectFiles(project: ProjectCandidate | ProjectDetail, directoryPath?: string) {
@@ -609,6 +641,15 @@ function DashboardView({
   const [detailColumnWidth, setDetailColumnWidth] = useState(() =>
     storedColumnWidth(detailColumnStorageKey, defaultDetailColumnWidth, minDetailColumnWidth),
   );
+  const [projectMenu, setProjectMenu] = useState<{ candidate: ProjectCandidate; x: number; y: number } | null>(null);
+  const [teamworkRevision, setTeamworkRevision] = useState(0);
+  const [uninstallDialog, setUninstallDialog] = useState<{
+    candidate: ProjectCandidate;
+    canCleanTeamContext: boolean;
+    cleanTeamContext: boolean;
+    ownerCheckError: string | null;
+  } | null>(null);
+  const [uninstallBusy, setUninstallBusy] = useState(false);
   const detailPanelHidden = activeTerminalTabKind === "browser";
 
   function normalizeColumnWidths(projectWidth: number, detailWidth: number, gridWidth: number, detailHidden = detailPanelHidden) {
@@ -693,6 +734,69 @@ function DashboardView({
     return () => unsubscribe?.();
   }, [bridgeAvailable]);
 
+  useEffect(() => {
+    if (!projectMenu) return;
+    const close = () => setProjectMenu(null);
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setProjectMenu(null);
+    };
+    window.addEventListener("click", close);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [projectMenu]);
+
+  async function openTurnOffTeamworkDialog(candidate: ProjectCandidate) {
+    setProjectMenu(null);
+    let canCleanTeamContext = false;
+    let ownerCheckError: string | null = null;
+    try {
+      const projectDetail = detail?.path === candidate.path ? detail : await getProjectDetail(candidate);
+      const owner = githubOwnerFromRemote(projectDetail.repoUrl);
+      if (owner) {
+        const identity = await resolveTeamworkIdentity();
+        canCleanTeamContext = owner.toLowerCase() === identity.login.toLowerCase();
+      }
+    } catch (error) {
+      ownerCheckError = asMessage(error);
+    }
+    setUninstallDialog({ candidate, canCleanTeamContext, cleanTeamContext: false, ownerCheckError });
+  }
+
+  async function openProjectContextMenu(candidate: ProjectCandidate, event: ReactMouseEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    const position = projectContextMenuPosition(event.clientX, event.clientY);
+    setProjectMenu(null);
+    try {
+      const status = await getTeamworkStatus(candidate);
+      if (!status.harnessInstalled) return;
+      setProjectMenu({ candidate, ...position });
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    }
+  }
+
+  async function confirmTurnOffTeamwork() {
+    if (!uninstallDialog || uninstallBusy) return;
+    setUninstallBusy(true);
+    try {
+      const result = await uninstallTeamwork(uninstallDialog.candidate, uninstallDialog.cleanTeamContext);
+      setToast({
+        tone: "success",
+        message: result.contextBranchDeleted ? "Teamwork turned off and task records cleaned." : "Teamwork turned off.",
+      });
+      setUninstallDialog(null);
+      setTeamworkRevision((value) => value + 1);
+      await onRefresh();
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      setUninstallBusy(false);
+    }
+  }
+
   const gridStyle = {
     gridTemplateColumns: detailPanelHidden
       ? `${projectColumnWidth}px ${resizerColumnWidth}px minmax(${minTerminalColumnWidth}px, 1fr) 0px 0px`
@@ -703,8 +807,8 @@ function DashboardView({
     <div className={cx("dashboard-grid", detailPanelHidden && "is-detail-hidden")} ref={gridRef} style={gridStyle}>
       <section className="project-panel">
         <div className="project-window-drag-strip" aria-hidden="true" />
-        <div className="project-panel-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px 4px" }}>
-          <span style={{ fontSize: "11px", fontWeight: 600, textTransform: "uppercase", opacity: 0.6 }}>Projects</span>
+        <div className="project-panel-header">
+          <span className="project-panel-title">Projects</span>
           <button aria-label="Add project" className="icon-button" title="Add project folder" type="button" onClick={() => void onPickProject()}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
           </button>
@@ -723,6 +827,7 @@ function DashboardView({
               terminalActivityByProjectId={terminalActivityByProjectId}
               selectedId={selectedCandidate?.id ?? null}
               onSelect={setSelectedId}
+              onContextMenu={(candidate, event) => void openProjectContextMenu(candidate, event)}
             />
           ) : (
             <div className="empty-state compact-title-row" style={{ padding: "24px 16px" }}>
@@ -777,11 +882,42 @@ function DashboardView({
             onOpenGitDiff={(relativePath) =>
               terminalPaneRef.current?.openGitDiff(selectedCandidate.path, selectedCandidate.name, relativePath) ?? Promise.resolve()
             }
+            teamworkRevision={teamworkRevision}
           />
         ) : (
           <EmptyState title="No project selected" body="Open Settings to add a project or configure a scan root." />
         )}
       </section>
+      {projectMenu ? (
+        <div
+          className="project-context-menu"
+          role="menu"
+          style={{ left: projectMenu.x, top: projectMenu.y }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            autoFocus
+            className="project-context-menu-item is-danger"
+            role="menuitem"
+            type="button"
+            onClick={() => void openTurnOffTeamworkDialog(projectMenu.candidate)}
+          >
+            Turn Off Teamwork
+          </button>
+        </div>
+      ) : null}
+      {uninstallDialog ? (
+        <TeamworkUninstallDialog
+          busy={uninstallBusy}
+          candidate={uninstallDialog.candidate}
+          canCleanTeamContext={uninstallDialog.canCleanTeamContext}
+          cleanTeamContext={uninstallDialog.cleanTeamContext}
+          ownerCheckError={uninstallDialog.ownerCheckError}
+          onCancel={() => { if (!uninstallBusy) setUninstallDialog(null); }}
+          onChangeCleanTeamContext={(cleanTeamContext) => setUninstallDialog((current) => current ? { ...current, cleanTeamContext } : current)}
+          onConfirm={() => void confirmTurnOffTeamwork()}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1340,12 +1476,13 @@ function sameProjectTerminalActivityStates(left: Record<string, ProjectTerminalA
   return leftKeys.every((key) => left[key] === right[key]);
 }
 
-function ProjectList({ agentStatusByProjectPath, candidates, runningServiceProjectIds, terminalActivityByProjectId, selectedId, onSelect }: {
+function ProjectList({ agentStatusByProjectPath, candidates, runningServiceProjectIds, terminalActivityByProjectId, selectedId, onContextMenu, onSelect }: {
   agentStatusByProjectPath: AgentStatusByProjectPath;
   candidates: ProjectCandidate[];
   runningServiceProjectIds: Set<string>;
   terminalActivityByProjectId: Record<string, ProjectTerminalActivityState>;
   selectedId: string | null;
+  onContextMenu?: (candidate: ProjectCandidate, event: ReactMouseEvent<HTMLButtonElement>) => void;
   onSelect: (id: string) => void;
 }) {
   if (!candidates.length) return null;
@@ -1358,7 +1495,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, runningServiceProje
           const hasProjectStatus = Boolean(terminalActivity);
           const subtitle = agentStatusByProjectPath[candidate.path] ?? candidate.path;
           return (
-            <button className={cx("project-row", selectedId === candidate.id && "is-selected")} key={candidate.id} onClick={() => onSelect(candidate.id)}>
+            <button className={cx("project-row", selectedId === candidate.id && "is-selected")} key={candidate.id} onClick={() => onSelect(candidate.id)} onContextMenu={onContextMenu ? (event) => onContextMenu(candidate, event) : undefined}>
               <ProjectIcon name={candidate.name} sources={candidate.iconSources ?? []} />
               <span className="project-row-main">
                 <span className="cell-title">
@@ -1379,6 +1516,66 @@ function ProjectList({ agentStatusByProjectPath, candidates, runningServiceProje
         })}
       </div>
     </section>
+  );
+}
+
+function TeamworkUninstallDialog({
+  busy,
+  candidate,
+  canCleanTeamContext,
+  cleanTeamContext,
+  ownerCheckError,
+  onCancel,
+  onChangeCleanTeamContext,
+  onConfirm,
+}: {
+  busy: boolean;
+  candidate: ProjectCandidate;
+  canCleanTeamContext: boolean;
+  cleanTeamContext: boolean;
+  ownerCheckError: string | null;
+  onCancel: () => void;
+  onChangeCleanTeamContext: (value: boolean) => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="teamwork-uninstall-backdrop" role="presentation" onMouseDown={onCancel}>
+      <section
+        aria-modal="true"
+        aria-labelledby="teamwork-uninstall-title"
+        className="subpanel confirm-panel teamwork-uninstall-dialog"
+        role="dialog"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div>
+          <h4 id="teamwork-uninstall-title">Turn Off Teamwork</h4>
+          <p className="summary-text">
+            {cleanTeamContext
+              ? `Remove local Teamwork harness files from ${candidate.name} and delete the shared team context branch.`
+              : `Remove local Teamwork harness files from ${candidate.name}. The team context branch will be kept.`}
+          </p>
+        </div>
+        {canCleanTeamContext ? (
+          <label className="checkbox-row teamwork-clean-checkbox">
+            <input
+              checked={cleanTeamContext}
+              disabled={busy}
+              type="checkbox"
+              onChange={(event) => onChangeCleanTeamContext(event.currentTarget.checked)}
+            />
+            <span>Also clean all task records</span>
+          </label>
+        ) : ownerCheckError ? (
+          <p className="teamwork-owner-note">Owner check unavailable.</p>
+        ) : null}
+        <div className="button-row">
+          <button className="button secondary compact" disabled={busy} type="button" onClick={onCancel}>Cancel</button>
+          <button className="button compact danger-button" disabled={busy} type="button" onClick={onConfirm}>
+            {busy ? "Turning off..." : "Turn Off Teamwork"}
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -1415,17 +1612,16 @@ function BrowserTabIcon({ browser }: { browser: BrowserSession }) {
   );
 }
 
-function ProjectDetailPane({ detail, candidate, setToast, onRefresh, onOpenFileInEditor, onOpenGitDiff }: {
+function ProjectDetailPane({ detail, candidate, setToast, onRefresh, onOpenFileInEditor, onOpenGitDiff, teamworkRevision }: {
   detail: ProjectDetail | null;
   candidate: ProjectCandidate;
   setToast: (toast: Toast) => void;
   onRefresh: () => Promise<void>;
   onOpenFileInEditor: (relativePath: string) => Promise<void>;
   onOpenGitDiff: (relativePath: string) => Promise<void>;
+  teamworkRevision: number;
 }) {
   const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>("tasks");
-
-  useEffect(() => { setActiveDetailTab("tasks"); }, [candidate.id]);
 
   function handleDetailTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, tab: DetailTab) {
     const currentIndex = detailTabs.findIndex((item) => item.id === tab);
@@ -1449,7 +1645,7 @@ function ProjectDetailPane({ detail, candidate, setToast, onRefresh, onOpenFileI
         ))}
       </div>
       <div aria-labelledby="project-detail-tab-tasks" className="detail-tab-panel" hidden={activeDetailTab !== "tasks"} id="project-detail-tabpanel-tasks" role="tabpanel">
-        <TasksDetailTab candidate={candidate} setToast={setToast} />
+        <TasksDetailTab candidate={candidate} setToast={setToast} teamworkRevision={teamworkRevision} />
       </div>
       <div aria-labelledby="project-detail-tab-git" className="detail-tab-panel" hidden={activeDetailTab !== "git"} id="project-detail-tabpanel-git" role="tabpanel">
         <GitDetailTab detail={detail} candidate={candidate} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} />
@@ -1472,11 +1668,11 @@ function taskPill(task: TaskViewModel): { label: string; cls: string } {
   return { label: task.status, cls: "phase-waiting" };
 }
 
-function TasksDetailTab({ candidate, setToast }: { candidate: ProjectCandidate; setToast: (toast: Toast) => void }) {
+function TasksDetailTab({ candidate, setToast, teamworkRevision }: { candidate: ProjectCandidate; setToast: (toast: Toast) => void; teamworkRevision: number }) {
   const [tasks, setTasks] = useState<TaskViewModel[]>([]);
   const [status, setStatus] = useState<TeamworkStatus | null>(null);
   const [selected, setSelected] = useState<TaskViewModel | null>(null);
-  const [busyAction, setBusyAction] = useState<"install" | "enable" | null>(null);
+  const [busyAction, setBusyAction] = useState<"install" | null>(null);
   const [teamworkError, setTeamworkError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1511,15 +1707,7 @@ function TasksDetailTab({ candidate, setToast }: { candidate: ProjectCandidate; 
       if (event.repoPath === candidate.path) setTasks(event.tasks);
     });
     return () => { cancelled = true; unsub?.(); };
-  }, [candidate.path, setToast]);
-
-  async function refreshTeamworkStatus(): Promise<TeamworkStatus> {
-    const getStatus = window.sharkBay?.teamwork?.getStatus;
-    if (!getStatus) throw new Error("Teamwork status API is not available.");
-    const updated = await getStatus({ repoPath: candidate.path });
-    setStatus(updated);
-    return updated;
-  }
+  }, [candidate.path, setToast, teamworkRevision]);
 
   async function installTeamworkHarness(): Promise<void> {
     setBusyAction("install");
@@ -1527,28 +1715,9 @@ function TasksDetailTab({ candidate, setToast }: { candidate: ProjectCandidate; 
     try {
       const install = window.sharkBay?.teamwork?.install;
       if (!install) throw new Error("Teamwork install API is not available.");
-      const machineId = Math.random().toString(36).slice(2, 8);
-      await install({ repoPath: candidate.path, githubLogin: "", githubUserId: 0, machineId, agent: "" });
-      await refreshTeamworkStatus();
-      setToast({ tone: "success", message: "Teamwork harness installed." });
-    } catch (error) {
-      const message = asMessage(error);
-      setTeamworkError(message);
-      setToast({ tone: "error", message });
-    } finally {
-      setBusyAction(null);
-    }
-  }
-
-  async function enableTeamwork(): Promise<void> {
-    setBusyAction("enable");
-    setTeamworkError(null);
-    try {
-      const enable = window.sharkBay?.teamwork?.enable;
-      if (!enable) throw new Error("Teamwork enable API is not available.");
-      const updated = await enable({ repoPath: candidate.path });
+      const updated = await install({ repoPath: candidate.path });
       setStatus(updated);
-      setToast({ tone: "success", message: "Teamwork enabled." });
+      setToast({ tone: "success", message: "Teamwork installed." });
     } catch (error) {
       const message = asMessage(error);
       setTeamworkError(message);
@@ -1566,52 +1735,57 @@ function TasksDetailTab({ candidate, setToast }: { candidate: ProjectCandidate; 
           <button className="icon-button" type="button" onClick={() => setSelected(null)} aria-label="Back to task list">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
-          <h3 style={{ fontSize: 13, fontWeight: 680, margin: 0 }}>{selected.title}</h3>
+          <span className="task-avatar task-detail-avatar">
+            {selected.owner.avatarUrl ? <img alt="" src={selected.owner.avatarUrl} /> : selected.owner.githubLogin.slice(0, 2).toUpperCase()}
+          </span>
+          <div className="task-detail-title">
+            <h3>{selected.title}</h3>
+            <span>{selected.taskTag} · {selected.owner.githubLogin}</span>
+          </div>
+          <strong className={cx("phase-pill", pill.cls)}>{pill.label}</strong>
         </div>
         <div className="task-detail-compact">
-          <div className="metadata-list">
-            <div className="metadata-row"><span>Tag</span><strong>{selected.taskTag}</strong></div>
-            <div className="metadata-row"><span>Status</span><strong className={cx("phase-pill", pill.cls)}>{pill.label}</strong></div>
-            {selected.agent && <div className="metadata-row"><span>Agent</span><strong>{selected.agent}</strong></div>}
-            {selected.verification && <div className="metadata-row"><span>Verify</span><strong>{selected.verification}</strong></div>}
-            <div className="metadata-row"><span>Sync</span><strong>{selected.sync}</strong></div>
-            {selected.files && selected.files.length > 0 && <div className="metadata-row"><span>Files</span><strong>{selected.files.length}</strong></div>}
-          </div>
-          {selected.files && selected.files.length > 0 && (
-            <div className="dirty-files-list">
-              {selected.files.map((f) => (
-                <button className="dirty-file-row" key={f} type="button">{f}</button>
-              ))}
-            </div>
-          )}
+          <pre className="task-detail-pre">{selected.rawMarkdown}</pre>
         </div>
       </div>
     );
   }
 
+  const showTeamworkFacts = Boolean(
+    status?.repo ||
+    status?.githubLogin ||
+    status?.branch ||
+    teamworkError ||
+    status?.lastError ||
+    (status?.pendingCount != null && status.pendingCount > 0),
+  );
+
   return (
     <>
-      <div className="teamwork-facts-card detail-card">
-        <div className="project-facts-list">
-          {status?.repo && <div className="repository-fact"><span className="fact-label">Repo</span><span className="fact-value">{status.repo}</span></div>}
-          {status?.githubLogin && <div className="repository-fact"><span className="fact-label">User</span><span className="fact-value">{status.githubLogin}</span></div>}
-          {status?.branch && <div className="repository-fact"><span className="fact-label">Branch</span><span className="fact-value">{status.branch}</span></div>}
-          <div className="repository-fact"><span className="fact-label">Harness</span><span className="fact-value">{status?.installed ? "Installed" : "Not installed"}</span></div>
-          {(teamworkError || status?.lastError) && <div className="repository-fact is-warn"><span>Error</span><strong>{teamworkError || status?.lastError}</strong></div>}
-          {status && !status.installed && (
-            <button className="worktree-pill" disabled={busyAction !== null} type="button" style={{ cursor: busyAction ? "default" : "pointer", marginTop: 4 }} onClick={() => void installTeamworkHarness()}>
-              {busyAction === "install" ? "Installing..." : "Install harness"}
-            </button>
-          )}
-          {status?.installed && !status.syncEnabled && (
-            <button className="worktree-pill" disabled={busyAction !== null} type="button" style={{ cursor: busyAction ? "default" : "pointer", marginTop: 4 }} onClick={() => void enableTeamwork()}>
-              {busyAction === "enable" ? "Enabling..." : "Enable teamwork"}
-            </button>
-          )}
-          {status?.lastSyncAt && <div className="repository-fact"><span className="fact-label">Last sync</span><span className="fact-value">{status.lastSyncAt}</span></div>}
-          {status?.pendingCount != null && status.pendingCount > 0 && <div className="repository-fact"><span className="fact-label">Pending</span><span className={cx("worktree-pill", "teamwork-attention")}>{status.pendingCount}</span></div>}
+      {showTeamworkFacts ? (
+        <div className="teamwork-facts-card detail-card">
+          <div className="project-facts-list">
+            {status?.repo && <div className="repository-fact"><span className="fact-label">Repo</span><span className="fact-value">{status.repo}</span></div>}
+            {status?.githubLogin && <div className="repository-fact"><span className="fact-label">User</span><span className="fact-value">{status.githubLogin}</span></div>}
+            {status?.branch && <div className="repository-fact"><span className="fact-label">Branch</span><span className="fact-value">{status.branch}</span></div>}
+            {(teamworkError || status?.lastError) && <div className="repository-fact is-warn"><span>Error</span><strong>{teamworkError || status?.lastError}</strong></div>}
+            {status?.pendingCount != null && status.pendingCount > 0 && <div className="repository-fact"><span className="fact-label">Pending</span><span className={cx("worktree-pill", "teamwork-attention")}>{status.pendingCount}</span></div>}
+          </div>
         </div>
-      </div>
+      ) : null}
+      {status && !status.installed && (
+        <section className="subpanel confirm-panel teamwork-action-card">
+          <div>
+            <h4>Install Teamwork</h4>
+            <p className="summary-text">Requires a GitHub origin and write access. Installation creates the local harness and enables team sync in one step.</p>
+          </div>
+          <div className="button-row">
+            <button className="button compact" disabled={busyAction !== null} type="button" onClick={() => void installTeamworkHarness()}>
+              {busyAction === "install" ? "Installing..." : "Install Teamwork"}
+            </button>
+          </div>
+        </section>
+      )}
       <div className="queue-list task-list-direct">
         {tasks.map((task) => {
           const pill = taskPill(task);
@@ -1628,7 +1802,6 @@ function TasksDetailTab({ candidate, setToast }: { candidate: ProjectCandidate; 
             </button>
           );
         })}
-        {tasks.length === 0 && <p style={{ padding: "12px", fontSize: 12, color: "var(--muted)" }}>No tasks found.</p>}
       </div>
     </>
   );
@@ -1639,10 +1812,12 @@ function GitDetailTab({ detail, candidate, setToast, onOpenFileInEditor, onOpenG
     <>
       <ProjectFactsCard detail={detail} candidate={candidate} />
       <DirtyFilesPanel detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} />
-      {detail?.gitHistory?.length || detail?.currentBranch ? (
+      {detail?.gitHistory?.length ? (
         <GitHistoryItems events={detail?.gitHistory ?? []} />
+      ) : detail ? (
+        <EmptyState title="No commits yet" body="Create the first commit to populate Git history." />
       ) : (
-        <EmptyState title="No git history" body="Restart SharkBay once to load Git history." />
+        <EmptyState title="No git history" body="Git history has not loaded yet." />
       )}
     </>
   );
@@ -1724,7 +1899,7 @@ function GitHistoryItems({ events }: { events: NonNullable<ProjectDetail["gitHis
           </div>
         );
       })}
-      {!visible.length ? <div className="muted-row">Restart SharkBay once to load Git history.</div> : null}
+      {!visible.length ? <div className="muted-row">No commits yet.</div> : null}
     </div>
   );
 }

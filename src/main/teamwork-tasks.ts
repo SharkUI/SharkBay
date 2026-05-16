@@ -21,6 +21,10 @@ export type TaskViewModel = {
   verification?: string;
   work?: string;
   notes?: string;
+  sourcePath: string;
+  frontmatter: Record<string, string>;
+  bodyMarkdown: string;
+  rawMarkdown: string;
   sourceKind: "local-md" | "team-md";
   readOnly: boolean;
 };
@@ -43,6 +47,10 @@ export async function parseTaskFile(filePath: string): Promise<TaskViewModel | n
 
   const isTeam = filePath.includes("team-context/tasks");
 
+  const parsedGithubUserId = fm["githubUserId"] ? Number(fm["githubUserId"]) : undefined;
+  const githubUserId = Number.isFinite(parsedGithubUserId) ? parsedGithubUserId : undefined;
+  const githubLogin = fm["actor"] ?? fm["owner"] ?? "unknown";
+
   return {
     taskId: fm["taskId"]!,
     taskTag: fm["taskTag"] ?? "",
@@ -50,7 +58,7 @@ export async function parseTaskFile(filePath: string): Promise<TaskViewModel | n
     mode: (fm["mode"] as TaskViewModel["mode"]) ?? "task",
     status: (fm["status"] as TaskViewModel["status"]) ?? "active",
     sync: (fm["sync"] as TaskViewModel["sync"]) ?? (isTeam ? "synced" : "local"),
-    owner: { githubLogin: fm["actor"] ?? fm["owner"] ?? "unknown", githubUserId: fm["githubUserId"] ? Number(fm["githubUserId"]) : undefined },
+    owner: { githubLogin, githubUserId, avatarUrl: githubAvatarUrl(githubLogin, githubUserId) },
     agent: fm["agent"],
     machine: fm["machine"],
     createdAt: fm["createdAt"],
@@ -62,6 +70,10 @@ export async function parseTaskFile(filePath: string): Promise<TaskViewModel | n
     verification: extractSection(body, "Verification"),
     work: extractSection(body, "Work"),
     notes: extractSection(body, "Notes"),
+    sourcePath: filePath,
+    frontmatter: fm,
+    bodyMarkdown: body.trim(),
+    rawMarkdown: raw,
     sourceKind: isTeam ? "team-md" : "local-md",
     readOnly: isTeam,
   };
@@ -83,7 +95,7 @@ export async function scanTasks(repoPath: string): Promise<TaskViewModel[]> {
       merged.set(t.taskId, t);
     }
   }
-  return [...merged.values()];
+  return [...merged.values()].sort(compareTasksByCreatedAtDesc);
 }
 
 export function watchTasks(repoPath: string, onChange: (tasks: TaskViewModel[]) => void): () => void {
@@ -157,4 +169,24 @@ function extractFilesList(body: string): string[] | undefined {
   if (!section) return undefined;
   const files = section.split("\n").map((l) => l.replace(/^-\s*/, "").trim()).filter(Boolean);
   return files.length > 0 ? files : undefined;
+}
+
+function githubAvatarUrl(githubLogin: string, githubUserId?: number): string | undefined {
+  if (Number.isFinite(githubUserId)) {
+    return `https://avatars.githubusercontent.com/u/${githubUserId}?v=4`;
+  }
+  if (githubLogin && githubLogin !== "unknown") {
+    return `https://github.com/${encodeURIComponent(githubLogin)}.png?size=80`;
+  }
+  return undefined;
+}
+
+function compareTasksByCreatedAtDesc(a: TaskViewModel, b: TaskViewModel): number {
+  return timestamp(b.createdAt) - timestamp(a.createdAt);
+}
+
+function timestamp(value?: string): number {
+  if (!value) return 0;
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
 }

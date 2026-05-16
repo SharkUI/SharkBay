@@ -27,6 +27,8 @@ import type {
   TeamworkInstallInput,
   TeamworkStatus,
   TeamworkTasksChangedEvent,
+  TeamworkUninstallInput,
+  TeamworkUninstallResult,
   GitHubIdentity,
   TerminalCloseInput,
   TerminalCreateInput,
@@ -124,8 +126,9 @@ const sharkBayApi = {
   teamwork: {
     getTasks: (input: TeamworkGetTasksInput) => invoke<TaskViewModel[]>(channels.teamworkGetTasks, input),
     getStatus: (input: { repoPath: string }) => invoke<TeamworkStatus>(channels.teamworkGetStatus, input),
-    install: (input: TeamworkInstallInput) => invoke<void>(channels.teamworkInstall, input),
+    install: (input: TeamworkInstallInput) => invoke<TeamworkStatus>(channels.teamworkInstall, input),
     enable: (input: { repoPath: string }) => invoke<TeamworkStatus>(channels.teamworkEnable, input),
+    uninstall: (input: TeamworkUninstallInput) => invoke<TeamworkUninstallResult>(channels.teamworkUninstall, input),
     resolveIdentity: () => invoke<GitHubIdentity>(channels.teamworkResolveIdentity),
     syncNow: (input: { repoPath: string }) => invoke<void>(channels.teamworkSyncNow, input),
     onTasksChanged: (callback: (event: TeamworkTasksChangedEvent) => void) => {

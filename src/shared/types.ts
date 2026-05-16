@@ -263,12 +263,17 @@ export type TaskViewModel = {
   verification?: string;
   work?: string;
   notes?: string;
+  sourcePath: string;
+  frontmatter: Record<string, string>;
+  bodyMarkdown: string;
+  rawMarkdown: string;
   sourceKind: "local-md" | "team-md";
   readOnly: boolean;
 };
 
 export type TeamworkStatus = {
   installed: boolean;
+  harnessInstalled: boolean;
   syncEnabled: boolean;
   lastSyncAt: string | null;
   pendingCount: number;
@@ -287,10 +292,22 @@ export type GitHubIdentity = {
 
 export type TeamworkInstallInput = {
   repoPath: string;
-  githubLogin: string;
-  githubUserId: number;
-  machineId: string;
-  agent: string;
+  githubLogin?: string;
+  githubUserId?: number;
+  machineId?: string;
+  agent?: string;
+};
+
+export type TeamworkUninstallInput = {
+  repoPath: string;
+  cleanTeamContext?: boolean;
+};
+
+export type TeamworkUninstallResult = {
+  removedPaths: string[];
+  skippedPaths: string[];
+  excludeRemovedLines: string[];
+  contextBranchDeleted: boolean;
 };
 
 export type TeamworkGetTasksInput = {
