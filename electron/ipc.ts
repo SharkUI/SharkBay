@@ -23,6 +23,13 @@ import type {
   BrowserSession,
   BrowserUpdateEvent,
   CreatePortForwardInput,
+  InstallToolInput,
+  InstallToolResult,
+  InstallRecipe,
+  ListInstallRecipesInput,
+  MachineProfile,
+  ProfileReadOptions,
+  ProjectProfile,
   ListPortForwardsInput,
   PortForwardEvent,
   ProjectConfigInput,
@@ -51,12 +58,12 @@ import type {
   TerminalUpdateEvent
 } from "../src/shared/types.js";
 import { ipcChannels as channels } from "../src/shared/ipc-channels.js";
-import { AgentSessionWatcher, listAgentClisForUri } from "../src/main/agent-clis.js";
+import { AgentSessionWatcher } from "../src/main/agent-clis.js";
 import { BrowserManager } from "../src/main/browser-tabs.js";
-import { SharkBayCore } from "../src/main/core/sharkbay-core.js";
 import { PortForwardManager } from "../src/main/port-forwards.js";
 import { testRemoteMachineConnection } from "../src/main/remote-machines.js";
 import { createDefaultSecretStore } from "../src/main/secrets.js";
+import { spawnCoreClient, type CoreClient } from "./core-client.js";
 
 export type IpcRuntime = {
   userDataPath: string;
@@ -67,14 +74,19 @@ export type IpcCallbacks = {
   onAppearanceThemeChanged?: (theme: AppearanceTheme) => void;
 };
 
-const core = new SharkBayCore();
+const secretStore = createDefaultSecretStore();
+let core: CoreClient | null = null;
 const agentSessionWatcher = new AgentSessionWatcher();
 const browserManager = new BrowserManager();
-const secretStore = createDefaultSecretStore();
 const portForwardManager = new PortForwardManager({ secretStore });
 
+function requireCore(): CoreClient {
+  if (!core) throw new Error("Core client is not initialized; registerIpcHandlers must complete first");
+  return core;
+}
+
 export function closeAllTerminalSessions(): void {
-  core.closeAllTerminalSessions();
+  void core?.dispose();
   browserManager.closeAll();
   void portForwardManager.closeAll();
 }
@@ -87,13 +99,17 @@ function handle<Payload, Result>(
   ipcMain.handle(channel, (_event, payload: Payload) => callback(payload));
 }
 
-export function registerIpcHandlers(
+export async function registerIpcHandlers(
   runtime: IpcRuntime,
   callbacks: IpcCallbacks = {}
-): void {
-  core.removeAllListeners("terminalData");
-  core.removeAllListeners("terminalUpdate");
-  core.removeAllListeners("terminalExit");
+): Promise<void> {
+  if (!core) {
+    core = await spawnCoreClient();
+  } else {
+    core.removeAllListeners("terminalData");
+    core.removeAllListeners("terminalUpdate");
+    core.removeAllListeners("terminalExit");
+  }
   agentSessionWatcher.removeAllListeners("status");
   browserManager.removeAllListeners("update");
   portForwardManager.removeAllListeners("update");
@@ -180,22 +196,34 @@ export function registerIpcHandlers(
     })
   );
   handle<ProjectScanInput | undefined, ScanProjectsResult>(channels.scanProjects, (payload) =>
-    core.scanProjects(runtime, payload)
+    requireCore().call("scanProjects", [runtime, payload])
   );
   handle<{ projectUri: string }, ProjectDetail>(channels.getProjectDetail, (payload) =>
-    core.getProjectDetail(runtime, payload)
+    requireCore().call("getProjectDetail", [runtime, payload])
   );
   handle<ProjectFilesInput, ProjectFilesResult>(channels.listProjectFiles, (payload) =>
-    core.listProjectFiles(runtime, payload)
+    requireCore().call("listProjectFiles", [runtime, payload])
   );
   handle<ReadFileInput, ReadFileResult>(channels.readProjectFile, (payload) =>
-    core.readProjectFile(runtime, payload)
+    requireCore().call("readProjectFile", [runtime, payload])
   );
   handle<WriteFileInput, WriteFileResult>(channels.writeProjectFile, (payload) =>
-    core.writeProjectFile(runtime, payload)
+    requireCore().call("writeProjectFile", [runtime, payload])
   );
   handle<{ cwdUri?: string } | undefined, AgentCli[]>(channels.listAgentClis, (payload) =>
-    listAgentClisForUri(runtime, payload?.cwdUri, { secretStore })
+    requireCore().call("listAgentClis", [runtime, payload])
+  );
+  handle<ListInstallRecipesInput, InstallRecipe[]>(channels.listInstallRecipes, (payload) =>
+    requireCore().call("listInstallRecipes", [runtime, payload])
+  );
+  handle<InstallToolInput, InstallToolResult>(channels.installTool, (payload) =>
+    requireCore().call("installTool", [runtime, payload])
+  );
+  handle<{ targetId: string; options?: ProfileReadOptions }, MachineProfile>(channels.readMachineProfile, (payload) =>
+    requireCore().call("readMachineProfile", [runtime, payload.targetId, payload.options])
+  );
+  handle<{ projectUri: string; options?: ProfileReadOptions }, ProjectProfile>(channels.readProjectProfile, (payload) =>
+    requireCore().call("readProjectProfile", [runtime, payload.projectUri, payload.options])
   );
   ipcMain.removeHandler(channels.createBrowser);
   ipcMain.handle(channels.createBrowser, (event, payload: BrowserCreateInput) => {
@@ -224,15 +252,15 @@ export function registerIpcHandlers(
     Promise.resolve(browserManager.reload(payload))
   );
   handle<TerminalCreateInput, TerminalSession>(channels.createTerminal, (payload) =>
-    core.createTerminal(runtime, payload)
+    requireCore().call("createTerminal", [runtime, payload])
   );
   handle<TerminalInput, TerminalSession>(channels.terminalInput, (payload) =>
-    Promise.resolve(core.inputTerminal(payload))
+    requireCore().call("inputTerminal", [payload])
   );
   handle<TerminalResizeInput, TerminalSession>(channels.resizeTerminal, (payload) =>
-    Promise.resolve(core.resizeTerminal(payload))
+    requireCore().call("resizeTerminal", [payload])
   );
   handle<TerminalCloseInput, TerminalSession>(channels.closeTerminal, (payload) =>
-    Promise.resolve(core.closeTerminal(payload))
+    requireCore().call("closeTerminal", [payload])
   );
 }

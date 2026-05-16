@@ -52,6 +52,151 @@ export type RemoteMachineTestResult =
   | { ok: true; message: string }
   | { ok: false; message: string };
 
+export type InstallToolInput = {
+  targetId: string;
+  recipeId: string;
+};
+
+export type ListInstallRecipesInput = {
+  targetId: string;
+  toolId?: string;
+};
+
+export type InstallToolResult = {
+  ok: boolean;
+  recipeId: string;
+  targetId: string;
+  logs: string[];
+  verified: boolean;
+  error?: string;
+};
+
+export type InstallRecipe = {
+  id: string;
+  toolId: string;
+  label: string;
+  targetKinds: Array<"local" | "ssh" | "container" | "wsl">;
+  platforms: Array<"darwin" | "linux" | "windows" | "unknown">;
+  preconditions: Array<{ tool: string; available: boolean }>;
+  steps: Array<
+    | { kind: "command"; command: string; requiresSudo?: boolean; description: string }
+    | { kind: "openUrl"; url: string; description: string }
+    | { kind: "manual"; markdown: string }
+  >;
+  verification: { command: string; args?: string[] };
+};
+
+export type ExecutionTargetKind = "local" | "ssh" | "container" | "wsl";
+
+export type ProfileReadOptions = {
+  refresh?: boolean;
+  depth?: "quick" | "standard" | "deep";
+};
+
+export type ProfileWarning = {
+  code: string;
+  message: string;
+  source?: string;
+};
+
+export type ToolProfile = {
+  id: string;
+  command: string;
+  available: boolean;
+  path: string | null;
+  version: string | null;
+  sourcePluginId?: string;
+};
+
+export type MachineProfile = {
+  targetId: string;
+  targetKind: ExecutionTargetKind;
+  detectedAt: string;
+  expiresAt?: string;
+  hostname: string | null;
+  os: {
+    platform: "darwin" | "linux" | "windows" | "unknown";
+    name: string | null;
+    version: string | null;
+    arch: string | null;
+    kernel: string | null;
+  };
+  shell: { path: string | null; name: string | null };
+  tools: ToolProfile[];
+  languages: ToolProfile[];
+  packageManagers: ToolProfile[];
+  agents: ToolProfile[];
+  warnings: ProfileWarning[];
+};
+
+export type DetectedProfileItem = {
+  id: string;
+  confidence: number;
+  evidence: string[];
+  sourcePluginId?: string;
+};
+
+export type DetectedPackageManager = DetectedProfileItem & {
+  manifest?: string;
+  lockfile?: string;
+};
+
+export type ProjectServiceProfile = {
+  id: string;
+  label: string;
+  command: string;
+  cwdUri: string;
+  script?: string;
+  likelyPorts: number[];
+  sourcePluginId?: string;
+};
+
+export type ProjectWorkspaceProfile = {
+  name: string;
+  path: string;
+  packageManager?: string;
+};
+
+export type ProjectProfile = {
+  projectUri: string;
+  targetId: string;
+  targetKind: ExecutionTargetKind;
+  detectedAt: string;
+  expiresAt?: string;
+  name: string;
+  displayPath: string;
+  vcs: {
+    type: "git" | "none" | "unknown";
+    root: string | null;
+    branch: string | null;
+    remoteOrigin: string | null;
+    dirty: boolean | null;
+  };
+  languages: DetectedProfileItem[];
+  frameworks: DetectedProfileItem[];
+  packageManagers: DetectedPackageManager[];
+  commands: {
+    install?: string;
+    dev?: string;
+    build?: string;
+    test?: string;
+    lint?: string;
+    format?: string;
+  };
+  services: ProjectServiceProfile[];
+  env: {
+    files: string[];
+    exampleFiles: string[];
+    requiredKeys?: string[];
+  };
+  structure: {
+    monorepo: boolean;
+    workspaces: ProjectWorkspaceProfile[];
+    importantFiles: string[];
+  };
+  warnings: ProfileWarning[];
+};
+
 export type ProjectIconSource = {
   kind: "local" | "favicon";
   url: string;
@@ -316,7 +461,13 @@ export type SharkBayBridge = {
   };
   agents?: {
     listClis?: (input?: { cwdUri?: string }) => Promise<AgentCli[]>;
+    listInstallRecipes?: (input: ListInstallRecipesInput) => Promise<InstallRecipe[]>;
+    installTool?: (input: InstallToolInput) => Promise<InstallToolResult>;
     onStatus?: (callback: (event: AgentProjectStatusEvent) => void) => () => void;
+  };
+  profiles?: {
+    readMachine?: (input: { targetId: string; options?: ProfileReadOptions }) => Promise<MachineProfile>;
+    readProject?: (input: { projectUri: string; options?: ProfileReadOptions }) => Promise<ProjectProfile>;
   };
   portForwards?: {
     list?: (input?: { machineId?: string }) => Promise<RemotePortForward[]>;

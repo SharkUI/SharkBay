@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { ProjectDevService } from "../shared/types.js";
-import { toLocalProjectUri } from "./core/project-uri.js";
+import { toLocalProjectUri } from "../core/project-uri.js";
 
 type PackageJson = {
   packageManager?: unknown;

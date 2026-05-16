@@ -16,7 +16,12 @@
   "include": [
     "electron/**/*.ts",
     "electron/**/*.mts",
+    "src/core/**/*.ts",
     "src/main/**/*.ts",
+    "src/providers/**/*.ts",
+    "src/plugins/**/*.ts",
+    "src/profiles/**/*.ts",
+    "src/storage/**/*.ts",
     "src/renderer/workflow.ts",
     "src/shared/**/*.ts",
     "tests/**/*.ts",

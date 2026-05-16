@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { getConfiguredRoots } from "./config.js";
-import { parseProjectUri } from "./core/project-uri.js";
+import { parseProjectUri } from "../core/project-uri.js";
 import { quoteForRemoteShell, runSshCommand, sshArgsForRemoteMachine, type SshCommandRunner } from "./remote-machines.js";
 import { createDefaultSecretStore, type SecretStore } from "./secrets.js";
 import type { AgentCli, AgentProjectStatusEvent, IpcRuntimeLike, RemoteMachine } from "../shared/types.js";

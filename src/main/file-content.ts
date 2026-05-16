@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { getConfiguredRoots } from "./config.js";
-import { localPathFromProjectUri } from "./core/project-uri.js";
+import { localPathFromProjectUri } from "../core/project-uri.js";
 import { resolveReadableRepoFile, resolveRepoPath } from "./path-safety.js";
 import type {
   IpcRuntimeLike,

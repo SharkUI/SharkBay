@@ -6,7 +6,7 @@ import { discoverProjectDevServices } from "./dev-services.js";
 import { readGitMetadata } from "./git.js";
 import { resolveConfiguredRoots } from "./path-safety.js";
 import { resolveProjectIconSources } from "./project-icons.js";
-import { parseProjectUri, toLocalProjectUri } from "./core/project-uri.js";
+import { parseProjectUri, toLocalProjectUri } from "../core/project-uri.js";
 
 const ignoredDirectories = new Set([
   ".git",

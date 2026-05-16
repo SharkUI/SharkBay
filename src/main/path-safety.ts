@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { RootScanResult } from "../shared/types.js";
-import { localPathFromProjectUri, toLocalProjectUri } from "./core/project-uri.js";
+import { localPathFromProjectUri, toLocalProjectUri } from "../core/project-uri.js";
 
 export type SafeRepoPath = {
   repoPath: string;

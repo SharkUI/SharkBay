@@ -1117,7 +1117,296 @@ Settings 增加 Extensions / Plugins 页面：
 
 Project detail 和 machine detail 可以显示由插件贡献的 cards，但第一阶段仅支持 Core 定义的安全 card 类型。
 
-## 13. Migration Plan
+## 13. Performance and Process Architecture
+
+### 13.1 当前状态
+
+当前 SharkBay 基本还是 Electron main process 中心架构：
+
+```text
+Renderer React
+  <-> Electron IPC
+    <-> Electron main
+      -> config
+      -> scanner
+      -> Git commands
+      -> SSH commands
+      -> terminal/node-pty
+      -> browser views
+      -> agent session watcher
+      -> port forwards
+```
+
+这个结构适合 MVP，因为实现快、调试简单、能充分利用 Node.js 和 Electron 原生能力。但它不适合长期承载：
+
+- 多 workspace 后台扫描。
+- 多 remote server profile probe。
+- 多插件 detector 并发运行。
+- 长时间 agent session supervision。
+- 大量 terminal output / logs。
+- Marketplace 插件执行。
+- Remote helper connection pool。
+
+因此，Electron 应长期作为 desktop shell 和 IPC gateway，而不是业务核心和插件运行时。
+
+### 13.2 目标进程模型
+
+中长期目标：
+
+```text
+Renderer
+  - React UI
+  - xterm rendering
+  - profile cards
+  - marketplace UI
+
+Electron Main
+  - app lifecycle
+  - windows / menus / dock
+  - native dialogs
+  - secure IPC gateway
+  - credential gateway
+  - BrowserView/WebContentsView
+
+SharkBay Core Service
+  - workspace/project/machine state
+  - provider registry
+  - profile orchestration
+  - terminal/session supervisor
+  - agent session supervisor
+  - event bus
+  - SQLite/cache/log store
+
+Plugin Host
+  - plugin discovery
+  - manifest validation
+  - bundled plugin runtime
+  - marketplace plugin runtime
+  - permission checks
+
+Worker Pool
+  - profile detector jobs
+  - project scanning
+  - log parsing
+  - CPU-heavy analysis
+
+Remote Helper (optional)
+  - remote file tree streaming
+  - remote git/status cache
+  - remote project profile probe
+  - remote session assist
+```
+
+第一阶段 Core Service 可以仍然是 Electron main 内的 TypeScript class。重要的是 API 边界先按独立服务设计，后续才能迁移到 child process / worker thread / Rust or Go helper。
+
+### 13.3 Electron main 的长期边界
+
+Electron main 应保留：
+
+- 创建窗口。
+- 管理菜单、dock、系统事件。
+- 连接 renderer IPC。
+- 调用系统 keychain / credential provider。
+- 打开 native file dialog。
+- 管理 BrowserView/WebContentsView。
+- 启动和监督 Core Service / Plugin Host。
+
+Electron main 不应长期负责：
+
+- 递归扫描项目。
+- 执行插件 detector。
+- 解析大量日志。
+- 维护复杂 remote connection pool。
+- 跑 marketplace 第三方插件代码。
+- 保存所有业务状态。
+
+### 13.4 Core service
+
+Core service 是 SharkBay 的业务大脑。它可以先是 Node.js/TypeScript child process：
+
+```text
+electron-main <-> core-service over IPC/RPC
+```
+
+职责：
+
+- Provider registry。
+- Machine/project profile orchestration。
+- Workspace/project/task/session 数据模型。
+- Terminal/session lifecycle。
+- Agent session lifecycle。
+- Profile cache。
+- SQLite store。
+- Event bus。
+- Job scheduler。
+
+Core service 必须支持 backpressure：
+
+- 限制每个 target 的并发 job。
+- 限制 remote SSH 并发。
+- 限制 detector 超时时间。
+- 限制 terminal ring buffer。
+- 限制 IPC event 频率。
+
+### 13.5 Plugin host and workers
+
+插件运行不应和 Electron main 共享故障域。目标：
+
+```text
+core-service
+  -> plugin-host
+    -> plugin worker
+```
+
+执行策略：
+
+- Bundled plugins 可以先 in-process。
+- 第三方插件默认 out-of-process。
+- Detector jobs 进入 worker pool。
+- 每个 job 有 timeout、memory/output limit。
+- 插件 crash 不影响 app。
+- 插件输出只能是结构化 patch / contribution result。
+
+MVP 如果暂时不能做完整 sandbox，也要让 API 形状保持可迁移：
+
+```ts
+pluginHost.runDetector(pluginId, detectorId, contextRef)
+```
+
+而不是把 detector 函数直接散落调用在业务代码里。
+
+### 13.6 Job scheduler
+
+Profile 和插件体系需要统一 job scheduler。
+
+```ts
+type SharkBayJob = {
+  id: string;
+  kind: "machine-profile" | "project-profile" | "scan" | "agent-detect" | "install" | "log-parse";
+  targetId: string;
+  projectUri?: string;
+  priority: "interactive" | "background" | "idle";
+  timeoutMs: number;
+};
+```
+
+调度原则：
+
+- 用户当前正在看的 project 优先。
+- Remote target 默认低并发。
+- Idle detector 不抢占 terminal / agent。
+- 同一 project 的 profile job 合并去重。
+- 安装 job 必须用户确认，不自动重试。
+- 所有 job 有可观测状态和日志。
+
+### 13.7 Data and IPC performance
+
+Renderer 不应接收无限流数据。
+
+建议：
+
+- Terminal output 使用 ring buffer + append event。
+- 大日志按 chunk 懒加载。
+- Profile update 发送 diff 或完整小对象，避免巨型对象频繁广播。
+- File tree 使用分页 / lazy directory loading。
+- Scanner 返回 skeleton，然后增量补 metadata。
+- SQLite 作为核心状态索引，JSON 只保留启动配置。
+
+IPC event 应有节流：
+
+```text
+terminal output: streaming but bounded
+profile updates: coalesced
+scan updates: batched
+agent status: latest-state wins
+```
+
+### 13.8 Remote performance
+
+SSH command-per-operation 是 MVP 可接受方案，但不是长期性能模型。
+
+VS Code Remote Development 的做法值得参考：Remote extensions 会在远端 OS 上安装 VS Code Server，让命令和扩展能直接和远端 workspace / filesystem 交互；这个 server 由 VS Code client 管理生命周期，不接入用户或系统级启动脚本，也不是给其他 client 复用的通用 daemon。Remote-SSH 还会使用 SSH tunnel 和随机本地端口或 Unix socket 通信，并提供 kill / uninstall server 的清理命令。
+
+SharkBay 应采用相同原则，但分阶段实现：
+
+- 第一次连接不强制安装 helper。
+- 基础能力先通过 SSH command mode 工作。
+- 当用户启用高级 remote acceleration，或某个 remote target 达到性能阈值时，再提示安装 SharkBay Remote Helper。
+- Helper 安装在用户目录，例如 `~/.sharkbay/remote-helper/<version>`。
+- Helper 由 SharkBay Core 启动、停止、升级和卸载，不写入 systemd、launchd、shell startup，除非用户显式选择。
+- Helper 以登录用户身份运行，不获取额外权限。
+- Helper 和本地 Core 通过 SSH tunnel 通信，默认只监听 localhost 或 Unix socket。
+- Helper 必须有 Kill / Uninstall 操作。
+
+分阶段：
+
+1. SSH command mode：
+   - 简单可靠。
+   - 每次操作启动进程，延迟较高。
+   - 适合 git metadata、少量文件读取、quick profile。
+2. SSH connection reuse：
+   - 使用 ControlMaster / multiplexing 或内部 connection pool。
+   - 降低重复连接成本。
+3. Remote helper：
+   - 可选安装 / 按需启动。
+   - 通过 SSH tunnel 通信。
+   - 负责远端扫描、缓存、文件树、profile probe。
+   - 承载远端插件 detector 中允许在 remote 运行的部分。
+
+Remote helper 不应成为 MVP 硬依赖。用户不安装 helper 时，基础 remote project 仍可工作。
+
+### 13.9 Performance budgets
+
+建议建立明确预算：
+
+```text
+App cold start to first window: < 1.5s target
+Project list skeleton render: < 300ms after config load
+Local quick project profile: < 500ms per active project
+Remote quick project profile: < 2s best effort
+Machine profile probe: < 5s best effort
+Plugin detector timeout: 1-5s by detector type
+Terminal output retained in memory: bounded ring buffer
+Remote concurrent jobs per target: default 2-4
+Background detector CPU: idle / low priority
+```
+
+这些预算不一定第一天全部达成，但要成为设计约束。
+
+### 13.10 Observability
+
+性能问题需要可观测性：
+
+- Job timeline。
+- Detector duration。
+- Plugin crash/error logs。
+- SSH command latency。
+- Profile cache hit/miss。
+- IPC event rate。
+- Terminal buffer size。
+- Renderer render timing。
+
+Settings 可以增加 Diagnostics 页面，导出最近日志，方便定位 remote / plugin / performance 问题。
+
+## 14. Migration Plan
+
+### Implementation tracker
+
+| Area | Status | Notes |
+| --- | --- | --- |
+| Shared target/profile/plugin types | Done | Added final architecture models in `src/shared/types.ts`. |
+| Core service boundary | Done (MVP) | Electron IPC now talks to `SharkBayCoreService` through a `CoreClient` proxy that forks the service into an Electron `utilityProcess` (`electron/core-host.ts`). Legacy `src/main/core/SharkBayCore` removed. |
+| Provider registry | Done | URI- and target-id-based dispatch in `src/core/provider-registry.ts`; no SSH special cases in callers. |
+| Local provider final shape | In progress | Runtime IPC now uses `LocalProvider`; profile detector migration remains. |
+| SSH provider final shape | In progress | Runtime IPC now uses `SshProvider`; helper/connection pooling remains. |
+| Plugin manifest and bundled plugin loader | In progress | Added manifest parser; bundled plugin loader remains. |
+| Profile orchestrator | In progress | Orchestrator with quick/standard/deep depth filtering; bundled detectors for core, Node, Python, Go, Rust, Java, and Agent CLIs. Detector `runOn` declares supported depths. |
+| Job scheduler | In progress | Added scheduler with per-target concurrency, priority, timeout, dedupe, and profile detector integration. |
+| Profile cache/storage | In progress | File cache keyed by `<target/uri>|<depth>` with 24h machine / 15min project TTLs; project cache invalidates on manifest-mtime / git-HEAD change for local provider. SQLite migration remains. |
+| UI profile consumption | In progress | Agent CLI buttons from MachineProfile; Stack tab in project detail and Machine Profile card in remote machine detail consume MachineProfile/ProjectProfile via new `profiles:*` IPC. Workspace summary view remains. |
+| Agent install pipeline | Done (MVP) | Recipe listing, Core install/verify/refresh, IPC bridge, and renderer Install Agent dialog with command preview, target label, logs, and post-install refresh. |
+| Core service process isolation | Done (MVP) | `SharkBayCoreService` runs in an Electron `utilityProcess`. `CoreClient` (`electron/core-client.ts`) provides request/response + event forwarding via `parentPort` messages. Browser/AgentSessionWatcher/PortForwardManager stay in Electron main for now. Worker-pool split inside the core process remains. |
+| Remote helper strategy | Documented | Helper is optional, user-scoped, SharkBay-managed, and not a system daemon by default. |
 
 ### Phase 1: Plugin manifest and bundled plugins
 
@@ -1166,13 +1455,21 @@ Project detail 和 machine detail 可以显示由插件贡献的 cards，但第�
 - 增加 monorepo 检测。
 - 增加 framework detector。
 
-### Phase 7: Workspace integration
+### Phase 7: Performance isolation
+
+- 把 profile orchestration 迁到 Core Service 边界后面。
+- 增加 job scheduler。
+- Detector jobs 迁到 worker pool。
+- 第三方插件迁到 Plugin Host process。
+- Electron main 只保留 app lifecycle 和 IPC gateway。
+
+### Phase 8: Workspace integration
 
 - Workspace 绑定 execution target。
 - Workspace profile 汇总 machine profile + project profiles。
 - Agent launch scope 使用 workspace / project profile 注入上下文。
 
-## 14. Open Questions
+## 15. Open Questions
 
 - Profile 是否进入 `AppConfig`，还是只存 cache / SQLite？
   - 建议不进入 `AppConfig`，避免配置文件包含大量易变数据。
@@ -1192,13 +1489,19 @@ Project detail 和 machine detail 可以显示由插件贡献的 cards，但第�
   - 默认不允许静默 sudo。需要 sudo 的 recipe 必须显著提示，并要求用户确认。
 - 插件 UI 是否允许 React component？
   - MVP 不允许。先使用 Core 提供的 profile card schema。
+- Core Service 是 Node child process、worker thread，还是 Rust/Go daemon？
+  - 建议先 Node child process，边界稳定后再迁移性能敏感模块。
+- Remote helper 何时引入？
+  - 当 SSH command mode 在 file tree/profile/search 上成为瓶颈时再引入。
 
-## 15. 设计原则
+## 16. 设计原则
 
 - Provider 负责“怎么执行”。
 - Machine Profile 负责“机器有什么”。
 - Project Profile 负责“项目怎么工作”。
 - Plugin 负责贡献语言、框架、agent、installer 能力。
+- Electron 负责桌面壳和安全 IPC，不长期承担业务核心。
+- Core Service 负责业务状态、调度和 provider orchestration。
 - Detector 由插件贡献，但不知道 local / ssh。
 - UI 不判断 local / remote，只消费能力和 profile。
 - Profile 是缓存，不是用户手写配置。

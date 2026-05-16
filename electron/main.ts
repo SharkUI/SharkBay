@@ -132,7 +132,7 @@ app.whenReady().then(async () => {
   const config = await loadAppConfig(getRuntimeConfigPath(runtime));
   appearanceTheme = config.appearanceTheme;
 
-  registerIpcHandlers(runtime, {
+  await registerIpcHandlers(runtime, {
     onAppearanceThemeChanged: setAppearanceTheme,
   });
 

@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { isEditableProjectFile, listProjectFiles } from "../src/main/project-files.js";
-import { toLocalProjectUri } from "../src/main/core/project-uri.js";
+import { toLocalProjectUri } from "../src/core/project-uri.js";
 import { makeTempRoot, writeText } from "./helpers.js";
 
 describe("project file listing", () => {

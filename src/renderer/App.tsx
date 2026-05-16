@@ -14,9 +14,13 @@ import type {
   BrowserBounds,
   BrowserSession,
   BrowserUpdateEvent,
+  InstallRecipe,
+  InstallToolResult,
+  MachineProfile,
   ProjectCandidate,
   ProjectDetail,
   ProjectFileTreeItem,
+  ProjectProfile,
   ProjectSummary,
   RemoteMachine,
   RemoteMachineInput,
@@ -43,7 +47,7 @@ import {
 import type { WorkflowProjectTerminalActivityState } from "./workflow";
 
 type View = "dashboard" | "settings";
-type DetailTab = "git" | "files" | "forwards";
+type DetailTab = "git" | "stack" | "files" | "forwards";
 type SettingsSection = "local-machine" | "appearance" | `remote-machine:${string}`;
 
 const remoteConnectionMethods: Array<{
@@ -148,6 +152,7 @@ const detailColumnStorageKey = "sharkbay.detailColumnWidth.v2";
 const projectColumnStorageKey = "sharkbay.projectColumnWidth.v2";
 const detailTabs: Array<{ id: DetailTab; label: string; remoteOnly?: boolean }> = [
   { id: "git", label: "Git" },
+  { id: "stack", label: "Stack" },
   { id: "files", label: "Files" },
   { id: "forwards", label: "Port forwards", remoteOnly: true },
 ];
@@ -707,6 +712,7 @@ function DashboardView({
   const [runningServiceProjectIds, setRunningServiceProjectIds] = useState<Set<string>>(() => new Set());
   const [terminalActivityByProjectId, setTerminalActivityByProjectId] = useState<Record<string, ProjectTerminalActivityState>>({});
   const [agentClis, setAgentClis] = useState<AgentCli[]>([]);
+  const [agentListVersion, setAgentListVersion] = useState(0);
   const [agentStatusByProjectPath, setAgentStatusByProjectPath] = useState<AgentStatusByProjectPath>({});
   const [activeTerminalTabKind, setActiveTerminalTabKind] = useState<ActiveTerminalTabKind>(null);
   const [projectColumnWidth, setProjectColumnWidth] = useState(() =>
@@ -788,7 +794,7 @@ function DashboardView({
       .then((clis) => { if (!cancelled) setAgentClis(clis); })
       .catch((error) => { if (!cancelled) setToast({ tone: "error", message: asMessage(error) }); });
     return () => { cancelled = true; };
-  }, [bridgeAvailable, selectedCandidate?.uri, setToast]);
+  }, [bridgeAvailable, selectedCandidate?.uri, setToast, agentListVersion]);
 
   useEffect(() => {
     if (!bridgeAvailable) return;
@@ -856,6 +862,7 @@ function DashboardView({
           isVisible={isVisible}
           setToast={setToast}
           onActiveTabKindChange={setActiveTerminalTabKind}
+          onAgentListRefreshRequested={() => setAgentListVersion((current) => current + 1)}
           onRunningServiceProjectIdsChange={(nextIds) =>
             setRunningServiceProjectIds((currentIds) => sameStringSet(currentIds, nextIds) ? currentIds : nextIds)
           }
@@ -911,11 +918,13 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   isVisible: boolean;
   setToast: (toast: Toast) => void;
   onActiveTabKindChange: (kind: ActiveTerminalTabKind) => void;
+  onAgentListRefreshRequested: () => void;
   onRunningServiceProjectIdsChange: (projectIds: Set<string>) => void;
   onTerminalActivityProjectStatesChange: (states: Record<string, ProjectTerminalActivityState>) => void;
-}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, isVisible, setToast, onActiveTabKindChange, onRunningServiceProjectIdsChange, onTerminalActivityProjectStatesChange }, ref) {
+}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, isVisible, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onRunningServiceProjectIdsChange, onTerminalActivityProjectStatesChange }, ref) {
   const [spaces, setSpaces] = useState<Record<string, TerminalSpace>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [installAgentDialogOpen, setInstallAgentDialogOpen] = useState(false);
   const spacesRef = useRef<Record<string, TerminalSpace>>({});
   const activeProjectIdRef = useRef<string | null>(null);
   const creatingProjects = useRef(new Set<string>());
@@ -1331,6 +1340,9 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                   <AgentCliIcon agent={agent} />
                 </button>
               ))}
+              <button aria-label="Install agent" className="icon-button terminal-tab-add terminal-agent-install-button" disabled={!candidate?.providerId} title="Install agent CLI" type="button" onClick={() => setInstallAgentDialogOpen(true)}>
+                <DownloadIcon />
+              </button>
             </div>
             <div className="xterm-surface-stack">
               {space.tabs.map((tab) => {
@@ -1366,11 +1378,24 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                   <AgentCliIcon agent={agent} />
                 </button>
               ))}
+              <button aria-label="Install agent" className="icon-button terminal-tab-add terminal-agent-install-button" disabled={!candidate?.providerId} title="Install agent CLI" type="button" onClick={() => setInstallAgentDialogOpen(true)}>
+                <DownloadIcon />
+              </button>
             </div>
             <div className="xterm-surface-stack"><div className="xterm-empty-state"><EmptyState title="No terminal open" body={candidate ? "Open a tab for the selected project." : "Select a project to start a shell."} /></div></div>
           </div>
         ) : null}
       </div>
+      {installAgentDialogOpen && candidate?.providerId ? (
+        <InstallAgentDialog
+          targetId={candidate.providerId}
+          targetLabel={candidate.providerKind === "ssh" ? candidate.displayPath : "Local Machine"}
+          installedAgentIds={agentClis.map((agent) => agent.id)}
+          onClose={() => setInstallAgentDialogOpen(false)}
+          onInstalled={onAgentListRefreshRequested}
+          setToast={setToast}
+        />
+      ) : null}
     </div>
   );
 });
@@ -1746,6 +1771,9 @@ function ProjectDetailPane({ detail, candidate, setToast, onRefresh, onOpenFileI
       <div aria-labelledby="project-detail-tab-git" className="detail-tab-panel" hidden={activeDetailTab !== "git"} id="project-detail-tabpanel-git" role="tabpanel">
         <GitDetailTab detail={detail} candidate={candidate} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} />
       </div>
+      <div aria-labelledby="project-detail-tab-stack" className="detail-tab-panel" hidden={activeDetailTab !== "stack"} id="project-detail-tabpanel-stack" role="tabpanel">
+        <StackDetailTab active={activeDetailTab === "stack"} candidate={candidate} setToast={setToast} />
+      </div>
       <div aria-labelledby="project-detail-tab-files" className="detail-tab-panel" hidden={activeDetailTab !== "files"} id="project-detail-tabpanel-files" role="tabpanel">
         <FilesDetailTab active={activeDetailTab === "files"} candidate={candidate} detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} />
       </div>
@@ -1797,6 +1825,103 @@ function ProjectFactsCard({ detail, candidate }: { detail: ProjectDetail | null;
       </div>
     </section>
   );
+}
+
+function StackDetailTab({ active, candidate, setToast }: { active: boolean; candidate: ProjectCandidate; setToast: (toast: Toast) => void }) {
+  const [profile, setProfile] = useState<ProjectProfile | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    if (!active) return;
+    let cancelled = false;
+    const readProject = getBridge().profiles?.readProject;
+    if (!readProject) { setLoadError("Project profile API is not available."); return; }
+    setBusy(true);
+    setLoadError(null);
+    readProject({ projectUri: candidate.uri, options: reloadKey > 0 ? { refresh: true } : undefined })
+      .then((next) => { if (!cancelled) setProfile(next); })
+      .catch((error) => { if (!cancelled) setLoadError(asMessage(error)); })
+      .finally(() => { if (!cancelled) setBusy(false); });
+    return () => { cancelled = true; };
+  }, [active, candidate.uri, reloadKey]);
+
+  function refresh() {
+    setReloadKey((current) => current + 1);
+    setToast({ tone: "info", message: "Refreshing project profile" });
+  }
+
+  if (loadError) return <div className="inline-connection-result is-error" role="status">{loadError}</div>;
+  if (!profile && busy) return <div className="empty-state compact-title-row" style={{ padding: "24px 16px" }}><span>Loading project profile…</span></div>;
+  if (!profile) return <EmptyState title="No project profile" body="Open the Stack tab again to detect this project." />;
+
+  const commandEntries = Object.entries(profile.commands).filter(([, value]) => value);
+  return (
+    <>
+      <section className="subpanel project-facts-card">
+        <div className="panel-title-row compact-title-row">
+          <h4>Stack</h4>
+          <button aria-label="Refresh project profile" className="icon-button" disabled={busy} type="button" onClick={refresh}><RefreshIcon /></button>
+        </div>
+        <div className="project-facts-list">
+          {profile.languages.length ? <ProfileChipFact label="Languages" items={profile.languages.map((item) => item.id)} /> : null}
+          {profile.frameworks.length ? <ProfileChipFact label="Frameworks" items={profile.frameworks.map((item) => item.id)} /> : null}
+          {profile.packageManagers.length ? <ProfileChipFact label="Package managers" items={profile.packageManagers.map((item) => item.id)} /> : null}
+          {profile.structure.monorepo ? <div className="repository-fact"><span>Structure</span><strong>Monorepo</strong></div> : null}
+        </div>
+      </section>
+      {commandEntries.length ? (
+        <section className="subpanel project-facts-card">
+          <div className="panel-title-row compact-title-row"><h4>Commands</h4></div>
+          <div className="project-facts-list">
+            {commandEntries.map(([key, value]) => (
+              <div className="repository-fact" key={key}><span>{key}</span><strong>{value}</strong></div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      {profile.services.length ? (
+        <section className="subpanel project-facts-card">
+          <div className="panel-title-row compact-title-row"><h4>Services</h4></div>
+          <div className="project-facts-list">
+            {profile.services.map((service) => (
+              <div className="repository-fact" key={service.id}><span>{service.label}</span><strong>{service.command}</strong></div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      {profile.env.files.length || profile.env.exampleFiles.length ? (
+        <section className="subpanel project-facts-card">
+          <div className="panel-title-row compact-title-row"><h4>Env files</h4></div>
+          <div className="project-facts-list">
+            {profile.env.files.map((file) => (<div className="repository-fact" key={`env-${file}`}><span>env</span><strong>{file}</strong></div>))}
+            {profile.env.exampleFiles.map((file) => (<div className="repository-fact" key={`example-${file}`}><span>example</span><strong>{file}</strong></div>))}
+          </div>
+        </section>
+      ) : null}
+      {profile.structure.importantFiles.length ? (
+        <section className="subpanel project-facts-card">
+          <div className="panel-title-row compact-title-row"><h4>Important files</h4></div>
+          <div className="project-facts-list">
+            {profile.structure.importantFiles.map((file) => (<div className="repository-fact" key={file}><span>file</span><strong>{file}</strong></div>))}
+          </div>
+        </section>
+      ) : null}
+      {profile.warnings.length ? (
+        <section className="subpanel project-facts-card">
+          <div className="panel-title-row compact-title-row"><h4>Warnings</h4></div>
+          <div className="project-facts-list">
+            {profile.warnings.map((warning, index) => (<div className="repository-fact is-warn" key={`${warning.code}-${index}`}><span>{warning.code}</span><strong>{warning.message}</strong></div>))}
+          </div>
+        </section>
+      ) : null}
+    </>
+  );
+}
+
+function ProfileChipFact({ label, items }: { label: string; items: string[] }) {
+  return <div className="repository-fact"><span>{label}</span><strong>{items.join(", ")}</strong></div>;
 }
 
 function DirtyFilesPanel({ detail, setToast, onOpenFileInEditor, onOpenGitDiff }: { detail: ProjectDetail | null; setToast: (toast: Toast) => void; onOpenFileInEditor: (relativePath: string) => Promise<void>; onOpenGitDiff: (relativePath: string) => Promise<void> }) {
@@ -2572,6 +2697,7 @@ function RemoteMachineDetailPanel({ machine, setToast, onRemove, onTest }: {
 }) {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [connectionResult, setConnectionResult] = useState<RemoteMachineTestResult | null>(null);
+  const [profileReloadKey, setProfileReloadKey] = useState(0);
   async function test() {
     setBusyAction("test");
     setConnectionResult(null);
@@ -2579,6 +2705,7 @@ function RemoteMachineDetailPanel({ machine, setToast, onRemove, onTest }: {
       const result = await onTest({ id: machine.id });
       setConnectionResult(result);
       setToast({ tone: result.ok ? "success" : "error", message: `${machine.label}: ${result.message}` });
+      if (result.ok) setProfileReloadKey((current) => current + 1);
     } catch (error) {
       const message = asMessage(error);
       setConnectionResult({ ok: false, message });
@@ -2618,7 +2745,84 @@ function RemoteMachineDetailPanel({ machine, setToast, onRemove, onTest }: {
           </div>
         ) : null}
       </section>
+      <MachineProfileCard targetId={machine.id} setToast={setToast} reloadKey={profileReloadKey} />
     </>
+  );
+}
+
+function MachineProfileCard({ targetId, setToast, reloadKey }: { targetId: string; setToast: (toast: Toast) => void; reloadKey: number }) {
+  const [profile, setProfile] = useState<MachineProfile | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [localReloadKey, setLocalReloadKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const readMachine = getBridge().profiles?.readMachine;
+    if (!readMachine) { setLoadError("Machine profile API is not available."); return; }
+    const wantsRefresh = reloadKey > 0 || localReloadKey > 0;
+    setBusy(true);
+    setLoadError(null);
+    readMachine({ targetId, options: wantsRefresh ? { refresh: true } : undefined })
+      .then((next) => { if (!cancelled) setProfile(next); })
+      .catch((error) => { if (!cancelled) setLoadError(asMessage(error)); })
+      .finally(() => { if (!cancelled) setBusy(false); });
+    return () => { cancelled = true; };
+  }, [targetId, reloadKey, localReloadKey]);
+
+  function refresh() {
+    setLocalReloadKey((current) => current + 1);
+    setToast({ tone: "info", message: "Refreshing machine profile" });
+  }
+
+  return (
+    <section className="workflow-panel remote-machines-panel">
+      <div className="panel-title-row compact-title-row">
+        <h4>Machine profile</h4>
+        <button aria-label="Refresh machine profile" className="icon-button" disabled={busy} type="button" onClick={refresh}><RefreshIcon /></button>
+      </div>
+      {loadError ? (
+        <div className="inline-connection-result is-error" role="status">{loadError}</div>
+      ) : !profile && busy ? (
+        <div className="form-note">Probing machine…</div>
+      ) : !profile ? (
+        <div className="form-note">No profile yet. Use Test Connection or Refresh to probe.</div>
+      ) : (
+        <>
+          <div className="settings-facts-grid">
+            <Fact label="OS" value={profile.os.name ? `${profile.os.name}${profile.os.version ? ` ${profile.os.version}` : ""}` : "Unknown"} />
+            <Fact label="Arch" value={profile.os.arch ?? "-"} />
+            <Fact label="Hostname" value={profile.hostname ?? "-"} />
+            <Fact label="Shell" value={profile.shell.name ?? profile.shell.path ?? "-"} />
+          </div>
+          <ToolList title="Agents" tools={profile.agents} />
+          <ToolList title="Languages" tools={profile.languages} />
+          <ToolList title="Tools" tools={profile.tools} />
+          <ToolList title="Package managers" tools={profile.packageManagers} />
+          {profile.warnings.length ? (
+            <div className="settings-list">
+              {profile.warnings.map((warning, index) => (
+                <div className="settings-list-row" key={`${warning.code}-${index}`}><span className="truncate">{warning.code}</span><small className="truncate">{warning.message}</small></div>
+              ))}
+            </div>
+          ) : null}
+        </>
+      )}
+    </section>
+  );
+}
+
+function ToolList({ title, tools }: { title: string; tools: MachineProfile["tools"] }) {
+  if (!tools.length) return null;
+  return (
+    <div>
+      <div className="form-note" style={{ marginBottom: "4px" }}>{title}</div>
+      <div className="settings-facts-grid">
+        {tools.map((tool) => (
+          <Fact key={tool.id} label={tool.id} value={tool.available ? (tool.version ?? "available") : "missing"} tone={tool.available ? undefined : "warn"} />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -2671,6 +2875,122 @@ function RefreshIcon() {
 
 function GlobeIcon() {
   return <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16"><circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a15.3 15.3 0 0 1 0 20" /><path d="M12 2a15.3 15.3 0 0 0 0 20" /></svg>;
+}
+
+function DownloadIcon() {
+  return <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16"><path d="M12 3v12" /><path d="m6 11 6 6 6-6" /><path d="M5 21h14" /></svg>;
+}
+
+function InstallAgentDialog({ targetId, targetLabel, installedAgentIds, onClose, onInstalled, setToast }: {
+  targetId: string;
+  targetLabel: string;
+  installedAgentIds: string[];
+  onClose: () => void;
+  onInstalled: () => void;
+  setToast: (toast: Toast) => void;
+}) {
+  const [recipes, setRecipes] = useState<InstallRecipe[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<InstallToolResult | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const list = getBridge().agents?.listInstallRecipes;
+    if (!list) { setLoadError("Install recipes are not available."); return; }
+    list({ targetId })
+      .then((items) => { if (!cancelled) setRecipes(items); })
+      .catch((error) => { if (!cancelled) setLoadError(asMessage(error)); });
+    return () => { cancelled = true; };
+  }, [targetId]);
+
+  const installedSet = useMemo(() => new Set(installedAgentIds), [installedAgentIds]);
+  const visibleRecipes = recipes?.filter((recipe) => !installedSet.has(recipe.toolId)) ?? null;
+  const selectedRecipe = recipes?.find((recipe) => recipe.id === selectedRecipeId) ?? null;
+
+  async function runInstall(recipe: InstallRecipe) {
+    const installTool = getBridge().agents?.installTool;
+    if (!installTool) { setToast({ tone: "error", message: "Install tool API is not available." }); return; }
+    setBusy(true);
+    setResult(null);
+    try {
+      const next = await installTool({ targetId, recipeId: recipe.id });
+      setResult(next);
+      if (next.ok) {
+        setToast({ tone: "success", message: `Installed ${recipe.toolId}` });
+        onInstalled();
+      } else {
+        setToast({ tone: "error", message: next.error ?? "Install failed" });
+      }
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+      <section aria-modal="true" className="modal-panel add-project-dialog" role="dialog" aria-labelledby="install-agent-dialog-title">
+        <div className="modal-header">
+          <div>
+            <h3 id="install-agent-dialog-title">Install agent CLI</h3>
+            <p>Target: {targetLabel}</p>
+          </div>
+          <button aria-label="Close" className="icon-button" disabled={busy} type="button" onClick={onClose}>x</button>
+        </div>
+        <div className="remote-machine-form" style={{ gap: "12px" }}>
+          {loadError ? (
+            <div className="inline-connection-result is-error" role="status">{loadError}</div>
+          ) : !recipes ? (
+            <div className="form-note">Loading install recipes…</div>
+          ) : !visibleRecipes?.length ? (
+            <EmptyState title="All agents installed" body="No additional install recipes apply to this target." />
+          ) : !selectedRecipe ? (
+            <div className="settings-list">
+              {visibleRecipes.map((recipe) => (
+                <button className="settings-list-row" key={recipe.id} type="button" onClick={() => setSelectedRecipeId(recipe.id)}>
+                  <span className="truncate"><strong>{recipe.toolId}</strong> — {recipe.label}</span>
+                  <small className="truncate">{describeRecipeSteps(recipe)}</small>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <>
+              <div className="settings-facts-grid">
+                <Fact label="Agent" value={selectedRecipe.toolId} />
+                <Fact label="Recipe" value={selectedRecipe.label} />
+              </div>
+              <div className="form-note">SharkBay will run the following on <strong>{targetLabel}</strong>:</div>
+              <pre className="install-recipe-steps">{describeRecipeSteps(selectedRecipe)}</pre>
+              {result ? (
+                <pre className={cx("install-recipe-steps", result.ok ? "is-success" : "is-error")}>{result.logs.join("\n") || (result.ok ? "Installed." : result.error ?? "Install failed.")}</pre>
+              ) : null}
+              <div className="remote-machine-form-actions">
+                {!result?.ok ? (
+                  <button className="button secondary" disabled={busy} type="button" onClick={() => setSelectedRecipeId(null)}>Back</button>
+                ) : null}
+                {result?.ok ? (
+                  <button className="button" type="button" onClick={onClose}>Done</button>
+                ) : (
+                  <button className="button" disabled={busy} type="button" onClick={() => void runInstall(selectedRecipe)}>{busy ? "Installing" : "Install"}</button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function describeRecipeSteps(recipe: InstallRecipe): string {
+  return recipe.steps.map((step) => {
+    if (step.kind === "command") return `$ ${step.command}${step.requiresSudo ? "  # requires sudo" : ""}`;
+    if (step.kind === "openUrl") return `open ${step.url}`;
+    return step.markdown;
+  }).join("\n");
 }
 
 function AgentCliIcon({ agent }: { agent: AgentCli }) {

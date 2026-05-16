@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { devCommandForProject, discoverProjectDevServices } from "../src/main/dev-services.js";
-import { toLocalProjectUri } from "../src/main/core/project-uri.js";
+import { toLocalProjectUri } from "../src/core/project-uri.js";
 import { makeTempRoot, writeJson } from "./helpers.js";
 
 describe("project dev service discovery", () => {

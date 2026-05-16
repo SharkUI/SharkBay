@@ -6,7 +6,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import * as pty from "node-pty";
 import { getConfiguredRoots } from "./config.js";
-import { parseProjectUri } from "./core/project-uri.js";
+import { parseProjectUri } from "../core/project-uri.js";
 import { resolveProjectUri } from "./path-safety.js";
 import { createAskPassScript, sshArgsForRemoteMachine } from "./remote-machines.js";
 import { createDefaultSecretStore, type SecretStore } from "./secrets.js";

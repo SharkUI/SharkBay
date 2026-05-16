@@ -78,6 +78,278 @@ export type RemoteMachineTestResult =
   | { ok: true; message: string }
   | { ok: false; message: string };
 
+export type ExecutionTargetKind = "local" | "ssh" | "container" | "wsl";
+
+export type ExecutionTargetStatus = "available" | "unavailable" | "auth-required" | "unknown";
+
+export type ExecutionTarget = {
+  id: string;
+  kind: ExecutionTargetKind;
+  label: string;
+  status: ExecutionTargetStatus;
+  uri: string;
+  displayPath: string;
+  machineId?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProfileReadOptions = {
+  refresh?: boolean;
+  depth?: ProfileDepth;
+};
+
+export type ProfileDepth = "quick" | "standard" | "deep";
+
+export type ProfileWarning = {
+  code: string;
+  message: string;
+  source?: string;
+};
+
+export type ToolProfile = {
+  id: string;
+  command: string;
+  available: boolean;
+  path: string | null;
+  version: string | null;
+  sourcePluginId?: string;
+};
+
+export type MachineOsProfile = {
+  platform: "darwin" | "linux" | "windows" | "unknown";
+  name: string | null;
+  version: string | null;
+  arch: string | null;
+  kernel: string | null;
+};
+
+export type MachineProfile = {
+  targetId: string;
+  targetKind: ExecutionTargetKind;
+  detectedAt: string;
+  expiresAt?: string;
+  hostname: string | null;
+  os: MachineOsProfile;
+  shell: {
+    path: string | null;
+    name: string | null;
+  };
+  tools: ToolProfile[];
+  languages: ToolProfile[];
+  packageManagers: ToolProfile[];
+  agents: ToolProfile[];
+  warnings: ProfileWarning[];
+};
+
+export type DetectedProfileItem = {
+  id: string;
+  confidence: number;
+  evidence: string[];
+  sourcePluginId?: string;
+};
+
+export type DetectedPackageManager = DetectedProfileItem & {
+  id: "npm" | "pnpm" | "yarn" | "bun" | "pip" | "uv" | "poetry" | "conda" | "go" | "maven" | "gradle" | "cargo" | string;
+  manifest?: string;
+  lockfile?: string;
+};
+
+export type ProjectServiceProfile = {
+  id: string;
+  label: string;
+  command: string;
+  cwdUri: string;
+  script?: string;
+  likelyPorts: number[];
+  sourcePluginId?: string;
+};
+
+export type ProjectWorkspaceProfile = {
+  name: string;
+  path: string;
+  packageManager?: string;
+};
+
+export type ProjectProfile = {
+  projectUri: string;
+  targetId: string;
+  targetKind: ExecutionTargetKind;
+  detectedAt: string;
+  expiresAt?: string;
+  name: string;
+  displayPath: string;
+  vcs: {
+    type: "git" | "none" | "unknown";
+    root: string | null;
+    branch: string | null;
+    remoteOrigin: string | null;
+    dirty: boolean | null;
+  };
+  languages: DetectedProfileItem[];
+  frameworks: DetectedProfileItem[];
+  packageManagers: DetectedPackageManager[];
+  commands: {
+    install?: string;
+    dev?: string;
+    build?: string;
+    test?: string;
+    lint?: string;
+    format?: string;
+  };
+  services: ProjectServiceProfile[];
+  env: {
+    files: string[];
+    exampleFiles: string[];
+    requiredKeys?: string[];
+  };
+  structure: {
+    monorepo: boolean;
+    workspaces: ProjectWorkspaceProfile[];
+    importantFiles: string[];
+  };
+  warnings: ProfileWarning[];
+};
+
+export type PluginTrustState = "bundled" | "verified" | "trusted" | "untrusted" | "disabled";
+
+export type PluginCapabilityRequest =
+  | { kind: "profile:machine" }
+  | { kind: "profile:project" }
+  | { kind: "agent:detect" }
+  | { kind: "install:software"; requiresConfirmation: true }
+  | { kind: "command:run"; scope: "local" | "target" }
+  | { kind: "file:read"; patterns?: string[] };
+
+export type SharkBayPluginManifest = {
+  id: string;
+  name: string;
+  version: string;
+  publisher: string;
+  engines: {
+    sharkbay: string;
+  };
+  main?: string;
+  trust?: PluginTrustState;
+  capabilities?: PluginCapabilityRequest[];
+  contributes?: PluginContributions;
+};
+
+export type PluginContributions = {
+  machineDetectors?: DetectorContribution[];
+  projectDetectors?: DetectorContribution[];
+  agents?: AgentContribution[];
+  installers?: InstallerContribution[];
+  commands?: CommandContribution[];
+  profileCards?: ProfileCardContribution[];
+};
+
+export type DetectorContribution = {
+  id: string;
+  label: string;
+  description?: string;
+};
+
+export type AgentContribution = {
+  id: string;
+  label: string;
+  shortLabel: string;
+  commands: string[];
+  detect: {
+    commandNames: string[];
+    versionArgs?: string[];
+  };
+  launch: {
+    command: string;
+    args?: string[];
+    supportsWorkspaceScope: boolean;
+    supportsProjectScope: boolean;
+  };
+  installRecipes?: string[];
+};
+
+export type InstallerContribution = {
+  id: string;
+  label: string;
+  recipeIds?: string[];
+};
+
+export type CommandContribution = {
+  id: string;
+  label: string;
+  category?: string;
+};
+
+export type ProfileCardContribution = {
+  id: string;
+  location: "machine.profile" | "project.profile";
+  title: string;
+  dataSelector: string;
+  display: "tool-list" | "command-list" | "key-value" | "warnings";
+};
+
+export type InstallRecipe = {
+  id: string;
+  toolId: string;
+  label: string;
+  targetKinds: ExecutionTargetKind[];
+  platforms: MachineOsProfile["platform"][];
+  preconditions: InstallPrecondition[];
+  steps: InstallStep[];
+  verification: ToolVerification;
+};
+
+export type InstallToolInput = {
+  targetId: string;
+  recipeId: string;
+};
+
+export type ListInstallRecipesInput = {
+  targetId: string;
+  toolId?: string;
+};
+
+export type InstallToolResult = {
+  ok: boolean;
+  recipeId: string;
+  targetId: string;
+  logs: string[];
+  verified: boolean;
+  error?: string;
+};
+
+export type InstallPrecondition = {
+  tool: string;
+  available: boolean;
+};
+
+export type InstallStep =
+  | { kind: "command"; command: string; requiresSudo?: boolean; description: string }
+  | { kind: "openUrl"; url: string; description: string }
+  | { kind: "manual"; markdown: string };
+
+export type ToolVerification = {
+  command: string;
+  args?: string[];
+};
+
+export type ProjectFingerprint = {
+  manifestMtimes: Record<string, number | null>;
+  gitHead: string | null;
+};
+
+export type SharkBayJobKind = "machine-profile" | "project-profile" | "scan" | "agent-detect" | "install" | "log-parse";
+
+export type SharkBayJob = {
+  id: string;
+  kind: SharkBayJobKind;
+  targetId: string;
+  projectUri?: string;
+  priority: "interactive" | "background" | "idle";
+  timeoutMs: number;
+  createdAt: string;
+};
+
 export type ProjectScanInput = {
   configuredRoots?: string[];
   maxDepth?: number;

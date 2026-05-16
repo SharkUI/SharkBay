@@ -1,5 +1,5 @@
 import { getConfiguredRoots } from "./config.js";
-import { parseProjectUri } from "./core/project-uri.js";
+import { parseProjectUri } from "../core/project-uri.js";
 import { isEditableProjectFile } from "./project-files.js";
 import { remoteShellCommand, runSshCommand, sshArgsForRemoteMachine, type SshCommandRunner } from "./remote-machines.js";
 import { createDefaultSecretStore, type SecretStore } from "./secrets.js";

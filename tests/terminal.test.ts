@@ -12,7 +12,7 @@ import {
   terminalShellEnvironment,
   TerminalManager,
 } from "../src/main/terminal.js";
-import { toLocalProjectUri } from "../src/main/core/project-uri.js";
+import { toLocalProjectUri } from "../src/core/project-uri.js";
 import { createGitRepoFixture, makeTempRoot, makeTestRuntime, writeJson } from "./helpers.js";
 
 describe("terminal cwd validation", () => {

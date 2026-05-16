@@ -2,7 +2,7 @@ import { getConfiguredRoots } from "./config.js";
 import { parseGitDirtyFiles } from "./git.js";
 import { remoteShellCommand, runSshCommand, sshArgsForRemoteMachine, type SshCommandRunner } from "./remote-machines.js";
 import { createDefaultSecretStore, type SecretStore } from "./secrets.js";
-import { parseProjectUri } from "./core/project-uri.js";
+import { parseProjectUri } from "../core/project-uri.js";
 import type { GitDirtyFile, GitEvent, GitMetadata, IpcRuntimeLike, RemoteMachine } from "../shared/types.js";
 
 const gitTimeoutMs = 8000;

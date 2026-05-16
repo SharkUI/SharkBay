@@ -14,9 +14,16 @@ import type {
   BrowserSession,
   BrowserUpdateEvent,
   CreatePortForwardInput,
+  InstallToolInput,
+  InstallToolResult,
+  InstallRecipe,
+  ListInstallRecipesInput,
   ListPortForwardsInput,
+  MachineProfile,
   PortForwardEvent,
+  ProfileReadOptions,
   ProjectConfigInput,
+  ProjectProfile,
   ProjectScanInput,
   ProjectDetail,
   ProjectFilesInput,
@@ -126,11 +133,19 @@ const sharkBayApi = {
   },
   agents: {
     listClis: (input?: { cwdUri?: string }) => invoke<AgentCli[]>(channels.listAgentClis, input),
+    listInstallRecipes: (input: ListInstallRecipesInput) => invoke<InstallRecipe[]>(channels.listInstallRecipes, input),
+    installTool: (input: InstallToolInput) => invoke<InstallToolResult>(channels.installTool, input),
     onStatus: (callback: (event: AgentProjectStatusEvent) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: AgentProjectStatusEvent) => callback(payload);
       ipcRenderer.on(channels.agentStatus, listener);
       return () => ipcRenderer.removeListener(channels.agentStatus, listener);
     }
+  },
+  profiles: {
+    readMachine: (input: { targetId: string; options?: ProfileReadOptions }) =>
+      invoke<MachineProfile>(channels.readMachineProfile, input),
+    readProject: (input: { projectUri: string; options?: ProfileReadOptions }) =>
+      invoke<ProjectProfile>(channels.readProjectProfile, input)
   },
   portForwards: {
     list: (input?: ListPortForwardsInput) => invoke<RemotePortForward[]>(channels.listPortForwards, input),
