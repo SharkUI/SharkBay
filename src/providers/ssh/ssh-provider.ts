@@ -13,6 +13,8 @@ import type {
   GitMetadata,
   IpcRuntimeLike,
   MachineProfile,
+  PathExistsInput,
+  PathExistsResult,
   ProfileReadOptions,
   ProjectFilesInput,
   ProjectFilesResult,
@@ -176,6 +178,18 @@ export class SshProvider extends EventEmitter implements ExecutionProvider {
       structure: { monorepo: false, workspaces: [], importantFiles: [] },
       warnings: [],
     };
+  }
+
+  async pathExistsOnTarget(runtime: IpcRuntimeLike, input: PathExistsInput): Promise<PathExistsResult> {
+    const result = await this.runCommand(runtime, input.targetId, `if [ -d ${shellQuote(input.path)} ]; then echo dir; elif [ -e ${shellQuote(input.path)} ]; then echo file; else echo missing; fi`, { timeoutMs: 8000 });
+    const stdout = result.stdout.trim();
+    if (result.exitCode !== 0) {
+      const stderr = result.stderr.trim();
+      return { ok: false, reason: "unreachable", message: stderr || `ssh exited with code ${result.exitCode}` };
+    }
+    if (stdout === "dir") return { ok: true, kind: "directory" };
+    if (stdout === "file") return { ok: true, kind: "file" };
+    return { ok: false, reason: "not-found", message: `Path does not exist on remote: ${input.path}` };
   }
 
   async runCommand(runtime: IpcRuntimeLike, uriOrTargetId: string, command: string, options: RunCommandOptions = {}): Promise<CommandResult> {

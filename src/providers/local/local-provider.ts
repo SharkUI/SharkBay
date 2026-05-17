@@ -17,6 +17,8 @@ import type {
   GitMetadata,
   IpcRuntimeLike,
   MachineProfile,
+  PathExistsInput,
+  PathExistsResult,
   ProfileReadOptions,
   ProjectFilesInput,
   ProjectFilesResult,
@@ -198,6 +200,17 @@ export class LocalProvider extends EventEmitter implements ExecutionProvider {
       structure: { monorepo: false, workspaces: [], importantFiles: [] },
       warnings: [],
     };
+  }
+
+  async pathExistsOnTarget(_runtime: IpcRuntimeLike, input: PathExistsInput): Promise<PathExistsResult> {
+    try {
+      const stat = await fs.stat(input.path);
+      return { ok: true, kind: stat.isDirectory() ? "directory" : "file" };
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") return { ok: false, reason: "not-found", message: `Path does not exist: ${input.path}` };
+      return { ok: false, reason: "error", message: error instanceof Error ? error.message : String(error) };
+    }
   }
 
   async readProjectFingerprint(_runtime: IpcRuntimeLike, projectUri: string): Promise<ProjectFingerprint> {

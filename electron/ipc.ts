@@ -5,6 +5,7 @@ import {
   getConfiguredRoots,
   removeConfiguredRoot,
   removeConfiguredProject,
+  renameProject,
   removeConfiguredRemoteMachine,
   setAppearanceTheme,
   upsertConfiguredRemoteMachine
@@ -28,6 +29,8 @@ import type {
   InstallRecipe,
   ListInstallRecipesInput,
   MachineProfile,
+  PathExistsInput,
+  PathExistsResult,
   ProfileReadOptions,
   ProjectProfile,
   ListPortForwardsInput,
@@ -44,6 +47,7 @@ import type {
   RemoteMachineInput,
   RemoteMachineTestResult,
   RemotePortForward,
+  RenameProjectInput,
   RemoveProjectInput,
   RemovePortForwardInput,
   RemoveRemoteMachineInput,
@@ -150,6 +154,7 @@ export async function registerIpcHandlers(
   handle<RemoveRootInput, AppConfig>(channels.removeRoot, (payload) => removeConfiguredRoot(runtime, payload));
   handle<ProjectConfigInput, AppConfig>(channels.addProject, (payload) => addConfiguredProject(runtime, payload));
   handle<RemoveProjectInput, AppConfig>(channels.removeProject, (payload) => removeConfiguredProject(runtime, payload));
+  handle<RenameProjectInput, AppConfig>(channels.renameProject, (payload) => renameProject(runtime, payload));
   handle<RemoteMachineInput, AppConfig>(channels.addRemoteMachine, async (payload) => {
     const result = await upsertConfiguredRemoteMachine(runtime, payload);
     if (payload.password && result.machine.passwordSecretId) {
@@ -225,6 +230,9 @@ export async function registerIpcHandlers(
   handle<{ projectUri: string; options?: ProfileReadOptions }, ProjectProfile>(channels.readProjectProfile, (payload) =>
     requireCore().call("readProjectProfile", [runtime, payload.projectUri, payload.options])
   );
+  handle<PathExistsInput, PathExistsResult>(channels.pathExistsOnTarget, (payload) =>
+    requireCore().call("pathExistsOnTarget", [runtime, payload])
+  );
   ipcMain.removeHandler(channels.createBrowser);
   ipcMain.handle(channels.createBrowser, (event, payload: BrowserCreateInput) => {
     const window = BrowserWindow.fromWebContents(event.sender);
@@ -254,13 +262,13 @@ export async function registerIpcHandlers(
   handle<TerminalCreateInput, TerminalSession>(channels.createTerminal, (payload) =>
     requireCore().call("createTerminal", [runtime, payload])
   );
-  handle<TerminalInput, TerminalSession>(channels.terminalInput, (payload) =>
+  handle<TerminalInput, TerminalSession | null>(channels.terminalInput, (payload) =>
     requireCore().call("inputTerminal", [payload])
   );
-  handle<TerminalResizeInput, TerminalSession>(channels.resizeTerminal, (payload) =>
+  handle<TerminalResizeInput, TerminalSession | null>(channels.resizeTerminal, (payload) =>
     requireCore().call("resizeTerminal", [payload])
   );
-  handle<TerminalCloseInput, TerminalSession>(channels.closeTerminal, (payload) =>
+  handle<TerminalCloseInput, TerminalSession | null>(channels.closeTerminal, (payload) =>
     requireCore().call("closeTerminal", [payload])
   );
 }

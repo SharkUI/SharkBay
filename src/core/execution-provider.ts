@@ -6,6 +6,8 @@ import type {
   GitMetadata,
   IpcRuntimeLike,
   MachineProfile,
+  PathExistsInput,
+  PathExistsResult,
   ProfileReadOptions,
   ProjectFilesInput,
   ProjectFilesResult,
@@ -111,6 +113,7 @@ export interface ExecutionProvider {
   readMachineProfile(runtime: IpcRuntimeLike, targetId: string, options?: ProfileReadOptions): Promise<MachineProfile>;
   readProjectProfile(runtime: IpcRuntimeLike, projectUri: string, options?: ProfileReadOptions): Promise<ProjectProfile>;
   readProjectFingerprint?(runtime: IpcRuntimeLike, projectUri: string): Promise<ProjectFingerprint>;
+  pathExistsOnTarget(runtime: IpcRuntimeLike, input: PathExistsInput): Promise<PathExistsResult>;
 
   runCommand(runtime: IpcRuntimeLike, uriOrTargetId: string, command: string, options?: RunCommandOptions): Promise<CommandResult>;
   createTerminal(runtime: IpcRuntimeLike, input: TerminalCreateInput): Promise<TerminalSession>;

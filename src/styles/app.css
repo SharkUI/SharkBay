@@ -708,6 +708,30 @@ body.is-resizing-columns * {
   justify-self: end;
 }
 
+.project-menu-trigger {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.project-row:hover .project-menu-trigger,
+.project-row .project-menu-trigger:focus-visible {
+  opacity: 1;
+}
+
+.project-rename-input {
+  width: 100%;
+  min-height: 20px;
+  color: inherit;
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid #8dbab0;
+  border-radius: 4px;
+  padding: 1px 4px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  outline: none;
+}
+
 .project-row-status .worktree-pill,
 .project-row-status .terminal-activity-pill {
   min-height: 16px;
@@ -2842,6 +2866,12 @@ body.is-resizing-columns .app-shell[data-theme="night"] .column-resizer::before 
 .app-shell[data-theme="night"] .project-context-menu-item.is-danger:hover,
 .app-shell[data-theme="night"] .project-context-menu-item.is-danger:focus-visible {
   background: rgba(165, 59, 53, 0.18);
+}
+
+.app-shell[data-theme="night"] .project-rename-input {
+  color: #d9e5df;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: #5a8a80;
 }
 
 .app-shell[data-theme="night"] .project-section-title h4 {

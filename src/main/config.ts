@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { AppearanceTheme, AppearanceThemeInput, AppConfig, IpcRuntimeLike, ProjectConfigInput, RemoteMachine, RemoteMachineInput, RemoveProjectInput, RemoveRemoteMachineInput, RemoveRootInput, RootConfigInput } from "../shared/types.js";
+import type { AppearanceTheme, AppearanceThemeInput, AppConfig, IpcRuntimeLike, ProjectConfigInput, RemoteMachine, RemoteMachineInput, RemoveProjectInput, RemoveRemoteMachineInput, RemoveRootInput, RenameProjectInput, RootConfigInput } from "../shared/types.js";
 import { isRecord } from "../shared/schema.js";
 import { writeJsonAtomic, readJsonFile } from "./json-file.js";
 
@@ -22,6 +22,7 @@ export function createDefaultConfig(): AppConfig {
     configuredProjects: [],
     configuredRemoteProjects: [],
     configuredRemoteMachines: [],
+    projectAliases: {},
     appearanceTheme: "day",
     updatedAt: today(),
   };
@@ -108,6 +109,19 @@ export async function removeConfiguredProject(first: string | IpcRuntimeLike, se
     const absolute = path.resolve(projectValue);
     config.configuredProjects = config.configuredProjects.filter((p) => p !== absolute);
   }
+  config.updatedAt = today();
+  await saveAppConfig(config, configPath);
+  return config;
+}
+
+export async function renameProject(runtime: IpcRuntimeLike, input: RenameProjectInput): Promise<AppConfig> {
+  const uri = input.uri?.trim();
+  const name = input.name?.trim();
+  if (!uri) throw new Error("Project uri is required");
+  if (!name) throw new Error("Project name is required");
+  const configPath = getRuntimeConfigPath(runtime);
+  const config = await loadAppConfig(configPath);
+  config.projectAliases[uri] = name;
   config.updatedAt = today();
   await saveAppConfig(config, configPath);
   return config;
@@ -204,9 +218,21 @@ function normalizeAppConfig(value: unknown): AppConfig {
       ? [...new Set(value.configuredRemoteProjects.filter((item): item is string => typeof item === "string" && item.startsWith("ssh://")))]
       : [],
     configuredRemoteMachines: normalizeRemoteMachines(value.configuredRemoteMachines),
+    projectAliases: normalizeProjectAliases(value.projectAliases),
     appearanceTheme: normalizeAppearanceTheme(value.appearanceTheme),
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : today(),
   };
+}
+
+function normalizeProjectAliases(value: unknown): Record<string, string> {
+  if (!isRecord(value)) return {};
+  const result: Record<string, string> = {};
+  for (const [key, val] of Object.entries(value)) {
+    if (typeof key === "string" && typeof val === "string" && key.trim() && val.trim()) {
+      result[key.trim()] = val.trim();
+    }
+  }
+  return result;
 }
 
 function normalizeRemoteMachines(value: unknown): RemoteMachine[] {

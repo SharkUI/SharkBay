@@ -11,6 +11,8 @@ import type {
   InstallRecipe,
   ListInstallRecipesInput,
   MachineProfile,
+  PathExistsInput,
+  PathExistsResult,
   ProfileReadOptions,
   ProjectDetail,
   ProjectFilesInput,
@@ -245,6 +247,10 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
     return this.profiles.readProjectProfile(runtime, projectUri, options);
   }
 
+  pathExistsOnTarget(runtime: IpcRuntimeLike, input: PathExistsInput): Promise<PathExistsResult> {
+    return this.providers.providerForTargetId(input.targetId).pathExistsOnTarget(runtime, input);
+  }
+
   async createTerminal(runtime: IpcRuntimeLike, input: TerminalCreateInput): Promise<TerminalSession> {
     const provider = this.providers.providerForUri(input.cwdUri);
     const session = await provider.createTerminal(runtime, input);
@@ -252,28 +258,22 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
     return session;
   }
 
-  inputTerminal(input: TerminalInput): TerminalSession {
-    return this.requireTerminalProvider(input.sessionId).inputTerminal(input);
+  inputTerminal(input: TerminalInput): TerminalSession | null {
+    return this.terminalProviders.get(input.sessionId)?.inputTerminal(input) ?? null;
   }
 
-  resizeTerminal(input: TerminalResizeInput): TerminalSession {
-    return this.requireTerminalProvider(input.sessionId).resizeTerminal(input);
+  resizeTerminal(input: TerminalResizeInput): TerminalSession | null {
+    return this.terminalProviders.get(input.sessionId)?.resizeTerminal(input) ?? null;
   }
 
-  closeTerminal(input: TerminalCloseInput): TerminalSession {
-    return this.requireTerminalProvider(input.sessionId).closeTerminal(input);
+  closeTerminal(input: TerminalCloseInput): TerminalSession | null {
+    return this.terminalProviders.get(input.sessionId)?.closeTerminal(input) ?? null;
   }
 
   closeAllTerminalSessions(): void {
     for (const provider of this.providers.list()) {
       provider.closeAllTerminalSessions();
     }
-  }
-
-  private requireTerminalProvider(_sessionId: string): ExecutionProvider {
-    const provider = this.terminalProviders.get(_sessionId);
-    if (!provider) throw new Error("Unknown terminal session");
-    return provider;
   }
 }
 

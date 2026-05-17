@@ -46,6 +46,7 @@ const dispatchers: Record<CoreMethodName, Dispatcher> = {
   writeProjectFile: ([runtime, input]) => core.writeProjectFile(runtime as never, input as never),
   readMachineProfile: ([runtime, targetId, options]) => core.readMachineProfile(runtime as never, targetId as string, options as never),
   readProjectProfile: ([runtime, projectUri, options]) => core.readProjectProfile(runtime as never, projectUri as string, options as never),
+  pathExistsOnTarget: ([runtime, input]) => core.pathExistsOnTarget(runtime as never, input as never),
   createTerminal: ([runtime, input]) => core.createTerminal(runtime as never, input as never),
   inputTerminal: ([input]) => core.inputTerminal(input as never),
   resizeTerminal: ([input]) => core.resizeTerminal(input as never),

@@ -6,6 +6,7 @@ export type AppConfig = {
   configuredProjects: string[];
   configuredRemoteProjects: string[];
   configuredRemoteMachines: RemoteMachine[];
+  projectAliases: Record<string, string>;
   appearanceTheme: AppearanceTheme;
   updatedAt: string;
 };
@@ -30,6 +31,11 @@ export type ProjectConfigInput = {
 export type RemoveProjectInput = {
   path?: string;
   uri?: string;
+};
+
+export type RenameProjectInput = {
+  uri: string;
+  name: string;
 };
 
 export type AppearanceThemeInput = {
@@ -337,6 +343,15 @@ export type ProjectFingerprint = {
   manifestMtimes: Record<string, number | null>;
   gitHead: string | null;
 };
+
+export type PathExistsInput = {
+  targetId: string;
+  path: string;
+};
+
+export type PathExistsResult =
+  | { ok: true; kind: "file" | "directory" }
+  | { ok: false; reason: "not-found" | "unreachable" | "error"; message: string };
 
 export type SharkBayJobKind = "machine-profile" | "project-profile" | "scan" | "agent-detect" | "install" | "log-parse";
 

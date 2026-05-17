@@ -292,6 +292,12 @@ async function removeProject(pathOrUri: string): Promise<void> {
   await handler(pathOrUri.startsWith("ssh://") ? { uri: pathOrUri } : { path: pathOrUri });
 }
 
+async function renameProjectAlias(uri: string, name: string): Promise<void> {
+  const handler = getBridge().config?.renameProject;
+  if (!handler) throw new Error("Project rename is not exposed by the preload API.");
+  await handler({ uri, name });
+}
+
 async function addRemoteMachine(input: RemoteMachineInput): Promise<AppConfig> {
   const handler = getBridge().config?.addRemoteMachine;
   if (!handler) throw new Error("Remote machine add is not exposed by the preload API.");
@@ -410,6 +416,22 @@ function gitDiffCommandFor(relativePath: string): string {
   return `git --no-pager diff -- ${quotedPath}`;
 }
 
+function explainEarlyTerminalExit(tab: TerminalShellTab, event: TerminalExitEvent): string | null {
+  const exitCode = event.exitCode;
+  if (exitCode === null || exitCode === 0) return null;
+  const createdAt = Date.parse(tab.session.createdAt);
+  if (Number.isFinite(createdAt) && Date.now() - createdAt > 5000) return null;
+  const isRemote = tab.session.cwdUri.startsWith("ssh://");
+  if (exitCode === 255 && isRemote) return "SSH connection failed. Check the remote machine is reachable and your auth still works.";
+  if (exitCode === 2) return isRemote
+    ? "Shell exited immediately. The project path may not exist on the remote — re-add the project with the correct path."
+    : "Shell exited immediately (exit 2). Check the project directory exists and is readable.";
+  if (exitCode === 127) return "Command not found. Check the shell or the initial command.";
+  if (exitCode === 126) return "Command not executable. Check file permissions.";
+  if (exitCode === 1) return "Shell exited with an error right after starting. See the terminal output for details.";
+  return null;
+}
+
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
@@ -486,6 +508,7 @@ export function App() {
   const [configuredProjects, setConfiguredProjects] = useState<string[]>([]);
   const [configuredRemoteProjects, setConfiguredRemoteProjects] = useState<string[]>([]);
   const [remoteMachines, setRemoteMachines] = useState<RemoteMachine[]>([]);
+  const [projectAliases, setProjectAliases] = useState<Record<string, string>>({});
   const [candidates, setCandidates] = useState<ProjectCandidate[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
@@ -520,6 +543,7 @@ export function App() {
         setConfiguredProjects(rootConfig.configuredProjects ?? []);
         setConfiguredRemoteProjects(rootConfig.configuredRemoteProjects ?? []);
         setRemoteMachines(rootConfig.configuredRemoteMachines ?? []);
+        setProjectAliases(rootConfig.projectAliases ?? {});
       }
       const nextCandidates = scan.candidates ?? [];
       const normalizedRootErrors = normalizeRoots(scan.roots);
@@ -619,6 +643,9 @@ export function App() {
               onOpenSettings={() => setView("settings")}
               onAddProject={async (pathOrUri) => { pathOrUri.startsWith("ssh://") ? await addProjectUri(pathOrUri) : await addProject(pathOrUri); await refreshProjects({ showToast: true }); }}
               onPickProject={async () => { const paths = await pickAndAddProjects(); if (paths.length) await refreshProjects({ showToast: true }); }}
+              onRemoveProject={async (uri) => { await removeProject(uri); await refreshProjects({ showToast: true }); }}
+              onRenameProject={async (uri, name) => { await renameProjectAlias(uri, name); await refreshProjects({ showToast: false }); }}
+              projectAliases={projectAliases}
             />
           </div>
           {view === "settings" ? (
@@ -681,6 +708,7 @@ function DashboardView({
   isVisible,
   loading,
   remoteMachines,
+  projectAliases,
   scanErrors,
   selectedCandidate,
   setSelectedId,
@@ -689,6 +717,8 @@ function DashboardView({
   onOpenSettings,
   onAddProject,
   onPickProject,
+  onRemoveProject,
+  onRenameProject,
 }: {
   appearanceTheme: AppearanceTheme;
   bridgeAvailable: boolean;
@@ -697,6 +727,7 @@ function DashboardView({
   isVisible: boolean;
   loading: boolean;
   remoteMachines: RemoteMachine[];
+  projectAliases: Record<string, string>;
   scanErrors: string[];
   selectedCandidate: ProjectCandidate | null;
   setSelectedId: (value: string) => void;
@@ -705,6 +736,8 @@ function DashboardView({
   onOpenSettings: () => void;
   onAddProject: (pathOrUri: string) => Promise<void>;
   onPickProject: () => Promise<void>;
+  onRemoveProject: (uri: string) => Promise<void>;
+  onRenameProject: (uri: string, name: string) => Promise<void>;
 }) {
   const gridRef = useRef<HTMLDivElement | null>(null);
   const terminalPaneRef = useRef<TerminalPaneHandle | null>(null);
@@ -832,10 +865,13 @@ function DashboardView({
             <ProjectList
               agentStatusByProjectPath={agentStatusByProjectPath}
               candidates={filteredCandidates}
+              projectAliases={projectAliases}
               runningServiceProjectIds={runningServiceProjectIds}
               terminalActivityByProjectId={terminalActivityByProjectId}
               selectedId={selectedCandidate?.id ?? null}
               onSelect={setSelectedId}
+              onRemoveProject={onRemoveProject}
+              onRenameProject={onRenameProject}
             />
           ) : (
             <div className="empty-state compact-title-row" style={{ padding: "24px 16px" }}>
@@ -1203,6 +1239,10 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     const message = `\r\n[process exited${event.exitCode === null ? "" : ` with code ${event.exitCode}`}${event.signal ? `, signal ${event.signal}` : ""}]\r\n`;
     const match = findTerminalTabWithSpace(spacesRef.current, event.sessionId);
     match?.tab.terminal.write(message);
+    if (match?.tab) {
+      const hint = explainEarlyTerminalExit(match.tab, event);
+      if (hint) setToast({ tone: "error", message: hint });
+    }
     setSpaces((current) => mapTerminalTab(current, event.sessionId, (currentTab) => ({ ...currentTab, activityState: "idle", outputBurstStartedAt: null, session: { ...currentTab.session, status: "exited" } })));
   }
 
@@ -1610,14 +1650,51 @@ function sameProjectTerminalActivityStates(left: Record<string, ProjectTerminalA
   return leftKeys.every((key) => left[key] === right[key]);
 }
 
-function ProjectList({ agentStatusByProjectPath, candidates, runningServiceProjectIds, terminalActivityByProjectId, selectedId, onSelect }: {
+function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, runningServiceProjectIds, terminalActivityByProjectId, selectedId, onSelect, onRemoveProject, onRenameProject }: {
   agentStatusByProjectPath: AgentStatusByProjectPath;
   candidates: ProjectCandidate[];
+  projectAliases: Record<string, string>;
   runningServiceProjectIds: Set<string>;
   terminalActivityByProjectId: Record<string, ProjectTerminalActivityState>;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onRemoveProject: (uri: string) => Promise<void>;
+  onRenameProject: (uri: string, name: string) => Promise<void>;
 }) {
+  const [menuOpen, setMenuOpen] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const menuRef = useRef<HTMLDivElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleClick(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setMenuOpen(null);
+    }
+    function handleKey(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") setMenuOpen(null);
+    }
+    document.addEventListener("pointerdown", handleClick, true);
+    document.addEventListener("keydown", handleKey, true);
+    return () => {
+      document.removeEventListener("pointerdown", handleClick, true);
+      document.removeEventListener("keydown", handleKey, true);
+    };
+  }, [menuOpen]);
+
+  useEffect(() => {
+    if (renamingId) renameInputRef.current?.focus();
+  }, [renamingId]);
+
+  function commitRename(candidate: ProjectCandidate) {
+    const trimmed = renameValue.trim();
+    setRenamingId(null);
+    if (trimmed && trimmed !== candidate.name) {
+      void onRenameProject(candidate.uri, trimmed);
+    }
+  }
+
   if (!candidates.length) return null;
   return (
     <section className="project-section">
@@ -1627,27 +1704,88 @@ function ProjectList({ agentStatusByProjectPath, candidates, runningServiceProje
           const terminalActivity = terminalActivityForCandidate(candidate, terminalActivityByProjectId);
           const hasProjectStatus = Boolean(terminalActivity);
           const subtitle = agentStatusByProjectPath[candidate.displayPath] ?? candidate.displayPath;
+          const displayName = projectAliases[candidate.uri] || candidate.name;
+          const isRenaming = renamingId === candidate.id;
           return (
             <button className={cx("project-row", selectedId === candidate.id && "is-selected")} key={candidate.id} onClick={() => onSelect(candidate.id)}>
-              <ProjectIcon name={candidate.name} sources={candidate.iconSources ?? []} />
+              <ProjectIcon name={displayName} sources={candidate.iconSources ?? []} />
               <span className="project-row-main">
                 <span className="cell-title">
                   {hasRunningService ? <span className="project-service-dot" aria-label="Service running" /> : null}
-                  <span className="cell-title-text truncate">{candidate.name}</span>
+                  {isRenaming ? (
+                    <input
+                      ref={renameInputRef}
+                      className="project-rename-input"
+                      value={renameValue}
+                      onClick={(event) => event.stopPropagation()}
+                      onChange={(event) => setRenameValue(event.target.value)}
+                      onBlur={() => commitRename(candidate)}
+                      onKeyDown={(event) => {
+                        event.stopPropagation();
+                        if (event.key === "Enter") commitRename(candidate);
+                        if (event.key === "Escape") setRenamingId(null);
+                      }}
+                    />
+                  ) : (
+                    <span className="cell-title-text truncate">{displayName}</span>
+                  )}
                 </span>
                 <span className="cell-subtitle truncate" title={subtitle}>{subtitle}</span>
               </span>
-              {hasProjectStatus ? (
-                <span className="project-row-status">
-                  {terminalActivity ? (
-                    <span className={cx("terminal-activity-pill", terminalActivity === "working" ? "is-working" : "is-attention")}>{terminalActivity === "working" ? "working" : "attention"}</span>
-                  ) : null}
-                </span>
-              ) : null}
+              <span className="project-row-status">
+                {hasProjectStatus && terminalActivity ? (
+                  <span className={cx("terminal-activity-pill", terminalActivity === "working" ? "is-working" : "is-attention")}>{terminalActivity === "working" ? "working" : "attention"}</span>
+                ) : null}
+                <button
+                  aria-label="Project menu"
+                  className="icon-button project-menu-trigger"
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+                    setMenuOpen({ id: candidate.id, x: rect.right, y: rect.bottom + 4 });
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <circle cx="8" cy="3.5" r="1.2" fill="currentColor"/>
+                    <circle cx="8" cy="8" r="1.2" fill="currentColor"/>
+                    <circle cx="8" cy="12.5" r="1.2" fill="currentColor"/>
+                  </svg>
+                </button>
+              </span>
             </button>
           );
         })}
       </div>
+      {menuOpen ? (
+        <div ref={menuRef} className="project-context-menu" style={{ top: menuOpen.y, left: menuOpen.x }}>
+          <button
+            className="project-context-menu-item"
+            type="button"
+            onClick={() => {
+              const candidate = candidates.find((c) => c.id === menuOpen.id);
+              setMenuOpen(null);
+              if (candidate) {
+                setRenameValue(projectAliases[candidate.uri] || candidate.name);
+                setRenamingId(candidate.id);
+              }
+            }}
+          >
+            Rename
+          </button>
+          <button
+            className="project-context-menu-item is-danger"
+            type="button"
+            onClick={() => {
+              const candidate = candidates.find((c) => c.id === menuOpen.id);
+              setMenuOpen(null);
+              if (candidate) void onRemoveProject(candidate.uri);
+            }}
+          >
+            Remove Project
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -2487,6 +2625,8 @@ function AddProjectDialog({ remoteMachines, setToast, onAdd, onClose, onPickLoca
   const [machineId, setMachineId] = useState("local");
   const [remotePath, setRemotePath] = useState("");
   const [busy, setBusy] = useState(false);
+  const [busyLabel, setBusyLabel] = useState("Adding");
+  const [pathError, setPathError] = useState<string | null>(null);
   const selectedRemoteMachine = remoteMachines.find((machine) => machine.id === machineId) ?? remoteMachines[0] ?? null;
   const isLocal = machineId === "local";
   const canAddRemote = Boolean(selectedRemoteMachine && remotePath.trim().startsWith("/") && !busy);
@@ -2505,16 +2645,34 @@ function AddProjectDialog({ remoteMachines, setToast, onAdd, onClose, onPickLoca
 
   async function addRemote(event: FormEvent) {
     event.preventDefault();
+    setPathError(null);
     if (!selectedRemoteMachine || !remotePath.trim().startsWith("/")) {
-      setToast({ tone: "error", message: "Enter an absolute remote project path." });
+      setPathError("Enter an absolute remote project path.");
       return;
     }
+    const trimmedPath = remotePath.trim();
     setBusy(true);
     try {
-      await onAdd(toRemoteProjectUri(selectedRemoteMachine.id, remotePath.trim()));
+      setBusyLabel("Verifying");
+      const verify = getBridge().targets?.pathExists;
+      if (verify) {
+        const verification = await verify({ targetId: selectedRemoteMachine.id, path: trimmedPath });
+        if (!verification.ok) {
+          setPathError(verification.reason === "not-found"
+            ? `Path does not exist on ${selectedRemoteMachine.label}: ${trimmedPath}`
+            : `Could not verify path on ${selectedRemoteMachine.label}: ${verification.message}`);
+          return;
+        }
+        if (verification.kind === "file") {
+          setPathError(`That path is a file, not a directory: ${trimmedPath}`);
+          return;
+        }
+      }
+      setBusyLabel("Adding");
+      await onAdd(toRemoteProjectUri(selectedRemoteMachine.id, trimmedPath));
       setToast({ tone: "success", message: "Remote project added." });
     } catch (error) {
-      setToast({ tone: "error", message: asMessage(error) });
+      setPathError(asMessage(error));
     } finally {
       setBusy(false);
     }
@@ -2543,10 +2701,13 @@ function AddProjectDialog({ remoteMachines, setToast, onAdd, onClose, onPickLoca
             </div>
           ) : (
             <>
-              <label className="remote-machine-wide-field"><span>Remote project path</span><input className="input" placeholder={selectedRemoteMachine?.defaultProjectPath ?? "/home/app/project"} value={remotePath} onChange={(event) => setRemotePath(event.target.value)} /></label>
-              <div className="remote-machine-form-note">Remote project browsing comes next; for now enter the absolute path on the selected machine.</div>
+              <label className="remote-machine-wide-field"><span>Remote project path</span><input className="input" placeholder={selectedRemoteMachine?.defaultProjectPath ?? "/home/app/project"} value={remotePath} onChange={(event) => { setRemotePath(event.target.value); setPathError(null); }} /></label>
+              <div className="remote-machine-form-note">SharkBay verifies the path exists on the remote before adding the project.</div>
+              {pathError ? (
+                <div className="inline-connection-result is-error" role="status" aria-live="polite">{pathError}</div>
+              ) : null}
               <div className="remote-machine-form-actions">
-                <button className="button" disabled={!canAddRemote} type="submit">{busy ? "Adding" : "Add Remote Project"}</button>
+                <button className="button" disabled={!canAddRemote} type="submit">{busy ? busyLabel : "Add Remote Project"}</button>
               </div>
             </>
           )}

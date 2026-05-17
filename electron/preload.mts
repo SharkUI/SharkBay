@@ -20,6 +20,8 @@ import type {
   ListInstallRecipesInput,
   ListPortForwardsInput,
   MachineProfile,
+  PathExistsInput,
+  PathExistsResult,
   PortForwardEvent,
   ProfileReadOptions,
   ProjectConfigInput,
@@ -35,6 +37,7 @@ import type {
   RemoteMachineInput,
   RemoteMachineTestResult,
   RemotePortForward,
+  RenameProjectInput,
   RemoveProjectInput,
   RemovePortForwardInput,
   RemoveRemoteMachineInput,
@@ -83,6 +86,7 @@ const sharkBayApi = {
     removeRoot: (input: RemoveRootInput) => invoke<AppConfig>(channels.removeRoot, input),
     addProject: (input: ProjectConfigInput) => invoke<AppConfig>(channels.addProject, input),
     removeProject: (input: RemoveProjectInput) => invoke<AppConfig>(channels.removeProject, input),
+    renameProject: (input: RenameProjectInput) => invoke<AppConfig>(channels.renameProject, input),
     addRemoteMachine: (input: RemoteMachineInput) => invoke<AppConfig>(channels.addRemoteMachine, input),
     removeRemoteMachine: (input: RemoveRemoteMachineInput) => invoke<AppConfig>(channels.removeRemoteMachine, input),
     testRemoteMachine: (input: { id: string } | RemoteMachineInput) => invoke<RemoteMachineTestResult>(channels.testRemoteMachine, input),
@@ -146,6 +150,9 @@ const sharkBayApi = {
       invoke<MachineProfile>(channels.readMachineProfile, input),
     readProject: (input: { projectUri: string; options?: ProfileReadOptions }) =>
       invoke<ProjectProfile>(channels.readProjectProfile, input)
+  },
+  targets: {
+    pathExists: (input: PathExistsInput) => invoke<PathExistsResult>(channels.pathExistsOnTarget, input)
   },
   portForwards: {
     list: (input?: ListPortForwardsInput) => invoke<RemotePortForward[]>(channels.listPortForwards, input),

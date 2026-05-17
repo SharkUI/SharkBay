@@ -1397,13 +1397,13 @@ Settings 可以增加 Diagnostics 页面，导出最近日志，方便定位 rem
 | Shared target/profile/plugin types | Done | Added final architecture models in `src/shared/types.ts`. |
 | Core service boundary | Done (MVP) | Electron IPC now talks to `SharkBayCoreService` through a `CoreClient` proxy that forks the service into an Electron `utilityProcess` (`electron/core-host.ts`). Legacy `src/main/core/SharkBayCore` removed. |
 | Provider registry | Done | URI- and target-id-based dispatch in `src/core/provider-registry.ts`; no SSH special cases in callers. |
-| Local provider final shape | In progress | Runtime IPC now uses `LocalProvider`; profile detector migration remains. |
-| SSH provider final shape | In progress | Runtime IPC now uses `SshProvider`; helper/connection pooling remains. |
-| Plugin manifest and bundled plugin loader | In progress | Added manifest parser; bundled plugin loader remains. |
+| Local provider final shape | In progress | Runtime IPC uses `LocalProvider` with `readProjectFingerprint` and `pathExistsOnTarget`. Profile detector migration remains. |
+| SSH provider final shape | In progress | Runtime IPC uses `SshProvider` with `pathExistsOnTarget`; helper / connection pooling remain. |
+| Plugin manifest and bundled plugin loader | In progress | Manifest parser exists; loader that scans `~/.sharkbay/plugins/installed/` and registers contributions still remains. Bundled detectors are wired directly today. |
 | Profile orchestrator | In progress | Orchestrator with quick/standard/deep depth filtering; bundled detectors for core, Node, Python, Go, Rust, Java, and Agent CLIs. Detector `runOn` declares supported depths. |
 | Job scheduler | In progress | Added scheduler with per-target concurrency, priority, timeout, dedupe, and profile detector integration. |
 | Profile cache/storage | In progress | File cache keyed by `<target/uri>|<depth>` with 24h machine / 15min project TTLs; project cache invalidates on manifest-mtime / git-HEAD change for local provider. SQLite migration remains. |
-| UI profile consumption | In progress | Agent CLI buttons from MachineProfile; Stack tab in project detail and Machine Profile card in remote machine detail consume MachineProfile/ProjectProfile via new `profiles:*` IPC. Workspace summary view remains. |
+| UI profile consumption | In progress | Agent CLI buttons from MachineProfile; Stack tab in project detail and Machine Profile card in remote machine detail consume profiles via `profiles:*` IPC. Project list has context menu (rename / remove) with persisted `projectAliases`. Add Project verifies remote path via `targets:pathExists` before saving; terminals emit a friendly toast hint when they exit with a non-zero code within 5s. Workspace summary view remains. |
 | Agent install pipeline | Done (MVP) | Recipe listing, Core install/verify/refresh, IPC bridge, and renderer Install Agent dialog with command preview, target label, logs, and post-install refresh. |
 | Core service process isolation | Done (MVP) | `SharkBayCoreService` runs in an Electron `utilityProcess`. `CoreClient` (`electron/core-client.ts`) provides request/response + event forwarding via `parentPort` messages. Browser/AgentSessionWatcher/PortForwardManager stay in Electron main for now. Worker-pool split inside the core process remains. |
 | Remote helper strategy | Documented | Helper is optional, user-scoped, SharkBay-managed, and not a system daemon by default. |

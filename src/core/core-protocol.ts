@@ -6,6 +6,8 @@ import type {
   IpcRuntimeLike,
   ListInstallRecipesInput,
   MachineProfile,
+  PathExistsInput,
+  PathExistsResult,
   ProfileReadOptions,
   ProjectDetail,
   ProjectFilesInput,
@@ -38,10 +40,11 @@ export type CoreMethodMap = {
   writeProjectFile: { args: [IpcRuntimeLike, WriteFileInput]; result: WriteFileResult };
   readMachineProfile: { args: [IpcRuntimeLike, string, ProfileReadOptions | undefined]; result: MachineProfile };
   readProjectProfile: { args: [IpcRuntimeLike, string, ProfileReadOptions | undefined]; result: ProjectProfile };
+  pathExistsOnTarget: { args: [IpcRuntimeLike, PathExistsInput]; result: PathExistsResult };
   createTerminal: { args: [IpcRuntimeLike, TerminalCreateInput]; result: TerminalSession };
-  inputTerminal: { args: [TerminalInput]; result: TerminalSession };
-  resizeTerminal: { args: [TerminalResizeInput]; result: TerminalSession };
-  closeTerminal: { args: [TerminalCloseInput]; result: TerminalSession };
+  inputTerminal: { args: [TerminalInput]; result: TerminalSession | null };
+  resizeTerminal: { args: [TerminalResizeInput]; result: TerminalSession | null };
+  closeTerminal: { args: [TerminalCloseInput]; result: TerminalSession | null };
   closeAllTerminalSessions: { args: []; result: void };
 };
 

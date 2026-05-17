@@ -14,6 +14,7 @@ export type AppConfig = {
   configuredProjects?: string[];
   configuredRemoteProjects?: string[];
   configuredRemoteMachines?: RemoteMachine[];
+  projectAliases?: Record<string, string>;
   appearanceTheme?: AppearanceTheme;
   updatedAt?: string;
 };
@@ -87,6 +88,15 @@ export type InstallRecipe = {
 };
 
 export type ExecutionTargetKind = "local" | "ssh" | "container" | "wsl";
+
+export type PathExistsInput = {
+  targetId: string;
+  path: string;
+};
+
+export type PathExistsResult =
+  | { ok: true; kind: "file" | "directory" }
+  | { ok: false; reason: "not-found" | "unreachable" | "error"; message: string };
 
 export type ProfileReadOptions = {
   refresh?: boolean;
@@ -427,6 +437,7 @@ export type SharkBayBridge = {
     removeRoot?: (input: { path: string; rootPath?: string } | string) => Promise<AppConfig | RootRecord[] | void>;
     addProject?: (input: { path?: string; uri?: string }) => Promise<AppConfig | void>;
     removeProject?: (input: { path?: string; uri?: string }) => Promise<AppConfig | void>;
+    renameProject?: (input: { uri: string; name: string }) => Promise<AppConfig | void>;
     addRemoteMachine?: (input: RemoteMachineInput) => Promise<AppConfig>;
     removeRemoteMachine?: (input: { id: string }) => Promise<AppConfig>;
     testRemoteMachine?: (input: { id: string } | RemoteMachineInput) => Promise<RemoteMachineTestResult>;
@@ -468,6 +479,9 @@ export type SharkBayBridge = {
   profiles?: {
     readMachine?: (input: { targetId: string; options?: ProfileReadOptions }) => Promise<MachineProfile>;
     readProject?: (input: { projectUri: string; options?: ProfileReadOptions }) => Promise<ProjectProfile>;
+  };
+  targets?: {
+    pathExists?: (input: PathExistsInput) => Promise<PathExistsResult>;
   };
   portForwards?: {
     list?: (input?: { machineId?: string }) => Promise<RemotePortForward[]>;
