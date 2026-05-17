@@ -50,6 +50,7 @@ const dispatchers: Record<CoreMethodName, Dispatcher> = {
   listPlugins: () => core.listPlugins(),
   setPluginEnabled: ([pluginId, enabled]) => core.setPluginEnabled(pluginId as string, enabled as boolean),
   applyDisabledPlugins: ([disabledIds]) => core.applyDisabledPlugins(disabledIds as string[]),
+  readDiagnostics: () => core.readDiagnostics(),
   createTerminal: ([runtime, input]) => core.createTerminal(runtime as never, input as never),
   inputTerminal: ([input]) => core.inputTerminal(input as never),
   resizeTerminal: ([input]) => core.resizeTerminal(input as never),

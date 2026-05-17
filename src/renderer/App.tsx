@@ -14,6 +14,7 @@ import type {
   BrowserBounds,
   BrowserSession,
   BrowserUpdateEvent,
+  DiagnosticsSnapshot,
   InstallRecipe,
   InstallToolResult,
   MachineProfile,
@@ -49,7 +50,7 @@ import type { WorkflowProjectTerminalActivityState } from "./workflow";
 
 type View = "dashboard" | "settings";
 type DetailTab = "git" | "stack" | "files" | "forwards";
-type SettingsSection = "local-machine" | "appearance" | "extensions" | `remote-machine:${string}`;
+type SettingsSection = "local-machine" | "appearance" | "extensions" | "diagnostics" | `remote-machine:${string}`;
 
 const remoteConnectionMethods: Array<{
   id: RemoteMachineInput["authMode"];
@@ -2480,6 +2481,7 @@ function SettingsView({ appearanceTheme, roots, configuredProjects, configuredRe
     }
     if (section.startsWith("remote-machine:")) return "Remote";
     if (section === "extensions") return "Plugins";
+    if (section === "diagnostics") return "Activity & latency";
     return appearanceThemes.find((theme) => theme.id === appearanceTheme)?.label ?? "Theme";
   }
 
@@ -2517,6 +2519,9 @@ function SettingsView({ appearanceTheme, roots, configuredProjects, configuredRe
             <button aria-current={activeSection === "extensions" ? "page" : undefined} className={cx("settings-nav-item", activeSection === "extensions" && "is-selected")} type="button" onClick={() => setActiveSection("extensions")}>
               <span>Extensions</span><small>{sectionMeta("extensions")}</small>
             </button>
+            <button aria-current={activeSection === "diagnostics" ? "page" : undefined} className={cx("settings-nav-item", activeSection === "diagnostics" && "is-selected")} type="button" onClick={() => setActiveSection("diagnostics")}>
+              <span>Diagnostics</span><small>{sectionMeta("diagnostics")}</small>
+            </button>
             <button aria-current={activeSection === "appearance" ? "page" : undefined} className={cx("settings-nav-item", activeSection === "appearance" && "is-selected")} type="button" onClick={() => setActiveSection("appearance")}>
               <span>Appearance</span><small>{sectionMeta("appearance")}</small>
             </button>
@@ -2538,6 +2543,10 @@ function SettingsView({ appearanceTheme, roots, configuredProjects, configuredRe
             <div className="settings-section-heading"><h4>Extensions</h4><span>Manage installed plugins</span></div>
             <ExtensionsSettingsPanel active={activeSection === "extensions"} setToast={setToast} />
           </div>
+          <div className="settings-section-panel" hidden={activeSection !== "diagnostics"}>
+            <div className="settings-section-heading"><h4>Diagnostics</h4><span>Inspect job queue, cache hits, SSH latency</span></div>
+            <DiagnosticsSettingsPanel active={activeSection === "diagnostics"} setToast={setToast} />
+          </div>
           <div className="settings-section-panel" hidden={activeSection !== "appearance"}>
             <div className="settings-section-heading"><h4>Appearance</h4><span>{appearanceDescription(appearanceTheme)}</span></div>
             <AppearanceSettingsPanel appearanceTheme={appearanceTheme} setToast={setToast} onThemeChange={onThemeChange} />
@@ -2554,6 +2563,124 @@ function SettingsView({ appearanceTheme, roots, configuredProjects, configuredRe
       ) : null}
     </div>
   );
+}
+
+function DiagnosticsSettingsPanel({ active, setToast }: { active: boolean; setToast: (toast: Toast) => void }) {
+  const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [fetchKey, setFetchKey] = useState(0);
+
+  useEffect(() => {
+    if (!active) return;
+    let cancelled = false;
+    const read = getBridge().diagnostics?.read;
+    if (!read) { setLoadError("Diagnostics API is not available."); return; }
+    read()
+      .then((next) => { if (!cancelled) { setSnapshot(next); setLoadError(null); } })
+      .catch((error) => { if (!cancelled) setLoadError(asMessage(error)); });
+    return () => { cancelled = true; };
+  }, [active, fetchKey]);
+
+  useEffect(() => {
+    if (!active) return;
+    const timer = window.setInterval(() => setFetchKey((current) => current + 1), 3000);
+    return () => window.clearInterval(timer);
+  }, [active]);
+
+  if (loadError) return <section className="workflow-panel"><div className="inline-connection-result is-error" role="status">{loadError}</div></section>;
+  if (!snapshot) return <section className="workflow-panel"><div className="form-note">Loading diagnostics…</div></section>;
+
+  const uptimeMs = Math.max(0, Date.parse(snapshot.collectedAt) - Date.parse(snapshot.processStartedAt));
+  const terminalRate = uptimeMs > 0 ? (snapshot.terminalData.total / (uptimeMs / 1000)).toFixed(1) : "0";
+
+  return (
+    <>
+      <section className="workflow-panel">
+        <div className="panel-title-row compact-title-row">
+          <h4>Core service</h4>
+          <button aria-label="Refresh diagnostics" className="icon-button" type="button" onClick={() => { setFetchKey((current) => current + 1); setToast({ tone: "info", message: "Diagnostics refreshed" }); }}><RefreshIcon /></button>
+        </div>
+        <div className="settings-facts-grid">
+          <Fact label="Process uptime" value={formatDurationLong(uptimeMs)} />
+          <Fact label="Recent jobs" value={String(snapshot.recentJobs.length)} />
+          <Fact label="Terminal events" value={`${snapshot.terminalData.total} (${terminalRate}/s)`} />
+        </div>
+      </section>
+      <section className="workflow-panel">
+        <div className="panel-title-row compact-title-row"><h4>Profile cache</h4></div>
+        <div className="settings-facts-grid">
+          <Fact label="Machine hits" value={String(snapshot.cache.machine.hits)} />
+          <Fact label="Machine misses" value={String(snapshot.cache.machine.misses)} tone={snapshot.cache.machine.misses > snapshot.cache.machine.hits ? "warn" : undefined} />
+          <Fact label="Project hits" value={String(snapshot.cache.project.hits)} />
+          <Fact label="Project misses" value={String(snapshot.cache.project.misses)} tone={snapshot.cache.project.misses > snapshot.cache.project.hits ? "warn" : undefined} />
+        </div>
+      </section>
+      <section className="workflow-panel">
+        <div className="panel-title-row compact-title-row"><h4>SSH latency</h4></div>
+        {snapshot.ssh.count === 0 ? (
+          <div className="form-note">No SSH commands recorded yet.</div>
+        ) : (
+          <div className="settings-facts-grid">
+            <Fact label="Samples" value={String(snapshot.ssh.count)} />
+            <Fact label="Errors" value={String(snapshot.ssh.errors)} tone={snapshot.ssh.errors > 0 ? "warn" : undefined} />
+            <Fact label="Avg" value={formatLatency(snapshot.ssh.avgMs)} />
+            <Fact label="p50" value={formatLatency(snapshot.ssh.p50Ms)} />
+            <Fact label="p95" value={formatLatency(snapshot.ssh.p95Ms)} />
+            <Fact label="Max" value={formatLatency(snapshot.ssh.maxMs)} />
+          </div>
+        )}
+      </section>
+      <section className="workflow-panel">
+        <div className="panel-title-row compact-title-row"><h4>Detector activity</h4></div>
+        {snapshot.detectorAggregates.length === 0 ? (
+          <div className="form-note">No detector runs recorded yet.</div>
+        ) : (
+          <div className="settings-list">
+            {snapshot.detectorAggregates.map((aggregate) => (
+              <div className="settings-list-row" key={aggregate.detectorKey}>
+                <span className="truncate"><strong>{aggregate.detectorKey}</strong></span>
+                <small className="truncate">{aggregate.runs} run{aggregate.runs === 1 ? "" : "s"} · avg {formatLatency(aggregate.avgDurationMs)}{aggregate.failureCount > 0 ? ` · ${aggregate.failureCount} failure${aggregate.failureCount === 1 ? "" : "s"}` : ""}</small>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+      <section className="workflow-panel">
+        <div className="panel-title-row compact-title-row"><h4>Recent jobs</h4></div>
+        {snapshot.recentJobs.length === 0 ? (
+          <div className="form-note">No jobs recorded yet.</div>
+        ) : (
+          <div className="settings-list">
+            {snapshot.recentJobs.slice(0, 20).map((job) => (
+              <div className={cx("settings-list-row", job.status !== "completed" && "is-warn")} key={job.id}>
+                <span className="truncate"><strong>{job.kind}</strong> · {job.targetId} · {formatLatency(job.durationMs)} · {job.status}</span>
+                <small className="truncate">{job.error ?? job.projectUri ?? job.finishedAt}</small>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </>
+  );
+}
+
+function formatLatency(ms: number | null): string {
+  if (ms === null || !Number.isFinite(ms)) return "-";
+  if (ms < 1) return "<1 ms";
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  return `${(ms / 1000).toFixed(2)} s`;
+}
+
+function formatDurationLong(ms: number): string {
+  if (ms < 1000) return "<1 s";
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds} s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainSeconds = seconds % 60;
+  if (minutes < 60) return `${minutes}m ${remainSeconds}s`;
+  const hours = Math.floor(minutes / 60);
+  const remainMinutes = minutes % 60;
+  return `${hours}h ${remainMinutes}m`;
 }
 
 function ExtensionsSettingsPanel({ active, setToast }: { active: boolean; setToast: (toast: Toast) => void }) {

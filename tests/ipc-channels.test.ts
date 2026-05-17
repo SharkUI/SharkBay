@@ -41,6 +41,7 @@ describe("IPC channels", () => {
       pathExistsOnTarget: "projects:pathExists",
       listPlugins: "plugins:list",
       setPluginEnabled: "plugins:setEnabled",
+      readDiagnostics: "diagnostics:read",
       addRemoteMachine: "remotes:addMachine",
       removeRemoteMachine: "remotes:removeMachine",
       testRemoteMachine: "remotes:testMachine",

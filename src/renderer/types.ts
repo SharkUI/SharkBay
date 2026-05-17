@@ -89,6 +89,55 @@ export type InstallRecipe = {
 
 export type ExecutionTargetKind = "local" | "ssh" | "container" | "wsl";
 
+export type DiagnosticsJobRecord = {
+  id: string;
+  kind: string;
+  targetId: string;
+  projectUri?: string;
+  status: "completed" | "failed" | "cancelled" | "timeout";
+  durationMs: number;
+  createdAt: string;
+  finishedAt: string;
+  error?: string;
+};
+
+export type DiagnosticsDetectorAggregate = {
+  detectorKey: string;
+  runs: number;
+  totalDurationMs: number;
+  avgDurationMs: number;
+  lastRunAt: string;
+  failureCount: number;
+};
+
+export type DiagnosticsLatencyStats = {
+  count: number;
+  errors: number;
+  minMs: number | null;
+  maxMs: number | null;
+  avgMs: number | null;
+  p50Ms: number | null;
+  p95Ms: number | null;
+};
+
+export type DiagnosticsCounter = {
+  total: number;
+  sinceIso: string;
+};
+
+export type DiagnosticsSnapshot = {
+  collectedAt: string;
+  processStartedAt: string;
+  recentJobs: DiagnosticsJobRecord[];
+  detectorAggregates: DiagnosticsDetectorAggregate[];
+  cache: {
+    machine: { hits: number; misses: number };
+    project: { hits: number; misses: number };
+  };
+  ssh: DiagnosticsLatencyStats;
+  terminalData: DiagnosticsCounter;
+};
+
 export type PluginTrustState = "bundled" | "verified" | "trusted" | "untrusted" | "disabled";
 
 export type PluginSummary = {
@@ -503,6 +552,9 @@ export type SharkBayBridge = {
   plugins?: {
     list?: () => Promise<PluginSummary[]>;
     setEnabled?: (input: { pluginId: string; enabled: boolean }) => Promise<PluginSummary[]>;
+  };
+  diagnostics?: {
+    read?: () => Promise<DiagnosticsSnapshot>;
   };
   portForwards?: {
     list?: (input?: { machineId?: string }) => Promise<RemotePortForward[]>;

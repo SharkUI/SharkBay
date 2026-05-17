@@ -1,5 +1,6 @@
 import type {
   AgentCli,
+  DiagnosticsSnapshot,
   InstallRecipe,
   InstallToolInput,
   InstallToolResult,
@@ -45,6 +46,7 @@ export type CoreMethodMap = {
   listPlugins: { args: []; result: PluginSummary[] };
   setPluginEnabled: { args: [string, boolean]; result: PluginSummary[] };
   applyDisabledPlugins: { args: [string[]]; result: void };
+  readDiagnostics: { args: []; result: DiagnosticsSnapshot };
   createTerminal: { args: [IpcRuntimeLike, TerminalCreateInput]; result: TerminalSession };
   inputTerminal: { args: [TerminalInput]; result: TerminalSession | null };
   resizeTerminal: { args: [TerminalResizeInput]; result: TerminalSession | null };

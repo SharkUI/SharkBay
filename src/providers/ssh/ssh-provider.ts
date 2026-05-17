@@ -41,6 +41,10 @@ import type {
 } from "../../core/execution-provider.js";
 import { parseProjectUri } from "../../core/project-uri.js";
 
+export type DiagnosticsTap = {
+  recordSshLatency(latencyMs: number, ok: boolean): void;
+};
+
 export class SshProvider extends EventEmitter implements ExecutionProvider {
   readonly id = "ssh";
   readonly kind = "ssh" as const;
@@ -49,6 +53,7 @@ export class SshProvider extends EventEmitter implements ExecutionProvider {
   private readonly terminalManager: TerminalManager;
   private readonly secretStore: SecretStore;
   private readonly runner: SshCommandRunner;
+  private diagnostics: DiagnosticsTap | null = null;
 
   constructor(options: { terminalManager?: TerminalManager; secretStore?: SecretStore; runner?: SshCommandRunner } = {}) {
     super();
@@ -58,6 +63,10 @@ export class SshProvider extends EventEmitter implements ExecutionProvider {
     this.terminalManager.on("data", (event) => this.emit("terminalData", event));
     this.terminalManager.on("update", (event) => this.emit("terminalUpdate", event));
     this.terminalManager.on("exit", (event) => this.emit("terminalExit", event));
+  }
+
+  setDiagnosticsCollector(diagnostics: DiagnosticsTap): void {
+    this.diagnostics = diagnostics;
   }
 
   async resolveTarget(runtime: IpcRuntimeLike, uriOrTargetId: string): Promise<ExecutionTarget> {
@@ -208,10 +217,13 @@ export class SshProvider extends EventEmitter implements ExecutionProvider {
       "--",
       remoteShellCommand(remoteCommand),
     ];
+    const startedAt = Date.now();
     try {
       const result = await this.runner(args, options.timeoutMs ?? 8000, password ? { password } : undefined);
+      this.diagnostics?.recordSshLatency(Date.now() - startedAt, true);
       return { stdout: result.stdout, stderr: result.stderr, exitCode: 0 };
     } catch (error) {
+      this.diagnostics?.recordSshLatency(Date.now() - startedAt, false);
       const detail = error as { stdout?: unknown; stderr?: unknown; code?: unknown };
       return {
         stdout: String(detail.stdout ?? ""),

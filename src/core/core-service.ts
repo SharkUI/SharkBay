@@ -6,6 +6,7 @@ import { resolveProjectUri } from "../main/path-safety.js";
 import type {
   IpcRuntimeLike,
   AgentCli,
+  DiagnosticsSnapshot,
   InstallToolInput,
   InstallToolResult,
   InstallRecipe,
@@ -41,6 +42,7 @@ import { bundledPlugins } from "../plugins/bundled-plugins.js";
 import { ProfileOrchestrator } from "../profiles/profile-orchestrator.js";
 import { JobScheduler } from "./job-scheduler.js";
 import { ProfileCache } from "../storage/profile-cache.js";
+import { DiagnosticsCollector } from "./diagnostics.js";
 
 export type SharkBayCoreServiceEvents = {
   terminalData: [TerminalDataEvent];
@@ -54,6 +56,7 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
   readonly scheduler: JobScheduler;
   readonly profileCache: ProfileCache;
   readonly profiles: ProfileOrchestrator;
+  readonly diagnostics: DiagnosticsCollector;
   private readonly terminalProviders = new Map<string, ExecutionProvider>();
 
   constructor(providers: ExecutionProvider[] = [], pluginHost = createDefaultPluginHost()) {
@@ -62,10 +65,19 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
     this.pluginHost = pluginHost;
     this.scheduler = new JobScheduler();
     this.profileCache = new ProfileCache();
-    this.profiles = new ProfileOrchestrator(this.providers, this.pluginHost, this.scheduler, this.profileCache);
+    this.diagnostics = new DiagnosticsCollector();
+    this.profiles = new ProfileOrchestrator(this.providers, this.pluginHost, this.scheduler, this.profileCache, this.diagnostics);
+    this.scheduler.on("update", (job) => this.diagnostics.recordJobUpdate(job));
     for (const provider of providers) {
       if (provider instanceof EventEmitter) {
-        provider.on("terminalData", (event) => this.emit("terminalData", event));
+        const maybeWithDiagnostics = provider as unknown as { setDiagnosticsCollector?: (collector: DiagnosticsCollector) => void };
+        if (typeof maybeWithDiagnostics.setDiagnosticsCollector === "function") {
+          maybeWithDiagnostics.setDiagnosticsCollector(this.diagnostics);
+        }
+        provider.on("terminalData", (event) => {
+          this.diagnostics.recordTerminalData();
+          this.emit("terminalData", event);
+        });
         provider.on("terminalUpdate", (event) => this.emit("terminalUpdate", event));
         provider.on("terminalExit", (event) => {
           this.terminalProviders.delete(event.sessionId);
@@ -73,6 +85,10 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
         });
       }
     }
+  }
+
+  readDiagnostics(): DiagnosticsSnapshot {
+    return this.diagnostics.snapshot();
   }
 
   scanProjects(runtime: IpcRuntimeLike, input?: ProjectScanInput): Promise<ScanProjectsResult> {

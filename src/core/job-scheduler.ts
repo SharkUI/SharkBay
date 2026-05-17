@@ -9,6 +9,7 @@ export type ScheduledJob<T> = SharkBayJob & {
   finishedAt?: string;
   error?: string;
   result?: T;
+  dedupeKey?: string;
 };
 
 export type JobSchedulerEvents = {
@@ -56,6 +57,7 @@ export class JobScheduler extends EventEmitter<JobSchedulerEvents> {
       timeoutMs: input.timeoutMs ?? this.options.defaultTimeoutMs ?? 5000,
       createdAt: new Date().toISOString(),
       status: "queued",
+      ...(input.dedupeKey ? { dedupeKey: input.dedupeKey } : {}),
     };
 
     const promise = new Promise<T>((resolve, reject) => {

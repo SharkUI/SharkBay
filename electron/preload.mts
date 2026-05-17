@@ -19,6 +19,7 @@ import type {
   InstallToolResult,
   InstallRecipe,
   ListInstallRecipesInput,
+  DiagnosticsSnapshot,
   ListPortForwardsInput,
   MachineProfile,
   PathExistsInput,
@@ -158,6 +159,9 @@ const sharkBayApi = {
   plugins: {
     list: () => invoke<PluginSummary[]>(channels.listPlugins),
     setEnabled: (input: { pluginId: string; enabled: boolean }) => invoke<PluginSummary[]>(channels.setPluginEnabled, input)
+  },
+  diagnostics: {
+    read: () => invoke<DiagnosticsSnapshot>(channels.readDiagnostics)
   },
   portForwards: {
     list: (input?: ListPortForwardsInput) => invoke<RemotePortForward[]>(channels.listPortForwards, input),

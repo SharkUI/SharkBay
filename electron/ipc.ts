@@ -28,6 +28,7 @@ import type {
   InstallToolResult,
   InstallRecipe,
   ListInstallRecipesInput,
+  DiagnosticsSnapshot,
   MachineProfile,
   PathExistsInput,
   PathExistsResult,
@@ -244,6 +245,9 @@ export async function registerIpcHandlers(
     await setPluginEnabledConfig(runtime, payload.pluginId, payload.enabled);
     return requireCore().call("setPluginEnabled", [payload.pluginId, payload.enabled]);
   });
+  handle<void, DiagnosticsSnapshot>(channels.readDiagnostics, () =>
+    requireCore().call("readDiagnostics", [])
+  );
   ipcMain.removeHandler(channels.createBrowser);
   ipcMain.handle(channels.createBrowser, (event, payload: BrowserCreateInput) => {
     const window = BrowserWindow.fromWebContents(event.sender);

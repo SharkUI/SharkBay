@@ -5,6 +5,7 @@ import type { IpcRuntimeLike, MachineProfile, ProfileDepth, ProfileReadOptions, 
 import { detectorMatchesDepth } from "../plugins/plugin-host.js";
 import type { PluginHost, MachineProfilePatch, ProjectProfilePatch } from "../plugins/plugin-host.js";
 import { ProfileCache } from "../storage/profile-cache.js";
+import type { DiagnosticsCollector } from "../core/diagnostics.js";
 
 const DEFAULT_DEPTH: ProfileDepth = "standard";
 
@@ -14,6 +15,7 @@ export class ProfileOrchestrator {
     private readonly pluginHost: PluginHost,
     private readonly scheduler = new JobScheduler(),
     private readonly cache = new ProfileCache(),
+    private readonly diagnostics?: DiagnosticsCollector,
   ) {}
 
   async readMachineProfile(runtime: IpcRuntimeLike, targetId: string, options?: ProfileReadOptions): Promise<MachineProfile> {
@@ -21,7 +23,11 @@ export class ProfileOrchestrator {
     const cacheKey = `${targetId}|${depth}`;
     if (!options?.refresh) {
       const cached = await this.cache.readMachineProfile(runtime, cacheKey);
-      if (cached) return cached;
+      if (cached) {
+        this.diagnostics?.recordCacheHit("machine");
+        return cached;
+      }
+      this.diagnostics?.recordCacheMiss("machine");
     }
     const provider = this.providers.providerForTargetId(targetId);
     const base = await provider.readMachineProfile(runtime, targetId, options);
@@ -56,8 +62,10 @@ export class ProfileOrchestrator {
     if (!options?.refresh) {
       const cached = await this.cache.readProjectProfileWithFingerprint(runtime, cacheKey);
       if (cached && (!currentFingerprint || fingerprintsMatch(cached.fingerprint, currentFingerprint))) {
+        this.diagnostics?.recordCacheHit("project");
         return cached.value;
       }
+      this.diagnostics?.recordCacheMiss("project");
     }
     const base = await provider.readProjectProfile(runtime, projectUri, options);
     const ctx = await provider.createProjectProbeContext(runtime, projectUri);
