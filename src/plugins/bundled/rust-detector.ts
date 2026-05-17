@@ -1,4 +1,5 @@
-import type { BundledPlugin, ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
+import type { BundledPlugin, MachineDetector, ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
+import { probeTools } from "./tool-probe.js";
 
 const pluginId = "com.sharkbay.language.rust";
 
@@ -10,13 +11,34 @@ export function rustBundledPlugin(): BundledPlugin {
       version: "1.0.0",
       publisher: "SharkBay",
       engines: { sharkbay: "^0.2.0" },
-      capabilities: [{ kind: "profile:project" }, { kind: "file:read", patterns: ["Cargo.toml", "Cargo.lock"] }],
+      capabilities: [{ kind: "profile:machine" }, { kind: "profile:project" }, { kind: "file:read", patterns: ["Cargo.toml", "Cargo.lock"] }],
       contributes: {
+        machineDetectors: [{ id: "rust.machine", label: "Rust Toolchain Detector" }],
         projectDetectors: [{ id: "rust.project", label: "Rust Project Detector" }],
       },
     },
     register(api) {
+      api.registerMachineDetector(createRustMachineDetector());
       api.registerProjectDetector(createRustProjectDetector());
+    },
+  };
+}
+
+export function createRustMachineDetector(): MachineDetector {
+  return {
+    id: "rust.machine",
+    pluginId,
+    label: "Rust Toolchain Detector",
+    runOn: ["standard", "deep"],
+    async run(ctx) {
+      const [languages, packageManagers] = await Promise.all([
+        probeTools(ctx, [{ id: "rustc", command: "rustc" }], pluginId),
+        probeTools(ctx, [{ id: "cargo", command: "cargo" }], pluginId),
+      ]);
+      return {
+        languages: languages.filter((tool) => tool.available),
+        packageManagers: packageManagers.filter((tool) => tool.available),
+      };
     },
   };
 }

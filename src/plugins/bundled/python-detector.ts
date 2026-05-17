@@ -1,4 +1,5 @@
-import type { BundledPlugin, ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
+import type { BundledPlugin, MachineDetector, ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
+import { probeTools } from "./tool-probe.js";
 
 const pluginId = "com.sharkbay.language.python";
 
@@ -10,13 +11,44 @@ export function pythonBundledPlugin(): BundledPlugin {
       version: "1.0.0",
       publisher: "SharkBay",
       engines: { sharkbay: "^0.2.0" },
-      capabilities: [{ kind: "profile:project" }, { kind: "file:read", patterns: ["pyproject.toml", "requirements*.txt", "Pipfile*", "*.lock"] }],
+      capabilities: [{ kind: "profile:machine" }, { kind: "profile:project" }, { kind: "file:read", patterns: ["pyproject.toml", "requirements*.txt", "Pipfile*", "*.lock"] }],
       contributes: {
+        machineDetectors: [{ id: "python.machine", label: "Python Runtime Detector" }],
         projectDetectors: [{ id: "python.project", label: "Python Project Detector" }],
       },
     },
     register(api) {
+      api.registerMachineDetector(createPythonMachineDetector());
       api.registerProjectDetector(createPythonProjectDetector());
+    },
+  };
+}
+
+export function createPythonMachineDetector(): MachineDetector {
+  return {
+    id: "python.machine",
+    pluginId,
+    label: "Python Runtime Detector",
+    runOn: ["standard", "deep"],
+    async run(ctx) {
+      const [languages, packageManagers] = await Promise.all([
+        probeTools(ctx, [
+          { id: "python", command: "python" },
+          { id: "python3", command: "python3" },
+        ], pluginId),
+        probeTools(ctx, [
+          { id: "pip", command: "pip" },
+          { id: "pip3", command: "pip3" },
+          { id: "uv", command: "uv" },
+          { id: "poetry", command: "poetry" },
+          { id: "pipenv", command: "pipenv" },
+          { id: "conda", command: "conda" },
+        ], pluginId),
+      ]);
+      return {
+        languages: languages.filter((tool) => tool.available),
+        packageManagers: packageManagers.filter((tool) => tool.available),
+      };
     },
   };
 }

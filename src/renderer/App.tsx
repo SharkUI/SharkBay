@@ -2009,24 +2009,34 @@ function StackDetailTab({ active, candidate, setToast }: { active: boolean; cand
   const [profile, setProfile] = useState<ProjectProfile | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
+  const [fetchKey, setFetchKey] = useState(0);
+  const forceRefreshRef = useRef(false);
 
   useEffect(() => {
     if (!active) return;
     let cancelled = false;
     const readProject = getBridge().profiles?.readProject;
     if (!readProject) { setLoadError("Project profile API is not available."); return; }
+    const wasForcedRefresh = forceRefreshRef.current;
+    forceRefreshRef.current = false;
     setBusy(true);
     setLoadError(null);
-    readProject({ projectUri: candidate.uri, options: reloadKey > 0 ? { refresh: true } : undefined })
+    readProject({ projectUri: candidate.uri, options: wasForcedRefresh ? { refresh: true } : undefined })
       .then((next) => { if (!cancelled) setProfile(next); })
       .catch((error) => { if (!cancelled) setLoadError(asMessage(error)); })
       .finally(() => { if (!cancelled) setBusy(false); });
     return () => { cancelled = true; };
-  }, [active, candidate.uri, reloadKey]);
+  }, [active, candidate.uri, fetchKey]);
+
+  useEffect(() => {
+    if (!active) return;
+    const timer = window.setInterval(() => setFetchKey((current) => current + 1), 30000);
+    return () => window.clearInterval(timer);
+  }, [active, candidate.uri]);
 
   function refresh() {
-    setReloadKey((current) => current + 1);
+    forceRefreshRef.current = true;
+    setFetchKey((current) => current + 1);
     setToast({ tone: "info", message: "Refreshing project profile" });
   }
 

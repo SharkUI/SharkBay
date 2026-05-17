@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { BundledPlugin, MachineDetector, ProjectDetector } from "../plugin-host.js";
+import { probeTools } from "./tool-probe.js";
 
 const pluginId = "com.sharkbay.core";
 
@@ -13,13 +14,46 @@ export function coreBundledPlugin(): BundledPlugin {
       engines: { sharkbay: "^0.2.0" },
       capabilities: [{ kind: "profile:machine" }, { kind: "profile:project" }],
       contributes: {
-        machineDetectors: [{ id: "core.machine", label: "Core Machine Detector" }],
+        machineDetectors: [
+          { id: "core.machine", label: "Core Machine Detector" },
+          { id: "core.tools", label: "Core System Tools Detector" },
+        ],
         projectDetectors: [{ id: "core.project", label: "Core Project Detector" }],
       },
     },
     register(api) {
       api.registerMachineDetector(createCoreMachineDetector());
+      api.registerMachineDetector(createCoreToolsDetector());
       api.registerProjectDetector(createCoreProjectDetector());
+    },
+  };
+}
+
+export function createCoreToolsDetector(): MachineDetector {
+  return {
+    id: "core.tools",
+    pluginId,
+    label: "Core System Tools Detector",
+    runOn: ["standard", "deep"],
+    async run(ctx) {
+      const [tools, packageManagers] = await Promise.all([
+        probeTools(ctx, [
+          { id: "git", command: "git" },
+          { id: "ssh", command: "ssh", versionArgs: ["-V"] },
+          { id: "curl", command: "curl" },
+          { id: "wget", command: "wget" },
+          { id: "docker", command: "docker" },
+        ], pluginId),
+        probeTools(ctx, [
+          { id: "brew", command: "brew" },
+          { id: "apt", command: "apt" },
+          { id: "dnf", command: "dnf" },
+          { id: "yum", command: "yum" },
+          { id: "pacman", command: "pacman" },
+          { id: "apk", command: "apk" },
+        ], pluginId),
+      ]);
+      return { tools, packageManagers: packageManagers.filter((tool) => tool.available) };
     },
   };
 }

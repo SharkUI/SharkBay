@@ -1,5 +1,6 @@
-import type { BundledPlugin, ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
+import type { BundledPlugin, MachineDetector, ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
 import type { DetectedPackageManager, ProjectProfile } from "../../shared/types.js";
+import { probeTools } from "./tool-probe.js";
 
 const pluginId = "com.sharkbay.language.node";
 
@@ -11,13 +12,40 @@ export function nodeBundledPlugin(): BundledPlugin {
       version: "1.0.0",
       publisher: "SharkBay",
       engines: { sharkbay: "^0.2.0" },
-      capabilities: [{ kind: "profile:project" }, { kind: "file:read", patterns: ["package.json", "*.lock", "pnpm-workspace.yaml"] }],
+      capabilities: [{ kind: "profile:machine" }, { kind: "profile:project" }, { kind: "file:read", patterns: ["package.json", "*.lock", "pnpm-workspace.yaml"] }],
       contributes: {
+        machineDetectors: [{ id: "node.machine", label: "Node.js Runtime Detector" }],
         projectDetectors: [{ id: "node.project", label: "Node.js Project Detector" }],
       },
     },
     register(api) {
+      api.registerMachineDetector(createNodeMachineDetector());
       api.registerProjectDetector(createNodeProjectDetector());
+    },
+  };
+}
+
+export function createNodeMachineDetector(): MachineDetector {
+  return {
+    id: "node.machine",
+    pluginId,
+    label: "Node.js Runtime Detector",
+    runOn: ["standard", "deep"],
+    async run(ctx) {
+      const [languages, packageManagers] = await Promise.all([
+        probeTools(ctx, [{ id: "node", command: "node" }], pluginId),
+        probeTools(ctx, [
+          { id: "npm", command: "npm" },
+          { id: "pnpm", command: "pnpm" },
+          { id: "yarn", command: "yarn" },
+          { id: "bun", command: "bun" },
+          { id: "corepack", command: "corepack" },
+        ], pluginId),
+      ]);
+      return {
+        languages: languages.filter((tool) => tool.available),
+        packageManagers: packageManagers.filter((tool) => tool.available),
+      };
     },
   };
 }

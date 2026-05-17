@@ -1,4 +1,5 @@
-import type { BundledPlugin, ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
+import type { BundledPlugin, MachineDetector, ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
+import { probeTools } from "./tool-probe.js";
 
 const pluginId = "com.sharkbay.language.go";
 
@@ -10,13 +11,28 @@ export function goBundledPlugin(): BundledPlugin {
       version: "1.0.0",
       publisher: "SharkBay",
       engines: { sharkbay: "^0.2.0" },
-      capabilities: [{ kind: "profile:project" }, { kind: "file:read", patterns: ["go.mod", "go.sum"] }],
+      capabilities: [{ kind: "profile:machine" }, { kind: "profile:project" }, { kind: "file:read", patterns: ["go.mod", "go.sum"] }],
       contributes: {
+        machineDetectors: [{ id: "go.machine", label: "Go Runtime Detector" }],
         projectDetectors: [{ id: "go.project", label: "Go Project Detector" }],
       },
     },
     register(api) {
+      api.registerMachineDetector(createGoMachineDetector());
       api.registerProjectDetector(createGoProjectDetector());
+    },
+  };
+}
+
+export function createGoMachineDetector(): MachineDetector {
+  return {
+    id: "go.machine",
+    pluginId,
+    label: "Go Runtime Detector",
+    runOn: ["standard", "deep"],
+    async run(ctx) {
+      const languages = await probeTools(ctx, [{ id: "go", command: "go" }], pluginId);
+      return { languages: languages.filter((tool) => tool.available) };
     },
   };
 }

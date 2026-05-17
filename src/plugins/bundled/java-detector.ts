@@ -1,4 +1,5 @@
-import type { BundledPlugin, ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
+import type { BundledPlugin, MachineDetector, ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
+import { probeTools } from "./tool-probe.js";
 
 const pluginId = "com.sharkbay.language.java";
 
@@ -10,13 +11,40 @@ export function javaBundledPlugin(): BundledPlugin {
       version: "1.0.0",
       publisher: "SharkBay",
       engines: { sharkbay: "^0.2.0" },
-      capabilities: [{ kind: "profile:project" }, { kind: "file:read", patterns: ["pom.xml", "build.gradle*", "settings.gradle*"] }],
+      capabilities: [{ kind: "profile:machine" }, { kind: "profile:project" }, { kind: "file:read", patterns: ["pom.xml", "build.gradle*", "settings.gradle*"] }],
       contributes: {
+        machineDetectors: [{ id: "java.machine", label: "Java Toolchain Detector" }],
         projectDetectors: [{ id: "java.project", label: "Java Project Detector" }],
       },
     },
     register(api) {
+      api.registerMachineDetector(createJavaMachineDetector());
       api.registerProjectDetector(createJavaProjectDetector());
+    },
+  };
+}
+
+export function createJavaMachineDetector(): MachineDetector {
+  return {
+    id: "java.machine",
+    pluginId,
+    label: "Java Toolchain Detector",
+    runOn: ["standard", "deep"],
+    async run(ctx) {
+      const [languages, packageManagers] = await Promise.all([
+        probeTools(ctx, [
+          { id: "java", command: "java" },
+          { id: "javac", command: "javac" },
+        ], pluginId),
+        probeTools(ctx, [
+          { id: "mvn", command: "mvn" },
+          { id: "gradle", command: "gradle" },
+        ], pluginId),
+      ]);
+      return {
+        languages: languages.filter((tool) => tool.available),
+        packageManagers: packageManagers.filter((tool) => tool.available),
+      };
     },
   };
 }
