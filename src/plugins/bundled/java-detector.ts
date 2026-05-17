@@ -1,6 +1,25 @@
-import type { ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
+import type { BundledPlugin, ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
 
 const pluginId = "com.sharkbay.language.java";
+
+export function javaBundledPlugin(): BundledPlugin {
+  return {
+    manifest: {
+      id: pluginId,
+      name: "Java Support",
+      version: "1.0.0",
+      publisher: "SharkBay",
+      engines: { sharkbay: "^0.2.0" },
+      capabilities: [{ kind: "profile:project" }, { kind: "file:read", patterns: ["pom.xml", "build.gradle*", "settings.gradle*"] }],
+      contributes: {
+        projectDetectors: [{ id: "java.project", label: "Java Project Detector" }],
+      },
+    },
+    register(api) {
+      api.registerProjectDetector(createJavaProjectDetector());
+    },
+  };
+}
 
 export function createJavaProjectDetector(): ProjectDetector {
   return {

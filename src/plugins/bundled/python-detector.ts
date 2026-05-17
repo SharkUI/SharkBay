@@ -1,6 +1,25 @@
-import type { ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
+import type { BundledPlugin, ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
 
 const pluginId = "com.sharkbay.language.python";
+
+export function pythonBundledPlugin(): BundledPlugin {
+  return {
+    manifest: {
+      id: pluginId,
+      name: "Python Support",
+      version: "1.0.0",
+      publisher: "SharkBay",
+      engines: { sharkbay: "^0.2.0" },
+      capabilities: [{ kind: "profile:project" }, { kind: "file:read", patterns: ["pyproject.toml", "requirements*.txt", "Pipfile*", "*.lock"] }],
+      contributes: {
+        projectDetectors: [{ id: "python.project", label: "Python Project Detector" }],
+      },
+    },
+    register(api) {
+      api.registerProjectDetector(createPythonProjectDetector());
+    },
+  };
+}
 
 export function createPythonProjectDetector(): ProjectDetector {
   return {

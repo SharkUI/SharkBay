@@ -28,6 +28,7 @@ import type {
   WriteFileInput,
   WriteFileResult,
 } from "../shared/types.js";
+import type { PluginSummary } from "../plugins/plugin-host.js";
 
 export type CoreMethodMap = {
   scanProjects: { args: [IpcRuntimeLike, ProjectScanInput | undefined]; result: ScanProjectsResult };
@@ -41,6 +42,9 @@ export type CoreMethodMap = {
   readMachineProfile: { args: [IpcRuntimeLike, string, ProfileReadOptions | undefined]; result: MachineProfile };
   readProjectProfile: { args: [IpcRuntimeLike, string, ProfileReadOptions | undefined]; result: ProjectProfile };
   pathExistsOnTarget: { args: [IpcRuntimeLike, PathExistsInput]; result: PathExistsResult };
+  listPlugins: { args: []; result: PluginSummary[] };
+  setPluginEnabled: { args: [string, boolean]; result: PluginSummary[] };
+  applyDisabledPlugins: { args: [string[]]; result: void };
   createTerminal: { args: [IpcRuntimeLike, TerminalCreateInput]; result: TerminalSession };
   inputTerminal: { args: [TerminalInput]; result: TerminalSession | null };
   resizeTerminal: { args: [TerminalResizeInput]; result: TerminalSession | null };

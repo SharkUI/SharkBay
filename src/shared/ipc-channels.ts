@@ -34,6 +34,8 @@ export const ipcChannels = {
   readMachineProfile: "profiles:readMachine",
   readProjectProfile: "profiles:readProject",
   pathExistsOnTarget: "projects:pathExists",
+  listPlugins: "plugins:list",
+  setPluginEnabled: "plugins:setEnabled",
   addRemoteMachine: "remotes:addMachine",
   removeRemoteMachine: "remotes:removeMachine",
   testRemoteMachine: "remotes:testMachine",

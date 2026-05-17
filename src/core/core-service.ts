@@ -36,19 +36,11 @@ import type {
 import type { ExecutionProvider } from "./execution-provider.js";
 import { parseProjectUri } from "./project-uri.js";
 import { ExecutionProviderRegistry } from "./provider-registry.js";
-import { PluginHost } from "../plugins/plugin-host.js";
-import { createCoreMachineDetector, createCoreProjectDetector } from "../plugins/bundled/core-detectors.js";
-import { createNodeProjectDetector } from "../plugins/bundled/node-detector.js";
-import { createPythonProjectDetector } from "../plugins/bundled/python-detector.js";
-import { createGoProjectDetector } from "../plugins/bundled/go-detector.js";
-import { createRustProjectDetector } from "../plugins/bundled/rust-detector.js";
-import { createJavaProjectDetector } from "../plugins/bundled/java-detector.js";
-import { createAgentMachineDetector } from "../plugins/bundled/agent-detector.js";
-import { createAgentInstallRecipes } from "../plugins/bundled/agent-detector.js";
+import { PluginHost, type PluginSummary } from "../plugins/plugin-host.js";
+import { bundledPlugins } from "../plugins/bundled-plugins.js";
 import { ProfileOrchestrator } from "../profiles/profile-orchestrator.js";
 import { JobScheduler } from "./job-scheduler.js";
 import { ProfileCache } from "../storage/profile-cache.js";
-import { InstallRecipeRegistry } from "../plugins/install-recipes.js";
 
 export type SharkBayCoreServiceEvents = {
   terminalData: [TerminalDataEvent];
@@ -62,7 +54,6 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
   readonly scheduler: JobScheduler;
   readonly profileCache: ProfileCache;
   readonly profiles: ProfileOrchestrator;
-  readonly installRecipes: InstallRecipeRegistry;
   private readonly terminalProviders = new Map<string, ExecutionProvider>();
 
   constructor(providers: ExecutionProvider[] = [], pluginHost = createDefaultPluginHost()) {
@@ -72,7 +63,6 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
     this.scheduler = new JobScheduler();
     this.profileCache = new ProfileCache();
     this.profiles = new ProfileOrchestrator(this.providers, this.pluginHost, this.scheduler, this.profileCache);
-    this.installRecipes = new InstallRecipeRegistry(createAgentInstallRecipes());
     for (const provider of providers) {
       if (provider instanceof EventEmitter) {
         provider.on("terminalData", (event) => this.emit("terminalData", event));
@@ -104,7 +94,7 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
   }
 
   async installTool(runtime: IpcRuntimeLike, input: InstallToolInput): Promise<InstallToolResult> {
-    const recipe = this.installRecipes.get(input.recipeId);
+    const recipe = this.pluginHost.listInstallRecipes().find((entry) => entry.id === input.recipeId);
     const logs: string[] = [];
     if (!recipe) {
       return { ok: false, recipeId: input.recipeId, targetId: input.targetId, logs, verified: false, error: "Install recipe not found" };
@@ -167,7 +157,7 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
 
   async listInstallRecipes(runtime: IpcRuntimeLike, input: ListInstallRecipesInput): Promise<InstallRecipe[]> {
     const profile = await this.readMachineProfile(runtime, input.targetId);
-    return this.installRecipes.list()
+    return this.pluginHost.listInstallRecipes()
       .filter((recipe) => !input.toolId || recipe.toolId === input.toolId)
       .filter((recipe) => recipe.targetKinds.includes(profile.targetKind))
       .filter((recipe) => recipeSupportsPlatform(recipe, profile.os.platform))
@@ -251,6 +241,19 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
     return this.providers.providerForTargetId(input.targetId).pathExistsOnTarget(runtime, input);
   }
 
+  applyDisabledPlugins(disabledIds: string[]): void {
+    this.pluginHost.applyEnabledState(disabledIds);
+  }
+
+  listPlugins(): PluginSummary[] {
+    return this.pluginHost.listPlugins();
+  }
+
+  setPluginEnabled(pluginId: string, enabled: boolean): PluginSummary[] {
+    this.pluginHost.setEnabled(pluginId, enabled);
+    return this.pluginHost.listPlugins();
+  }
+
   async createTerminal(runtime: IpcRuntimeLike, input: TerminalCreateInput): Promise<TerminalSession> {
     const provider = this.providers.providerForUri(input.cwdUri);
     const session = await provider.createTerminal(runtime, input);
@@ -310,13 +313,6 @@ function recipeSupportsPlatform(recipe: InstallRecipe, platform: MachineProfile[
 
 function createDefaultPluginHost(): PluginHost {
   const host = new PluginHost();
-  host.registerMachineDetector(createCoreMachineDetector());
-  host.registerMachineDetector(createAgentMachineDetector());
-  host.registerProjectDetector(createCoreProjectDetector());
-  host.registerProjectDetector(createNodeProjectDetector());
-  host.registerProjectDetector(createPythonProjectDetector());
-  host.registerProjectDetector(createGoProjectDetector());
-  host.registerProjectDetector(createRustProjectDetector());
-  host.registerProjectDetector(createJavaProjectDetector());
+  for (const plugin of bundledPlugins()) host.registerPlugin(plugin, { source: "bundled" });
   return host;
 }

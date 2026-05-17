@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { appChannels } from "../src/shared/app-events.js";
 import { ipcChannels as channels } from "../src/shared/ipc-channels.js";
+import type { PluginSummary } from "../src/plugins/plugin-host.js";
 import type {
   AgentCli,
   AgentProjectStatusEvent,
@@ -153,6 +154,10 @@ const sharkBayApi = {
   },
   targets: {
     pathExists: (input: PathExistsInput) => invoke<PathExistsResult>(channels.pathExistsOnTarget, input)
+  },
+  plugins: {
+    list: () => invoke<PluginSummary[]>(channels.listPlugins),
+    setEnabled: (input: { pluginId: string; enabled: boolean }) => invoke<PluginSummary[]>(channels.setPluginEnabled, input)
   },
   portForwards: {
     list: (input?: ListPortForwardsInput) => invoke<RemotePortForward[]>(channels.listPortForwards, input),

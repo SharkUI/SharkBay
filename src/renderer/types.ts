@@ -89,6 +89,23 @@ export type InstallRecipe = {
 
 export type ExecutionTargetKind = "local" | "ssh" | "container" | "wsl";
 
+export type PluginTrustState = "bundled" | "verified" | "trusted" | "untrusted" | "disabled";
+
+export type PluginSummary = {
+  id: string;
+  name: string;
+  version: string;
+  publisher: string;
+  source: "bundled" | "installed";
+  trustState: PluginTrustState;
+  enabled: boolean;
+  contributes: {
+    machineDetectors: number;
+    projectDetectors: number;
+    installRecipes: number;
+  };
+};
+
 export type PathExistsInput = {
   targetId: string;
   path: string;
@@ -482,6 +499,10 @@ export type SharkBayBridge = {
   };
   targets?: {
     pathExists?: (input: PathExistsInput) => Promise<PathExistsResult>;
+  };
+  plugins?: {
+    list?: () => Promise<PluginSummary[]>;
+    setEnabled?: (input: { pluginId: string; enabled: boolean }) => Promise<PluginSummary[]>;
   };
   portForwards?: {
     list?: (input?: { machineId?: string }) => Promise<RemotePortForward[]>;

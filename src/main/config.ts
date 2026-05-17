@@ -23,9 +23,24 @@ export function createDefaultConfig(): AppConfig {
     configuredRemoteProjects: [],
     configuredRemoteMachines: [],
     projectAliases: {},
+    disabledPluginIds: [],
     appearanceTheme: "day",
     updatedAt: today(),
   };
+}
+
+export async function setPluginEnabledConfig(runtime: IpcRuntimeLike, pluginId: string, enabled: boolean): Promise<AppConfig> {
+  const id = pluginId.trim();
+  if (!id) throw new Error("Plugin id is required");
+  const configPath = getRuntimeConfigPath(runtime);
+  const config = await loadAppConfig(configPath);
+  const set = new Set(config.disabledPluginIds);
+  if (enabled) set.delete(id);
+  else set.add(id);
+  config.disabledPluginIds = [...set];
+  config.updatedAt = today();
+  await saveAppConfig(config, configPath);
+  return config;
 }
 
 export async function loadAppConfig(configPath = getConfigPath()): Promise<AppConfig> {
@@ -226,6 +241,9 @@ function normalizeAppConfig(value: unknown): AppConfig {
       : [],
     configuredRemoteMachines: normalizeRemoteMachines(value.configuredRemoteMachines),
     projectAliases: normalizeProjectAliases(value.projectAliases),
+    disabledPluginIds: Array.isArray(value.disabledPluginIds)
+      ? [...new Set(value.disabledPluginIds.filter((item): item is string => typeof item === "string" && item.trim().length > 0))]
+      : [],
     appearanceTheme: normalizeAppearanceTheme(value.appearanceTheme),
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : today(),
   };

@@ -1,6 +1,25 @@
-import type { ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
+import type { BundledPlugin, ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
 
 const pluginId = "com.sharkbay.language.go";
+
+export function goBundledPlugin(): BundledPlugin {
+  return {
+    manifest: {
+      id: pluginId,
+      name: "Go Support",
+      version: "1.0.0",
+      publisher: "SharkBay",
+      engines: { sharkbay: "^0.2.0" },
+      capabilities: [{ kind: "profile:project" }, { kind: "file:read", patterns: ["go.mod", "go.sum"] }],
+      contributes: {
+        projectDetectors: [{ id: "go.project", label: "Go Project Detector" }],
+      },
+    },
+    register(api) {
+      api.registerProjectDetector(createGoProjectDetector());
+    },
+  };
+}
 
 export function createGoProjectDetector(): ProjectDetector {
   return {

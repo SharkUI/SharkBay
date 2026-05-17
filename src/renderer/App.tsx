@@ -17,6 +17,7 @@ import type {
   InstallRecipe,
   InstallToolResult,
   MachineProfile,
+  PluginSummary,
   ProjectCandidate,
   ProjectDetail,
   ProjectFileTreeItem,
@@ -48,7 +49,7 @@ import type { WorkflowProjectTerminalActivityState } from "./workflow";
 
 type View = "dashboard" | "settings";
 type DetailTab = "git" | "stack" | "files" | "forwards";
-type SettingsSection = "local-machine" | "appearance" | `remote-machine:${string}`;
+type SettingsSection = "local-machine" | "appearance" | "extensions" | `remote-machine:${string}`;
 
 const remoteConnectionMethods: Array<{
   id: RemoteMachineInput["authMode"];
@@ -2468,6 +2469,7 @@ function SettingsView({ appearanceTheme, roots, configuredProjects, configuredRe
       return `${projectLabel}, ${rootLabel}`;
     }
     if (section.startsWith("remote-machine:")) return "Remote";
+    if (section === "extensions") return "Plugins";
     return appearanceThemes.find((theme) => theme.id === appearanceTheme)?.label ?? "Theme";
   }
 
@@ -2502,6 +2504,9 @@ function SettingsView({ appearanceTheme, roots, configuredProjects, configuredRe
             </button>
           </div>
           <div className="settings-nav-group">
+            <button aria-current={activeSection === "extensions" ? "page" : undefined} className={cx("settings-nav-item", activeSection === "extensions" && "is-selected")} type="button" onClick={() => setActiveSection("extensions")}>
+              <span>Extensions</span><small>{sectionMeta("extensions")}</small>
+            </button>
             <button aria-current={activeSection === "appearance" ? "page" : undefined} className={cx("settings-nav-item", activeSection === "appearance" && "is-selected")} type="button" onClick={() => setActiveSection("appearance")}>
               <span>Appearance</span><small>{sectionMeta("appearance")}</small>
             </button>
@@ -2519,6 +2524,10 @@ function SettingsView({ appearanceTheme, roots, configuredProjects, configuredRe
               <RemoteMachineDetailPanel machine={activeRemoteMachine} setToast={setToast} onRemove={async (id) => { await onRemoveRemoteMachine(id); setActiveSection("local-machine"); }} onTest={onTestRemoteMachine} />
             </div>
           ) : null}
+          <div className="settings-section-panel" hidden={activeSection !== "extensions"}>
+            <div className="settings-section-heading"><h4>Extensions</h4><span>Manage installed plugins</span></div>
+            <ExtensionsSettingsPanel active={activeSection === "extensions"} setToast={setToast} />
+          </div>
           <div className="settings-section-panel" hidden={activeSection !== "appearance"}>
             <div className="settings-section-heading"><h4>Appearance</h4><span>{appearanceDescription(appearanceTheme)}</span></div>
             <AppearanceSettingsPanel appearanceTheme={appearanceTheme} setToast={setToast} onThemeChange={onThemeChange} />
@@ -2534,6 +2543,77 @@ function SettingsView({ appearanceTheme, roots, configuredProjects, configuredRe
         />
       ) : null}
     </div>
+  );
+}
+
+function ExtensionsSettingsPanel({ active, setToast }: { active: boolean; setToast: (toast: Toast) => void }) {
+  const [plugins, setPlugins] = useState<PluginSummary[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!active) return;
+    let cancelled = false;
+    const list = getBridge().plugins?.list;
+    if (!list) { setLoadError("Plugin API is not available."); return; }
+    setLoadError(null);
+    list()
+      .then((items) => { if (!cancelled) setPlugins(items); })
+      .catch((error) => { if (!cancelled) setLoadError(asMessage(error)); });
+    return () => { cancelled = true; };
+  }, [active]);
+
+  async function toggle(plugin: PluginSummary) {
+    const setEnabled = getBridge().plugins?.setEnabled;
+    if (!setEnabled) { setToast({ tone: "error", message: "Plugin API is not available." }); return; }
+    setBusyId(plugin.id);
+    try {
+      const next = await setEnabled({ pluginId: plugin.id, enabled: !plugin.enabled });
+      setPlugins(next);
+      setToast({ tone: "success", message: `${plugin.name} ${plugin.enabled ? "disabled" : "enabled"}` });
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (loadError) return <section className="workflow-panel"><div className="inline-connection-result is-error" role="status">{loadError}</div></section>;
+  if (!plugins) return <section className="workflow-panel"><div className="form-note">Loading plugins…</div></section>;
+  if (!plugins.length) return <section className="workflow-panel"><EmptyState title="No plugins" body="No bundled or installed plugins were found." /></section>;
+  return (
+    <section className="workflow-panel">
+      <div className="settings-list">
+        {plugins.map((plugin) => {
+          const contributesParts = [
+            plugin.contributes.machineDetectors ? `${plugin.contributes.machineDetectors} machine detector${plugin.contributes.machineDetectors === 1 ? "" : "s"}` : null,
+            plugin.contributes.projectDetectors ? `${plugin.contributes.projectDetectors} project detector${plugin.contributes.projectDetectors === 1 ? "" : "s"}` : null,
+            plugin.contributes.installRecipes ? `${plugin.contributes.installRecipes} install recipe${plugin.contributes.installRecipes === 1 ? "" : "s"}` : null,
+          ].filter(Boolean);
+          return (
+            <div className="settings-list-row" key={plugin.id} style={{ gap: "12px", alignItems: "center" }}>
+              <span style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
+                <span className="truncate"><strong>{plugin.name}</strong> <small style={{ opacity: 0.6 }}>v{plugin.version} · {plugin.publisher}</small></span>
+                <small className="truncate" style={{ opacity: 0.7 }}>
+                  <span className="machine-tag">{plugin.source}</span>
+                  {" "}{plugin.id}
+                  {contributesParts.length ? ` · ${contributesParts.join(", ")}` : ""}
+                </small>
+              </span>
+              <button
+                className={cx("button", "secondary", "compact")}
+                disabled={busyId === plugin.id || plugin.source === "bundled" && plugin.id === "com.sharkbay.core"}
+                title={plugin.source === "bundled" && plugin.id === "com.sharkbay.core" ? "Core plugin cannot be disabled" : undefined}
+                type="button"
+                onClick={() => void toggle(plugin)}
+              >
+                {busyId === plugin.id ? "Saving…" : plugin.enabled ? "Disable" : "Enable"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

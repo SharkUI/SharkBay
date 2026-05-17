@@ -2,9 +2,16 @@ import { describe, expect, it } from "vitest";
 import { SharkBayCoreService } from "../src/core/core-service.js";
 import { LocalProvider } from "../src/providers/local/local-provider.js";
 import { PluginHost } from "../src/plugins/plugin-host.js";
+import { agentBundledPlugin } from "../src/plugins/bundled/agent-detector.js";
 import type { CommandResult, RunCommandOptions } from "../src/core/execution-provider.js";
 import type { IpcRuntimeLike, MachineProfile } from "../src/shared/types.js";
 import { makeTestRuntime } from "./helpers.js";
+
+function pluginHostWithAgentPlugin(): PluginHost {
+  const host = new PluginHost();
+  host.registerPlugin(agentBundledPlugin(), { source: "bundled" });
+  return host;
+}
 
 class InstallTestProvider extends LocalProvider {
   readonly commands: string[] = [];
@@ -40,7 +47,7 @@ describe("CoreService installTool", () => {
   it("runs install recipe steps, verifies, and refreshes machine profile", async () => {
     const runtime = await makeTestRuntime("install-tool");
     const provider = new InstallTestProvider();
-    const core = new SharkBayCoreService([provider], new PluginHost());
+    const core = new SharkBayCoreService([provider], pluginHostWithAgentPlugin());
 
     const result = await core.installTool(runtime, { targetId: "local", recipeId: "codex.npm.global" });
 
@@ -65,7 +72,7 @@ describe("CoreService installTool", () => {
   it("lists recipes compatible with target kind, OS, and preconditions", async () => {
     const runtime = await makeTestRuntime("install-tool-list");
     const provider = new InstallTestProvider();
-    const core = new SharkBayCoreService([provider], new PluginHost());
+    const core = new SharkBayCoreService([provider], pluginHostWithAgentPlugin());
 
     const recipes = await core.listInstallRecipes(runtime, { targetId: "local", toolId: "codex" });
     expect(recipes.map((recipe) => recipe.id)).toEqual(["codex.npm.global"]);
@@ -79,7 +86,7 @@ describe("CoreService installTool", () => {
     const runtime = await makeTestRuntime("install-tool-platform");
     const provider = new InstallTestProvider();
     provider.platform = "windows";
-    const core = new SharkBayCoreService([provider], new PluginHost());
+    const core = new SharkBayCoreService([provider], pluginHostWithAgentPlugin());
 
     await expect(core.installTool(runtime, { targetId: "local", recipeId: "codex.npm.global" })).resolves.toMatchObject({
       ok: false,

@@ -406,7 +406,6 @@ type PluginTrustState = "bundled" | "verified" | "trusted" | "untrusted" | "disa
 - 未验证插件默认不能执行 installer。
 - 高风险权限必须二次确认。
 - 用户可以 per plugin disable。
-- 用户可以 per workspace trust。
 
 ### 5.5 Software installation recipes
 
@@ -550,7 +549,6 @@ type AgentContribution = {
   launch: {
     command: string;
     args?: string[];
-    supportsWorkspaceScope: boolean;
     supportsProjectScope: boolean;
   };
   installRecipes?: string[];
@@ -1139,7 +1137,7 @@ Renderer React
 
 这个结构适合 MVP，因为实现快、调试简单、能充分利用 Node.js 和 Electron 原生能力。但它不适合长期承载：
 
-- 多 workspace 后台扫描。
+- 多 project 后台扫描。
 - 多 remote server profile probe。
 - 多插件 detector 并发运行。
 - 长时间 agent session supervision。
@@ -1169,7 +1167,7 @@ Electron Main
   - BrowserView/WebContentsView
 
 SharkBay Core Service
-  - workspace/project/machine state
+  - project/machine state
   - provider registry
   - profile orchestration
   - terminal/session supervisor
@@ -1232,7 +1230,7 @@ electron-main <-> core-service over IPC/RPC
 
 - Provider registry。
 - Machine/project profile orchestration。
-- Workspace/project/task/session 数据模型。
+- Project/task/session 数据模型。
 - Terminal/session lifecycle。
 - Agent session lifecycle。
 - Profile cache。
@@ -1399,11 +1397,11 @@ Settings 可以增加 Diagnostics 页面，导出最近日志，方便定位 rem
 | Provider registry | Done | URI- and target-id-based dispatch in `src/core/provider-registry.ts`; no SSH special cases in callers. |
 | Local provider final shape | In progress | Runtime IPC uses `LocalProvider` with `readProjectFingerprint` and `pathExistsOnTarget`. Profile detector migration remains. |
 | SSH provider final shape | In progress | Runtime IPC uses `SshProvider` with `pathExistsOnTarget`; helper / connection pooling remain. |
-| Plugin manifest and bundled plugin loader | In progress | Manifest parser exists; loader that scans `~/.sharkbay/plugins/installed/` and registers contributions still remains. Bundled detectors are wired directly today. |
+| Plugin manifest and bundled plugin loader | In progress | All 7 bundled detectors now declare a `sharkbay-plugin.json` manifest and register through `PluginHost.registerPlugin`. Disabled state persists in `AppConfig.disabledPluginIds` and applies on Core spawn; Settings → Extensions UI lists plugins and toggles enable/disable. Filesystem scanner for `~/.sharkbay/plugins/installed/` reads manifests but cannot execute plugin code yet (deferred to Phase 5.x sandbox). |
 | Profile orchestrator | In progress | Orchestrator with quick/standard/deep depth filtering; bundled detectors for core, Node, Python, Go, Rust, Java, and Agent CLIs. Detector `runOn` declares supported depths. |
 | Job scheduler | In progress | Added scheduler with per-target concurrency, priority, timeout, dedupe, and profile detector integration. |
 | Profile cache/storage | In progress | File cache keyed by `<target/uri>|<depth>` with 24h machine / 15min project TTLs; project cache invalidates on manifest-mtime / git-HEAD change for local provider. SQLite migration remains. |
-| UI profile consumption | In progress | Agent CLI buttons from MachineProfile; Stack tab in project detail and Machine Profile card in remote machine detail consume profiles via `profiles:*` IPC. Project list has context menu (rename / remove) with persisted `projectAliases`. Add Project verifies remote path via `targets:pathExists` before saving; terminals emit a friendly toast hint when they exit with a non-zero code within 5s. Workspace summary view remains. |
+| UI profile consumption | In progress | Agent CLI buttons from MachineProfile; Stack tab in project detail and Machine Profile card in remote machine detail consume profiles via `profiles:*` IPC. Project list has context menu (rename / remove) with persisted `projectAliases`. Add Project verifies remote path via `targets:pathExists` before saving; terminals emit a friendly toast hint when they exit with a non-zero code within 5s. |
 | Agent install pipeline | Done (MVP) | Recipe listing, Core install/verify/refresh, IPC bridge, and renderer Install Agent dialog with command preview, target label, logs, and post-install refresh. |
 | Core service process isolation | Done (MVP) | `SharkBayCoreService` runs in an Electron `utilityProcess`. `CoreClient` (`electron/core-client.ts`) provides request/response + event forwarding via `parentPort` messages. Browser/AgentSessionWatcher/PortForwardManager stay in Electron main for now. Worker-pool split inside the core process remains. |
 | Remote helper strategy | Documented | Helper is optional, user-scoped, SharkBay-managed, and not a system daemon by default. |
@@ -1463,11 +1461,9 @@ Settings 可以增加 Diagnostics 页面，导出最近日志，方便定位 rem
 - 第三方插件迁到 Plugin Host process。
 - Electron main 只保留 app lifecycle 和 IPC gateway。
 
-### Phase 8: Workspace integration
-
-- Workspace 绑定 execution target。
-- Workspace profile 汇总 machine profile + project profiles。
-- Agent launch scope 使用 workspace / project profile 注入上下文。
+> Note: SharkBay 不引入独立的 "workspace" 抽象。Project 已经绑定 target (URI 携带 target id)，
+> agent launch 直接消费 selected project 的 machine + project profile 作为上下文。
+> 多 project 聚合的 UX 需求（grouping、pin、tag）按需用轻量方式实现，不再建模成一层概念。
 
 ## 15. Open Questions
 

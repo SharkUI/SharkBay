@@ -5,8 +5,21 @@ import { getRuntimeConfigPath } from "../src/main/config.js";
 import { toLocalProjectUri } from "../src/core/project-uri.js";
 import { SharkBayCoreService } from "../src/core/core-service.js";
 import { LocalProvider } from "../src/providers/local/local-provider.js";
-import { PluginHost } from "../src/plugins/plugin-host.js";
+import { PluginHost, type ProjectDetector } from "../src/plugins/plugin-host.js";
 import { createGitRepoFixture, makeTempRoot, makeTestRuntime, writeJson } from "./helpers.js";
+
+function pluginWithProjectDetector(detector: ProjectDetector) {
+  return {
+    manifest: {
+      id: detector.pluginId,
+      name: detector.pluginId,
+      version: "0.0.0",
+      publisher: "test",
+      engines: { sharkbay: "^0.2.0" },
+    },
+    register: (api: { registerProjectDetector(d: ProjectDetector): void }) => api.registerProjectDetector(detector),
+  };
+}
 
 describe("ProfileOrchestrator", () => {
   it("runs bundled project detectors through provider probe contexts", async () => {
@@ -49,14 +62,14 @@ describe("ProfileOrchestrator", () => {
       updatedAt: "2026-05-16",
     });
     const host = new PluginHost();
-    host.registerProjectDetector({
+    host.registerPlugin(pluginWithProjectDetector({
       id: "fail.project",
       pluginId: "test.plugin",
       label: "Failure Detector",
       run: async () => {
         throw new Error("boom");
       },
-    });
+    }));
 
     const core = new SharkBayCoreService([new LocalProvider()], host);
     const profile = await core.readProjectProfile(runtime, toLocalProjectUri(repo));
@@ -79,7 +92,7 @@ describe("ProfileOrchestrator", () => {
     await fs.writeFile(path.join(repo, "package.json"), "{\"scripts\":{\"dev\":\"vite\"}}\n");
     let runs = 0;
     const host = new PluginHost();
-    host.registerProjectDetector({
+    host.registerPlugin(pluginWithProjectDetector({
       id: "fingerprint.project",
       pluginId: "test.plugin",
       label: "Fingerprint Detector",
@@ -87,7 +100,7 @@ describe("ProfileOrchestrator", () => {
         runs += 1;
         return { frameworks: [{ id: `run-${runs}`, confidence: 1, evidence: [] }] };
       },
-    });
+    }));
     const core = new SharkBayCoreService([new LocalProvider()], host);
     const projectUri = toLocalProjectUri(repo);
 
@@ -112,7 +125,7 @@ describe("ProfileOrchestrator", () => {
     });
     let runs = 0;
     const host = new PluginHost();
-    host.registerProjectDetector({
+    host.registerPlugin(pluginWithProjectDetector({
       id: "count.project",
       pluginId: "test.plugin",
       label: "Count Detector",
@@ -120,7 +133,7 @@ describe("ProfileOrchestrator", () => {
         runs += 1;
         return { frameworks: [{ id: `run-${runs}`, confidence: 1, evidence: [] }] };
       },
-    });
+    }));
     const core = new SharkBayCoreService([new LocalProvider()], host);
     const projectUri = toLocalProjectUri(repo);
 

@@ -7,6 +7,7 @@ export type AppConfig = {
   configuredRemoteProjects: string[];
   configuredRemoteMachines: RemoteMachine[];
   projectAliases: Record<string, string>;
+  disabledPluginIds: string[];
   appearanceTheme: AppearanceTheme;
   updatedAt: string;
 };
@@ -268,7 +269,6 @@ export type AgentContribution = {
   launch: {
     command: string;
     args?: string[];
-    supportsWorkspaceScope: boolean;
     supportsProjectScope: boolean;
   };
   installRecipes?: string[];

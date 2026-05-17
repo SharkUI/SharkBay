@@ -1,8 +1,33 @@
 import type { ToolProfile } from "../../shared/types.js";
 import type { InstallRecipe } from "../../shared/types.js";
-import type { MachineDetector } from "../plugin-host.js";
+import type { BundledPlugin, MachineDetector } from "../plugin-host.js";
 
 const pluginId = "com.sharkbay.agents";
+
+export function agentBundledPlugin(): BundledPlugin {
+  return {
+    manifest: {
+      id: pluginId,
+      name: "Agent CLI Detection",
+      version: "1.0.0",
+      publisher: "SharkBay",
+      engines: { sharkbay: "^0.2.0" },
+      capabilities: [
+        { kind: "agent:detect" },
+        { kind: "profile:machine" },
+        { kind: "install:software", requiresConfirmation: true },
+      ],
+      contributes: {
+        machineDetectors: [{ id: "agents.machine", label: "Agent CLI Detector" }],
+        installers: [{ id: "agents.npm", label: "Install agents via npm" }],
+      },
+    },
+    register(api) {
+      api.registerMachineDetector(createAgentMachineDetector());
+      for (const recipe of createAgentInstallRecipes()) api.registerInstallRecipe(recipe);
+    },
+  };
+}
 
 const agentDefinitions = [
   { id: "codex", command: "codex" },

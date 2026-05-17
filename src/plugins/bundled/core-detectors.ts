@@ -1,7 +1,28 @@
 import path from "node:path";
-import type { MachineDetector, ProjectDetector } from "../plugin-host.js";
+import type { BundledPlugin, MachineDetector, ProjectDetector } from "../plugin-host.js";
 
 const pluginId = "com.sharkbay.core";
+
+export function coreBundledPlugin(): BundledPlugin {
+  return {
+    manifest: {
+      id: pluginId,
+      name: "SharkBay Core Detectors",
+      version: "1.0.0",
+      publisher: "SharkBay",
+      engines: { sharkbay: "^0.2.0" },
+      capabilities: [{ kind: "profile:machine" }, { kind: "profile:project" }],
+      contributes: {
+        machineDetectors: [{ id: "core.machine", label: "Core Machine Detector" }],
+        projectDetectors: [{ id: "core.project", label: "Core Project Detector" }],
+      },
+    },
+    register(api) {
+      api.registerMachineDetector(createCoreMachineDetector());
+      api.registerProjectDetector(createCoreProjectDetector());
+    },
+  };
+}
 
 export function createCoreMachineDetector(): MachineDetector {
   return {

@@ -8,16 +8,27 @@ describe("CoreService agent listing", () => {
   it("builds UI agent buttons from MachineProfile agents", async () => {
     const runtime = await makeTestRuntime("core-agent-list");
     const host = new PluginHost();
-    host.registerMachineDetector({
-      id: "test.agents",
-      pluginId: "test.plugin",
-      label: "Test Agents",
-      run: async () => ({
-        agents: [
-          { id: "codex", command: "codex", available: true, path: "/usr/local/bin/codex", version: "codex 1", sourcePluginId: "test.plugin" },
-          { id: "claude", command: "claude", available: false, path: null, version: null, sourcePluginId: "test.plugin" },
-        ],
-      }),
+    host.registerPlugin({
+      manifest: {
+        id: "test.plugin",
+        name: "Test Plugin",
+        version: "0.0.0",
+        publisher: "test",
+        engines: { sharkbay: "^0.2.0" },
+      },
+      register(api) {
+        api.registerMachineDetector({
+          id: "test.agents",
+          pluginId: "test.plugin",
+          label: "Test Agents",
+          run: async () => ({
+            agents: [
+              { id: "codex", command: "codex", available: true, path: "/usr/local/bin/codex", version: "codex 1", sourcePluginId: "test.plugin" },
+              { id: "claude", command: "claude", available: false, path: null, version: null, sourcePluginId: "test.plugin" },
+            ],
+          }),
+        });
+      },
     });
     const core = new SharkBayCoreService([new LocalProvider()], host);
 

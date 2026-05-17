@@ -1,6 +1,25 @@
-import type { ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
+import type { BundledPlugin, ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
 
 const pluginId = "com.sharkbay.language.rust";
+
+export function rustBundledPlugin(): BundledPlugin {
+  return {
+    manifest: {
+      id: pluginId,
+      name: "Rust Support",
+      version: "1.0.0",
+      publisher: "SharkBay",
+      engines: { sharkbay: "^0.2.0" },
+      capabilities: [{ kind: "profile:project" }, { kind: "file:read", patterns: ["Cargo.toml", "Cargo.lock"] }],
+      contributes: {
+        projectDetectors: [{ id: "rust.project", label: "Rust Project Detector" }],
+      },
+    },
+    register(api) {
+      api.registerProjectDetector(createRustProjectDetector());
+    },
+  };
+}
 
 export function createRustProjectDetector(): ProjectDetector {
   return {

@@ -1,7 +1,26 @@
-import type { ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
+import type { BundledPlugin, ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
 import type { DetectedPackageManager, ProjectProfile } from "../../shared/types.js";
 
 const pluginId = "com.sharkbay.language.node";
+
+export function nodeBundledPlugin(): BundledPlugin {
+  return {
+    manifest: {
+      id: pluginId,
+      name: "Node.js Support",
+      version: "1.0.0",
+      publisher: "SharkBay",
+      engines: { sharkbay: "^0.2.0" },
+      capabilities: [{ kind: "profile:project" }, { kind: "file:read", patterns: ["package.json", "*.lock", "pnpm-workspace.yaml"] }],
+      contributes: {
+        projectDetectors: [{ id: "node.project", label: "Node.js Project Detector" }],
+      },
+    },
+    register(api) {
+      api.registerProjectDetector(createNodeProjectDetector());
+    },
+  };
+}
 
 type PackageJson = {
   scripts?: Record<string, unknown>;

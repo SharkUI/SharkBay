@@ -68,6 +68,8 @@ import { PortForwardManager } from "../src/main/port-forwards.js";
 import { testRemoteMachineConnection } from "../src/main/remote-machines.js";
 import { createDefaultSecretStore } from "../src/main/secrets.js";
 import { spawnCoreClient, type CoreClient } from "./core-client.js";
+import { setPluginEnabledConfig } from "../src/main/config.js";
+import type { PluginSummary } from "../src/plugins/plugin-host.js";
 
 export type IpcRuntime = {
   userDataPath: string;
@@ -109,6 +111,8 @@ export async function registerIpcHandlers(
 ): Promise<void> {
   if (!core) {
     core = await spawnCoreClient();
+    const config = await getConfiguredRoots(runtime);
+    await core.call("applyDisabledPlugins", [config.disabledPluginIds ?? []]);
   } else {
     core.removeAllListeners("terminalData");
     core.removeAllListeners("terminalUpdate");
@@ -233,6 +237,13 @@ export async function registerIpcHandlers(
   handle<PathExistsInput, PathExistsResult>(channels.pathExistsOnTarget, (payload) =>
     requireCore().call("pathExistsOnTarget", [runtime, payload])
   );
+  handle<void, PluginSummary[]>(channels.listPlugins, () =>
+    requireCore().call("listPlugins", [])
+  );
+  handle<{ pluginId: string; enabled: boolean }, PluginSummary[]>(channels.setPluginEnabled, async (payload) => {
+    await setPluginEnabledConfig(runtime, payload.pluginId, payload.enabled);
+    return requireCore().call("setPluginEnabled", [payload.pluginId, payload.enabled]);
+  });
   ipcMain.removeHandler(channels.createBrowser);
   ipcMain.handle(channels.createBrowser, (event, payload: BrowserCreateInput) => {
     const window = BrowserWindow.fromWebContents(event.sender);
