@@ -894,6 +894,7 @@ function DashboardView({
           appearanceTheme={appearanceTheme}
           agentClis={agentClis}
           candidate={selectedCandidate}
+          projectAliases={projectAliases}
           bridgeAvailable={bridgeAvailable}
           isVisible={isVisible}
           setToast={setToast}
@@ -922,10 +923,10 @@ function DashboardView({
             setToast={setToast}
             onRefresh={onRefresh}
             onOpenFileInEditor={(relativePath) =>
-              terminalPaneRef.current?.openFileInEditor(selectedCandidate.uri, selectedCandidate.name, relativePath) ?? Promise.resolve()
+              terminalPaneRef.current?.openFileInEditor(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, relativePath) ?? Promise.resolve()
             }
             onOpenGitDiff={(relativePath) =>
-              terminalPaneRef.current?.openGitDiff(selectedCandidate.uri, selectedCandidate.name, relativePath) ?? Promise.resolve()
+              terminalPaneRef.current?.openGitDiff(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, relativePath) ?? Promise.resolve()
             }
           />
         ) : (
@@ -951,13 +952,14 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   agentClis: AgentCli[];
   bridgeAvailable: boolean;
   candidate: ProjectCandidate | null;
+  projectAliases: Record<string, string>;
   isVisible: boolean;
   setToast: (toast: Toast) => void;
   onActiveTabKindChange: (kind: ActiveTerminalTabKind) => void;
   onAgentListRefreshRequested: () => void;
   onRunningServiceProjectIdsChange: (projectIds: Set<string>) => void;
   onTerminalActivityProjectStatesChange: (states: Record<string, ProjectTerminalActivityState>) => void;
-}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, isVisible, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onRunningServiceProjectIdsChange, onTerminalActivityProjectStatesChange }, ref) {
+}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, projectAliases, isVisible, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onRunningServiceProjectIdsChange, onTerminalActivityProjectStatesChange }, ref) {
   const [spaces, setSpaces] = useState<Record<string, TerminalSpace>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [installAgentDialogOpen, setInstallAgentDialogOpen] = useState(false);
@@ -1025,32 +1027,32 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     setActiveProjectId(candidate.id);
     setSpaces((current) => {
       if (current[candidate.id]) return current;
-      return { ...current, [candidate.id]: { projectId: candidate.id, projectName: candidate.name, uri: candidate.uri, displayPath: candidate.displayPath, tabs: [], activeId: null, serviceUrl: null } };
+      return { ...current, [candidate.id]: { projectId: candidate.id, projectName: displayProjectName ?? candidate.name, uri: candidate.uri, displayPath: candidate.displayPath, tabs: [], activeId: null, serviceUrl: null } };
     });
     if (!isVisible) return;
     const existing = spacesRef.current[candidate.id];
     if (existing?.tabs.length) return;
     if (creatingProjects.current.has(candidate.id)) return;
     creatingProjects.current.add(candidate.id);
-    void openProjectTab(candidate.id, candidate.uri, candidate.name, candidate.displayPath, true).finally(() => { creatingProjects.current.delete(candidate.id); });
+    void openProjectTab(candidate.id, candidate.uri, displayProjectName ?? candidate.name, candidate.displayPath, true).finally(() => { creatingProjects.current.delete(candidate.id); });
   }, [bridgeAvailable, candidate?.id, candidate?.uri, isVisible]);
 
   async function openCurrentProjectTab() {
     if (!candidate?.uri) return;
-    await openProjectTab(candidate.id, candidate.uri, candidate.name, candidate.displayPath);
+    await openProjectTab(candidate.id, candidate.uri, displayProjectName ?? candidate.name, candidate.displayPath);
   }
 
   async function openAgentProjectTab(agent: AgentCli) {
     if (!candidate?.uri) return;
     const isRemote = candidate.providerKind === "ssh";
     const launchCommand = isRemote ? agent.command : (agent.executablePath || agent.command);
-    await openProjectTab(candidate.id, candidate.uri, candidate.name, candidate.displayPath, false, { initialCommand: shellQuote(launchCommand) });
+    await openProjectTab(candidate.id, candidate.uri, displayProjectName ?? candidate.name, candidate.displayPath, false, { initialCommand: shellQuote(launchCommand) });
   }
 
   async function openBrowserProjectTab() {
     if (!candidate?.uri) return;
     const initialUrl = selectedSpace?.tabs.some((tab) => isRunningServiceTab(tab)) ? selectedSpace.serviceUrl ?? "about:blank" : "about:blank";
-    await openBrowserTab(candidate.id, candidate.uri, candidate.name, candidate.displayPath, initialUrl);
+    await openBrowserTab(candidate.id, candidate.uri, displayProjectName ?? candidate.name, candidate.displayPath, initialUrl);
   }
 
   useImperativeHandle(ref, () => ({
@@ -1182,7 +1184,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     if (!candidate?.uri) return;
     const existing = selectedSpace?.tabs.find((tab): tab is TerminalShellTab => tab.kind === "terminal" && tab.session.service?.id === service.id && tab.session.status === "running");
     if (existing) { await closeTab(existing.session.id); return; }
-    await openProjectTab(candidate.id, service.cwdUri, candidate.name, candidate.displayPath, false, { initialCommand: service.command, service: { id: service.id, label: service.label, command: service.command } });
+    await openProjectTab(candidate.id, service.cwdUri, displayProjectName ?? candidate.name, candidate.displayPath, false, { initialCommand: service.command, service: { id: service.id, label: service.label, command: service.command } });
   }
 
   function appendTerminalOutput(event: TerminalDataEvent) {
@@ -1322,7 +1324,8 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     });
   }
 
-  const terminalHeading = candidate?.name ?? "Terminal";
+  const displayProjectName = candidate ? (projectAliases[candidate.uri] || candidate.name) : null;
+  const terminalHeading = displayProjectName ?? "Terminal";
 
   return (
     <div className="terminal-layout">
@@ -1511,6 +1514,8 @@ function BrowserSurface({
 function XTermSurface({ active, onResize, tab }: { active: boolean; onResize: (cols: number, rows: number) => void; tab: TerminalShellTab }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const openedRef = useRef(false);
+  const onResizeRef = useRef(onResize);
+  useEffect(() => { onResizeRef.current = onResize; }, [onResize]);
   useEffect(() => { if (!hostRef.current || openedRef.current) return; tab.terminal.open(hostRef.current); openedRef.current = true; }, [tab]);
   useEffect(() => {
     if (!active || !openedRef.current) return;
@@ -1518,14 +1523,24 @@ function XTermSurface({ active, onResize, tab }: { active: boolean; onResize: (c
       const dimensions = tab.fitAddon.proposeDimensions();
       if (!dimensions || !validTerminalResizeDimensions(dimensions.cols, dimensions.rows)) return;
       tab.fitAddon.fit();
-      onResize(Math.floor(dimensions.cols), Math.floor(dimensions.rows));
+      onResizeRef.current(Math.floor(dimensions.cols), Math.floor(dimensions.rows));
     };
-    const frame = window.requestAnimationFrame(() => { fitAndResize(); tab.terminal.focus(); });
+    const frame = window.requestAnimationFrame(() => {
+      fitAndResize();
+      if (!isUserEditingElsewhere()) tab.terminal.focus();
+    });
     const observer = new ResizeObserver(() => fitAndResize());
     if (hostRef.current) observer.observe(hostRef.current);
     return () => { window.cancelAnimationFrame(frame); observer.disconnect(); };
-  }, [active, onResize, tab]);
+  }, [active, tab]);
   return <div aria-hidden={!active} className={cx("xterm-surface", active && "is-active")} ref={hostRef} />;
+}
+
+function isUserEditingElsewhere(): boolean {
+  const node = document.activeElement as HTMLElement | null;
+  if (!node) return false;
+  if (node.tagName === "INPUT" || node.tagName === "TEXTAREA" || node.tagName === "SELECT") return true;
+  return node.isContentEditable === true;
 }
 
 function createXTerm(sessionId: string, appearanceTheme: AppearanceTheme, setToast: (toast: Toast) => void, onInput: (sessionId: string) => void) {
@@ -1664,6 +1679,8 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
   const [menuOpen, setMenuOpen] = useState<{ id: string; x: number; y: number } | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [confirmRemove, setConfirmRemove] = useState<{ uri: string; name: string } | null>(null);
+  const [removing, setRemoving] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
@@ -1757,6 +1774,28 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
           );
         })}
       </div>
+      {confirmRemove ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !removing) setConfirmRemove(null); }}>
+          <section aria-modal="true" className="modal-panel" role="dialog" aria-labelledby="confirm-remove-project-title" style={{ maxWidth: "440px" }}>
+            <div className="modal-header">
+              <div>
+                <h3 id="confirm-remove-project-title">Remove project?</h3>
+                <p>This removes <strong>{confirmRemove.name}</strong> from SharkBay. Files on disk are not deleted.</p>
+              </div>
+              <button aria-label="Close" className="icon-button" disabled={removing} type="button" onClick={() => setConfirmRemove(null)}>x</button>
+            </div>
+            <div className="remote-machine-form-actions" style={{ padding: "12px 16px 16px" }}>
+              <button className="button secondary" disabled={removing} type="button" onClick={() => setConfirmRemove(null)}>Cancel</button>
+              <button className="button is-danger" disabled={removing} type="button" onClick={async () => {
+                const target = confirmRemove;
+                if (!target) return;
+                setRemoving(true);
+                try { await onRemoveProject(target.uri); setConfirmRemove(null); } finally { setRemoving(false); }
+              }}>{removing ? "Removing" : "Remove"}</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
       {menuOpen ? (
         <div ref={menuRef} className="project-context-menu" style={{ top: menuOpen.y, left: menuOpen.x }}>
           <button
@@ -1779,7 +1818,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
             onClick={() => {
               const candidate = candidates.find((c) => c.id === menuOpen.id);
               setMenuOpen(null);
-              if (candidate) void onRemoveProject(candidate.uri);
+              if (candidate) setConfirmRemove({ uri: candidate.uri, name: projectAliases[candidate.uri] || candidate.name });
             }}
           >
             Remove Project

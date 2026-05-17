@@ -689,6 +689,17 @@ body.is-resizing-columns * {
   background: #f7e7e4;
 }
 
+.button.is-danger {
+  background: #c0392b;
+  color: #fff;
+  border-color: #a53b35;
+}
+
+.button.is-danger:hover:not(:disabled),
+.button.is-danger:focus-visible:not(:disabled) {
+  background: #a53b35;
+}
+
 .project-row-main,
 .project-row-status {
   min-width: 0;

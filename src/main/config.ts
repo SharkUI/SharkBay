@@ -105,9 +105,16 @@ export async function removeConfiguredProject(first: string | IpcRuntimeLike, se
   const config = await loadAppConfig(configPath);
   if (projectValue.startsWith("ssh://")) {
     config.configuredRemoteProjects = config.configuredRemoteProjects.filter((p) => p !== projectValue);
+    delete config.projectAliases[projectValue];
   } else {
-    const absolute = path.resolve(projectValue);
+    const rawPath = projectValue.startsWith("local:")
+      ? decodeURI(projectValue.slice("local:".length))
+      : projectValue;
+    const absolute = path.resolve(rawPath);
     config.configuredProjects = config.configuredProjects.filter((p) => p !== absolute);
+    delete config.projectAliases[`local:${encodeURI(absolute)}`];
+    delete config.projectAliases[projectValue];
+    delete config.projectAliases[absolute];
   }
   config.updatedAt = today();
   await saveAppConfig(config, configPath);
