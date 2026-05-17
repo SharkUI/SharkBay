@@ -35,6 +35,7 @@ describe("IPC channels", () => {
       listAgentClis: "agents:listClis",
       listInstallRecipes: "agents:listInstallRecipes",
       installTool: "agents:installTool",
+      installLog: "agents:installLog",
       agentStatus: "agents:status",
       readMachineProfile: "profiles:readMachine",
       readProjectProfile: "profiles:readProject",

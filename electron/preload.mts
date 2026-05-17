@@ -20,6 +20,7 @@ import type {
   InstallRecipe,
   ListInstallRecipesInput,
   DiagnosticsSnapshot,
+  InstallLogEvent,
   ListPortForwardsInput,
   MachineProfile,
   PathExistsInput,
@@ -145,6 +146,11 @@ const sharkBayApi = {
       const listener = (_event: Electron.IpcRendererEvent, payload: AgentProjectStatusEvent) => callback(payload);
       ipcRenderer.on(channels.agentStatus, listener);
       return () => ipcRenderer.removeListener(channels.agentStatus, listener);
+    },
+    onInstallLog: (callback: (event: InstallLogEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: InstallLogEvent) => callback(payload);
+      ipcRenderer.on(channels.installLog, listener);
+      return () => ipcRenderer.removeListener(channels.installLog, listener);
     }
   },
   profiles: {

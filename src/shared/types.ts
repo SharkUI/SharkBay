@@ -344,6 +344,17 @@ export type ProjectFingerprint = {
   gitHead: string | null;
 };
 
+export type InstallLogStream = "command" | "stdout" | "stderr" | "info";
+
+export type InstallLogEvent = {
+  installId: string;
+  recipeId: string;
+  targetId: string;
+  toolId: string;
+  stream: InstallLogStream;
+  line: string;
+};
+
 export type DiagnosticsJobRecord = {
   id: string;
   kind: string;

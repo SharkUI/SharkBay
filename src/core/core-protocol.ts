@@ -1,6 +1,7 @@
 import type {
   AgentCli,
   DiagnosticsSnapshot,
+  InstallLogEvent,
   InstallRecipe,
   InstallToolInput,
   InstallToolResult,
@@ -60,6 +61,7 @@ export type CoreEventMap = {
   terminalData: TerminalDataEvent;
   terminalUpdate: TerminalUpdateEvent;
   terminalExit: TerminalExitEvent;
+  installLog: InstallLogEvent;
 };
 
 export type CoreEventName = keyof CoreEventMap;

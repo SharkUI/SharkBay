@@ -7,6 +7,8 @@ import type {
   IpcRuntimeLike,
   AgentCli,
   DiagnosticsSnapshot,
+  InstallLogEvent,
+  InstallLogStream,
   InstallToolInput,
   InstallToolResult,
   InstallRecipe,
@@ -48,6 +50,7 @@ export type SharkBayCoreServiceEvents = {
   terminalData: [TerminalDataEvent];
   terminalUpdate: [TerminalUpdateEvent];
   terminalExit: [TerminalExitEvent];
+  installLog: [InstallLogEvent];
 };
 
 export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents> {
@@ -115,6 +118,12 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
     if (!recipe) {
       return { ok: false, recipeId: input.recipeId, targetId: input.targetId, logs, verified: false, error: "Install recipe not found" };
     }
+    const installId = `install-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
+    const pushLog = (stream: InstallLogStream, line: string) => {
+      if (!line) return;
+      logs.push(line);
+      this.emit("installLog", { installId, recipeId: recipe.id, targetId: input.targetId, toolId: recipe.toolId, stream, line });
+    };
     const provider = this.providers.providerForTargetId(input.targetId);
     const machineProfile = await this.readMachineProfile(runtime, input.targetId);
     if (!recipe.targetKinds.includes(machineProfile.targetKind)) {
@@ -145,22 +154,22 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
       run: async () => {
         for (const step of recipe.steps) {
           if (step.kind !== "command") {
-            logs.push(`${step.kind}: ${step.kind === "openUrl" ? step.url : step.markdown}`);
+            pushLog("info", `${step.kind}: ${step.kind === "openUrl" ? step.url : step.markdown}`);
             continue;
           }
-          logs.push(`$ ${step.command}`);
+          pushLog("command", `$ ${step.command}`);
           const commandResult = await provider.runCommand(runtime, input.targetId, step.command, { timeoutMs: 120000 });
-          if (commandResult.stdout.trim()) logs.push(commandResult.stdout.trim());
-          if (commandResult.stderr.trim()) logs.push(commandResult.stderr.trim());
+          pushLog("stdout", commandResult.stdout.trim());
+          pushLog("stderr", commandResult.stderr.trim());
           if (commandResult.exitCode !== 0) {
             return { ok: false, recipeId: recipe.id, targetId: input.targetId, logs, verified: false, error: `Install step failed with exit code ${commandResult.exitCode}` };
           }
         }
         const verifyCommand = [recipe.verification.command, ...(recipe.verification.args ?? [])].map(shellQuote).join(" ");
-        logs.push(`$ ${verifyCommand}`);
+        pushLog("command", `$ ${verifyCommand}`);
         const verification = await provider.runCommand(runtime, input.targetId, verifyCommand, { timeoutMs: 10000 });
-        if (verification.stdout.trim()) logs.push(verification.stdout.trim());
-        if (verification.stderr.trim()) logs.push(verification.stderr.trim());
+        pushLog("stdout", verification.stdout.trim());
+        pushLog("stderr", verification.stderr.trim());
         const verified = verification.exitCode === 0;
         if (verified) {
           await this.readMachineProfile(runtime, input.targetId, { refresh: true });

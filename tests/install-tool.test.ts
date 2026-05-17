@@ -4,7 +4,7 @@ import { LocalProvider } from "../src/providers/local/local-provider.js";
 import { PluginHost } from "../src/plugins/plugin-host.js";
 import { agentBundledPlugin } from "../src/plugins/bundled/agent-detector.js";
 import type { CommandResult, RunCommandOptions } from "../src/core/execution-provider.js";
-import type { IpcRuntimeLike, MachineProfile } from "../src/shared/types.js";
+import type { InstallLogEvent, IpcRuntimeLike, MachineProfile } from "../src/shared/types.js";
 import { makeTestRuntime } from "./helpers.js";
 
 function pluginHostWithAgentPlugin(): PluginHost {
@@ -80,6 +80,24 @@ describe("CoreService installTool", () => {
     provider.npmAvailable = false;
     await core.readMachineProfile(runtime, "local", { refresh: true });
     await expect(core.listInstallRecipes(runtime, { targetId: "local", toolId: "codex" })).resolves.toEqual([]);
+  });
+
+  it("emits installLog events with installId/recipeId/stream for each step", async () => {
+    const runtime = await makeTestRuntime("install-tool-stream");
+    const provider = new InstallTestProvider();
+    const core = new SharkBayCoreService([provider], pluginHostWithAgentPlugin());
+    const events: InstallLogEvent[] = [];
+    core.on("installLog", (event) => events.push(event));
+
+    const result = await core.installTool(runtime, { targetId: "local", recipeId: "codex.npm.global" });
+
+    expect(result.ok).toBe(true);
+    expect(events.length).toBeGreaterThan(0);
+    const installIds = new Set(events.map((event) => event.installId));
+    expect(installIds.size).toBe(1);
+    expect(events.every((event) => event.recipeId === "codex.npm.global" && event.targetId === "local")).toBe(true);
+    expect(events.some((event) => event.stream === "command" && event.line.startsWith("$ npm install"))).toBe(true);
+    expect(events.some((event) => event.stream === "stdout" && event.line === "installed")).toBe(true);
   });
 
   it("rejects install recipes that do not support the target OS", async () => {

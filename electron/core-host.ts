@@ -32,6 +32,7 @@ const forwardEvent = (name: CoreEventName, payload: unknown) => {
 core.on("terminalData", (event) => forwardEvent("terminalData", event));
 core.on("terminalUpdate", (event) => forwardEvent("terminalUpdate", event));
 core.on("terminalExit", (event) => forwardEvent("terminalExit", event));
+core.on("installLog", (event) => forwardEvent("installLog", event));
 
 type Dispatcher = (args: unknown[]) => Promise<unknown> | unknown;
 

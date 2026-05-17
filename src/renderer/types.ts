@@ -72,6 +72,17 @@ export type InstallToolResult = {
   error?: string;
 };
 
+export type InstallLogStream = "command" | "stdout" | "stderr" | "info";
+
+export type InstallLogEvent = {
+  installId: string;
+  recipeId: string;
+  targetId: string;
+  toolId: string;
+  stream: InstallLogStream;
+  line: string;
+};
+
 export type InstallRecipe = {
   id: string;
   toolId: string;
@@ -541,6 +552,7 @@ export type SharkBayBridge = {
     listInstallRecipes?: (input: ListInstallRecipesInput) => Promise<InstallRecipe[]>;
     installTool?: (input: InstallToolInput) => Promise<InstallToolResult>;
     onStatus?: (callback: (event: AgentProjectStatusEvent) => void) => () => void;
+    onInstallLog?: (callback: (event: InstallLogEvent) => void) => () => void;
   };
   profiles?: {
     readMachine?: (input: { targetId: string; options?: ProfileReadOptions }) => Promise<MachineProfile>;

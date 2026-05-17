@@ -137,6 +137,11 @@ export async function registerIpcHandlers(
       window.webContents.send(channels.terminalExit, event);
     });
   });
+  core.on("installLog", (event) => {
+    BrowserWindow.getAllWindows().forEach((window) => {
+      window.webContents.send(channels.installLog, event);
+    });
+  });
   agentSessionWatcher.on("status", (event: AgentProjectStatusEvent) => {
     BrowserWindow.getAllWindows().forEach((window) => {
       window.webContents.send(channels.agentStatus, event);

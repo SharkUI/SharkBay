@@ -11,6 +11,7 @@ import {
   type CoreRequestMessage,
 } from "../src/core/core-protocol.js";
 import type {
+  InstallLogEvent,
   TerminalDataEvent,
   TerminalExitEvent,
   TerminalUpdateEvent,
@@ -20,6 +21,7 @@ export type CoreClientEvents = {
   terminalData: [TerminalDataEvent];
   terminalUpdate: [TerminalUpdateEvent];
   terminalExit: [TerminalExitEvent];
+  installLog: [InstallLogEvent];
 };
 
 type Pending = { resolve: (value: unknown) => void; reject: (error: unknown) => void };
@@ -95,6 +97,7 @@ export class CoreClient extends EventEmitter<CoreClientEvents> {
       if (name === "terminalData") this.emit("terminalData", message.payload as TerminalDataEvent);
       else if (name === "terminalUpdate") this.emit("terminalUpdate", message.payload as TerminalUpdateEvent);
       else if (name === "terminalExit") this.emit("terminalExit", message.payload as TerminalExitEvent);
+      else if (name === "installLog") this.emit("installLog", message.payload as InstallLogEvent);
     }
   }
 

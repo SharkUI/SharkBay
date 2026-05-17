@@ -15,6 +15,7 @@ import type {
   BrowserSession,
   BrowserUpdateEvent,
   DiagnosticsSnapshot,
+  InstallLogEvent,
   InstallRecipe,
   InstallToolResult,
   MachineProfile,
@@ -3311,6 +3312,8 @@ function InstallAgentDialog({ targetId, targetLabel, installedAgentIds, onClose,
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<InstallToolResult | null>(null);
+  const [liveLogLines, setLiveLogLines] = useState<string[]>([]);
+  const logsRef = useRef<HTMLPreElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -3322,15 +3325,33 @@ function InstallAgentDialog({ targetId, targetLabel, installedAgentIds, onClose,
     return () => { cancelled = true; };
   }, [targetId]);
 
+  useEffect(() => {
+    const subscribe = getBridge().agents?.onInstallLog;
+    if (!subscribe || !selectedRecipeId) return;
+    const unsubscribe = subscribe((event) => {
+      if (event.targetId !== targetId || event.recipeId !== selectedRecipeId) return;
+      setLiveLogLines((current) => [...current, formatInstallLogLine(event)]);
+    });
+    return unsubscribe;
+  }, [targetId, selectedRecipeId]);
+
+  useEffect(() => {
+    if (!logsRef.current) return;
+    logsRef.current.scrollTop = logsRef.current.scrollHeight;
+  }, [liveLogLines]);
+
   const installedSet = useMemo(() => new Set(installedAgentIds), [installedAgentIds]);
   const visibleRecipes = recipes?.filter((recipe) => !installedSet.has(recipe.toolId)) ?? null;
   const selectedRecipe = recipes?.find((recipe) => recipe.id === selectedRecipeId) ?? null;
+  const hasStreamedLogs = liveLogLines.length > 0;
+  const displayLogs = hasStreamedLogs ? liveLogLines.join("\n") : result?.logs.join("\n") ?? "";
 
   async function runInstall(recipe: InstallRecipe) {
     const installTool = getBridge().agents?.installTool;
     if (!installTool) { setToast({ tone: "error", message: "Install tool API is not available." }); return; }
     setBusy(true);
     setResult(null);
+    setLiveLogLines([]);
     try {
       const next = await installTool({ targetId, recipeId: recipe.id });
       setResult(next);
@@ -3381,8 +3402,10 @@ function InstallAgentDialog({ targetId, targetLabel, installedAgentIds, onClose,
               </div>
               <div className="form-note">SharkBay will run the following on <strong>{targetLabel}</strong>:</div>
               <pre className="install-recipe-steps">{describeRecipeSteps(selectedRecipe)}</pre>
-              {result ? (
-                <pre className={cx("install-recipe-steps", result.ok ? "is-success" : "is-error")}>{result.logs.join("\n") || (result.ok ? "Installed." : result.error ?? "Install failed.")}</pre>
+              {busy || result || hasStreamedLogs ? (
+                <pre ref={logsRef} className={cx("install-recipe-steps", result && (result.ok ? "is-success" : "is-error"))} style={{ maxHeight: "240px", overflow: "auto" }}>
+                  {displayLogs || (busy ? "Starting…" : result?.ok ? "Installed." : result?.error ?? "Install failed.")}
+                </pre>
               ) : null}
               <div className="remote-machine-form-actions">
                 {!result?.ok ? (
@@ -3391,7 +3414,7 @@ function InstallAgentDialog({ targetId, targetLabel, installedAgentIds, onClose,
                 {result?.ok ? (
                   <button className="button" type="button" onClick={onClose}>Done</button>
                 ) : (
-                  <button className="button" disabled={busy} type="button" onClick={() => void runInstall(selectedRecipe)}>{busy ? "Installing" : "Install"}</button>
+                  <button className="button" disabled={busy} type="button" onClick={() => void runInstall(selectedRecipe)}>{busy ? "Installing…" : "Install"}</button>
                 )}
               </div>
             </>
@@ -3400,6 +3423,11 @@ function InstallAgentDialog({ targetId, targetLabel, installedAgentIds, onClose,
       </section>
     </div>
   );
+}
+
+function formatInstallLogLine(event: InstallLogEvent): string {
+  if (event.stream === "stderr") return `! ${event.line}`;
+  return event.line;
 }
 
 function describeRecipeSteps(recipe: InstallRecipe): string {
