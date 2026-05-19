@@ -639,7 +639,7 @@ export type RemotePortForward = {
 export type CreatePortForwardInput = {
   machineId: string;
   remotePort: number;
-  localPort: number;
+  localPort?: number;
   remoteHost?: string;
 };
 
@@ -649,6 +649,25 @@ export type RemovePortForwardInput = {
 
 export type ListPortForwardsInput = {
   machineId?: string;
+};
+
+export type DetectRemotePortsInput = {
+  machineId: string;
+};
+
+export type RemoteDetectedPort = {
+  machineId: string;
+  remoteHost: string;
+  remotePort: number;
+  processName: string | null;
+  pid: number | null;
+  source: "process";
+  label: string;
+  protocol: "http" | "https" | null;
+  forwarded: boolean;
+  forwardId?: string;
+  localPort?: number;
+  status?: PortForwardStatus;
 };
 
 export type PortForwardEvent = {

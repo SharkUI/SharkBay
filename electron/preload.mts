@@ -15,6 +15,7 @@ import type {
   BrowserSession,
   BrowserUpdateEvent,
   CreatePortForwardInput,
+  DetectRemotePortsInput,
   InstallToolInput,
   InstallToolResult,
   InstallRecipe,
@@ -37,6 +38,7 @@ import type {
   ReadFileResult,
   WriteFileInput,
   WriteFileResult,
+  RemoteDetectedPort,
   RemoteMachineInput,
   RemoteMachineTestResult,
   RemotePortForward,
@@ -171,6 +173,7 @@ const sharkBayApi = {
   },
   portForwards: {
     list: (input?: ListPortForwardsInput) => invoke<RemotePortForward[]>(channels.listPortForwards, input),
+    detect: (input: DetectRemotePortsInput) => invoke<RemoteDetectedPort[]>(channels.detectRemotePorts, input),
     create: (input: CreatePortForwardInput) => invoke<RemotePortForward>(channels.createPortForward, input),
     remove: (input: RemovePortForwardInput) => invoke<{ ok: true }>(channels.removePortForward, input),
     onUpdate: (callback: (event: PortForwardEvent) => void) => {

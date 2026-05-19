@@ -42,6 +42,7 @@ export const ipcChannels = {
   removeRemoteMachine: "remotes:removeMachine",
   testRemoteMachine: "remotes:testMachine",
   listPortForwards: "forwards:list",
+  detectRemotePorts: "forwards:detectPorts",
   createPortForward: "forwards:create",
   removePortForward: "forwards:remove",
   portForwardUpdate: "forwards:update",

@@ -570,7 +570,8 @@ export type SharkBayBridge = {
   };
   portForwards?: {
     list?: (input?: { machineId?: string }) => Promise<RemotePortForward[]>;
-    create?: (input: { machineId: string; remotePort: number; localPort: number; remoteHost?: string }) => Promise<RemotePortForward>;
+    detect?: (input: { machineId: string }) => Promise<RemoteDetectedPort[]>;
+    create?: (input: { machineId: string; remotePort: number; localPort?: number; remoteHost?: string }) => Promise<RemotePortForward>;
     remove?: (input: { id: string }) => Promise<{ ok: true }>;
     onUpdate?: (callback: (event: { forward: RemotePortForward }) => void) => () => void;
   };
@@ -588,4 +589,19 @@ export type RemotePortForward = {
   error: string | null;
   pid: number | null;
   createdAt: string;
+};
+
+export type RemoteDetectedPort = {
+  machineId: string;
+  remoteHost: string;
+  remotePort: number;
+  processName: string | null;
+  pid: number | null;
+  source: "process";
+  label: string;
+  protocol: "http" | "https" | null;
+  forwarded: boolean;
+  forwardId?: string;
+  localPort?: number;
+  status?: PortForwardStatus;
 };

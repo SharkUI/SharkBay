@@ -24,6 +24,7 @@ import type {
   BrowserSession,
   BrowserUpdateEvent,
   CreatePortForwardInput,
+  DetectRemotePortsInput,
   InstallToolInput,
   InstallToolResult,
   InstallRecipe,
@@ -45,6 +46,7 @@ import type {
   ReadFileResult,
   WriteFileInput,
   WriteFileResult,
+  RemoteDetectedPort,
   RemoteMachineInput,
   RemoteMachineTestResult,
   RemotePortForward,
@@ -185,6 +187,9 @@ export async function registerIpcHandlers(
   );
   handle<ListPortForwardsInput | undefined, RemotePortForward[]>(channels.listPortForwards, (payload) =>
     Promise.resolve(portForwardManager.list(payload?.machineId))
+  );
+  handle<DetectRemotePortsInput, RemoteDetectedPort[]>(channels.detectRemotePorts, (payload) =>
+    portForwardManager.detect(runtime, payload)
   );
   handle<CreatePortForwardInput, RemotePortForward>(channels.createPortForward, (payload) =>
     portForwardManager.create(runtime, payload)

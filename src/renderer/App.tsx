@@ -28,6 +28,7 @@ import type {
   RemoteMachine,
   RemoteMachineInput,
   RemoteMachineTestResult,
+  RemoteDetectedPort,
   RemotePortForward,
   RootRecord,
   ScanResult,
@@ -2176,23 +2177,33 @@ function PortForwardsDetailTab({ active, candidate, setToast }: {
 }) {
   const machineId = candidate.providerId;
   const [forwards, setForwards] = useState<RemotePortForward[]>([]);
+  const [detectedPorts, setDetectedPorts] = useState<RemoteDetectedPort[]>([]);
   const [loading, setLoading] = useState(false);
+  const [detecting, setDetecting] = useState(false);
   const [remotePort, setRemotePort] = useState("8080");
   const [localPort, setLocalPort] = useState("8080");
   const [busy, setBusy] = useState(false);
+  const [forwardingKey, setForwardingKey] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
 
   async function refresh() {
-    const handler = getBridge().portForwards?.list;
-    if (!handler) return;
+    const listHandler = getBridge().portForwards?.list;
+    const detectHandler = getBridge().portForwards?.detect;
+    if (!listHandler) return;
     setLoading(true);
+    setDetecting(Boolean(detectHandler));
     try {
-      const items = await handler({ machineId });
+      const [items, detected] = await Promise.all([
+        listHandler({ machineId }),
+        detectHandler?.({ machineId }) ?? Promise.resolve([]),
+      ]);
       setForwards(items);
+      setDetectedPorts(detected);
     } catch (error) {
       setToast({ tone: "error", message: asMessage(error) });
     } finally {
       setLoading(false);
+      setDetecting(false);
     }
   }
 
@@ -2206,6 +2217,11 @@ function PortForwardsDetailTab({ active, candidate, setToast }: {
         if (!exists) return [...current, event.forward];
         return current.map((item) => (item.id === event.forward.id ? event.forward : item));
       });
+      setDetectedPorts((current) => current.map((port) => (
+        port.remotePort === event.forward.remotePort && port.machineId === event.forward.machineId
+          ? { ...port, forwarded: event.forward.status === "running" || event.forward.status === "starting", forwardId: event.forward.id, localPort: event.forward.localPort, status: event.forward.status }
+          : port
+      )));
     });
     return () => unsubscribe?.();
   }, [machineId]);
@@ -2246,49 +2262,141 @@ function PortForwardsDetailTab({ active, candidate, setToast }: {
     }
   }
 
+  async function forwardDetected(port: RemoteDetectedPort, openAfterStart: boolean) {
+    const handler = getBridge().portForwards?.create;
+    if (!handler) return;
+    const key = detectedPortKey(port);
+    setForwardingKey(key);
+    try {
+      const forward = await handler({ machineId, remotePort: port.remotePort, remoteHost: port.remoteHost });
+      setToast({ tone: "success", message: `Forwarding localhost:${forward.localPort} → ${candidate.providerId}:${port.remotePort}` });
+      if (openAfterStart) openForward(forward, port.protocol);
+      await refresh();
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      setForwardingKey(null);
+    }
+  }
+
+  function openForward(forward: RemotePortForward, protocol: "http" | "https" | null = "http") {
+    window.open(`${protocol ?? "http"}://127.0.0.1:${forward.localPort}`, "_blank", "noopener,noreferrer");
+  }
+
   return (
-    <>
-      <section className="subpanel port-forwards-card">
-        <header className="subpanel-header">
-          <h4>Add port forward</h4>
-          <span className="form-note">Tunnel a remote port through SSH to your local machine.</span>
-        </header>
-        <form className="port-forward-form" onSubmit={(event) => void addForward(event)}>
-          <label><span>Remote port</span><input className="input" inputMode="numeric" value={remotePort} onChange={(event) => setRemotePort(event.target.value)} placeholder="8080" /></label>
-          <label><span>Local port</span><input className="input" inputMode="numeric" value={localPort} onChange={(event) => setLocalPort(event.target.value)} placeholder="8080" /></label>
-          <div className="port-forward-actions">
-            <button className="button" disabled={busy} type="submit">{busy ? "Starting" : "Forward"}</button>
+    <section className="subpanel port-forwards-panel">
+      <header className="port-forwards-toolbar">
+        <div className="port-forwards-title-block">
+          <h4>Port forwards</h4>
+          <span>{candidate.providerId}</span>
+        </div>
+        <div className="port-forwards-summary">
+          <span>{detectedPorts.length} detected</span>
+          <span>{forwards.length} active</span>
+          <button className="button secondary compact" disabled={detecting} type="button" onClick={() => void refresh()}>
+            {detecting ? "Scanning" : "Scan"}
+          </button>
+        </div>
+      </header>
+
+      <div className="port-forward-section">
+        <div className="port-forward-section-header">
+          <h5>Detected</h5>
+          <span>One-click tunnels for listening remote services.</span>
+        </div>
+        {detecting && !detectedPorts.length ? (
+          <div className="port-forward-empty">Scanning remote listeners...</div>
+        ) : detectedPorts.length ? (
+          <div className="port-forward-table">
+            {detectedPorts.map((port) => {
+              const forward = port.forwardId ? forwards.find((item) => item.id === port.forwardId) : forwards.find((item) => item.remotePort === port.remotePort && item.remoteHost === port.remoteHost);
+              const key = detectedPortKey(port);
+              return (
+                <div className={cx("port-forward-row", port.forwarded ? "is-running" : "is-detected")} key={key}>
+                  <div className="port-forward-service">
+                    <strong>{port.label}</strong>
+                    <span>{port.processName ? `${port.processName}${port.pid ? ` · pid ${port.pid}` : ""}` : "remote process"}</span>
+                  </div>
+                  <div className="port-forward-route">
+                    <span>{port.remoteHost}:{port.remotePort}</span>
+                    <span>{port.forwarded ? `127.0.0.1:${port.localPort}` : "not forwarded"}</span>
+                  </div>
+                  <span className={cx("port-forward-status", port.forwarded ? "is-running" : "is-detected")}>{port.forwarded ? "active" : "detected"}</span>
+                  <div className="port-forward-row-actions">
+                    {port.forwarded && forward ? (
+                      <button className="button secondary compact" type="button" onClick={() => openForward(forward, port.protocol)}>Open</button>
+                    ) : (
+                      <>
+                        <button className="button secondary compact" disabled={forwardingKey === key} type="button" onClick={() => void forwardDetected(port, false)}>
+                          {forwardingKey === key ? "Starting" : "Forward"}
+                        </button>
+                        {port.protocol ? (
+                          <button className="button compact" disabled={forwardingKey === key} type="button" onClick={() => void forwardDetected(port, true)}>Open</button>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
+        ) : (
+          <div className="port-forward-empty">No listening ports detected.</div>
+        )}
+      </div>
+
+      <div className="port-forward-section">
+        <div className="port-forward-section-header">
+          <h5>Manual</h5>
+          <span>Use this when a service is not discoverable yet.</span>
+        </div>
+        <form className="port-forward-form" onSubmit={(event) => void addForward(event)}>
+          <label><span>Remote</span><input className="input" inputMode="numeric" value={remotePort} onChange={(event) => setRemotePort(event.target.value)} placeholder="8080" /></label>
+          <label><span>Local</span><input className="input" inputMode="numeric" value={localPort} onChange={(event) => setLocalPort(event.target.value)} placeholder="auto" /></label>
+          <button className="button compact" disabled={busy} type="submit">{busy ? "Starting" : "Forward"}</button>
         </form>
-      </section>
-      <section className="subpanel port-forwards-card">
-        <header className="subpanel-header">
-          <h4>Active forwards</h4>
-          <span className="form-note">{forwards.length} forward{forwards.length === 1 ? "" : "s"}</span>
-        </header>
+      </div>
+
+      <div className="port-forward-section">
+        <div className="port-forward-section-header">
+          <h5>Active</h5>
+          <span>{forwards.length} tunnel{forwards.length === 1 ? "" : "s"} running or recently stopped.</span>
+        </div>
         {loading && !forwards.length ? (
-          <p style={{ padding: "12px", opacity: 0.6 }}>Loading…</p>
+          <div className="port-forward-empty">Loading forwards...</div>
         ) : forwards.length ? (
-          <div className="port-forward-list">
+          <div className="port-forward-table">
             {forwards.map((forward) => (
               <div className={cx("port-forward-row", `is-${forward.status}`)} key={forward.id}>
-                <div className="port-forward-row-main">
-                  <span className="port-forward-arrow">localhost:{forward.localPort} → {forward.remoteHost}:{forward.remotePort}</span>
-                  <span className={cx("port-forward-status", `is-${forward.status}`)}>{forward.status}</span>
+                <div className="port-forward-service">
+                  <strong>localhost:{forward.localPort}</strong>
+                  <span>{forward.status}</span>
+                </div>
+                <div className="port-forward-route">
+                  <span>127.0.0.1:{forward.localPort}</span>
+                  <span>{forward.remoteHost}:{forward.remotePort}</span>
+                </div>
+                <span className={cx("port-forward-status", `is-${forward.status}`)}>{forward.status}</span>
+                <div className="port-forward-row-actions">
+                  {forward.status === "running" ? <button className="button secondary compact" type="button" onClick={() => openForward(forward)}>Open</button> : null}
+                  <button className="button secondary compact" disabled={removingId === forward.id} type="button" onClick={() => void removeForward(forward.id)}>
+                    {removingId === forward.id ? "Stopping" : "Stop"}
+                  </button>
                 </div>
                 {forward.error ? <div className="port-forward-error">{forward.error}</div> : null}
-                <button className="button secondary compact" disabled={removingId === forward.id} type="button" onClick={() => void removeForward(forward.id)}>
-                  {removingId === forward.id ? "Stopping" : "Stop"}
-                </button>
               </div>
             ))}
           </div>
         ) : (
-          <p style={{ padding: "12px", opacity: 0.6 }}>No active forwards.</p>
+          <div className="port-forward-empty">No active forwards.</div>
         )}
-      </section>
-    </>
+      </div>
+    </section>
   );
+}
+
+function detectedPortKey(port: RemoteDetectedPort): string {
+  return `${port.machineId}:${port.remoteHost}:${port.remotePort}`;
 }
 
 function FilesDetailTab({ active, candidate, detail, setToast, onOpenFileInEditor }: {
@@ -2503,18 +2611,21 @@ function SettingsView({ appearanceTheme, roots, configuredProjects, configuredRe
             <button aria-current={activeSection === "local-machine" ? "page" : undefined} className={cx("settings-nav-item", activeSection === "local-machine" && "is-selected")} type="button" onClick={() => setActiveSection("local-machine")}>
               <span>Local Machine</span><small>{sectionMeta("local-machine")}</small>
             </button>
+            <div className="settings-nav-section-title">
+              <span>Remote machines</span>
+              <button aria-label="Add remote machine" className="settings-add-remote-button" disabled={!bridgeAvailable} title="Add remote machine" type="button" onClick={() => setRemoteMachineModalOpen(true)}>
+                <PlusIcon />
+              </button>
+            </div>
             {remoteMachines.map((machine) => {
               const sectionId = `remote-machine:${machine.id}` as const;
               return (
                 <button aria-current={sectionId === activeSection ? "page" : undefined} className={cx("settings-nav-item", "is-remote-machine", sectionId === activeSection && "is-selected")} key={machine.id} type="button" onClick={() => setActiveSection(sectionId)}>
-                  <span>{machine.label}</span><small><span className="machine-tag">Remote</span>{machine.sshConfigHost ?? machine.host}</small>
+                  <span>{machine.label}</span>
+                  <small><span>{remoteMachineAuthLabel(machine.authMode)}</span><span>{machine.sshConfigHost ?? machine.host}</span></small>
                 </button>
               );
             })}
-            <button className="settings-add-remote-button" disabled={!bridgeAvailable} type="button" onClick={() => setRemoteMachineModalOpen(true)}>
-              <PlusIcon />
-              <span>Add Remote Machine</span>
-            </button>
           </div>
           <div className="settings-nav-group">
             <button aria-current={activeSection === "extensions" ? "page" : undefined} className={cx("settings-nav-item", activeSection === "extensions" && "is-selected")} type="button" onClick={() => setActiveSection("extensions")}>
@@ -2718,26 +2829,51 @@ function ExtensionsSettingsPanel({ active, setToast }: { active: boolean; setToa
 
   if (loadError) return <section className="workflow-panel"><div className="inline-connection-result is-error" role="status">{loadError}</div></section>;
   if (!plugins) return <section className="workflow-panel"><div className="form-note">Loading plugins…</div></section>;
-  if (!plugins.length) return <section className="workflow-panel"><EmptyState title="No plugins" body="No bundled or installed plugins were found." /></section>;
+  if (!plugins.length) return (
+    <section className="extensions-panel">
+      <div className="extensions-toolbar">
+        <div><h4>Extensions</h4><span>No bundled or installed plugins were found.</span></div>
+        <button className="button compact" type="button" onClick={() => setToast({ tone: "info", message: "Install Extension coming soon." })}>Install Extension</button>
+      </div>
+      <div className="extensions-empty">No plugins found.</div>
+    </section>
+  );
   return (
-    <section className="workflow-panel">
-      <div className="settings-list">
+    <section className="extensions-panel">
+      <div className="extensions-toolbar">
+        <div>
+          <h4>Extensions</h4>
+          <span>{plugins.length} plugin{plugins.length === 1 ? "" : "s"} · {plugins.filter((plugin) => plugin.enabled).length} enabled</span>
+        </div>
+        <button className="button compact" type="button" onClick={() => setToast({ tone: "info", message: "Install Extension coming soon." })}>Install Extension</button>
+      </div>
+      <div className="extensions-list">
         {plugins.map((plugin) => {
           const contributesParts = [
-            plugin.contributes.machineDetectors ? `${plugin.contributes.machineDetectors} machine detector${plugin.contributes.machineDetectors === 1 ? "" : "s"}` : null,
-            plugin.contributes.projectDetectors ? `${plugin.contributes.projectDetectors} project detector${plugin.contributes.projectDetectors === 1 ? "" : "s"}` : null,
-            plugin.contributes.installRecipes ? `${plugin.contributes.installRecipes} install recipe${plugin.contributes.installRecipes === 1 ? "" : "s"}` : null,
+            plugin.contributes.machineDetectors ? `${plugin.contributes.machineDetectors} machine` : null,
+            plugin.contributes.projectDetectors ? `${plugin.contributes.projectDetectors} project` : null,
+            plugin.contributes.installRecipes ? `${plugin.contributes.installRecipes} install` : null,
           ].filter(Boolean);
           return (
-            <div className="settings-list-row" key={plugin.id} style={{ gap: "12px", alignItems: "center" }}>
-              <span style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
-                <span className="truncate"><strong>{plugin.name}</strong> <small style={{ opacity: 0.6 }}>v{plugin.version} · {plugin.publisher}</small></span>
-                <small className="truncate" style={{ opacity: 0.7 }}>
-                  <span className="machine-tag">{plugin.source}</span>
-                  {" "}{plugin.id}
-                  {contributesParts.length ? ` · ${contributesParts.join(", ")}` : ""}
-                </small>
-              </span>
+            <div className={cx("extension-card", !plugin.enabled && "is-disabled")} key={plugin.id}>
+              <div className="extension-card-main">
+                <div className="extension-icon" aria-hidden="true">{plugin.name.slice(0, 1).toUpperCase()}</div>
+                <div className="extension-copy">
+                  <div className="extension-title-row">
+                    <strong>{plugin.name}</strong>
+                    <span className={cx("extension-state", plugin.enabled ? "is-enabled" : "is-disabled")}>{plugin.enabled ? "Enabled" : "Disabled"}</span>
+                  </div>
+                  <div className="extension-meta">
+                    <span>{plugin.id}</span>
+                    <span>v{plugin.version}</span>
+                    <span>{plugin.publisher}</span>
+                  </div>
+                  <div className="extension-tags">
+                    <span className="machine-tag">{plugin.source}</span>
+                    {contributesParts.map((part) => <span className="extension-chip" key={part}>{part}</span>)}
+                  </div>
+                </div>
+              </div>
               <button
                 className={cx("button", "secondary", "compact")}
                 disabled={busyId === plugin.id || plugin.source === "bundled" && plugin.id === "com.sharkbay.core"}
@@ -3145,18 +3281,24 @@ function RemoteMachineDetailPanel({ machine, setToast, onRemove, onTest }: {
   }
   return (
     <>
-      <div className="settings-section-heading"><h4>{machine.label}</h4><span className="machine-tag">Remote</span></div>
-      <section className="workflow-panel remote-machines-panel">
-        <div className="settings-facts-grid">
-          <Fact label="Method" value={remoteMachineAuthLabel(machine.authMode)} />
-          <Fact label="Host" value={machine.sshConfigHost ?? machine.host} />
-          <Fact label="Port" value={String(machine.port)} />
-          <Fact label="Default path" value={machine.defaultProjectPath ?? "-"} />
-        </div>
-        <div className="remote-machine-detail-actions">
-          <button className="button secondary" disabled={Boolean(busyAction)} type="button" onClick={() => void test()}>{busyAction === "test" ? "Testing" : "Test Connection"}</button>
-          <button className="button secondary" disabled={Boolean(busyAction)} type="button" onClick={() => void remove()}>{busyAction === "remove" ? "Removing" : "Remove"}</button>
-        </div>
+      <section className="remote-machine-detail-card">
+        <header className="remote-machine-detail-hero">
+          <div>
+            <span className="machine-tag">Remote</span>
+            <h4>{machine.label}</h4>
+            <p>{machine.sshConfigHost ?? machine.host}</p>
+          </div>
+          <div className="remote-machine-detail-actions">
+            <button className="button secondary compact" disabled={Boolean(busyAction)} type="button" onClick={() => void test()}>{busyAction === "test" ? "Testing" : "Test"}</button>
+            <button className="button secondary compact" disabled={Boolean(busyAction)} type="button" onClick={() => void remove()}>{busyAction === "remove" ? "Removing" : "Remove"}</button>
+          </div>
+        </header>
+        <dl className="remote-machine-attributes">
+          <div><dt>Connection</dt><dd>{remoteMachineAuthLabel(machine.authMode)}</dd></div>
+          <div><dt>Host</dt><dd>{machine.sshConfigHost ?? machine.host}</dd></div>
+          <div><dt>Port</dt><dd>{machine.port}</dd></div>
+          <div><dt>Default project path</dt><dd>{machine.defaultProjectPath ?? "-"}</dd></div>
+        </dl>
         {connectionResult ? (
           <div className={cx("inline-connection-result", connectionResult.ok ? "is-success" : "is-error")} role="status" aria-live="polite">
             {connectionResult.message}
@@ -3194,25 +3336,28 @@ function MachineProfileCard({ targetId, setToast, reloadKey }: { targetId: strin
   }
 
   return (
-    <section className="workflow-panel remote-machines-panel">
-      <div className="panel-title-row compact-title-row">
-        <h4>Machine profile</h4>
+    <section className="machine-profile-panel">
+      <header className="machine-profile-header">
+        <div>
+          <h4>Machine profile</h4>
+          <span>{busy ? "Refreshing" : profile ? "Last detected capabilities" : "Not probed yet"}</span>
+        </div>
         <button aria-label="Refresh machine profile" className="icon-button" disabled={busy} type="button" onClick={refresh}><RefreshIcon /></button>
-      </div>
+      </header>
       {loadError ? (
         <div className="inline-connection-result is-error" role="status">{loadError}</div>
       ) : !profile && busy ? (
-        <div className="form-note">Probing machine…</div>
+        <div className="machine-profile-empty">Probing machine...</div>
       ) : !profile ? (
-        <div className="form-note">No profile yet. Use Test Connection or Refresh to probe.</div>
+        <div className="machine-profile-empty">No profile yet. Use Test Connection or Refresh to probe.</div>
       ) : (
         <>
-          <div className="settings-facts-grid">
-            <Fact label="OS" value={profile.os.name ? `${profile.os.name}${profile.os.version ? ` ${profile.os.version}` : ""}` : "Unknown"} />
-            <Fact label="Arch" value={profile.os.arch ?? "-"} />
-            <Fact label="Hostname" value={profile.hostname ?? "-"} />
-            <Fact label="Shell" value={profile.shell.name ?? profile.shell.path ?? "-"} />
-          </div>
+          <dl className="machine-profile-summary">
+            <div><dt>OS</dt><dd>{profile.os.name ? `${profile.os.name}${profile.os.version ? ` ${profile.os.version}` : ""}` : "Unknown"}</dd></div>
+            <div><dt>Arch</dt><dd>{profile.os.arch ?? "-"}</dd></div>
+            <div><dt>Hostname</dt><dd>{profile.hostname ?? "-"}</dd></div>
+            <div><dt>Shell</dt><dd>{profile.shell.name ?? profile.shell.path ?? "-"}</dd></div>
+          </dl>
           <ToolList title="Agents" tools={profile.agents} />
           <ToolList title="Languages" tools={profile.languages} />
           <ToolList title="Tools" tools={profile.tools} />
@@ -3233,14 +3378,21 @@ function MachineProfileCard({ targetId, setToast, reloadKey }: { targetId: strin
 function ToolList({ title, tools }: { title: string; tools: MachineProfile["tools"] }) {
   if (!tools.length) return null;
   return (
-    <div>
-      <div className="form-note" style={{ marginBottom: "4px" }}>{title}</div>
-      <div className="settings-facts-grid">
+    <section className="machine-tool-section">
+      <div className="machine-tool-section-title">
+        <h5>{title}</h5>
+        <span>{tools.filter((tool) => tool.available).length}/{tools.length} available</span>
+      </div>
+      <div className="machine-tool-list">
         {tools.map((tool) => (
-          <Fact key={tool.id} label={tool.id} value={tool.available ? (tool.version ?? "available") : "missing"} tone={tool.available ? undefined : "warn"} />
+          <div className={cx("machine-tool-row", !tool.available && "is-missing")} key={tool.id}>
+            <span className={cx("machine-tool-state", tool.available ? "is-available" : "is-missing")} />
+            <strong>{tool.id}</strong>
+            <span>{tool.available ? (tool.version ?? tool.path ?? "available") : "missing"}</span>
+          </div>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -3370,55 +3522,82 @@ function InstallAgentDialog({ targetId, targetLabel, installedAgentIds, onClose,
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-      <section aria-modal="true" className="modal-panel add-project-dialog" role="dialog" aria-labelledby="install-agent-dialog-title">
-        <div className="modal-header">
+      <section aria-modal="true" className="modal-panel install-agent-dialog" role="dialog" aria-labelledby="install-agent-dialog-title">
+        <div className="modal-header install-agent-header">
           <div>
             <h3 id="install-agent-dialog-title">Install agent CLI</h3>
             <p>Target: {targetLabel}</p>
           </div>
           <button aria-label="Close" className="icon-button" disabled={busy} type="button" onClick={onClose}>x</button>
         </div>
-        <div className="remote-machine-form" style={{ gap: "12px" }}>
-          {loadError ? (
-            <div className="inline-connection-result is-error" role="status">{loadError}</div>
-          ) : !recipes ? (
-            <div className="form-note">Loading install recipes…</div>
-          ) : !visibleRecipes?.length ? (
-            <EmptyState title="All agents installed" body="No additional install recipes apply to this target." />
-          ) : !selectedRecipe ? (
-            <div className="settings-list">
-              {visibleRecipes.map((recipe) => (
-                <button className="settings-list-row" key={recipe.id} type="button" onClick={() => setSelectedRecipeId(recipe.id)}>
-                  <span className="truncate"><strong>{recipe.toolId}</strong> — {recipe.label}</span>
-                  <small className="truncate">{describeRecipeSteps(recipe)}</small>
-                </button>
-              ))}
+        <div className="install-agent-body">
+          <aside className="install-agent-sidebar">
+            <div className="install-agent-section-title">
+              <span>Available</span>
+              <strong>{visibleRecipes?.length ?? 0}</strong>
             </div>
-          ) : (
-            <>
-              <div className="settings-facts-grid">
-                <Fact label="Agent" value={selectedRecipe.toolId} />
-                <Fact label="Recipe" value={selectedRecipe.label} />
+            {loadError ? (
+              <div className="inline-connection-result is-error" role="status">{loadError}</div>
+            ) : !recipes ? (
+              <div className="install-agent-empty">Loading install recipes...</div>
+            ) : !visibleRecipes?.length ? (
+              <div className="install-agent-empty">All agents installed.</div>
+            ) : (
+              <div className="install-agent-recipe-list">
+                {visibleRecipes.map((recipe) => (
+                  <button className={cx("install-agent-recipe", selectedRecipeId === recipe.id && "is-selected")} key={recipe.id} type="button" onClick={() => setSelectedRecipeId(recipe.id)}>
+                    <strong>{recipe.toolId}</strong>
+                    <span>{recipe.label}</span>
+                  </button>
+                ))}
               </div>
-              <div className="form-note">SharkBay will run the following on <strong>{targetLabel}</strong>:</div>
-              <pre className="install-recipe-steps">{describeRecipeSteps(selectedRecipe)}</pre>
-              {busy || result || hasStreamedLogs ? (
-                <pre ref={logsRef} className={cx("install-recipe-steps", result && (result.ok ? "is-success" : "is-error"))} style={{ maxHeight: "240px", overflow: "auto" }}>
-                  {displayLogs || (busy ? "Starting…" : result?.ok ? "Installed." : result?.error ?? "Install failed.")}
-                </pre>
-              ) : null}
-              <div className="remote-machine-form-actions">
-                {!result?.ok ? (
-                  <button className="button secondary" disabled={busy} type="button" onClick={() => setSelectedRecipeId(null)}>Back</button>
+            )}
+          </aside>
+          <div className="install-agent-detail">
+            {!recipes ? (
+              <div className="install-agent-empty">Preparing installer...</div>
+            ) : !visibleRecipes?.length ? (
+              <div className="install-agent-complete">
+                <strong>All agents installed</strong>
+                <span>No additional install recipes apply to this target.</span>
+              </div>
+            ) : !selectedRecipe ? (
+              <div className="install-agent-empty">Select an agent recipe to review before installing.</div>
+            ) : (
+              <>
+                <div className="install-agent-selected">
+                  <div>
+                    <span>Agent</span>
+                    <strong>{selectedRecipe.toolId}</strong>
+                  </div>
+                  <div>
+                    <span>Recipe</span>
+                    <strong>{selectedRecipe.label}</strong>
+                  </div>
+                </div>
+                <div className="install-agent-command">
+                  <span>Command plan</span>
+                  <pre>{describeRecipeSteps(selectedRecipe)}</pre>
+                </div>
+                {busy || result || hasStreamedLogs ? (
+                  <div className={cx("install-agent-log", result && (result.ok ? "is-success" : "is-error"))}>
+                    <span>Install log</span>
+                    <pre ref={logsRef}>
+                      {displayLogs || (busy ? "Starting..." : result?.ok ? "Installed." : result?.error ?? "Install failed.")}
+                    </pre>
+                  </div>
                 ) : null}
-                {result?.ok ? (
-                  <button className="button" type="button" onClick={onClose}>Done</button>
-                ) : (
-                  <button className="button" disabled={busy} type="button" onClick={() => void runInstall(selectedRecipe)}>{busy ? "Installing…" : "Install"}</button>
-                )}
-              </div>
-            </>
-          )}
+              </>
+            )}
+          </div>
+        </div>
+        <div className="install-agent-actions">
+          <button className="button secondary" disabled={busy} type="button" onClick={onClose}>{result?.ok ? "Close" : "Cancel"}</button>
+          {selectedRecipe && !result?.ok ? (
+            <button className="button" disabled={busy} type="button" onClick={() => void runInstall(selectedRecipe)}>{busy ? "Installing..." : "Install"}</button>
+          ) : result?.ok ? (
+            <button className="button" type="button" onClick={onClose}>Done</button>
+          ) : null}
         </div>
       </section>
     </div>
