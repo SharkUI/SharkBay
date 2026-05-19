@@ -72,7 +72,7 @@ export async function resolveRepoPath(repoPath: string, configuredRoots: string[
 
   const containingRoot = roots.find((root) => isPathInside(root, realRepo));
   if (!containingRoot) {
-    throw new Error("Repository path is outside configured roots");
+    throw new Error("Repository path is outside configured roots and outside configured projects");
   }
 
   return { repoPath: realRepo, containingRoot };

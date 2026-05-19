@@ -91,8 +91,12 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
 
   async create(runtime: IpcRuntimeLike, input: TerminalCreateInput): Promise<TerminalSession> {
     const spec = await this.resolveLaunchSpec(runtime, input.cwdUri);
+    const initialCommand = normalizeTerminalCommandLine(input.initialCommand);
+    const command = !spec.isRemote && input.service && initialCommand
+      ? serviceTerminalCommand(spec.shell, initialCommand)
+      : spec.command;
     const id = `term-${Date.now().toString(36)}-${++this.sequence}`;
-    const ptyProcess = pty.spawn(spec.command.file, spec.command.args, {
+    const ptyProcess = pty.spawn(command.file, command.args, {
       cwd: spec.cwd,
       cols: input.cols ?? 80,
       rows: input.rows ?? 24,
@@ -147,8 +151,7 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
     if (!spec.isRemote) {
       this.startTitleInspection(session);
     }
-    const initialCommand = normalizeTerminalCommandLine(input.initialCommand);
-    if (initialCommand) {
+    if (initialCommand && (!input.service || spec.isRemote)) {
       session.activeCommandLine = initialCommand;
       session.commandSubmittedAt = this.now();
       session.foregroundCommandObserved = false;
@@ -439,6 +442,10 @@ export function buildInteractiveSshArgs(sshArgs: string[], remoteCommand: string
 
 export function terminalCommand(shell: string): { file: string; args: string[] } {
   return { file: shell, args: ["-l"] };
+}
+
+function serviceTerminalCommand(shell: string, command: string): { file: string; args: string[] } {
+  return { file: shell, args: ["-lc", serviceCommandLine(command)] };
 }
 
 function positiveTerminalDimension(value: number | null | undefined): number | null {
