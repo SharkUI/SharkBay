@@ -12,7 +12,7 @@ describe("Python bundled detector", () => {
     const runtime = await makeTestRuntime("python-detector");
     const root = await makeTempRoot("python-detector-root");
     const repo = await createGitRepoFixture(root, "PyRepo");
-    await writeJson(getRuntimeConfigPath(runtime), { schemaVersion: 1, configuredRoots: [root], updatedAt: "2026-05-16" });
+    await writeJson(getRuntimeConfigPath(runtime), { schemaVersion: 1, configuredRoots: [], configuredProjects: [repo], updatedAt: "2026-05-16" });
     await fs.writeFile(path.join(repo, "pyproject.toml"), "[project]\nname = \"pyrepo\"\ndependencies = [\"fastapi\"]\n");
     await fs.writeFile(path.join(repo, "uv.lock"), "version = 1\n");
 

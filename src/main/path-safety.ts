@@ -43,7 +43,7 @@ export async function resolveConfiguredRoots(configuredRoots: string[]): Promise
   return results;
 }
 
-export async function resolveRepoPath(repoPath: string, configuredRoots: string[], configuredProjects?: string[]): Promise<SafeRepoPath> {
+export async function resolveRepoPath(repoPath: string, _configuredRoots: string[], configuredProjects?: string[]): Promise<SafeRepoPath> {
   const realRepo = await fs.realpath(path.resolve(repoPath));
   const stat = await fs.stat(realRepo);
   if (!stat.isDirectory()) {
@@ -64,18 +64,11 @@ export async function resolveRepoPath(repoPath: string, configuredRoots: string[
     }
   }
 
-  // Fall back to configured roots containment check
-  const roots = await availableRootPaths(configuredRoots);
-  if (roots.length === 0 && (!configuredProjects || configuredProjects.length === 0)) {
-    throw new Error("No configured roots are available");
+  if (!configuredProjects || configuredProjects.length === 0) {
+    throw new Error("No configured projects are available");
   }
 
-  const containingRoot = roots.find((root) => isPathInside(root, realRepo));
-  if (!containingRoot) {
-    throw new Error("Repository path is outside configured roots and outside configured projects");
-  }
-
-  return { repoPath: realRepo, containingRoot };
+  throw new Error("Repository path is outside configured projects");
 }
 
 export async function resolveProjectUri(projectUri: string, configuredRoots: string[], configuredProjects?: string[]): Promise<SafeRepoPath & { projectUri: string }> {
@@ -112,9 +105,4 @@ export async function resolveReadableRepoFile(
     throw new Error("Repository file is outside the allowed boundary");
   }
   return realFile;
-}
-
-async function availableRootPaths(configuredRoots: string[]): Promise<string[]> {
-  const results = await resolveConfiguredRoots(configuredRoots);
-  return results.filter((root) => root.available && root.path).map((root) => root.path as string);
 }

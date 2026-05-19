@@ -127,4 +127,24 @@ describe("scanner", () => {
       }),
     ]);
   });
+
+  it("scans only individually configured projects in the app project list", async () => {
+    const runtime = await makeTestRuntime("scanner-manual-only");
+    const root = await makeTempRoot("scanner-manual-only-root");
+    const manualRepo = await createGitRepoFixture(root, "ManualRepo");
+    await createGitRepoFixture(root, "IgnoredRootRepo");
+    await writeJson(getRuntimeConfigPath(runtime), {
+      schemaVersion: 1,
+      configuredRoots: [root],
+      configuredProjects: [manualRepo],
+      configuredRemoteProjects: [],
+      appearanceTheme: "day",
+      updatedAt: "2026-05-19",
+    });
+
+    const result = await scanProjects(runtime);
+
+    expect(result.roots).toEqual([]);
+    expect(result.candidates.map((candidate) => candidate.name)).toEqual(["ManualRepo"]);
+  });
 });

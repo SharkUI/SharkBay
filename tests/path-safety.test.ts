@@ -13,7 +13,7 @@ describe("path safety", () => {
 
     expect(isPathInside(repo, path.join(repo, "child"))).toBe(true);
     expect(isPathInside(repo, sibling)).toBe(false);
-    await expect(resolveRepoPath(sibling, [repo])).rejects.toThrow(/outside configured projects/);
+    await expect(resolveRepoPath(sibling, [], [repo])).rejects.toThrow(/outside configured projects/);
   });
 
   it("rejects traversal outside configured projects", async () => {
@@ -21,6 +21,6 @@ describe("path safety", () => {
     const repo = await createGitRepoFixture(root, "Repo");
     const outside = await makeTempRoot("outside");
 
-    await expect(resolveRepoPath(path.join(repo, "..", "..", path.basename(outside)), [repo])).rejects.toThrow();
+    await expect(resolveRepoPath(path.join(repo, "..", "..", path.basename(outside)), [], [repo])).rejects.toThrow();
   });
 });

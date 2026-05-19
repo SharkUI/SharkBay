@@ -1,9 +1,7 @@
 import { BrowserWindow, dialog, ipcMain } from "electron";
 import {
-  addConfiguredRoot,
   addConfiguredProject,
   getConfiguredRoots,
-  removeConfiguredRoot,
   removeConfiguredProject,
   renameProject,
   removeConfiguredRemoteMachine,
@@ -55,8 +53,6 @@ import type {
   RemoveProjectInput,
   RemovePortForwardInput,
   RemoveRemoteMachineInput,
-  RemoveRootInput,
-  RootConfigInput,
   ScanProjectsResult,
   GitHubIdentity,
   TaskViewModel,
@@ -274,8 +270,6 @@ export async function registerIpcHandlers(
   });
 
   handle<void, AppConfig>(channels.listRoots, () => getConfiguredRoots(runtime));
-  handle<RootConfigInput, AppConfig>(channels.addRoot, (payload) => addConfiguredRoot(runtime, payload));
-  handle<RemoveRootInput, AppConfig>(channels.removeRoot, (payload) => removeConfiguredRoot(runtime, payload));
   handle<ProjectConfigInput, AppConfig>(channels.addProject, (payload) => addConfiguredProject(runtime, payload));
   handle<RemoveProjectInput, AppConfig>(channels.removeProject, (payload) => removeConfiguredProject(runtime, payload));
   handle<RenameProjectInput, AppConfig>(channels.renameProject, (payload) => renameProject(runtime, payload));
@@ -316,8 +310,8 @@ export async function registerIpcHandlers(
     if (!window) return { cancelled: true, paths: [] };
     const result = await dialog.showOpenDialog(window, {
       title: "Select project folder",
-      properties: ["openDirectory", "multiSelections"],
-      message: "Choose one or more project directories to add",
+      properties: ["openDirectory"],
+      message: "Choose a project directory to add",
     });
     return { cancelled: result.canceled, paths: result.filePaths };
   });

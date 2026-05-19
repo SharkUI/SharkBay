@@ -30,7 +30,6 @@ import type {
   RemoteMachineTestResult,
   RemoteDetectedPort,
   RemotePortForward,
-  RootRecord,
   ScanResult,
   SharkBayBridge,
   TaskViewModel,
@@ -243,43 +242,15 @@ function normalizeAppearanceTheme(value: unknown): AppearanceTheme {
   return value === "night" ? "night" : "day";
 }
 
-function normalizeRoots(raw: AppConfig | RootRecord[] | string[] | undefined): RootRecord[] {
-  if (!raw) return [];
-  if (isAppConfig(raw)) return raw.configuredRoots.map((root) => ({ path: root }));
-  return raw.map((root) => {
-    if (typeof root === "string") return { path: root };
-    return { ...root, path: root.path || root.inputPath || "", unavailable: root.unavailable ?? root.available === false };
-  });
-}
-
 function normalizeScan(raw: ScanResult | ProjectCandidate[]): ScanResult {
   if (Array.isArray(raw)) return { candidates: raw };
   return { ...raw, candidates: raw.candidates ?? [] };
-}
-
-async function listRoots(): Promise<RootRecord[]> {
-  const bridge = getBridge();
-  const handler = bridge.config?.listRoots;
-  if (!handler) throw new Error("Root listing is not exposed by the preload API.");
-  return normalizeRoots(await handler());
 }
 
 async function updateAppearanceTheme(theme: AppearanceTheme): Promise<AppConfig> {
   const handler = getBridge().config?.setAppearanceTheme;
   if (!handler) throw new Error("Appearance theme settings are not exposed by the preload API.");
   return handler({ theme });
-}
-
-async function addRoot(path: string): Promise<void> {
-  const handler = getBridge().config?.addRoot;
-  if (!handler) throw new Error("Root add is not exposed by the preload API.");
-  await handler({ path, rootPath: path });
-}
-
-async function removeRoot(path: string): Promise<void> {
-  const handler = getBridge().config?.removeRoot;
-  if (!handler) throw new Error("Root remove is not exposed by the preload API.");
-  await handler({ path, rootPath: path });
 }
 
 async function addProject(path: string): Promise<void> {
@@ -329,12 +300,18 @@ async function pickAndAddProjects(): Promise<string[]> {
   if (!picker) throw new Error("Folder picker is not exposed by the preload API.");
   const result = await picker();
   if (result.cancelled || result.paths.length === 0) return [];
+  const projectPath = result.paths[0];
+  if (!projectPath) return [];
   const addHandler = getBridge().config?.addProject;
   if (!addHandler) throw new Error("Project add is not exposed by the preload API.");
-  for (const p of result.paths) {
-    await addHandler({ path: p });
-  }
-  return result.paths;
+  await addHandler({ path: projectPath });
+  return [projectPath];
+}
+
+async function uninstallTeamwork(repoPath: string): Promise<void> {
+  const handler = getBridge().teamwork?.uninstall;
+  if (!handler) throw new Error("Teamwork uninstall is not exposed by the preload API.");
+  await handler({ repoPath });
 }
 
 async function scanProjects(): Promise<ScanResult> {
@@ -521,7 +498,6 @@ function remoteProjectLabel(uri: string, machines: RemoteMachine[]): string {
 
 export function App() {
   const [view, setView] = useState<View>("dashboard");
-  const [roots, setRoots] = useState<RootRecord[]>([]);
   const [configuredProjects, setConfiguredProjects] = useState<string[]>([]);
   const [configuredRemoteProjects, setConfiguredRemoteProjects] = useState<string[]>([]);
   const [remoteMachines, setRemoteMachines] = useState<RemoteMachine[]>([]);
@@ -532,17 +508,12 @@ export function App() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
   const [scanErrors, setScanErrors] = useState<string[]>([]);
-  const [lastScanAt, setLastScanAt] = useState<string | null>(null);
   const [appearanceTheme, setAppearanceTheme] = useState<AppearanceTheme>("day");
   const refreshInFlight = useRef(false);
 
   const bridgeAvailable = typeof window !== "undefined" && Boolean(window.sharkBay);
 
   const selectedCandidate = useMemo(() => resolveSelectedCandidate(candidates, selectedId), [candidates, selectedId]);
-
-  async function refreshRoots() {
-    setRoots(await listRoots());
-  }
 
   async function refreshProjects(options: RefreshOptions = {}): Promise<{ candidates: ProjectCandidate[] }> {
     const setBusy = options.setBusy ?? true;
@@ -554,7 +525,6 @@ export function App() {
       const configHandler = bridge.config?.listRoots;
       if (!configHandler) throw new Error("Root listing is not exposed by the preload API.");
       const [rootConfig, scan] = await Promise.all([configHandler(), scanProjects()]);
-      const rootList = normalizeRoots(rootConfig);
       if (isAppConfig(rootConfig)) {
         setAppearanceTheme(normalizeAppearanceTheme(rootConfig.appearanceTheme));
         setConfiguredProjects(rootConfig.configuredProjects ?? []);
@@ -563,17 +533,9 @@ export function App() {
         setProjectAliases(rootConfig.projectAliases ?? {});
       }
       const nextCandidates = scan.candidates ?? [];
-      const normalizedRootErrors = normalizeRoots(scan.roots);
-      const rootErrors = [
-        ...(scan.errors ?? []),
-        ...normalizedRootErrors.filter((r) => r.unavailable).map((root) => `${root.path}: ${root.error ?? "unavailable"}`),
-      ];
-      const nextRoots = scan.roots ? normalizeRoots(scan.roots) : rootList;
 
-      setRoots(nextRoots);
       setCandidates(nextCandidates);
-      setScanErrors(rootErrors);
-      setLastScanAt(new Date().toISOString());
+      setScanErrors(scan.errors ?? []);
       setSelectedId((current) => {
         if (current && nextCandidates.some((c) => c.id === current)) return current;
         return nextCandidates[0]?.id ?? null;
@@ -662,12 +624,13 @@ export function App() {
               onPickProject={async () => {
                 const paths = await pickAndAddProjects();
                 if (paths.length) {
-                  setToast({ tone: "success", message: paths.length === 1 ? "Project added." : `${paths.length} projects added.` });
+                  setToast({ tone: "success", message: "Project added." });
                   await refreshProjects({ showToast: false });
                 }
               }}
               onRemoveProject={async (uri) => { await removeProject(uri); await refreshProjects({ showToast: true }); }}
               onRenameProject={async (uri, name) => { await renameProjectAlias(uri, name); await refreshProjects({ showToast: false }); }}
+              onUninstallTeamwork={async (repoPath) => { await uninstallTeamwork(repoPath); await refreshProjects({ showToast: false }); }}
               projectAliases={projectAliases}
             />
           </div>
@@ -675,20 +638,14 @@ export function App() {
             <div className="view-surface settings-surface">
               <SettingsView
                 appearanceTheme={appearanceTheme}
-                roots={roots}
                 configuredProjects={configuredProjects}
                 configuredRemoteProjects={configuredRemoteProjects}
                 remoteMachines={remoteMachines}
                 bridgeAvailable={bridgeAvailable}
-                lastScanAt={lastScanAt}
-                loading={loading}
                 candidates={candidates}
                 scanErrors={scanErrors}
                 setToast={setToast}
                 onBack={() => setView("dashboard")}
-                onScan={async () => { await refreshProjects({ showToast: true }); }}
-                onAdd={async (path) => { await addRoot(path); await refreshRoots(); await refreshProjects({ showToast: true }); }}
-                onRemove={async (path) => { await removeRoot(path); await refreshRoots(); await refreshProjects({ showToast: true }); }}
                 onRemoveProject={async (path) => { await removeProject(path); await refreshProjects({ showToast: true }); }}
                 onAddRemoteMachine={async (input) => {
                   const config = await addRemoteMachine(input);
@@ -742,6 +699,7 @@ function DashboardView({
   onPickProject,
   onRemoveProject,
   onRenameProject,
+  onUninstallTeamwork,
 }: {
   appearanceTheme: AppearanceTheme;
   bridgeAvailable: boolean;
@@ -761,6 +719,7 @@ function DashboardView({
   onPickProject: () => Promise<void>;
   onRemoveProject: (uri: string) => Promise<void>;
   onRenameProject: (uri: string, name: string) => Promise<void>;
+  onUninstallTeamwork: (repoPath: string) => Promise<void>;
 }) {
   const gridRef = useRef<HTMLDivElement | null>(null);
   const terminalPaneRef = useRef<TerminalPaneHandle | null>(null);
@@ -878,8 +837,8 @@ function DashboardView({
     <div className={cx("dashboard-grid", detailPanelHidden && "is-detail-hidden")} ref={gridRef} style={gridStyle}>
       <section className="project-panel">
         <div className="project-window-drag-strip" aria-hidden="true" />
-        <div className="project-panel-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px 4px" }}>
-          <span style={{ fontSize: "11px", fontWeight: 600, textTransform: "uppercase", opacity: 0.6 }}>Projects</span>
+        <div className="project-panel-header">
+          <span className="project-panel-title">Projects</span>
           <button aria-label="Add project" className="icon-button" title="Add project" type="button" onClick={() => setAddProjectDialogOpen(true)}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
           </button>
@@ -901,6 +860,7 @@ function DashboardView({
               onSelect={setSelectedId}
               onRemoveProject={onRemoveProject}
               onRenameProject={onRenameProject}
+              onUninstallTeamwork={onUninstallTeamwork}
             />
           ) : (
             <div className="empty-state compact-title-row" style={{ padding: "24px 16px" }}>
@@ -1711,7 +1671,7 @@ function sameProjectTerminalActivityStates(left: Record<string, ProjectTerminalA
   return leftKeys.every((key) => left[key] === right[key]);
 }
 
-function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, runningServiceProjectIds, terminalActivityByProjectId, selectedId, onSelect, onRemoveProject, onRenameProject }: {
+function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, runningServiceProjectIds, terminalActivityByProjectId, selectedId, onSelect, onRemoveProject, onRenameProject, onUninstallTeamwork }: {
   agentStatusByProjectPath: AgentStatusByProjectPath;
   candidates: ProjectCandidate[];
   projectAliases: Record<string, string>;
@@ -1721,12 +1681,15 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
   onSelect: (id: string) => void;
   onRemoveProject: (uri: string) => Promise<void>;
   onRenameProject: (uri: string, name: string) => Promise<void>;
+  onUninstallTeamwork: (repoPath: string) => Promise<void>;
 }) {
   const [menuOpen, setMenuOpen] = useState<{ id: string; x: number; y: number } | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [confirmRemove, setConfirmRemove] = useState<{ uri: string; name: string } | null>(null);
+  const [confirmUninstall, setConfirmUninstall] = useState<{ repoPath: string; name: string } | null>(null);
   const [removing, setRemoving] = useState(false);
+  const [uninstalling, setUninstalling] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
@@ -1758,6 +1721,10 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
     }
   }
 
+  function openProjectMenu(candidate: ProjectCandidate, x: number, y: number) {
+    setMenuOpen({ id: candidate.id, x, y });
+  }
+
   if (!candidates.length) return null;
   return (
     <section className="project-section">
@@ -1770,7 +1737,21 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
           const displayName = projectAliases[candidate.uri] || candidate.name;
           const isRenaming = renamingId === candidate.id;
           return (
-            <button className={cx("project-row", selectedId === candidate.id && "is-selected")} key={candidate.id} onClick={() => onSelect(candidate.id)}>
+            <button
+              className={cx("project-row", selectedId === candidate.id && "is-selected")}
+              key={candidate.id}
+              onClick={() => onSelect(candidate.id)}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                openProjectMenu(candidate, event.clientX, event.clientY);
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+                event.preventDefault();
+                const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+                openProjectMenu(candidate, rect.left + 24, rect.top + 24);
+              }}
+            >
               <ProjectIcon name={displayName} sources={candidate.iconSources ?? []} />
               <span className="project-row-main">
                 <span className="cell-title">
@@ -1799,22 +1780,6 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
                 {hasProjectStatus && terminalActivity ? (
                   <span className={cx("terminal-activity-pill", terminalActivity === "working" ? "is-working" : "is-attention")}>{terminalActivity === "working" ? "working" : "attention"}</span>
                 ) : null}
-                <button
-                  aria-label="Project menu"
-                  className="icon-button project-menu-trigger"
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-                    setMenuOpen({ id: candidate.id, x: rect.right, y: rect.bottom + 4 });
-                  }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                    <circle cx="8" cy="3.5" r="1.2" fill="currentColor"/>
-                    <circle cx="8" cy="8" r="1.2" fill="currentColor"/>
-                    <circle cx="8" cy="12.5" r="1.2" fill="currentColor"/>
-                  </svg>
-                </button>
               </span>
             </button>
           );
@@ -1842,6 +1807,28 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
           </section>
         </div>
       ) : null}
+      {confirmUninstall ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !uninstalling) setConfirmUninstall(null); }}>
+          <section aria-modal="true" className="modal-panel" role="dialog" aria-labelledby="confirm-uninstall-teamwork-title" style={{ maxWidth: "440px" }}>
+            <div className="modal-header">
+              <div>
+                <h3 id="confirm-uninstall-teamwork-title">Uninstall Teamwork?</h3>
+                <p>This removes the local Teamwork harness from <strong>{confirmUninstall.name}</strong>. Source files are not deleted.</p>
+              </div>
+              <button aria-label="Close" className="icon-button" disabled={uninstalling} type="button" onClick={() => setConfirmUninstall(null)}>x</button>
+            </div>
+            <div className="remote-machine-form-actions" style={{ padding: "12px 16px 16px" }}>
+              <button className="button secondary" disabled={uninstalling} type="button" onClick={() => setConfirmUninstall(null)}>Cancel</button>
+              <button className="button is-danger" disabled={uninstalling} type="button" onClick={async () => {
+                const target = confirmUninstall;
+                if (!target) return;
+                setUninstalling(true);
+                try { await onUninstallTeamwork(target.repoPath); setConfirmUninstall(null); } finally { setUninstalling(false); }
+              }}>{uninstalling ? "Uninstalling" : "Uninstall"}</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
       {menuOpen ? (
         <div ref={menuRef} className="project-context-menu" style={{ top: menuOpen.y, left: menuOpen.x }}>
           <button
@@ -1858,6 +1845,23 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
           >
             Rename
           </button>
+          {(() => {
+            const candidate = candidates.find((c) => c.id === menuOpen.id);
+            const repoPath = candidate ? localPathFromCandidate(candidate) : null;
+            if (!candidate || !repoPath) return null;
+            return (
+              <button
+                className="project-context-menu-item"
+                type="button"
+                onClick={() => {
+                  setMenuOpen(null);
+                  setConfirmUninstall({ repoPath, name: projectAliases[candidate.uri] || candidate.name });
+                }}
+              >
+                Uninstall Teamwork
+              </button>
+            );
+          })()}
           <button
             className="project-context-menu-item is-danger"
             type="button"
@@ -1969,8 +1973,9 @@ function ProjectDetailPane({ detail, candidate, setToast, onRefresh, onOpenFileI
   const isLocal = candidate.providerKind === "local";
   const availableTabs = detailTabs.filter((tab) => (!tab.remoteOnly || isRemote) && (!tab.localOnly || isLocal));
   const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>("git");
-
-  useEffect(() => { setActiveDetailTab("git"); }, [candidate.id]);
+  const visibleDetailTab = availableTabs.some((tab) => tab.id === activeDetailTab)
+    ? activeDetailTab
+    : availableTabs[0]?.id ?? "git";
 
   function handleDetailTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, tab: DetailTab) {
     const currentIndex = availableTabs.findIndex((item) => item.id === tab);
@@ -1988,28 +1993,28 @@ function ProjectDetailPane({ detail, candidate, setToast, onRefresh, onOpenFileI
     <div className="detail-layout">
       <div className="detail-tab-cards" role="tablist" aria-label="Project detail sections">
         {availableTabs.map((tab) => (
-          <button aria-controls={`project-detail-tabpanel-${tab.id}`} aria-selected={activeDetailTab === tab.id} className={cx("detail-tab-card", activeDetailTab === tab.id && "is-active")} id={`project-detail-tab-${tab.id}`} key={tab.id} role="tab" tabIndex={activeDetailTab === tab.id ? 0 : -1} type="button" onKeyDown={(event) => handleDetailTabKeyDown(event, tab.id)} onClick={() => setActiveDetailTab(tab.id)}>
+          <button aria-controls={`project-detail-tabpanel-${tab.id}`} aria-selected={visibleDetailTab === tab.id} className={cx("detail-tab-card", visibleDetailTab === tab.id && "is-active")} id={`project-detail-tab-${tab.id}`} key={tab.id} role="tab" tabIndex={visibleDetailTab === tab.id ? 0 : -1} type="button" onKeyDown={(event) => handleDetailTabKeyDown(event, tab.id)} onClick={() => setActiveDetailTab(tab.id)}>
             {tab.label}
           </button>
         ))}
       </div>
-      <div aria-labelledby="project-detail-tab-git" className="detail-tab-panel" hidden={activeDetailTab !== "git"} id="project-detail-tabpanel-git" role="tabpanel">
+      <div aria-labelledby="project-detail-tab-git" className="detail-tab-panel" hidden={visibleDetailTab !== "git"} id="project-detail-tabpanel-git" role="tabpanel">
         <GitDetailTab detail={detail} candidate={candidate} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} />
       </div>
       {isLocal ? (
-        <div aria-labelledby="project-detail-tab-team" className="detail-tab-panel" hidden={activeDetailTab !== "team"} id="project-detail-tabpanel-team" role="tabpanel">
-          <TasksDetailTab active={activeDetailTab === "team"} candidate={candidate} setToast={setToast} onOpenBrowserTab={onOpenBrowserTab} onRefresh={onRefresh} />
+        <div aria-labelledby="project-detail-tab-team" className="detail-tab-panel" hidden={visibleDetailTab !== "team"} id="project-detail-tabpanel-team" role="tabpanel">
+          <TasksDetailTab active={visibleDetailTab === "team"} candidate={candidate} setToast={setToast} onOpenBrowserTab={onOpenBrowserTab} onRefresh={onRefresh} />
         </div>
       ) : null}
-      <div aria-labelledby="project-detail-tab-stack" className="detail-tab-panel" hidden={activeDetailTab !== "stack"} id="project-detail-tabpanel-stack" role="tabpanel">
-        <StackDetailTab active={activeDetailTab === "stack"} candidate={candidate} setToast={setToast} />
+      <div aria-labelledby="project-detail-tab-stack" className="detail-tab-panel" hidden={visibleDetailTab !== "stack"} id="project-detail-tabpanel-stack" role="tabpanel">
+        <StackDetailTab active={visibleDetailTab === "stack"} candidate={candidate} setToast={setToast} />
       </div>
-      <div aria-labelledby="project-detail-tab-files" className="detail-tab-panel" hidden={activeDetailTab !== "files"} id="project-detail-tabpanel-files" role="tabpanel">
-        <FilesDetailTab active={activeDetailTab === "files"} candidate={candidate} detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} />
+      <div aria-labelledby="project-detail-tab-files" className="detail-tab-panel" hidden={visibleDetailTab !== "files"} id="project-detail-tabpanel-files" role="tabpanel">
+        <FilesDetailTab active={visibleDetailTab === "files"} candidate={candidate} detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} />
       </div>
       {isRemote ? (
-        <div aria-labelledby="project-detail-tab-forwards" className="detail-tab-panel" hidden={activeDetailTab !== "forwards"} id="project-detail-tabpanel-forwards" role="tabpanel">
-          <PortForwardsDetailTab active={activeDetailTab === "forwards"} candidate={candidate} setToast={setToast} />
+        <div aria-labelledby="project-detail-tab-forwards" className="detail-tab-panel" hidden={visibleDetailTab !== "forwards"} id="project-detail-tabpanel-forwards" role="tabpanel">
+          <PortForwardsDetailTab active={visibleDetailTab === "forwards"} candidate={candidate} setToast={setToast} />
         </div>
       ) : null}
     </div>
@@ -2051,8 +2056,7 @@ function TasksDetailTab({ active, candidate, setToast, onOpenBrowserTab, onRefre
   const [tasks, setTasks] = useState<TaskViewModel[]>([]);
   const [status, setStatus] = useState<TeamworkStatus | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [busyAction, setBusyAction] = useState<"install" | "sync" | "site" | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<"install" | "site" | null>(null);
   const selected = useMemo(
     () => selectedTaskId ? tasks.find((task) => task.taskId === selectedTaskId) ?? null : null,
     [selectedTaskId, tasks],
@@ -2066,7 +2070,6 @@ function TasksDetailTab({ active, candidate, setToast, onOpenBrowserTab, onRefre
     const getTasks = teamwork?.getTasks;
     const getStatus = teamwork?.getStatus;
     if (!getTasks || !getStatus) {
-      setLoadError("Teamwork APIs are not exposed by the preload bridge.");
       return;
     }
     const getTasksHandler: NonNullable<NonNullable<SharkBayBridge["teamwork"]>["getTasks"]> = getTasks;
@@ -2082,11 +2085,9 @@ function TasksDetailTab({ active, candidate, setToast, onOpenBrowserTab, onRefre
         setTasks(nextTasks);
         setStatus(nextStatus);
         setSelectedTaskId((current) => current && nextTasks.some((task) => task.taskId === current) ? current : null);
-        setLoadError(null);
       } catch (error) {
         if (cancelled) return;
         const message = asMessage(error);
-        setLoadError(message);
         if (showToast) setToast({ tone: "error", message });
       }
     }
@@ -2116,25 +2117,6 @@ function TasksDetailTab({ active, candidate, setToast, onOpenBrowserTab, onRefre
       setStatus(nextStatus);
       setToast({ tone: "success", message: "Teamwork installed." });
       await onRefresh();
-    } catch (error) {
-      setToast({ tone: "error", message: asMessage(error) });
-    } finally {
-      setBusyAction(null);
-    }
-  }
-
-  async function syncNow() {
-    if (!repoPath) return;
-    setBusyAction("sync");
-    try {
-      const sync = getBridge().teamwork?.syncNow;
-      const getStatus = getBridge().teamwork?.getStatus;
-      const getTasks = getBridge().teamwork?.getTasks;
-      if (!sync) throw new Error("Teamwork sync API is not available.");
-      await sync({ repoPath });
-      if (getStatus) setStatus(await getStatus({ repoPath }));
-      if (getTasks) setTasks(await getTasks({ repoPath }));
-      setToast({ tone: "success", message: "Teamwork synced." });
     } catch (error) {
       setToast({ tone: "error", message: asMessage(error) });
     } finally {
@@ -2187,20 +2169,6 @@ function TasksDetailTab({ active, candidate, setToast, onOpenBrowserTab, onRefre
 
   return (
     <>
-      <section className="subpanel project-facts-card teamwork-facts-card">
-        <div className="panel-title-row compact-title-row">
-          <h4>Teamwork</h4>
-          {status?.installed ? <button className="button secondary compact" disabled={busyAction !== null} type="button" onClick={() => void syncNow()}>{busyAction === "sync" ? "Syncing" : "Sync"}</button> : null}
-        </div>
-        <div className="project-facts-list">
-          <div className="repository-fact"><span>Status</span><strong>{status?.installed ? "Installed" : status?.harnessInstalled ? "Harness only" : "Not installed"}</strong></div>
-          {status?.repo ? <div className="repository-fact"><span>Repo</span><strong>{status.repo}</strong></div> : null}
-          {status?.githubLogin ? <div className="repository-fact"><span>User</span><strong>{status.githubLogin}</strong></div> : null}
-          {status?.pendingCount ? <div className="repository-fact"><span>Pending</span><strong>{String(status.pendingCount)}</strong></div> : null}
-          {(loadError || status?.lastError) ? <div className="repository-fact is-warn"><span>Error</span><strong>{loadError || status?.lastError}</strong></div> : null}
-        </div>
-      </section>
-
       {status && !status.installed ? (
         <section className="subpanel confirm-panel teamwork-action-card">
           <div>
@@ -2840,12 +2808,11 @@ function updateProjectFileChildren(items: ProjectFileTreeItem[], targetPath: str
   });
 }
 
-function SettingsView({ appearanceTheme, roots, configuredProjects, configuredRemoteProjects, remoteMachines, bridgeAvailable, lastScanAt, loading, candidates, scanErrors, setToast, onBack, onScan, onAdd, onRemove, onRemoveProject, onAddRemoteMachine, onRemoveRemoteMachine, onTestRemoteMachine, onThemeChange }: {
-  appearanceTheme: AppearanceTheme; roots: RootRecord[]; configuredProjects: string[]; configuredRemoteProjects: string[]; remoteMachines: RemoteMachine[]; bridgeAvailable: boolean; lastScanAt: string | null; loading: boolean; candidates: ProjectCandidate[]; scanErrors: string[]; setToast: (toast: Toast) => void;
-  onBack: () => void; onScan: () => Promise<void>; onAdd: (path: string) => Promise<void>; onRemove: (path: string) => Promise<void>; onRemoveProject: (path: string) => Promise<void>;
+function SettingsView({ appearanceTheme, configuredProjects, configuredRemoteProjects, remoteMachines, bridgeAvailable, candidates, scanErrors, setToast, onBack, onRemoveProject, onAddRemoteMachine, onRemoveRemoteMachine, onTestRemoteMachine, onThemeChange }: {
+  appearanceTheme: AppearanceTheme; configuredProjects: string[]; configuredRemoteProjects: string[]; remoteMachines: RemoteMachine[]; bridgeAvailable: boolean; candidates: ProjectCandidate[]; scanErrors: string[]; setToast: (toast: Toast) => void;
+  onBack: () => void; onRemoveProject: (path: string) => Promise<void>;
   onAddRemoteMachine: (input: RemoteMachineInput) => Promise<void>; onRemoveRemoteMachine: (id: string) => Promise<void>; onTestRemoteMachine: (input: { id: string } | RemoteMachineInput) => Promise<RemoteMachineTestResult>; onThemeChange: (theme: AppearanceTheme) => Promise<void>;
 }) {
-  const unavailableRootCount = roots.filter((root) => root.unavailable || root.available === false).length;
   const [activeSection, setActiveSection] = useState<SettingsSection>("local-machine");
   const [remoteMachineModalOpen, setRemoteMachineModalOpen] = useState(false);
   const activeRemoteMachineId = activeSection.startsWith("remote-machine:") ? activeSection.slice("remote-machine:".length) : null;
@@ -2854,9 +2821,7 @@ function SettingsView({ appearanceTheme, roots, configuredProjects, configuredRe
   function sectionMeta(section: SettingsSection): string {
     if (section === "local-machine") {
       const projectCount = configuredProjects.length + configuredRemoteProjects.length;
-      const projectLabel = `${projectCount} project${projectCount === 1 ? "" : "s"}`;
-      const rootLabel = `${roots.length} root${roots.length === 1 ? "" : "s"}`;
-      return `${projectLabel}, ${rootLabel}`;
+      return `${projectCount} project${projectCount === 1 ? "" : "s"}`;
     }
     if (section.startsWith("remote-machine:")) return "Remote";
     if (section === "extensions") return "Plugins";
@@ -2911,10 +2876,9 @@ function SettingsView({ appearanceTheme, roots, configuredProjects, configuredRe
         </aside>
         <section className="settings-content" aria-label="Settings content">
           <div className="settings-section-panel" hidden={activeSection !== "local-machine"}>
-            <div className="settings-section-heading"><h4>Local Machine</h4><span>{configuredProjects.length + configuredRemoteProjects.length} project{configuredProjects.length + configuredRemoteProjects.length === 1 ? "" : "s"}, {roots.length} root{roots.length === 1 ? "" : "s"}</span></div>
+            <div className="settings-section-heading"><h4>Local Machine</h4><span>{configuredProjects.length + configuredRemoteProjects.length} project{configuredProjects.length + configuredRemoteProjects.length === 1 ? "" : "s"}</span></div>
             <ProjectWorkflowPanel configuredProjects={configuredProjects} configuredRemoteProjects={configuredRemoteProjects} remoteMachines={remoteMachines} onRemoveProject={onRemoveProject} setToast={setToast} />
-            <RootWorkflowPanel bridgeAvailable={bridgeAvailable} lastScanAt={lastScanAt} loading={loading} candidates={candidates} roots={roots} scanErrors={scanErrors} unavailableRootCount={unavailableRootCount} onAdd={onAdd} onRemove={onRemove} onScan={onScan} setToast={setToast} />
-            <SettingsStatusPanel candidates={candidates} roots={roots} scanErrors={scanErrors} unavailableRootCount={unavailableRootCount} />
+            <SettingsStatusPanel candidates={candidates} scanErrors={scanErrors} />
           </div>
           {activeRemoteMachine ? (
             <div className="settings-section-panel">
@@ -3181,60 +3145,6 @@ function AppearanceSettingsPanel({ appearanceTheme, setToast, onThemeChange }: {
           );
         })}
       </div>
-    </section>
-  );
-}
-
-function RootWorkflowPanel({ bridgeAvailable, lastScanAt, loading, candidates, roots, scanErrors, unavailableRootCount, onAdd, onRemove, onScan, setToast }: {
-  bridgeAvailable: boolean; lastScanAt: string | null; loading: boolean; candidates: ProjectCandidate[]; roots: RootRecord[]; scanErrors: string[]; unavailableRootCount: number;
-  onAdd: (path: string) => Promise<void>; onRemove: (path: string) => Promise<void>; onScan: () => Promise<void>; setToast: (toast: Toast) => void;
-}) {
-  const [path, setPath] = useState("");
-  const [busyPath, setBusyPath] = useState<string | null>(null);
-  const firstRun = roots.length === 0;
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    const nextPath = path.trim();
-    if (!nextPath) { setToast({ tone: "error", message: "Enter a configured root path before adding it." }); return; }
-    setBusyPath(nextPath);
-    try { await onAdd(nextPath); setPath(""); setToast({ tone: "success", message: "Root added and scanned." }); } catch (error) { setToast({ tone: "error", message: asMessage(error) }); } finally { setBusyPath(null); }
-  }
-
-  async function remove(pathToRemove: string) {
-    setBusyPath(pathToRemove);
-    try { await onRemove(pathToRemove); setToast({ tone: "success", message: "Root removed." }); } catch (error) { setToast({ tone: "error", message: asMessage(error) }); } finally { setBusyPath(null); }
-  }
-
-  return (
-    <section className={cx("workflow-panel", firstRun && "is-first-run")}>
-      <div className="workflow-copy">
-        <div className="eyebrow">{firstRun ? "First run" : "Configured roots"}</div>
-        <h3>{firstRun ? "Choose a parent folder to scan" : "Scan roots"}</h3>
-        <p>Add one or more parent folders. The Projects view scans only these locations.</p>
-      </div>
-      <form className="root-form dashboard-root-form" onSubmit={(event) => void submit(event)}>
-        <label><span>Folder path</span><input className="input" placeholder="/path/to/projects" value={path} onChange={(event) => setPath(event.target.value)} /></label>
-        <button className="button" disabled={!bridgeAvailable || !path.trim() || Boolean(busyPath)} type="submit">{firstRun ? "Add root" : "Add another root"}</button>
-      </form>
-      <div className="scan-strip" aria-live="polite">
-        {lastScanAt ? <span>Last scan: {formatScanTime(lastScanAt)}</span> : null}
-        <span>{candidates.length} project{candidates.length === 1 ? "" : "s"}</span>
-        {unavailableRootCount ? <span>{unavailableRootCount} unavailable root{unavailableRootCount === 1 ? "" : "s"}</span> : null}
-        {scanErrors.length ? <span>{scanErrors.length} scan issue{scanErrors.length === 1 ? "" : "s"}</span> : null}
-        <button className="button secondary compact" disabled={!bridgeAvailable || loading || roots.length === 0} type="button" onClick={() => void onScan()}>{loading ? "Scanning" : "Scan all roots"}</button>
-      </div>
-      {roots.length ? (
-        <div className="root-list" aria-label="Configured scan roots">
-          {roots.map((root) => (
-            <div className={cx("root-row", (root.unavailable || root.available === false) && "is-unavailable")} key={root.path}>
-              <span className="truncate" title={root.path}>{root.path}</span>
-              {root.unavailable || root.available === false ? <span className="root-state">Unavailable</span> : null}
-              <button className="button secondary compact" disabled={busyPath === root.path} type="button" onClick={() => void remove(root.path)}>Remove</button>
-            </div>
-          ))}
-        </div>
-      ) : null}
     </section>
   );
 }
@@ -3675,22 +3585,17 @@ function remoteMachineAuthLabel(authMode: RemoteMachine["authMode"]): string {
   return "SSH config";
 }
 
-function SettingsStatusPanel({ candidates, roots, scanErrors, unavailableRootCount }: { candidates: ProjectCandidate[]; roots: RootRecord[]; scanErrors: string[]; unavailableRootCount: number }) {
-  const unavailableRoots = roots.filter((root) => root.unavailable || root.available === false);
+function SettingsStatusPanel({ candidates, scanErrors }: { candidates: ProjectCandidate[]; scanErrors: string[] }) {
   return (
     <section className="workflow-panel settings-status-panel">
       <div className="settings-facts-grid">
-        <Fact label="Roots" value={String(roots.length)} />
         <Fact label="Projects" value={String(candidates.length)} />
-        <Fact label="Unavailable" value={String(unavailableRootCount)} tone={unavailableRootCount ? "warn" : undefined} />
+        <Fact label="Issues" value={String(scanErrors.length)} tone={scanErrors.length ? "warn" : undefined} />
       </div>
-      {unavailableRoots.length ? (
-        <section className="subpanel settings-list-panel"><h4>Unavailable roots</h4><div className="settings-list">{unavailableRoots.map((root) => (<div className="settings-list-row" key={root.path}><span className="truncate">{root.path}</span><small className="truncate">{root.error ?? "Unavailable"}</small></div>))}</div></section>
-      ) : null}
       {scanErrors.length ? (
         <section className="subpanel settings-list-panel"><h4>Scan issues</h4><div className="settings-list">{scanErrors.map((error) => (<div className="settings-list-row" key={error}><span className="truncate">{error}</span></div>))}</div></section>
       ) : null}
-      {!unavailableRoots.length && !scanErrors.length ? (<div className="empty-state compact-title-row"><strong>No issues</strong><span>Settings status is clear.</span></div>) : null}
+      {!scanErrors.length ? (<div className="empty-state compact-title-row"><strong>No issues</strong><span>Settings status is clear.</span></div>) : null}
     </section>
   );
 }

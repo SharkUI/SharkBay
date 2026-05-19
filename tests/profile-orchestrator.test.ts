@@ -28,7 +28,8 @@ describe("ProfileOrchestrator", () => {
     const repo = await createGitRepoFixture(root, "ProfileRepo");
     await writeJson(getRuntimeConfigPath(runtime), {
       schemaVersion: 1,
-      configuredRoots: [root],
+      configuredRoots: [],
+      configuredProjects: [repo],
       updatedAt: "2026-05-16",
     });
     await fs.writeFile(path.join(repo, "package.json"), "{\"scripts\":{\"dev\":\"vite\"}}\n");
@@ -58,7 +59,8 @@ describe("ProfileOrchestrator", () => {
     const repo = await createGitRepoFixture(root, "FailureRepo");
     await writeJson(getRuntimeConfigPath(runtime), {
       schemaVersion: 1,
-      configuredRoots: [root],
+      configuredRoots: [],
+      configuredProjects: [repo],
       updatedAt: "2026-05-16",
     });
     const host = new PluginHost();
@@ -86,7 +88,8 @@ describe("ProfileOrchestrator", () => {
     const repo = await createGitRepoFixture(root, "FingerprintRepo");
     await writeJson(getRuntimeConfigPath(runtime), {
       schemaVersion: 1,
-      configuredRoots: [root],
+      configuredRoots: [],
+      configuredProjects: [repo],
       updatedAt: "2026-05-16",
     });
     await fs.writeFile(path.join(repo, "package.json"), "{\"scripts\":{\"dev\":\"vite\"}}\n");
@@ -120,7 +123,8 @@ describe("ProfileOrchestrator", () => {
     const repo = await createGitRepoFixture(root, "CacheRepo");
     await writeJson(getRuntimeConfigPath(runtime), {
       schemaVersion: 1,
-      configuredRoots: [root],
+      configuredRoots: [],
+      configuredProjects: [repo],
       updatedAt: "2026-05-16",
     });
     let runs = 0;

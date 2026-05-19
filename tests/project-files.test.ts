@@ -6,7 +6,7 @@ import { toLocalProjectUri } from "../src/core/project-uri.js";
 import { makeTempRoot, writeText } from "./helpers.js";
 
 describe("project file listing", () => {
-  it("returns a sorted editable project file tree inside configured roots", async () => {
+  it("returns a sorted editable project file tree inside configured projects", async () => {
     const root = await makeTempRoot("project-files");
     const repo = path.join(root, "Fixture");
     await writeText(path.join(repo, ".env"), "SECRET=test\n");
@@ -20,7 +20,7 @@ describe("project file listing", () => {
     await fs.symlink(path.join(root, "outside"), path.join(repo, "linked-outside"));
     await fs.symlink(path.join(root, "outside", "secret.md"), path.join(repo, "linked-secret.md"));
 
-    const result = await listProjectFiles({ userDataPath: root }, { projectUri: toLocalProjectUri(repo), configuredRoots: [root] });
+    const result = await listProjectFiles({ userDataPath: root }, { projectUri: toLocalProjectUri(repo), configuredProjects: [repo] });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -44,25 +44,25 @@ describe("project file listing", () => {
     const src = result.files.find((item) => item.path === "src");
     expect(src?.children).toBeUndefined();
 
-    const srcResult = await listProjectFiles({ userDataPath: root }, { projectUri: toLocalProjectUri(repo), configuredRoots: [root], directoryPath: "src" });
+    const srcResult = await listProjectFiles({ userDataPath: root }, { projectUri: toLocalProjectUri(repo), configuredProjects: [repo], directoryPath: "src" });
     expect(srcResult.ok).toBe(true);
     if (!srcResult.ok) return;
     expect(srcResult.files.map((item) => item.path)).toEqual(["src/App.tsx", "src/logo.png"]);
     expect(srcResult.files.find((item) => item.path === "src/App.tsx")?.editable).toBe(true);
     expect(srcResult.files.find((item) => item.path === "src/logo.png")?.editable).toBe(false);
 
-    const nodeModulesResult = await listProjectFiles({ userDataPath: root }, { projectUri: toLocalProjectUri(repo), configuredRoots: [root], directoryPath: "node_modules" });
+    const nodeModulesResult = await listProjectFiles({ userDataPath: root }, { projectUri: toLocalProjectUri(repo), configuredProjects: [repo], directoryPath: "node_modules" });
     expect(nodeModulesResult.ok).toBe(true);
     if (!nodeModulesResult.ok) return;
     expect(nodeModulesResult.files.map((item) => item.path)).toEqual(["node_modules/ignored"]);
   });
 
-  it("rejects repositories outside configured roots", async () => {
+  it("rejects repositories outside configured projects", async () => {
     const root = await makeTempRoot("project-files-root");
     const outside = await makeTempRoot("project-files-outside");
     await writeText(path.join(outside, "README.md"), "# Outside\n");
 
-    const result = await listProjectFiles({ userDataPath: root }, { projectUri: toLocalProjectUri(outside), configuredRoots: [root] });
+    const result = await listProjectFiles({ userDataPath: root }, { projectUri: toLocalProjectUri(outside), configuredProjects: [root] });
 
     expect(result.ok).toBe(false);
     if (result.ok) return;

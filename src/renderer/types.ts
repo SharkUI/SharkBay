@@ -583,8 +583,6 @@ export type SharkBayBridge = {
   };
   config?: {
     listRoots?: () => Promise<AppConfig | RootRecord[] | string[]>;
-    addRoot?: (input: { path: string; rootPath?: string } | string) => Promise<AppConfig | RootRecord[] | void>;
-    removeRoot?: (input: { path: string; rootPath?: string } | string) => Promise<AppConfig | RootRecord[] | void>;
     addProject?: (input: { path?: string; uri?: string }) => Promise<AppConfig | void>;
     removeProject?: (input: { path?: string; uri?: string }) => Promise<AppConfig | void>;
     renameProject?: (input: { uri: string; name: string }) => Promise<AppConfig | void>;

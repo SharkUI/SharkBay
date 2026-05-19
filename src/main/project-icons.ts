@@ -77,7 +77,7 @@ async function resolveLocalIconSources(repoPath: string, configuredProjects: str
 async function packageIconPaths(repoPath: string, configuredProjects: string[]): Promise<string[]> {
   let packageJsonPath: string;
   try {
-    packageJsonPath = await resolveReadableRepoFile(repoPath, configuredProjects, "package.json");
+    packageJsonPath = await resolveReadableRepoFile(repoPath, [], "package.json", configuredProjects);
   } catch {
     return [];
   }
@@ -119,7 +119,7 @@ async function localIconSource(repoPath: string, configuredProjects: string[], r
 
   let filePath: string;
   try {
-    filePath = await resolveReadableRepoFile(repoPath, configuredProjects, safePath);
+    filePath = await resolveReadableRepoFile(repoPath, [], safePath, configuredProjects);
   } catch {
     return null;
   }

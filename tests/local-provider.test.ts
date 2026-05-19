@@ -14,7 +14,8 @@ describe("LocalProvider", () => {
     await fs.writeFile(path.join(repo, "README.md"), "# ProviderRepo\n");
     await writeJson(getRuntimeConfigPath(runtime), {
       schemaVersion: 1,
-      configuredRoots: [root],
+      configuredRoots: [],
+      configuredProjects: [repo],
       updatedAt: "2026-05-16",
     });
 

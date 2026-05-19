@@ -700,6 +700,21 @@ body.is-resizing-columns * {
   background: #a53b35;
 }
 
+.project-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px 4px;
+}
+
+.project-panel-title {
+  color: #5f6c6e;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
 .project-row-main,
 .project-row-status {
   min-width: 0;
@@ -717,16 +732,6 @@ body.is-resizing-columns * {
   justify-content: flex-end;
   gap: 3px;
   justify-self: end;
-}
-
-.project-menu-trigger {
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-.project-row:hover .project-menu-trigger,
-.project-row .project-menu-trigger:focus-visible {
-  opacity: 1;
 }
 
 .project-rename-input {
@@ -3624,6 +3629,7 @@ body.is-resizing-columns .app-shell[data-theme="night"] .column-resizer::before 
 .app-shell[data-theme="night"] .decision-meta,
 .app-shell[data-theme="night"] .form-note,
 .app-shell[data-theme="night"] .eyebrow,
+.app-shell[data-theme="night"] .project-panel-title,
 .app-shell[data-theme="night"] .section-heading {
   color: #9fb0ac;
 }

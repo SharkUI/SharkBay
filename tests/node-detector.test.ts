@@ -14,7 +14,8 @@ describe("Node bundled detector", () => {
     const repo = await createGitRepoFixture(root, "NodeApp");
     await writeJson(getRuntimeConfigPath(runtime), {
       schemaVersion: 1,
-      configuredRoots: [root],
+      configuredRoots: [],
+      configuredProjects: [repo],
       updatedAt: "2026-05-16",
     });
     await writeJson(path.join(repo, "package.json"), {

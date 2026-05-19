@@ -47,8 +47,6 @@ import type {
   RemoveProjectInput,
   RemovePortForwardInput,
   RemoveRemoteMachineInput,
-  RemoveRootInput,
-  RootConfigInput,
   ScanProjectsResult,
   TaskViewModel,
   TerminalCloseInput,
@@ -96,8 +94,6 @@ const sharkBayApi = {
   },
   config: {
     listRoots: () => invoke<AppConfig>(channels.listRoots),
-    addRoot: (input: RootConfigInput) => invoke<AppConfig>(channels.addRoot, input),
-    removeRoot: (input: RemoveRootInput) => invoke<AppConfig>(channels.removeRoot, input),
     addProject: (input: ProjectConfigInput) => invoke<AppConfig>(channels.addProject, input),
     removeProject: (input: RemoveProjectInput) => invoke<AppConfig>(channels.removeProject, input),
     renameProject: (input: RenameProjectInput) => invoke<AppConfig>(channels.renameProject, input),

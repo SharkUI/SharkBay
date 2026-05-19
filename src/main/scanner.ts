@@ -37,7 +37,7 @@ export async function scanConfiguredRoots(configuredRoots: string[], options: { 
       if (found.has(projectUri)) continue;
       const rootUri = toLocalProjectUri(root.path);
       const [iconSources, services, gitMetadata] = await Promise.all([
-        resolveProjectIconSources(repoPath, [root.path]),
+        resolveProjectIconSources(repoPath, [repoPath]),
         discoverProjectDevServices(repoPath),
         readGitMetadata(repoPath),
       ]);
@@ -62,14 +62,12 @@ export async function scanConfiguredRoots(configuredRoots: string[], options: { 
 
 export async function scanProjects(runtime: IpcRuntimeLike, input?: ProjectScanInput): Promise<ScanProjectsResult> {
   const config = await loadAppConfig(getRuntimeConfigPath(runtime));
-  const rootResult = await scanConfiguredRoots(config.configuredRoots, { maxDepth: input?.maxDepth });
 
-  // Resolve manually added projects and merge with scanned results
   const manualCandidates = await resolveManualProjects(config.configuredProjects);
   const remoteCandidates = await resolveRemoteProjects(config.configuredRemoteProjects, config.configuredRemoteMachines);
-  const merged = mergeProjectCandidates(rootResult.candidates, [...manualCandidates, ...remoteCandidates]);
+  const merged = mergeProjectCandidates([], [...manualCandidates, ...remoteCandidates]);
 
-  return { roots: rootResult.roots, candidates: merged };
+  return { roots: [], candidates: merged };
 }
 
 async function resolveRemoteProjects(configuredRemoteProjects: string[], remoteMachines: RemoteMachine[] = []): Promise<ProjectCandidate[]> {

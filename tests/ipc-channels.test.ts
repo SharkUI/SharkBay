@@ -5,8 +5,6 @@ describe("IPC channels", () => {
   it("exposes only the current generic workbench channels", () => {
     expect(ipcChannels).toEqual({
       listRoots: "config:listRoots",
-      addRoot: "config:addRoot",
-      removeRoot: "config:removeRoot",
       pickProjectFolder: "config:pickProjectFolder",
       addProject: "config:addProject",
       removeProject: "config:removeProject",

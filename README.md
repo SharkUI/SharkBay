@@ -54,7 +54,7 @@ Current client configuration is stored at:
 ~/.sharkbay/config.json
 ```
 
-That file contains scan roots, manually added projects, appearance theme, and config metadata. Electron may still use its platform `userData` directory for Chromium/runtime state, but SharkBay workspace data should live under `~/.sharkbay`.
+That file contains manually added projects, appearance theme, and config metadata. Electron may still use its platform `userData` directory for Chromium/runtime state, but SharkBay workspace data should live under `~/.sharkbay`.
 
 ## Tech Stack
 

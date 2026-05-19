@@ -61,7 +61,7 @@ export async function listProjectFiles(runtime: IpcRuntimeLike, input: ProjectFi
     return { ok: true, projectUri: safeRepo.projectUri, files };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const reason = message.includes("outside configured roots") || message.includes("No configured roots")
+    const reason = message.includes("outside configured projects") || message.includes("No configured projects")
       ? "unsafe-path"
       : "io-error";
     return { ok: false, reason, message };
@@ -81,7 +81,7 @@ async function resolveRequestedDirectory(repoPath: string, containingRoot: strin
     throw new Error("Requested path is not a directory");
   }
   if (!isPathInside(repoPath, realPath) || !isPathInside(containingRoot, realPath)) {
-    throw new Error("Requested directory is outside configured roots");
+    throw new Error("Requested directory is outside configured projects");
   }
   return realPath;
 }
