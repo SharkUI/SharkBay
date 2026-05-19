@@ -101,13 +101,18 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
       ? serviceTerminalCommand(spec.shell, initialCommand)
       : spec.command;
     const id = `term-${Date.now().toString(36)}-${++this.sequence}`;
-    const ptyProcess = pty.spawn(command.file, command.args, {
-      cwd: spec.cwd,
-      cols: input.cols ?? 80,
-      rows: input.rows ?? 24,
-      name: "xterm-256color",
-      env: spec.env,
-    });
+    let ptyProcess: pty.IPty;
+    try {
+      ptyProcess = pty.spawn(command.file, command.args, {
+        cwd: spec.cwd,
+        cols: input.cols ?? 80,
+        rows: input.rows ?? 24,
+        name: "xterm-256color",
+        env: spec.env,
+      });
+    } catch (error) {
+      throw new Error(`Failed to spawn terminal: ${error instanceof Error ? error.message : String(error)}`);
+    }
     const foregroundProcess = safeForegroundProcess(ptyProcess);
     const initialTitle = spec.isRemote
       ? remoteTerminalDisplayTitle(spec.projectRoot, input.service?.label)

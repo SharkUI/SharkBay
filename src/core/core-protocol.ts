@@ -34,7 +34,7 @@ import type { PluginSummary } from "../plugins/plugin-host.js";
 
 export type CoreMethodMap = {
   scanProjects: { args: [IpcRuntimeLike, ProjectScanInput | undefined]; result: ScanProjectsResult };
-  listAgentClis: { args: [IpcRuntimeLike, { cwdUri?: string } | undefined]; result: AgentCli[] };
+  listAgentClis: { args: [IpcRuntimeLike, { cwdUri?: string; refresh?: boolean } | undefined]; result: AgentCli[] };
   listInstallRecipes: { args: [IpcRuntimeLike, ListInstallRecipesInput]; result: InstallRecipe[] };
   installTool: { args: [IpcRuntimeLike, InstallToolInput]; result: InstallToolResult };
   getProjectDetail: { args: [IpcRuntimeLike, { projectUri: string }]; result: ProjectDetail };

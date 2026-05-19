@@ -313,6 +313,7 @@ export type InstallToolInput = {
 export type ListInstallRecipesInput = {
   targetId: string;
   toolId?: string;
+  refresh?: boolean;
 };
 
 export type InstallToolResult = {

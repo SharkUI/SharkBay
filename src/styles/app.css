@@ -3251,6 +3251,36 @@ button.project-file-toggle:focus-visible {
   stroke: none;
 }
 
+.agent-cli-loading {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  margin-bottom: 4px;
+}
+
+.terminal-agent-refresh-button {
+  opacity: 0.5;
+}
+
+.terminal-agent-refresh-button:hover {
+  opacity: 1;
+}
+
+.loading-spinner {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes agent-cli-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.7; }
+}
+
 .agent-cli-monogram {
   display: inline-grid;
   place-items: center;
