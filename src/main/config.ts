@@ -51,7 +51,12 @@ export async function loadAppConfig(configPath = getConfigPath()): Promise<AppCo
     }
     throw new Error(`Unable to load app config: ${result.message}`);
   }
-  return normalizeAppConfig(result.data);
+  const normalized = normalizeAppConfig(result.data);
+  const migrated = await migrateLegacyAppConfig(result.data, normalized);
+  if (shouldPersistMigratedConfig(result.data, migrated)) {
+    await saveAppConfig(migrated, configPath);
+  }
+  return migrated;
 }
 
 export async function getConfiguredRoots(runtime: IpcRuntimeLike): Promise<AppConfig> {
@@ -247,6 +252,59 @@ function normalizeAppConfig(value: unknown): AppConfig {
     appearanceTheme: normalizeAppearanceTheme(value.appearanceTheme),
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : today(),
   };
+}
+
+async function migrateLegacyAppConfig(raw: unknown, normalized: AppConfig): Promise<AppConfig> {
+  if (!isRecord(raw)) return normalized;
+  const next: AppConfig = {
+    ...normalized,
+    configuredProjects: [...normalized.configuredProjects],
+  };
+
+  if (!Array.isArray(raw.configuredProjects) && Array.isArray(raw.configuredRoots)) {
+    for (const root of next.configuredRoots) {
+      if (next.configuredProjects.includes(root)) continue;
+      if (await isGitProjectDirectory(root)) {
+        next.configuredProjects.push(root);
+      }
+    }
+  }
+
+  return next;
+}
+
+async function isGitProjectDirectory(directory: string): Promise<boolean> {
+  try {
+    const stat = await fs.lstat(path.join(directory, ".git"));
+    return stat.isDirectory() || stat.isFile();
+  } catch {
+    return false;
+  }
+}
+
+function shouldPersistMigratedConfig(raw: unknown, normalized: AppConfig): boolean {
+  if (!isRecord(raw)) return true;
+  if (raw.schemaVersion !== 1) return true;
+  if (!Array.isArray(raw.configuredRoots)) return true;
+  if (!Array.isArray(raw.configuredProjects)) return true;
+  if (!Array.isArray(raw.configuredRemoteProjects)) return true;
+  if (!Array.isArray(raw.configuredRemoteMachines)) return true;
+  if (!isRecord(raw.projectAliases)) return true;
+  if (!Array.isArray(raw.disabledPluginIds)) return true;
+  if (raw.appearanceTheme !== normalized.appearanceTheme) return true;
+  if (raw.updatedAt !== normalized.updatedAt) return true;
+  return !sameStringArray(raw.configuredRoots, normalized.configuredRoots)
+    || !sameStringArray(raw.configuredProjects, normalized.configuredProjects)
+    || !sameStringArray(raw.configuredRemoteProjects, normalized.configuredRemoteProjects)
+    || JSON.stringify(raw.configuredRemoteMachines) !== JSON.stringify(normalized.configuredRemoteMachines)
+    || JSON.stringify(raw.projectAliases) !== JSON.stringify(normalized.projectAliases)
+    || !sameStringArray(raw.disabledPluginIds, normalized.disabledPluginIds);
+}
+
+function sameStringArray(raw: unknown, normalized: string[]): boolean {
+  return Array.isArray(raw)
+    && raw.length === normalized.length
+    && raw.every((item, index) => item === normalized[index]);
 }
 
 function normalizeProjectAliases(value: unknown): Record<string, string> {

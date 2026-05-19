@@ -28,6 +28,7 @@ import type {
   InstallToolInput,
   InstallToolResult,
   InstallRecipe,
+  KnowledgeSiteResult,
   ListInstallRecipesInput,
   DiagnosticsSnapshot,
   MachineProfile,
@@ -57,6 +58,14 @@ import type {
   RemoveRootInput,
   RootConfigInput,
   ScanProjectsResult,
+  GitHubIdentity,
+  TaskViewModel,
+  TeamworkGetTasksInput,
+  TeamworkInstallInput,
+  TeamworkStatus,
+  TeamworkTasksChangedEvent,
+  TeamworkUninstallInput,
+  TeamworkUninstallResult,
   TerminalCloseInput,
   TerminalCreateInput,
   TerminalInput,
@@ -68,8 +77,14 @@ import { ipcChannels as channels } from "../src/shared/ipc-channels.js";
 import { AgentSessionWatcher } from "../src/main/agent-clis.js";
 import { BrowserManager } from "../src/main/browser-tabs.js";
 import { PortForwardManager } from "../src/main/port-forwards.js";
+import { readGitMetadata } from "../src/main/git.js";
+import { resolveRepoPath } from "../src/main/path-safety.js";
 import { testRemoteMachineConnection } from "../src/main/remote-machines.js";
 import { createDefaultSecretStore } from "../src/main/secrets.js";
+import { assertHarnessInstallable, checkRepoPermission, generateMachineId, getMachineId, installHarness, isHarnessInstalled, resolveGitHubIdentity, uninstallHarness } from "../src/main/teamwork-harness.js";
+import { deleteTeamContextBranch, hasLocalContextBranch, TeamworkSync } from "../src/main/teamwork-sync.js";
+import { scanTasks, watchTasks } from "../src/main/teamwork-tasks.js";
+import { generateKnowledgeSite, getKnowledgeSitePath } from "../src/main/knowledge-site.js";
 import { spawnCoreClient, type CoreClient } from "./core-client.js";
 import { setPluginEnabledConfig } from "../src/main/config.js";
 import type { PluginSummary } from "../src/plugins/plugin-host.js";
@@ -88,6 +103,8 @@ let core: CoreClient | null = null;
 const agentSessionWatcher = new AgentSessionWatcher();
 const browserManager = new BrowserManager();
 const portForwardManager = new PortForwardManager({ secretStore });
+const teamworkSyncInstances = new Map<string, TeamworkSync>();
+const teamworkWatcherCleanups = new Map<string, () => void>();
 
 function requireCore(): CoreClient {
   if (!core) throw new Error("Core client is not initialized; registerIpcHandlers must complete first");
@@ -98,6 +115,101 @@ export function closeAllTerminalSessions(): void {
   void core?.dispose();
   browserManager.closeAll();
   void portForwardManager.closeAll();
+  for (const sync of teamworkSyncInstances.values()) sync.stop();
+  teamworkSyncInstances.clear();
+  for (const cleanup of teamworkWatcherCleanups.values()) cleanup();
+  teamworkWatcherCleanups.clear();
+}
+
+async function resolveTeamworkRepoPath(runtime: IpcRuntime, repoPath: string): Promise<string> {
+  const config = await getConfiguredRoots(runtime);
+  const safe = await resolveRepoPath(repoPath, config.configuredRoots, config.configuredProjects);
+  return safe.repoPath;
+}
+
+async function syncForStatus(repoPath: string, installed: boolean): Promise<TeamworkSync | null> {
+  const existing = teamworkSyncInstances.get(repoPath);
+  if (existing) return existing;
+  if (!installed || !await hasLocalContextBranch(repoPath)) return null;
+
+  const sync = new TeamworkSync(repoPath);
+  sync.start();
+  teamworkSyncInstances.set(repoPath, sync);
+  return sync;
+}
+
+async function getTeamworkStatus(repoPath: string): Promise<TeamworkStatus> {
+  const harnessInstalled = await isHarnessInstalled(repoPath);
+  const contextAvailable = await hasLocalContextBranch(repoPath);
+  const installed = harnessInstalled && contextAvailable;
+  const sync = await syncForStatus(repoPath, installed);
+  const syncStatus = sync?.getStatus();
+  return {
+    installed,
+    harnessInstalled,
+    syncEnabled: syncStatus?.enabled ?? false,
+    lastSyncAt: syncStatus?.lastSyncAt ?? null,
+    pendingCount: syncStatus?.pendingCount ?? 0,
+    lastError: syncStatus?.lastError ?? null,
+  };
+}
+
+async function installTeamwork(repoPath: string): Promise<TeamworkStatus> {
+  await assertHarnessInstallable(repoPath);
+  const identity = await resolveGitHubIdentity();
+  const gitMeta = await readGitMetadata(repoPath);
+  const repo = githubRepoFromRemote(gitMeta.remoteOrigin);
+  if (!repo) {
+    throw new Error("Teamwork requires a GitHub origin remote. Configure remote.origin.url before installing Teamwork.");
+  }
+
+  const permission = await checkRepoPermission(repo, identity.login);
+  if (permission !== "admin" && permission !== "write") {
+    throw new Error(`Insufficient permission: ${permission}. Need at least write.`);
+  }
+
+  const sync = teamworkSyncInstances.get(repoPath) ?? new TeamworkSync(repoPath);
+  await sync.ensureContextBranch(repo, identity.login);
+
+  const machineId = await getMachineId(repoPath) ?? generateMachineId();
+  await installHarness(repoPath, {
+    githubLogin: identity.login,
+    githubUserId: identity.id,
+    machineId,
+    agent: "",
+    repo,
+  });
+
+  sync.start();
+  teamworkSyncInstances.set(repoPath, sync);
+  const syncStatus = sync.getStatus();
+  return {
+    installed: true,
+    harnessInstalled: true,
+    syncEnabled: syncStatus.enabled,
+    lastSyncAt: syncStatus.lastSyncAt,
+    pendingCount: syncStatus.pendingCount,
+    lastError: syncStatus.lastError,
+    githubLogin: identity.login,
+    repo,
+    branch: gitMeta.currentBranch ?? undefined,
+    permission,
+  };
+}
+
+async function assertContextCleanupOwner(repoPath: string): Promise<void> {
+  const identity = await resolveGitHubIdentity();
+  const gitMeta = await readGitMetadata(repoPath);
+  const repo = githubRepoFromRemote(gitMeta.remoteOrigin);
+  const owner = repo?.split("/")[0] ?? "";
+  if (!repo || owner.toLowerCase() !== identity.login.toLowerCase()) {
+    throw new Error("Only the repository owner can clean all Teamwork task records.");
+  }
+}
+
+function githubRepoFromRemote(remoteOrigin: string | null): string | null {
+  const match = remoteOrigin?.match(/github\.com[:/]([^/\s]+\/[^/\s]+?)(?:\.git)?$/);
+  return match?.[1] ?? null;
 }
 
 function handle<Payload, Result>(
@@ -296,4 +408,80 @@ export async function registerIpcHandlers(
   handle<TerminalCloseInput, TerminalSession | null>(channels.closeTerminal, (payload) =>
     requireCore().call("closeTerminal", [payload])
   );
+
+  handle<TeamworkGetTasksInput, TaskViewModel[]>(channels.teamworkGetTasks, async (payload) => {
+    const repoPath = await resolveTeamworkRepoPath(runtime, payload.repoPath);
+    const tasks = await scanTasks(repoPath);
+    if (!teamworkWatcherCleanups.has(repoPath)) {
+      const cleanup = watchTasks(repoPath, (updated) => {
+        const event: TeamworkTasksChangedEvent = { repoPath, tasks: updated };
+        BrowserWindow.getAllWindows().forEach((window) => {
+          window.webContents.send(channels.teamworkTasksChanged, event);
+        });
+      });
+      teamworkWatcherCleanups.set(repoPath, cleanup);
+    }
+    return tasks;
+  });
+
+  handle<{ repoPath: string }, TeamworkStatus>(channels.teamworkGetStatus, async (payload) => {
+    const repoPath = await resolveTeamworkRepoPath(runtime, payload.repoPath);
+    return getTeamworkStatus(repoPath);
+  });
+
+  handle<void, GitHubIdentity>(channels.teamworkResolveIdentity, async () => resolveGitHubIdentity());
+
+  handle<TeamworkInstallInput, TeamworkStatus>(channels.teamworkInstall, async (payload) => {
+    const repoPath = await resolveTeamworkRepoPath(runtime, payload.repoPath);
+    return installTeamwork(repoPath);
+  });
+
+  handle<{ repoPath: string }, TeamworkStatus>(channels.teamworkEnable, async (payload) => {
+    const repoPath = await resolveTeamworkRepoPath(runtime, payload.repoPath);
+    return installTeamwork(repoPath);
+  });
+
+  handle<TeamworkUninstallInput, TeamworkUninstallResult>(channels.teamworkUninstall, async (payload) => {
+    const repoPath = await resolveTeamworkRepoPath(runtime, payload.repoPath);
+    const sync = teamworkSyncInstances.get(repoPath);
+    sync?.stop();
+    teamworkSyncInstances.delete(repoPath);
+
+    let contextBranchDeleted = false;
+    if (payload.cleanTeamContext) {
+      await assertContextCleanupOwner(repoPath);
+      contextBranchDeleted = await deleteTeamContextBranch(repoPath);
+    }
+
+    const result = await uninstallHarness(repoPath);
+    const cleanup = teamworkWatcherCleanups.get(repoPath);
+    cleanup?.();
+    teamworkWatcherCleanups.delete(repoPath);
+    const event: TeamworkTasksChangedEvent = { repoPath, tasks: [] };
+    BrowserWindow.getAllWindows().forEach((window) => {
+      window.webContents.send(channels.teamworkTasksChanged, event);
+    });
+    return { ...result, contextBranchDeleted };
+  });
+
+  handle<{ repoPath: string }, void>(channels.teamworkSyncNow, async (payload) => {
+    const repoPath = await resolveTeamworkRepoPath(runtime, payload.repoPath);
+    let sync = teamworkSyncInstances.get(repoPath);
+    if (!sync) {
+      sync = new TeamworkSync(repoPath);
+      sync.start();
+      teamworkSyncInstances.set(repoPath, sync);
+    }
+    await sync.syncOnce();
+  });
+
+  handle<{ repoPath: string }, KnowledgeSiteResult>(channels.knowledgeSiteGenerate, async (payload) => {
+    const repoPath = await resolveTeamworkRepoPath(runtime, payload.repoPath);
+    return generateKnowledgeSite(repoPath);
+  });
+
+  handle<{ repoPath: string }, string>(channels.knowledgeSiteGetPath, async (payload) => {
+    const repoPath = await resolveTeamworkRepoPath(runtime, payload.repoPath);
+    return getKnowledgeSitePath(repoPath);
+  });
 }

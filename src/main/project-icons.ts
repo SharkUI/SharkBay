@@ -6,6 +6,9 @@ type UrlFields = { localUrl: string | null; testUrl: string | null; deploymentUr
 import { isRecord } from "../shared/schema.js";
 import { readJsonFile } from "./json-file.js";
 import { resolveReadableRepoFile } from "./path-safety.js";
+import { createDefaultSecretStore, type SecretStore } from "./secrets.js";
+import { remoteShellCommand, runSshCommand, sshArgsForRemoteMachine, type SshCommandRunner } from "./remote-machines.js";
+import type { RemoteMachine } from "../shared/types.js";
 
 const maxIconBytes = 1024 * 1024;
 
@@ -44,6 +47,18 @@ export async function resolveProjectIconSources(repoPath: string, configuredProj
   return dedupeSources([...localSources, ...faviconSources]);
 }
 
+export async function resolveRemoteProjectIconSources(
+  machine: RemoteMachine,
+  projectPath: string,
+  options: { secretStore?: SecretStore; runner?: SshCommandRunner } = {},
+): Promise<ProjectIconSource[]> {
+  const remoteSources = await resolveRemoteIconSources(machine, projectPath, {
+    secretStore: options.secretStore ?? createDefaultSecretStore(),
+    runner: options.runner ?? runSshCommand,
+  });
+  return dedupeSources(remoteSources);
+}
+
 async function resolveLocalIconSources(repoPath: string, configuredProjects: string[]): Promise<ProjectIconSource[]> {
   const paths = [...await packageIconPaths(repoPath, configuredProjects), ...commonIconPaths];
   const sources: ProjectIconSource[] = [];
@@ -78,6 +93,26 @@ async function packageIconPaths(repoPath: string, configuredProjects: string[]):
   return candidates.flatMap((candidate) => normalizeIconRelativePath(candidate));
 }
 
+async function remotePackageIconPaths(machine: RemoteMachine, projectPath: string, options: { secretStore: SecretStore; runner: SshCommandRunner }): Promise<string[]> {
+  const packageJson = await remoteReadTextFile(machine, projectPath, "package.json", options);
+  if (!packageJson) return [];
+
+  let data: unknown;
+  try {
+    data = JSON.parse(packageJson);
+  } catch {
+    return [];
+  }
+  if (!isRecord(data)) return [];
+
+  const candidates = [
+    nestedString(data, ["build", "mac", "icon"]),
+    nestedString(data, ["build", "icon"]),
+  ];
+
+  return candidates.flatMap((candidate) => normalizeIconRelativePath(candidate));
+}
+
 async function localIconSource(repoPath: string, configuredProjects: string[], relativePath: string): Promise<ProjectIconSource | null> {
   const safePath = normalizeIconRelativePath(relativePath)[0];
   if (!safePath) return null;
@@ -98,6 +133,79 @@ async function localIconSource(repoPath: string, configuredProjects: string[], r
       url: `data:${mimeTypeForPath(filePath)};base64,${buffer.toString("base64")}`,
       label: path.basename(filePath),
     };
+  } catch {
+    return null;
+  }
+}
+
+async function resolveRemoteIconSources(machine: RemoteMachine, projectPath: string, options: { secretStore: SecretStore; runner: SshCommandRunner }): Promise<ProjectIconSource[]> {
+  const paths = [...await remotePackageIconPaths(machine, projectPath, options), ...commonIconPaths];
+  const sources: ProjectIconSource[] = [];
+
+  for (const relativePath of dedupeStrings(paths)) {
+    const source = await remoteIconSource(machine, projectPath, relativePath, options);
+    if (source) {
+      sources.push(source);
+      break;
+    }
+  }
+
+  return sources;
+}
+
+async function remoteIconSource(machine: RemoteMachine, projectPath: string, relativePath: string, options: { secretStore: SecretStore; runner: SshCommandRunner }): Promise<ProjectIconSource | null> {
+  const safePath = normalizeIconRelativePath(relativePath)[0];
+  if (!safePath) return null;
+  const buffer = await remoteReadFileBuffer(machine, projectPath, safePath, maxIconBytes, options);
+  if (!buffer || buffer.length <= 0 || buffer.length > maxIconBytes) return null;
+  return {
+    kind: "local",
+    url: `data:${mimeTypeForPath(safePath)};base64,${buffer.toString("base64")}`,
+    label: path.posix.basename(safePath),
+  };
+}
+
+async function remoteReadTextFile(machine: RemoteMachine, projectPath: string, relativePath: string, options: { secretStore: SecretStore; runner: SshCommandRunner }): Promise<string | null> {
+  const buffer = await remoteReadFileBuffer(machine, projectPath, relativePath, 512 * 1024, options);
+  return buffer?.toString("utf8") ?? null;
+}
+
+async function remoteReadFileBuffer(
+  machine: RemoteMachine,
+  projectPath: string,
+  relativePath: string,
+  maxBytes: number,
+  options: { secretStore: SecretStore; runner: SshCommandRunner },
+): Promise<Buffer | null> {
+  const safePath = normalizeRemoteRelativePath(relativePath);
+  if (!safePath) return null;
+  const password = machine.authMode === "password" && machine.passwordSecretId
+    ? (await options.secretStore.get(machine.passwordSecretId)) ?? null
+    : null;
+  const sshArgs = sshArgsForRemoteMachine(machine, Boolean(password));
+  if (!sshArgs.length) return null;
+  const absolutePath = `${projectPath.replace(/\/+$/u, "")}/${safePath}`;
+  const script = [
+    `file=${shellQuote(absolutePath)}`,
+    "if [ ! -f \"$file\" ]; then exit 3; fi",
+    "size=$(wc -c < \"$file\" | tr -d ' ')",
+    `if [ -z "$size" ] || [ "$size" -le 0 ] || [ "$size" -gt ${maxBytes} ]; then exit 4; fi`,
+    "printf 'SHARKBAY_FILE:%s\\n' \"$size\"",
+    "base64 < \"$file\"",
+  ].join("; ");
+  try {
+    const result = await options.runner([
+      "-o", password ? "BatchMode=no" : "BatchMode=yes",
+      "-o", "ConnectTimeout=5",
+      ...sshArgs,
+      "--",
+      remoteShellCommand(script),
+    ], 8000, password ? { password } : undefined);
+    const markerEnd = result.stdout.indexOf("\n");
+    const marker = markerEnd >= 0 ? result.stdout.slice(0, markerEnd).trim() : "";
+    if (!marker.startsWith("SHARKBAY_FILE:")) return null;
+    const base64 = result.stdout.slice(markerEnd + 1).replace(/\s+/gu, "");
+    return base64 ? Buffer.from(base64, "base64") : null;
   } catch {
     return null;
   }
@@ -132,6 +240,15 @@ function normalizeIconRelativePath(value: unknown): string[] {
   const normalized = path.posix.normalize(withoutFragment.replace(/\\/g, "/").replace(/^\.\//, ""));
   if (normalized.startsWith("../") || normalized === ".." || path.posix.isAbsolute(normalized)) return [];
   return displayableExtensions.has(path.posix.extname(normalized).toLowerCase()) ? [normalized] : [];
+}
+
+function normalizeRemoteRelativePath(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const withoutFragment = value.split(/[?#]/, 1)[0]?.trim();
+  if (!withoutFragment) return null;
+  const normalized = path.posix.normalize(withoutFragment.replace(/\\/g, "/").replace(/^\.\//u, ""));
+  if (normalized.startsWith("../") || normalized === ".." || path.posix.isAbsolute(normalized)) return null;
+  return normalized;
 }
 
 function nestedString(record: Record<string, unknown>, keys: string[]): string | null {
@@ -186,4 +303,8 @@ function dedupeSources(sources: ProjectIconSource[]): ProjectIconSource[] {
 
 function dedupeStrings(values: string[]): string[] {
   return [...new Set(values)];
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }

@@ -1,7 +1,7 @@
 import { constants, promises as fs } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
 import path from "node:path";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 export type JsonReadResult =
   | {
@@ -50,7 +50,7 @@ export async function readJsonFile(filePath: string): Promise<JsonReadResult> {
 export async function writeJsonAtomic(filePath: string, data: unknown): Promise<string> {
   const directory = path.dirname(filePath);
   const basename = path.basename(filePath);
-  const tempPath = path.join(directory, `.${basename}.${process.pid}.${Date.now()}.tmp`);
+  const tempPath = path.join(directory, `.${basename}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`);
   const serialized = `${JSON.stringify(data, null, 2)}\n`;
   let handle: FileHandle | null = null;
 

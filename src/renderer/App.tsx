@@ -33,6 +33,8 @@ import type {
   RootRecord,
   ScanResult,
   SharkBayBridge,
+  TaskViewModel,
+  TeamworkStatus,
   TerminalDataEvent,
   TerminalExitEvent,
   TerminalCreateInput,
@@ -51,7 +53,7 @@ import {
 import type { WorkflowProjectTerminalActivityState } from "./workflow";
 
 type View = "dashboard" | "settings";
-type DetailTab = "git" | "stack" | "files" | "forwards";
+type DetailTab = "team" | "git" | "stack" | "files" | "forwards";
 type SettingsSection = "local-machine" | "appearance" | "extensions" | "diagnostics" | `remote-machine:${string}`;
 
 const remoteConnectionMethods: Array<{
@@ -139,6 +141,7 @@ type TerminalSpace = {
 type TerminalPaneHandle = {
   openFileInEditor: (projectUri: string, projectName: string, relativePath: string) => Promise<void>;
   openGitDiff: (projectUri: string, projectName: string, relativePath: string) => Promise<void>;
+  openBrowserTab: (projectUri: string, projectName: string, initialUrl: string) => Promise<void>;
 };
 
 type AgentStatusByProjectPath = Record<string, string>;
@@ -154,7 +157,8 @@ const resizerColumnWidth = 12;
 const columnResizeStep = 40;
 const detailColumnStorageKey = "sharkbay.detailColumnWidth.v2";
 const projectColumnStorageKey = "sharkbay.projectColumnWidth.v2";
-const detailTabs: Array<{ id: DetailTab; label: string; remoteOnly?: boolean }> = [
+const detailTabs: Array<{ id: DetailTab; label: string; remoteOnly?: boolean; localOnly?: boolean }> = [
+  { id: "team", label: "Team", localOnly: true },
   { id: "git", label: "Git" },
   { id: "stack", label: "Stack" },
   { id: "files", label: "Files" },
@@ -354,7 +358,7 @@ async function listProjectFiles(project: ProjectCandidate | ProjectDetail, direc
 async function createTerminal(
   cwdUri: string,
   title?: string,
-  options: Pick<TerminalCreateInput, "initialCommand" | "service"> = {},
+  options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "service"> = {},
 ): Promise<TerminalSession> {
   const handler = getBridge().terminal?.create;
   if (!handler) throw new Error("Terminal sessions are not exposed by the preload API.");
@@ -495,6 +499,15 @@ function appearanceDescription(theme: AppearanceTheme): string {
 
 function toRemoteProjectUri(machineId: string, remotePath: string): string {
   return `ssh://${encodeURIComponent(machineId)}${encodeURI(remotePath)}`;
+}
+
+function localPathFromCandidate(candidate: ProjectCandidate): string | null {
+  if (candidate.providerKind !== "local" || !candidate.uri.startsWith("local:")) return null;
+  try {
+    return decodeURI(candidate.uri.slice("local:".length));
+  } catch {
+    return null;
+  }
 }
 
 function remoteProjectLabel(uri: string, machines: RemoteMachine[]): string {
@@ -646,7 +659,13 @@ export function App() {
               onRefresh={refreshWorkspace}
               onOpenSettings={() => setView("settings")}
               onAddProject={async (pathOrUri) => { pathOrUri.startsWith("ssh://") ? await addProjectUri(pathOrUri) : await addProject(pathOrUri); await refreshProjects({ showToast: true }); }}
-              onPickProject={async () => { const paths = await pickAndAddProjects(); if (paths.length) await refreshProjects({ showToast: true }); }}
+              onPickProject={async () => {
+                const paths = await pickAndAddProjects();
+                if (paths.length) {
+                  setToast({ tone: "success", message: paths.length === 1 ? "Project added." : `${paths.length} projects added.` });
+                  await refreshProjects({ showToast: false });
+                }
+              }}
               onRemoveProject={async (uri) => { await removeProject(uri); await refreshProjects({ showToast: true }); }}
               onRenameProject={async (uri, name) => { await renameProjectAlias(uri, name); await refreshProjects({ showToast: false }); }}
               projectAliases={projectAliases}
@@ -932,6 +951,9 @@ function DashboardView({
             onOpenGitDiff={(relativePath) =>
               terminalPaneRef.current?.openGitDiff(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, relativePath) ?? Promise.resolve()
             }
+            onOpenBrowserTab={(url) =>
+              terminalPaneRef.current?.openBrowserTab(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, url) ?? Promise.resolve()
+            }
           />
         ) : (
           <EmptyState title="No project selected" body="Select a project to get started." />
@@ -1050,7 +1072,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     if (!candidate?.uri) return;
     const isRemote = candidate.providerKind === "ssh";
     const launchCommand = isRemote ? agent.command : (agent.executablePath || agent.command);
-    await openProjectTab(candidate.id, candidate.uri, displayProjectName ?? candidate.name, candidate.displayPath, false, { initialCommand: shellQuote(launchCommand) });
+    await openProjectTab(candidate.id, candidate.uri, displayProjectName ?? candidate.name, candidate.displayPath, false, { agentId: agent.id, initialCommand: shellQuote(launchCommand) });
   }
 
   async function openBrowserProjectTab() {
@@ -1065,6 +1087,9 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     },
     openGitDiff: async (projectUri, projectName, relativePath) => {
       await openProjectTab(projectUri, projectUri, projectName, selectedSpace?.displayPath ?? projectUri, false, { initialCommand: gitDiffCommandFor(relativePath) });
+    },
+    openBrowserTab: async (projectUri, projectName, initialUrl) => {
+      await openBrowserTab(projectUri, projectUri, projectName, selectedSpace?.displayPath ?? projectUri, initialUrl);
     },
   }));
 
@@ -1155,7 +1180,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     }
   }
 
-  async function openProjectTab(projectId: string, cwdUri: string, projectName: string, displayPath: string, quiet = false, options: Pick<TerminalCreateInput, "initialCommand" | "service"> = {}) {
+  async function openProjectTab(projectId: string, cwdUri: string, projectName: string, displayPath: string, quiet = false, options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "service"> = {}) {
     try {
       const session = await createTerminal(cwdUri, projectName, options);
       const terminal = createXTerm(session.id, appearanceTheme, setToast, recordTerminalInputActivity);
@@ -1914,16 +1939,18 @@ function EditorSurface({ active, appearanceTheme, tab, onChange, onSave }: {
   );
 }
 
-function ProjectDetailPane({ detail, candidate, setToast, onRefresh, onOpenFileInEditor, onOpenGitDiff }: {
+function ProjectDetailPane({ detail, candidate, setToast, onRefresh, onOpenFileInEditor, onOpenGitDiff, onOpenBrowserTab }: {
   detail: ProjectDetail | null;
   candidate: ProjectCandidate;
   setToast: (toast: Toast) => void;
   onRefresh: () => Promise<void>;
   onOpenFileInEditor: (relativePath: string) => Promise<void>;
   onOpenGitDiff: (relativePath: string) => Promise<void>;
+  onOpenBrowserTab: (url: string) => Promise<void>;
 }) {
   const isRemote = candidate.providerKind === "ssh";
-  const availableTabs = detailTabs.filter((tab) => !tab.remoteOnly || isRemote);
+  const isLocal = candidate.providerKind === "local";
+  const availableTabs = detailTabs.filter((tab) => (!tab.remoteOnly || isRemote) && (!tab.localOnly || isLocal));
   const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>("git");
 
   useEffect(() => { setActiveDetailTab("git"); }, [candidate.id]);
@@ -1952,6 +1979,11 @@ function ProjectDetailPane({ detail, candidate, setToast, onRefresh, onOpenFileI
       <div aria-labelledby="project-detail-tab-git" className="detail-tab-panel" hidden={activeDetailTab !== "git"} id="project-detail-tabpanel-git" role="tabpanel">
         <GitDetailTab detail={detail} candidate={candidate} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} />
       </div>
+      {isLocal ? (
+        <div aria-labelledby="project-detail-tab-team" className="detail-tab-panel" hidden={activeDetailTab !== "team"} id="project-detail-tabpanel-team" role="tabpanel">
+          <TasksDetailTab active={activeDetailTab === "team"} candidate={candidate} setToast={setToast} onOpenBrowserTab={onOpenBrowserTab} onRefresh={onRefresh} />
+        </div>
+      ) : null}
       <div aria-labelledby="project-detail-tab-stack" className="detail-tab-panel" hidden={activeDetailTab !== "stack"} id="project-detail-tabpanel-stack" role="tabpanel">
         <StackDetailTab active={activeDetailTab === "stack"} candidate={candidate} setToast={setToast} />
       </div>
@@ -1977,6 +2009,227 @@ function GitDetailTab({ detail, candidate, setToast, onOpenFileInEditor, onOpenG
       ) : (
         <EmptyState title="No git history" body="Restart SharkBay once to load Git history." />
       )}
+    </>
+  );
+}
+
+function taskPill(task: TaskViewModel): { label: string; cls: string } {
+  if (task.status === "completed" && task.sync === "failed") return { label: "Sync failed", cls: "phase-blocked" };
+  if (task.status === "completed") return { label: "Done", cls: "phase-done" };
+  if (task.status === "active") return { label: "Active", cls: "phase-done" };
+  if (task.status === "paused") return { label: "Paused", cls: "phase-blocked" };
+  if (task.status === "blocked") return { label: "Blocked", cls: "phase-blocked" };
+  if (task.status === "abandoned") return { label: "Dropped", cls: "phase-blocked" };
+  return { label: task.status, cls: "phase-waiting" };
+}
+
+function TasksDetailTab({ active, candidate, setToast, onOpenBrowserTab, onRefresh }: {
+  active: boolean;
+  candidate: ProjectCandidate;
+  setToast: (toast: Toast) => void;
+  onOpenBrowserTab: (url: string) => Promise<void>;
+  onRefresh: () => Promise<void>;
+}) {
+  const repoPath = localPathFromCandidate(candidate);
+  const [tasks, setTasks] = useState<TaskViewModel[]>([]);
+  const [status, setStatus] = useState<TeamworkStatus | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<"install" | "sync" | "site" | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const selected = useMemo(
+    () => selectedTaskId ? tasks.find((task) => task.taskId === selectedTaskId) ?? null : null,
+    [selectedTaskId, tasks],
+  );
+
+  useEffect(() => {
+    if (!active || !repoPath) return;
+    let cancelled = false;
+    const activeRepoPath = repoPath;
+    const teamwork = getBridge().teamwork;
+    const getTasks = teamwork?.getTasks;
+    const getStatus = teamwork?.getStatus;
+    if (!getTasks || !getStatus) {
+      setLoadError("Teamwork APIs are not exposed by the preload bridge.");
+      return;
+    }
+    const getTasksHandler: NonNullable<NonNullable<SharkBayBridge["teamwork"]>["getTasks"]> = getTasks;
+    const getStatusHandler: NonNullable<NonNullable<SharkBayBridge["teamwork"]>["getStatus"]> = getStatus;
+
+    async function refresh(showToast: boolean) {
+      try {
+        const [nextTasks, nextStatus] = await Promise.all([
+          getTasksHandler({ repoPath: activeRepoPath }),
+          getStatusHandler({ repoPath: activeRepoPath }),
+        ]);
+        if (cancelled) return;
+        setTasks(nextTasks);
+        setStatus(nextStatus);
+        setSelectedTaskId((current) => current && nextTasks.some((task) => task.taskId === current) ? current : null);
+        setLoadError(null);
+      } catch (error) {
+        if (cancelled) return;
+        const message = asMessage(error);
+        setLoadError(message);
+        if (showToast) setToast({ tone: "error", message });
+      }
+    }
+
+    void refresh(true);
+    const timer = window.setInterval(() => void refresh(false), 3000);
+    const unsubscribe = teamwork?.onTasksChanged?.((event) => {
+      if (event.repoPath === activeRepoPath) {
+        setTasks(event.tasks);
+        setSelectedTaskId((current) => current && event.tasks.some((task) => task.taskId === current) ? current : null);
+      }
+    });
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      unsubscribe?.();
+    };
+  }, [active, repoPath, setToast]);
+
+  async function installTeamworkHarness() {
+    if (!repoPath) return;
+    setBusyAction("install");
+    try {
+      const install = getBridge().teamwork?.install;
+      if (!install) throw new Error("Teamwork install API is not available.");
+      const nextStatus = await install({ repoPath });
+      setStatus(nextStatus);
+      setToast({ tone: "success", message: "Teamwork installed." });
+      await onRefresh();
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function syncNow() {
+    if (!repoPath) return;
+    setBusyAction("sync");
+    try {
+      const sync = getBridge().teamwork?.syncNow;
+      const getStatus = getBridge().teamwork?.getStatus;
+      const getTasks = getBridge().teamwork?.getTasks;
+      if (!sync) throw new Error("Teamwork sync API is not available.");
+      await sync({ repoPath });
+      if (getStatus) setStatus(await getStatus({ repoPath }));
+      if (getTasks) setTasks(await getTasks({ repoPath }));
+      setToast({ tone: "success", message: "Teamwork synced." });
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function openKnowledgeSite() {
+    if (!repoPath) return;
+    setBusyAction("site");
+    try {
+      const generate = getBridge().knowledgeSite?.generate;
+      const getPath = getBridge().knowledgeSite?.getPath;
+      if (!generate || !getPath) throw new Error("Knowledge Site API is not available.");
+      await generate({ repoPath });
+      const sitePath = await getPath({ repoPath });
+      await onOpenBrowserTab(`file://${sitePath}`);
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  if (!repoPath) return <EmptyState title="Teamwork unavailable" body="Teamwork is available for local Git projects." />;
+
+  if (selected) {
+    const pill = taskPill(selected);
+    return (
+      <div className="mock-task-detail">
+        <div className="task-detail-header">
+          <button className="icon-button" type="button" onClick={() => setSelectedTaskId(null)} aria-label="Back to task list">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          <span className="task-avatar task-detail-avatar">
+            {selected.owner.avatarUrl ? <img alt="" src={selected.owner.avatarUrl} /> : selected.owner.githubLogin.slice(0, 2).toUpperCase()}
+          </span>
+          <div className="task-detail-title">
+            <h3>{selected.title}</h3>
+            <span>{selected.taskTag} · {selected.owner.githubLogin}</span>
+          </div>
+          <strong className={cx("phase-pill", pill.cls)}>{pill.label}</strong>
+        </div>
+        <div className="task-detail-compact">
+          <pre className="task-detail-pre">{selected.rawMarkdown}</pre>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <section className="subpanel project-facts-card teamwork-facts-card">
+        <div className="panel-title-row compact-title-row">
+          <h4>Teamwork</h4>
+          {status?.installed ? <button className="button secondary compact" disabled={busyAction !== null} type="button" onClick={() => void syncNow()}>{busyAction === "sync" ? "Syncing" : "Sync"}</button> : null}
+        </div>
+        <div className="project-facts-list">
+          <div className="repository-fact"><span>Status</span><strong>{status?.installed ? "Installed" : status?.harnessInstalled ? "Harness only" : "Not installed"}</strong></div>
+          {status?.repo ? <div className="repository-fact"><span>Repo</span><strong>{status.repo}</strong></div> : null}
+          {status?.githubLogin ? <div className="repository-fact"><span>User</span><strong>{status.githubLogin}</strong></div> : null}
+          {status?.pendingCount ? <div className="repository-fact"><span>Pending</span><strong>{String(status.pendingCount)}</strong></div> : null}
+          {(loadError || status?.lastError) ? <div className="repository-fact is-warn"><span>Error</span><strong>{loadError || status?.lastError}</strong></div> : null}
+        </div>
+      </section>
+
+      {status && !status.installed ? (
+        <section className="subpanel confirm-panel teamwork-action-card">
+          <div>
+            <h4>Install Teamwork</h4>
+            <p className="summary-text">Requires a GitHub origin and write access. Installation creates the local harness and enables team sync.</p>
+          </div>
+          <div className="button-row">
+            <button className="button compact" disabled={busyAction !== null} type="button" onClick={() => void installTeamworkHarness()}>
+              {busyAction === "install" ? "Installing" : "Install Teamwork"}
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {status?.installed ? (
+        <section className="subpanel confirm-panel teamwork-action-card">
+          <div>
+            <h4>Knowledge Site</h4>
+            <p className="summary-text">Browse project docs and team task history as a local site.</p>
+          </div>
+          <div className="button-row">
+            <button className="button compact" disabled={busyAction !== null} type="button" onClick={() => void openKnowledgeSite()}>
+              {busyAction === "site" ? "Opening" : "Open Site"}
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      <div className="queue-list task-list-direct">
+        {tasks.map((task) => {
+          const pill = taskPill(task);
+          const createdTime = task.createdAt ? formatRelativeTime(task.createdAt) : null;
+          return (
+            <button className="queue-item" key={task.taskId} type="button" onClick={() => setSelectedTaskId(task.taskId)}>
+              <span className="task-avatar">
+                {task.owner.avatarUrl ? <img alt="" src={task.owner.avatarUrl} /> : task.owner.githubLogin.slice(0, 2).toUpperCase()}
+              </span>
+              <span className="task-row-main">
+                <span className="task-title">{task.title}</span>
+                <small>{task.taskTag} · {task.owner.githubLogin}{createdTime ? ` · ${createdTime}` : ""}</small>
+              </span>
+              <span className={cx("phase-pill", pill.cls)}>{pill.label}</span>
+            </button>
+          );
+        })}
+      </div>
     </>
   );
 }
@@ -3027,12 +3280,10 @@ function AddProjectDialog({ remoteMachines, setToast, onAdd, onClose, onPickLoca
   async function chooseLocal() {
     setBusy(true);
     try {
-      await onPickLocal();
       onClose();
+      await onPickLocal();
     } catch (error) {
       setToast({ tone: "error", message: asMessage(error) });
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -3045,6 +3296,7 @@ function AddProjectDialog({ remoteMachines, setToast, onAdd, onClose, onPickLoca
     }
     const trimmedPath = remotePath.trim();
     setBusy(true);
+    let closed = false;
     try {
       setBusyLabel("Verifying");
       const verify = getBridge().targets?.pathExists;
@@ -3062,12 +3314,15 @@ function AddProjectDialog({ remoteMachines, setToast, onAdd, onClose, onPickLoca
         }
       }
       setBusyLabel("Adding");
+      onClose();
+      closed = true;
       await onAdd(toRemoteProjectUri(selectedRemoteMachine.id, trimmedPath));
       setToast({ tone: "success", message: "Remote project added." });
     } catch (error) {
-      setPathError(asMessage(error));
+      if (closed) setToast({ tone: "error", message: asMessage(error) });
+      else setPathError(asMessage(error));
     } finally {
-      setBusy(false);
+      if (!closed) setBusy(false);
     }
   }
 

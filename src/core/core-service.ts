@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import path from "node:path";
 import { getConfiguredRoots } from "../main/config.js";
-import { resolveProjectIconSources } from "../main/project-icons.js";
+import { resolveProjectIconSources, resolveRemoteProjectIconSources } from "../main/project-icons.js";
 import { resolveProjectUri } from "../main/path-safety.js";
 import type {
   IpcRuntimeLike,
@@ -203,6 +203,9 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
     ]);
 
     if (parsed.kind === "ssh") {
+      const config = await getConfiguredRoots(runtime);
+      const machine = config.configuredRemoteMachines.find((item) => item.id === parsed.machineId);
+      const iconSources = machine ? await resolveRemoteProjectIconSources(machine, parsed.path) : [];
       return {
         id: input.projectUri,
         uri: input.projectUri,
@@ -210,7 +213,7 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
         providerId: parsed.machineId,
         providerKind: "ssh",
         displayPath: `${parsed.machineId}:${parsed.path}`,
-        iconSources: [],
+        iconSources,
         repoUrl: gitMeta.remoteOrigin,
         currentBranch: gitMeta.currentBranch,
         dirtyWorktree: gitMeta.dirtyWorktree,

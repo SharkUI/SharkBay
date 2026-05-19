@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { IpcRuntimeLike, ProjectCandidate, ProjectScanInput, ScanProjectsResult } from "../shared/types.js";
+import type { IpcRuntimeLike, ProjectCandidate, ProjectScanInput, RemoteMachine, ScanProjectsResult } from "../shared/types.js";
 import { loadAppConfig, getRuntimeConfigPath } from "./config.js";
 import { discoverProjectDevServices } from "./dev-services.js";
 import { readGitMetadata } from "./git.js";
@@ -66,27 +66,28 @@ export async function scanProjects(runtime: IpcRuntimeLike, input?: ProjectScanI
 
   // Resolve manually added projects and merge with scanned results
   const manualCandidates = await resolveManualProjects(config.configuredProjects);
-  const remoteCandidates = resolveRemoteProjects(config.configuredRemoteProjects, config.configuredRemoteMachines);
+  const remoteCandidates = await resolveRemoteProjects(config.configuredRemoteProjects, config.configuredRemoteMachines);
   const merged = mergeProjectCandidates(rootResult.candidates, [...manualCandidates, ...remoteCandidates]);
 
   return { roots: rootResult.roots, candidates: merged };
 }
 
-function resolveRemoteProjects(configuredRemoteProjects: string[], remoteMachines: { id: string; label: string }[] = []): ProjectCandidate[] {
-  const machineLabels = new Map(remoteMachines.map((machine) => [machine.id, machine.label]));
+async function resolveRemoteProjects(configuredRemoteProjects: string[], remoteMachines: RemoteMachine[] = []): Promise<ProjectCandidate[]> {
+  const machines = new Map(remoteMachines.map((machine) => [machine.id, machine]));
   const candidates: ProjectCandidate[] = [];
   for (const projectUri of configuredRemoteProjects) {
     try {
       const parsed = parseProjectUri(projectUri);
       if (parsed.kind !== "ssh") continue;
       const name = path.posix.basename(parsed.path) || parsed.machineId;
+      const machine = machines.get(parsed.machineId);
       candidates.push({
         id: projectUri,
         uri: projectUri,
         name,
         providerId: parsed.machineId,
         providerKind: "ssh",
-        displayPath: `${machineLabels.get(parsed.machineId) ?? parsed.machineId}:${parsed.path}`,
+        displayPath: `${machine?.label ?? parsed.machineId}:${parsed.path}`,
         rootUri: projectUri,
         iconSources: [],
         services: [],

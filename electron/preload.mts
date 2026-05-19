@@ -19,6 +19,7 @@ import type {
   InstallToolInput,
   InstallToolResult,
   InstallRecipe,
+  KnowledgeSiteResult,
   ListInstallRecipesInput,
   DiagnosticsSnapshot,
   InstallLogEvent,
@@ -49,6 +50,7 @@ import type {
   RemoveRootInput,
   RootConfigInput,
   ScanProjectsResult,
+  TaskViewModel,
   TerminalCloseInput,
   TerminalCreateInput,
   TerminalDataEvent,
@@ -56,7 +58,14 @@ import type {
   TerminalInput,
   TerminalResizeInput,
   TerminalSession,
-  TerminalUpdateEvent
+  TerminalUpdateEvent,
+  TeamworkGetTasksInput,
+  TeamworkInstallInput,
+  TeamworkStatus,
+  TeamworkTasksChangedEvent,
+  TeamworkUninstallInput,
+  TeamworkUninstallResult,
+  GitHubIdentity
 } from "../src/shared/types.js";
 
 const openSettingsListeners = new Set<() => void>();
@@ -170,6 +179,24 @@ const sharkBayApi = {
   },
   diagnostics: {
     read: () => invoke<DiagnosticsSnapshot>(channels.readDiagnostics)
+  },
+  teamwork: {
+    getTasks: (input: TeamworkGetTasksInput) => invoke<TaskViewModel[]>(channels.teamworkGetTasks, input),
+    getStatus: (input: { repoPath: string }) => invoke<TeamworkStatus>(channels.teamworkGetStatus, input),
+    install: (input: TeamworkInstallInput) => invoke<TeamworkStatus>(channels.teamworkInstall, input),
+    enable: (input: { repoPath: string }) => invoke<TeamworkStatus>(channels.teamworkEnable, input),
+    uninstall: (input: TeamworkUninstallInput) => invoke<TeamworkUninstallResult>(channels.teamworkUninstall, input),
+    resolveIdentity: () => invoke<GitHubIdentity>(channels.teamworkResolveIdentity),
+    syncNow: (input: { repoPath: string }) => invoke<void>(channels.teamworkSyncNow, input),
+    onTasksChanged: (callback: (event: TeamworkTasksChangedEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: TeamworkTasksChangedEvent) => callback(payload);
+      ipcRenderer.on(channels.teamworkTasksChanged, listener);
+      return () => ipcRenderer.removeListener(channels.teamworkTasksChanged, listener);
+    }
+  },
+  knowledgeSite: {
+    generate: (input: { repoPath: string }) => invoke<KnowledgeSiteResult>(channels.knowledgeSiteGenerate, input),
+    getPath: (input: { repoPath: string }) => invoke<string>(channels.knowledgeSiteGetPath, input)
   },
   portForwards: {
     list: (input?: ListPortForwardsInput) => invoke<RemotePortForward[]>(channels.listPortForwards, input),
