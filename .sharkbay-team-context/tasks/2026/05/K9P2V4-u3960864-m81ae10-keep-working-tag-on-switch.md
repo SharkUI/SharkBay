@@ -10,8 +10,9 @@ githubUserId: 3960864
 machine: 81ae10
 agent: Codex GPT-5.5
 createdAt: 2026-05-20T01:26:59Z
-updatedAt: 2026-05-20T01:28:26Z
+updatedAt: 2026-05-20T01:32:00Z
 completedAt: 2026-05-20T01:28:26Z
+commit: bcacc4f10c6a15a6fa5d160f98c57733db3b6b83
 ---
 
 ## Summary
@@ -28,6 +29,7 @@ Kept project `working` status from disappearing just because the project becomes
 - Identified current behavior: quiet timer clears `working` to `idle` when the terminal is the current active tab, which makes the left project tag disappear after selecting the project.
 - Updating the terminal quiet transition so `working` downgrades to attention/done regardless of current project selection, instead of disappearing.
 - Added a pure workflow helper and test for the quiet transition, then wired `App.tsx` to use it.
+- Preparing a combined commit with the related stale agent CLI button refresh change.
 
 ## Verification
 - `npm test -- tests/renderer-workflow.test.ts`

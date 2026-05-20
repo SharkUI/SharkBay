@@ -10,8 +10,9 @@ githubUserId: 3960864
 machine: 81ae10
 agent: Codex GPT-5.5
 createdAt: 2026-05-19T03:31:37Z
-updatedAt: 2026-05-19T03:35:32Z
+updatedAt: 2026-05-19T03:37:22Z
 completedAt: 2026-05-19T03:35:32Z
+commit: 6e9f2531
 ---
 
 ## Summary
@@ -43,4 +44,4 @@ Knowledge Site navigation now keeps docs subdirectories out of the left sidebar.
 ## Notes
 - Builds on the uncommitted Knowledge Site generator/test changes from L9V2XQ-u3960864-m81ae10.
 - The currently running `/Applications/SharkBay.app` still uses the old bundled generator and can overwrite `.sharkbay/site/` with the old template until the app is rebuilt/replaced and restarted.
-- No commit was produced.
+- Committed later in P8M4TY-u3960864-m81ae10.

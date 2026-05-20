@@ -10,8 +10,9 @@ githubUserId: 3960864
 machine: 81ae10
 agent: Codex GPT-5.5
 createdAt: 2026-05-17T12:52:45Z
-updatedAt: 2026-05-17T12:55:33Z
-completedAt: 2026-05-17T12:55:33Z
+updatedAt: 2026-05-17T12:59:17Z
+completedAt: 2026-05-17T12:59:17Z
+commit: 3d1fc863
 ---
 
 ## Summary
@@ -27,6 +28,8 @@ Fixed browser button service URL detection so streamed terminal output like Vite
 - Related team context reviewed: `3YGNE7-u3960864-m81ae10`, `K7S4N2-u3960864-m81ae10`.
 - Planned fix: accumulate short service-output buffers per terminal session before extracting URLs.
 - Added conservative URL matching so a trailing `http://localhost` fragment is not treated as a complete service URL before the port arrives.
+- Reopened after user reported the issue persists; next focus is ANSI style sequences embedded inside Vite URLs.
+- Changed terminal control sequence stripping to remove zero-width ANSI/OSC codes so styled URLs like `http://localhost:<bold>7777</bold>/` stay contiguous.
 
 ## Verification
 - `npm test -- tests/renderer-workflow.test.ts tests/browser-tabs.test.ts`

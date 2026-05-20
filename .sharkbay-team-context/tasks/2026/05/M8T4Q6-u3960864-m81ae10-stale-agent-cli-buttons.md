@@ -10,8 +10,9 @@ githubUserId: 3960864
 machine: 81ae10
 agent: Codex GPT-5.5
 createdAt: 2026-05-20T01:20:23Z
-updatedAt: 2026-05-20T01:21:51Z
+updatedAt: 2026-05-20T01:32:00Z
 completedAt: 2026-05-20T01:21:51Z
+commit: bcacc4f10c6a15a6fa5d160f98c57733db3b6b83
 ---
 
 ## Summary
@@ -25,6 +26,7 @@ Kept existing agent CLI shortcut buttons visible while project switches trigger 
 - Started from related context `N4P7KQ-u3960864-m81ae10`, which made local agent CLI listing force-refresh MachineProfile data to avoid stale packaged app detection.
 - Updating the renderer to keep last-known agent CLI buttons visible and replace them only after the background `listClis` call resolves.
 - Added a per-target renderer cache so switching back to a previously seen local/remote target can show that target's last-known CLI buttons immediately.
+- Preparing a combined commit with the related terminal activity indicator change.
 
 ## Verification
 - `npm test -- tests/core-agent-list.test.ts tests/renderer-workflow.test.ts`

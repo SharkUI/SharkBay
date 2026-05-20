@@ -10,8 +10,9 @@ githubUserId: 3960864
 machine: 81ae10
 agent: Codex GPT-5
 createdAt: 2026-05-17T15:11:50Z
-updatedAt: 2026-05-17T15:19:39Z
-completedAt: 2026-05-17T15:19:39Z
+updatedAt: 2026-05-18T03:27:51Z
+completedAt: 2026-05-18T03:27:51Z
+commit: b4dcec69a93c58a474c8bdbcbe76639f77636b90
 ---
 
 ## Summary
@@ -24,11 +25,11 @@ Implemented non-eager Teamwork installation and per-agent entry-file repair befo
 - src/renderer/types.ts
 - src/renderer/App.tsx
 - tests/teamwork-harness.test.ts
-- tests/terminal.test.ts
 - docs/teamwork.md
 - docs/development.md
 - docs/product.md
 - docs/architecture.md
+- README.md
 
 ## Work
 - Started task and confirmed the current adapter template and terminal launch path.
@@ -42,6 +43,7 @@ Implemented non-eager Teamwork installation and per-agent entry-file repair befo
 - `npm run typecheck`
 - `npm run test -- tests/teamwork-harness.test.ts tests/terminal.test.ts`
 - `npm run test`
+- `npm run build`
 
 ## Notes
 - User decided installation should only write `.sharkbay/` and `/.sharkbay/` exclude; entry files should be maintained only when the matching agent starts.
