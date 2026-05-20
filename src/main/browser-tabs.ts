@@ -55,7 +55,7 @@ export class BrowserManager extends EventEmitter<BrowserManagerEvents> {
 
     this.records.set(id, record);
     view.webContents.setWindowOpenHandler(({ url }) => {
-      void shell.openExternal(url);
+      shell.openExternal(url).catch(() => {/* ignore Launch Services errors */});
       return { action: "deny" };
     });
     view.webContents.on("page-title-updated", (_event, title) => {

@@ -186,6 +186,7 @@ export type ProjectProfile = {
   expiresAt?: string;
   name: string;
   displayPath: string;
+  hasTeamworkHarness: boolean;
   vcs: {
     type: "git" | "none" | "unknown";
     root: string | null;
@@ -564,6 +565,7 @@ export type TerminalCreateInput = {
   service?: { id: string; label: string; command: string };
   cols?: number;
   rows?: number;
+  hasTeamworkHarness?: boolean;
 };
 
 export type TerminalSession = {

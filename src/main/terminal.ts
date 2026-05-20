@@ -10,7 +10,7 @@ import { parseProjectUri } from "../core/project-uri.js";
 import { resolveProjectUri } from "./path-safety.js";
 import { createAskPassScript, sshArgsForRemoteMachine } from "./remote-machines.js";
 import { createDefaultSecretStore, type SecretStore } from "./secrets.js";
-import { prepareTeamworkAgentLaunch } from "./teamwork-harness.js";
+import { prepareTeamworkAgentLaunch, prepareRemoteAgentLaunch } from "./teamwork-harness.js";
 import type {
   IpcRuntimeLike,
   RemoteMachine,
@@ -93,9 +93,16 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
   async create(runtime: IpcRuntimeLike, input: TerminalCreateInput): Promise<TerminalSession> {
     const spec = await this.resolveLaunchSpec(runtime, input.cwdUri);
     let initialCommand = normalizeTerminalCommandLine(input.initialCommand);
-    if (!spec.isRemote && input.agentId && initialCommand && !input.service) {
-      const launch = await prepareTeamworkAgentLaunch(spec.projectRoot, input.agentId, initialCommand);
-      initialCommand = launch.initialCommand;
+    if (input.agentId && initialCommand && !input.service) {
+      if (spec.isRemote) {
+        if (input.hasTeamworkHarness) {
+          const launch = prepareRemoteAgentLaunch(input.agentId, initialCommand);
+          initialCommand = launch.initialCommand;
+        }
+      } else {
+        const launch = await prepareTeamworkAgentLaunch(spec.projectRoot, input.agentId, initialCommand);
+        initialCommand = launch.initialCommand;
+      }
     }
     const command = !spec.isRemote && input.service && initialCommand
       ? serviceTerminalCommand(spec.shell, initialCommand)

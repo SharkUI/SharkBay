@@ -176,6 +176,7 @@ export class LocalProvider extends EventEmitter implements ExecutionProvider {
     const parsed = parseProjectUri(projectUri);
     if (parsed.kind !== "local") throw new Error("Project URI is not local");
     const git = await this.readGitMetadata(runtime, projectUri);
+    const hasTeamworkHarness = await fs.access(path.join(parsed.path, ".sharkbay")).then(() => true).catch(() => false);
     return {
       projectUri,
       targetId: "local",
@@ -183,6 +184,7 @@ export class LocalProvider extends EventEmitter implements ExecutionProvider {
       detectedAt: new Date().toISOString(),
       name: path.basename(parsed.path),
       displayPath: parsed.path,
+      hasTeamworkHarness,
       vcs: {
         type: git.isGitRepository ? "git" : "none",
         root: git.gitRoot,

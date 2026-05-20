@@ -288,7 +288,12 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
 
   async createTerminal(runtime: IpcRuntimeLike, input: TerminalCreateInput): Promise<TerminalSession> {
     const provider = this.providers.providerForUri(input.cwdUri);
-    const session = await provider.createTerminal(runtime, input);
+    let enrichedInput = input;
+    if (input.agentId && input.initialCommand && !input.service && input.hasTeamworkHarness === undefined) {
+      const profile = await this.readProjectProfile(runtime, input.cwdUri).catch(() => null);
+      enrichedInput = { ...input, hasTeamworkHarness: profile?.hasTeamworkHarness ?? false };
+    }
+    const session = await provider.createTerminal(runtime, enrichedInput);
     this.terminalProviders.set(session.id, provider);
     return session;
   }

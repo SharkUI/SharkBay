@@ -54,12 +54,9 @@ export function createAgentMachineDetector(): MachineDetector {
       // Use the user's default login shell so PATH from ~/.zshrc, ~/.bashrc, nvm, etc. is loaded
       const wrappedScript = `$SHELL -l -c ${shellQuote(batchScript)} 2>/dev/null || bash -l -c ${shellQuote(batchScript)} 2>/dev/null || sh -l -c ${shellQuote(batchScript)}`;
       const batchResult = await ctx.run(wrappedScript, { timeoutMs: 10000 }).catch((err) => {
-        console.error("[agent-detector] batch which failed:", err instanceof Error ? err.message : err);
+        console.error("[agent-detector] detection failed:", err instanceof Error ? err.message : err);
         return null;
       });
-
-      console.log("[agent-detector] batch stdout:", JSON.stringify(batchResult?.stdout?.slice(0, 500) ?? null));
-      console.log("[agent-detector] batch stderr:", JSON.stringify(batchResult?.stderr?.slice(0, 300) ?? null));
 
       const foundPaths = new Map<string, string>();
       if (batchResult?.stdout) {
@@ -71,7 +68,11 @@ export function createAgentMachineDetector(): MachineDetector {
         }
       }
 
-      console.log("[agent-detector] found:", [...foundPaths.entries()].map(([k, v]) => `${k}=${v}`).join(", ") || "(none)");
+      if (foundPaths.size) {
+        console.log("[agent-detector]", [...foundPaths.keys()].join(", "));
+      } else if (batchResult?.stderr?.trim()) {
+        console.warn("[agent-detector] no agents found, stderr:", batchResult.stderr.trim().slice(0, 120));
+      }
 
       // Batch version detection for found agents in a single command
       const foundAgents = agentDefinitions.filter((agent) => foundPaths.has(agent.command));
