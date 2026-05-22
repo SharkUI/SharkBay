@@ -12,8 +12,9 @@ agent: Codex GPT-5
 sessionId: 019e4e03-2826-7453-a296-c1eb7e6a0af9
 branch: main
 createdAt: 2026-05-22T04:58:01Z
-updatedAt: 2026-05-22T05:06:04Z
-completedAt: 2026-05-22T05:06:04Z
+updatedAt: 2026-05-22T05:09:24Z
+completedAt: 2026-05-22T05:09:24Z
+commit: 4bcfafc2
 ---
 
 ## Summary
@@ -33,6 +34,8 @@ Changed local initial command startup so SharkBay Teamwork agent launches are ex
 - Reopened after user reported the duplicate launch command still appears during manual testing.
 - Changed local non-service initial commands to launch through shell `-lic` arguments instead of being written into the pty as typed input.
 - Extended regression coverage to assert the initial command executes without echoing the full command text.
+- Preparing a commit for the verified terminal startup fix.
+- Committed the terminal startup fix as `4bcfafc2`.
 
 ## Verification
 - `npm test -- tests/terminal.test.ts tests/teamwork-harness.test.ts`
