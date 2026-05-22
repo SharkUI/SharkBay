@@ -91,3 +91,18 @@ parentPort.on("message", async (event) => {
 
 const ready: CoreReadyMessage = { kind: "ready" };
 parentPort.postMessage(ready);
+
+// If the utility process is terminated out-of-band (SIGTERM from the parent
+// during quit, SIGINT/SIGHUP, crash recovery), close all pty sessions so the
+// shells we spawned don't orphan to launchd and accumulate as `(revoked)` fds
+// or stray zsh processes.
+let shuttingDown = false;
+function shutdownCore(): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  try { core.closeAllTerminalSessions(); } catch { /* best effort */ }
+}
+process.on("exit", shutdownCore);
+process.on("SIGTERM", () => { shutdownCore(); process.exit(0); });
+process.on("SIGINT", () => { shutdownCore(); process.exit(0); });
+process.on("SIGHUP", () => { shutdownCore(); process.exit(0); });
