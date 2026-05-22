@@ -820,7 +820,9 @@ function DashboardView({
   const [runningServiceProjectIds, setRunningServiceProjectIds] = useState<Set<string>>(() => new Set());
   const [terminalActivityByProjectId, setTerminalActivityByProjectId] = useState<Record<string, ProjectTerminalActivityState>>({});
   const [agentClis, setAgentClis] = useState<AgentCli[]>([]);
+  const [agentCliLoading, setAgentCliLoading] = useState(false);
   const [agentListVersion, setAgentListVersion] = useState(0);
+  const agentListVersionRef = useRef(0);
   const [agentStatusByProjectPath, setAgentStatusByProjectPath] = useState<AgentStatusByProjectPath>({});
   const [activeTerminalTabKind, setActiveTerminalTabKind] = useState<ActiveTerminalTabKind>(null);
   const agentClisByTargetRef = useRef<Record<string, AgentCli[]>>({});
@@ -900,14 +902,23 @@ function DashboardView({
     if (!listClis) return;
     const targetId = selectedCandidate?.providerId ?? "local";
     const cached = agentClisByTargetRef.current[targetId];
-    if (cached) setAgentClis(cached);
-    void listClis({ cwdUri: selectedCandidate?.uri })
+    if (cached) {
+      setAgentClis(cached);
+      setAgentCliLoading(false);
+    } else {
+      setAgentClis([]);
+      setAgentCliLoading(true);
+    }
+    const isManualRefresh = agentListVersion > agentListVersionRef.current;
+    agentListVersionRef.current = agentListVersion;
+    void listClis({ cwdUri: selectedCandidate?.uri, refresh: isManualRefresh || undefined })
       .then((clis) => {
         if (cancelled) return;
         agentClisByTargetRef.current[targetId] = clis;
         setAgentClis(clis);
       })
-      .catch((error) => { if (!cancelled) setToast({ tone: "error", message: asMessage(error) }); });
+      .catch((error) => { if (!cancelled) setToast({ tone: "error", message: asMessage(error) }); })
+      .finally(() => { if (!cancelled) setAgentCliLoading(false); });
     return () => { cancelled = true; };
   }, [bridgeAvailable, selectedCandidate?.providerId, selectedCandidate?.uri, setToast, agentListVersion]);
 
@@ -1001,6 +1012,7 @@ function DashboardView({
           ref={terminalPaneRef}
           appearanceTheme={appearanceTheme}
           agentClis={agentClis}
+          agentCliLoading={agentCliLoading}
           candidate={selectedCandidate}
           projectAliases={projectAliases}
           bridgeAvailable={bridgeAvailable}
@@ -1061,6 +1073,7 @@ function DashboardView({
 const TerminalPane = forwardRef<TerminalPaneHandle, {
   appearanceTheme: AppearanceTheme;
   agentClis: AgentCli[];
+  agentCliLoading: boolean;
   bridgeAvailable: boolean;
   candidate: ProjectCandidate | null;
   projectAliases: Record<string, string>;
@@ -1070,11 +1083,12 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   onAgentListRefreshRequested: () => void;
   onRunningServiceProjectIdsChange: (projectIds: Set<string>) => void;
   onTerminalActivityProjectStatesChange: (states: Record<string, ProjectTerminalActivityState>) => void;
-}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, projectAliases, isVisible, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onRunningServiceProjectIdsChange, onTerminalActivityProjectStatesChange }, ref) {
+}>(function TerminalPane({ appearanceTheme, agentClis, agentCliLoading, bridgeAvailable, candidate, projectAliases, isVisible, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onRunningServiceProjectIdsChange, onTerminalActivityProjectStatesChange }, ref) {
   const [spaces, setSpaces] = useState<Record<string, TerminalSpace>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [installAgentDialogOpen, setInstallAgentDialogOpen] = useState(false);
   const spacesRef = useRef<Record<string, TerminalSpace>>({});
+  const activeProjectIdRef = useRef<string | null>(null);
   const creatingProjects = useRef(new Set<string>());
   const quietTimers = useRef(new Map<string, ReturnType<typeof window.setTimeout>>());
   const focusRequestNonce = useRef(0);
@@ -1084,6 +1098,8 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const services = candidate?.services ?? [];
 
   useEffect(() => { spacesRef.current = spaces; }, [spaces]);
+  useEffect(() => { activeProjectIdRef.current = activeProjectId; }, [activeProjectId]);
+  useEffect(() => { setInstallAgentDialogOpen(false); }, [candidate?.id]);
   useEffect(() => () => { for (const timer of quietTimers.current.values()) window.clearTimeout(timer); quietTimers.current.clear(); }, []);
 
   useEffect(() => {
@@ -1146,7 +1162,11 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     if (existing?.tabs.length) return;
     if (creatingProjects.current.has(candidate.id)) return;
     creatingProjects.current.add(candidate.id);
-    void openProjectTab(candidate.id, candidate.uri, displayProjectName ?? candidate.name, candidate.displayPath, true).finally(() => { creatingProjects.current.delete(candidate.id); });
+    const delay = candidate.providerKind === "ssh" ? 1500 : 0;
+    const timer = window.setTimeout(() => {
+      void openProjectTab(candidate.id, candidate.uri, displayProjectName ?? candidate.name, candidate.displayPath, true).finally(() => { creatingProjects.current.delete(candidate.id); });
+    }, delay);
+    return () => { window.clearTimeout(timer); creatingProjects.current.delete(candidate.id); };
   }, [bridgeAvailable, candidate?.id, candidate?.uri, isVisible]);
 
   async function openCurrentProjectTab() {
@@ -1536,6 +1556,8 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                   <AgentCliIcon agent={agent} />
                 </button>
               ))}
+              {agentCliLoading && !agentClis.length ? <span className="agent-cli-loading" title="Detecting agents..."><LoadingSpinner /></span> : null}
+              {!agentCliLoading ? <button aria-label="Refresh agents" className="icon-button terminal-tab-add terminal-agent-refresh-button" disabled={agentCliLoading} title="Re-detect agent CLIs" type="button" onClick={onAgentListRefreshRequested}><RefreshIcon /></button> : null}
               <button aria-label="Install agent" className="icon-button terminal-tab-add terminal-agent-install-button" disabled={!candidate?.providerId} title="Install agent CLI" type="button" onClick={() => setInstallAgentDialogOpen(true)}>
                 <DownloadIcon />
               </button>
@@ -1575,6 +1597,8 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                   <AgentCliIcon agent={agent} />
                 </button>
               ))}
+              {agentCliLoading && !agentClis.length ? <span className="agent-cli-loading" title="Detecting agents..."><LoadingSpinner /></span> : null}
+              {!agentCliLoading ? <button aria-label="Refresh agents" className="icon-button terminal-tab-add terminal-agent-refresh-button" disabled={agentCliLoading} title="Re-detect agent CLIs" type="button" onClick={onAgentListRefreshRequested}><RefreshIcon /></button> : null}
               <button aria-label="Install agent" className="icon-button terminal-tab-add terminal-agent-install-button" disabled={!candidate?.providerId} title="Install agent CLI" type="button" onClick={() => setInstallAgentDialogOpen(true)}>
                 <DownloadIcon />
               </button>
@@ -4353,6 +4377,10 @@ function DownloadIcon() {
   return <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16"><path d="M12 3v12" /><path d="m6 11 6 6 6-6" /><path d="M5 21h14" /></svg>;
 }
 
+function LoadingSpinner() {
+  return <svg aria-hidden="true" className="loading-spinner" fill="none" height="14" viewBox="0 0 24 24" width="14"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" /><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeLinecap="round" strokeWidth="3" /></svg>;
+}
+
 function InstallAgentDialog({ targetId, targetLabel, installedAgentIds, onClose, onInstalled, setToast }: {
   targetId: string;
   targetLabel: string;
@@ -4373,7 +4401,9 @@ function InstallAgentDialog({ targetId, targetLabel, installedAgentIds, onClose,
     let cancelled = false;
     const list = getBridge().agents?.listInstallRecipes;
     if (!list) { setLoadError("Install recipes are not available."); return; }
-    list({ targetId })
+    setRecipes(null);
+    setLoadError(null);
+    list({ targetId, refresh: true })
       .then((items) => { if (!cancelled) setRecipes(items); })
       .catch((error) => { if (!cancelled) setLoadError(asMessage(error)); });
     return () => { cancelled = true; };
@@ -4396,6 +4426,7 @@ function InstallAgentDialog({ targetId, targetLabel, installedAgentIds, onClose,
 
   const installedSet = useMemo(() => new Set(installedAgentIds), [installedAgentIds]);
   const visibleRecipes = recipes?.filter((recipe) => !installedSet.has(recipe.toolId)) ?? null;
+  const noRecipesFromBackend = recipes !== null && recipes.length === 0;
   const selectedRecipe = recipes?.find((recipe) => recipe.id === selectedRecipeId) ?? null;
   const hasStreamedLogs = liveLogLines.length > 0;
   const displayLogs = hasStreamedLogs ? liveLogLines.join("\n") : result?.logs.join("\n") ?? "";
@@ -4441,7 +4472,9 @@ function InstallAgentDialog({ targetId, targetLabel, installedAgentIds, onClose,
             {loadError ? (
               <div className="inline-connection-result is-error" role="status">{loadError}</div>
             ) : !recipes ? (
-              <div className="install-agent-empty">Loading install recipes...</div>
+              <div className="install-agent-empty">Detecting available tools...</div>
+            ) : noRecipesFromBackend ? (
+              <div className="install-agent-empty">No install recipes match this target.</div>
             ) : !visibleRecipes?.length ? (
               <div className="install-agent-empty">All agents installed.</div>
             ) : (
@@ -4457,7 +4490,12 @@ function InstallAgentDialog({ targetId, targetLabel, installedAgentIds, onClose,
           </aside>
           <div className="install-agent-detail">
             {!recipes ? (
-              <div className="install-agent-empty">Preparing installer...</div>
+              <div className="install-agent-empty">Detecting target capabilities...</div>
+            ) : noRecipesFromBackend ? (
+              <div className="install-agent-complete">
+                <strong>No recipes available</strong>
+                <span>This target is missing prerequisites (e.g. npm or curl). Install a supported package manager on the target first.</span>
+              </div>
             ) : !visibleRecipes?.length ? (
               <div className="install-agent-complete">
                 <strong>All agents installed</strong>

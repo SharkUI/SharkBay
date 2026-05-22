@@ -162,7 +162,7 @@ const sharkBayApi = {
     }
   },
   agents: {
-    listClis: (input?: { cwdUri?: string }) => invoke<AgentCli[]>(channels.listAgentClis, input),
+    listClis: (input?: { cwdUri?: string; refresh?: boolean }) => invoke<AgentCli[]>(channels.listAgentClis, input),
     listInstallRecipes: (input: ListInstallRecipesInput) => invoke<InstallRecipe[]>(channels.listInstallRecipes, input),
     installTool: (input: InstallToolInput) => invoke<InstallToolResult>(channels.installTool, input),
     onStatus: (callback: (event: AgentProjectStatusEvent) => void) => {

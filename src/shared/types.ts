@@ -186,6 +186,7 @@ export type ProjectProfile = {
   expiresAt?: string;
   name: string;
   displayPath: string;
+  hasTeamworkHarness: boolean;
   vcs: {
     type: "git" | "none" | "unknown";
     root: string | null;
@@ -313,6 +314,7 @@ export type InstallToolInput = {
 export type ListInstallRecipesInput = {
   targetId: string;
   toolId?: string;
+  refresh?: boolean;
 };
 
 export type InstallToolResult = {
@@ -622,6 +624,7 @@ export type TerminalCreateInput = {
   service?: { id: string; label: string; command: string };
   cols?: number;
   rows?: number;
+  hasTeamworkHarness?: boolean;
 };
 
 export type TerminalSession = {

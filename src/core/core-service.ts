@@ -10,6 +10,9 @@ import type {
   CreateWorktreeResult,
   DiagnosticsSnapshot,
   GitBranchSummary,
+  GitDirtyFile,
+  GitEvent,
+  GitMetadata,
   ListGitBranchesInput,
   RemoveWorktreeInput,
   RemoveWorktreeResult,
@@ -108,9 +111,9 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
     return this.providers.providerForKind("local").scanProjects(runtime, input);
   }
 
-  async listAgentClis(runtime: IpcRuntimeLike, input?: { cwdUri?: string }): Promise<AgentCli[]> {
+  async listAgentClis(runtime: IpcRuntimeLike, input?: { cwdUri?: string; refresh?: boolean }): Promise<AgentCli[]> {
     const targetId = input?.cwdUri ? parseProjectUri(input.cwdUri).targetId : "local";
-    const profile = await this.readMachineProfile(runtime, targetId, targetId === "local" ? { refresh: true } : undefined);
+    const profile = await this.readMachineProfile(runtime, targetId, input?.refresh ? { refresh: true } : undefined);
     return profile.agents
       .filter((agent) => agent.available)
       .map((agent) => ({
@@ -191,7 +194,7 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
   }
 
   async listInstallRecipes(runtime: IpcRuntimeLike, input: ListInstallRecipesInput): Promise<InstallRecipe[]> {
-    const profile = await this.readMachineProfile(runtime, input.targetId);
+    const profile = await this.readMachineProfile(runtime, input.targetId, input.refresh ? { refresh: true } : undefined);
     return this.pluginHost.listInstallRecipes()
       .filter((recipe) => !input.toolId || recipe.toolId === input.toolId)
       .filter((recipe) => recipe.targetKinds.includes(profile.targetKind))
@@ -206,10 +209,11 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
   async getProjectDetail(runtime: IpcRuntimeLike, input: { projectUri: string }): Promise<ProjectDetail> {
     const provider = this.providers.providerForUri(input.projectUri);
     const parsed = parseProjectUri(input.projectUri);
+    const emptyGit: GitMetadata = { isGitRepository: false, gitRoot: null, currentBranch: null, defaultBranch: null, remoteOrigin: null, githubUrl: null, dirtyWorktree: null, isLinkedWorktree: null, worktreeBranch: null };
     const [gitMeta, gitHistory, gitDirtyFiles] = await Promise.all([
-      provider.readGitMetadata(runtime, input.projectUri),
-      provider.readGitHistory(runtime, input.projectUri),
-      provider.readGitDirtyFiles(runtime, input.projectUri),
+      provider.readGitMetadata(runtime, input.projectUri).catch(() => emptyGit),
+      provider.readGitHistory(runtime, input.projectUri).catch(() => [] as GitEvent[]),
+      provider.readGitDirtyFiles(runtime, input.projectUri).catch(() => [] as GitDirtyFile[]),
     ]);
 
     if (parsed.kind === "ssh") {
@@ -364,7 +368,12 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
 
   async createTerminal(runtime: IpcRuntimeLike, input: TerminalCreateInput): Promise<TerminalSession> {
     const provider = this.providers.providerForUri(input.cwdUri);
-    const session = await provider.createTerminal(runtime, input);
+    let enrichedInput = input;
+    if (input.agentId && input.initialCommand && !input.service && input.hasTeamworkHarness === undefined) {
+      const profile = await this.readProjectProfile(runtime, input.cwdUri).catch(() => null);
+      enrichedInput = { ...input, hasTeamworkHarness: profile?.hasTeamworkHarness ?? false };
+    }
+    const session = await provider.createTerminal(runtime, enrichedInput);
     this.terminalProviders.set(session.id, provider);
     return session;
   }

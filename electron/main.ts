@@ -108,7 +108,7 @@ function createMainWindow(): BrowserWindow {
   });
 
   window.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    shell.openExternal(url).catch(() => {/* ignore Launch Services errors */});
     return { action: "deny" };
   });
 

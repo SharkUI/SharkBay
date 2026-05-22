@@ -18,6 +18,13 @@ if (!parentPort) {
   throw new Error("core-host must be launched as an Electron utility process");
 }
 
+process.on("uncaughtException", (error) => {
+  console.error("[core-host] uncaughtException:", error?.message ?? error);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[core-host] unhandledRejection:", reason instanceof Error ? reason.message : reason);
+});
+
 const secretStore = createDefaultSecretStore();
 const core = new SharkBayCoreService([
   new LocalProvider(),

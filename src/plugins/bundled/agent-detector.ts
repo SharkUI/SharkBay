@@ -46,18 +46,67 @@ export function createAgentMachineDetector(): MachineDetector {
     label: "Agent CLI Detector",
     runOn: ["standard", "deep"],
     async run(ctx) {
-      const agents = await Promise.all(agentDefinitions.map(async (agent): Promise<ToolProfile> => {
-        const executablePath = await ctx.which(agent.command);
-        const version = executablePath ? await readVersion(ctx, executablePath) : null;
+      // Use login shell (-l) so that ~/.nvm, ~/.bashrc, ~/.zshrc PATH entries are loaded
+      const commands = agentDefinitions.map((agent) => agent.command);
+      const batchScript = commands
+        .map((cmd) => `printf '%s\\t%s\\n' '${cmd}' "$(command -v '${cmd}' 2>/dev/null || true)"`)
+        .join("; ");
+      // Use the user's default login shell so PATH from ~/.zshrc, ~/.bashrc, nvm, etc. is loaded
+      const wrappedScript = `$SHELL -l -c ${shellQuote(batchScript)} 2>/dev/null || bash -l -c ${shellQuote(batchScript)} 2>/dev/null || sh -l -c ${shellQuote(batchScript)}`;
+      const batchResult = await ctx.run(wrappedScript, { timeoutMs: 10000 }).catch((err) => {
+        console.error("[agent-detector] detection failed:", err instanceof Error ? err.message : err);
+        return null;
+      });
+
+      const foundPaths = new Map<string, string>();
+      if (batchResult?.stdout) {
+        for (const line of batchResult.stdout.split(/\r?\n/)) {
+          if (!line.trim()) continue;
+          const [command, ...rest] = line.split("\t");
+          const remotePath = rest.join("\t").trim();
+          if (command && remotePath) foundPaths.set(command, remotePath);
+        }
+      }
+
+      if (foundPaths.size) {
+        console.log("[agent-detector]", [...foundPaths.keys()].join(", "));
+      } else if (batchResult?.stderr?.trim()) {
+        console.warn("[agent-detector] no agents found, stderr:", batchResult.stderr.trim().slice(0, 120));
+      }
+
+      // Batch version detection for found agents in a single command
+      const foundAgents = agentDefinitions.filter((agent) => foundPaths.has(agent.command));
+      const versions = new Map<string, string>();
+      if (foundAgents.length) {
+        const versionScript = foundAgents
+          .map((agent) => {
+            const p = foundPaths.get(agent.command)!;
+            return `printf '%s\\t%s\\n' '${agent.command}' "$(${shellQuote(p)} --version 2>/dev/null | head -1 || true)"`;
+          })
+          .join("; ");
+        const wrappedVersionScript = `$SHELL -l -c ${shellQuote(versionScript)} 2>/dev/null || bash -l -c ${shellQuote(versionScript)} 2>/dev/null || sh -l -c ${shellQuote(versionScript)}`;
+        const versionResult = await ctx.run(wrappedVersionScript, { timeoutMs: 10000 }).catch(() => null);
+        if (versionResult?.stdout) {
+          for (const line of versionResult.stdout.split(/\r?\n/)) {
+            if (!line.trim()) continue;
+            const [command, ...rest] = line.split("\t");
+            const ver = rest.join("\t").trim();
+            if (command && ver) versions.set(command, ver);
+          }
+        }
+      }
+
+      const agents: ToolProfile[] = agentDefinitions.map((agent) => {
+        const executablePath = foundPaths.get(agent.command) || null;
         return {
           id: agent.id,
           command: agent.command,
           available: Boolean(executablePath),
           path: executablePath,
-          version,
+          version: versions.get(agent.command) || null,
           sourcePluginId: pluginId,
         };
-      }));
+      });
       return { agents };
     },
   };

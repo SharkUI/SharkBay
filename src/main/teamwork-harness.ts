@@ -489,6 +489,14 @@ export type TeamworkAgentLaunchResult = {
   skippedReason?: "not-installed" | "unsupported-agent";
 };
 
+export function prepareRemoteAgentLaunch(agentId: string, initialCommand: string): TeamworkAgentLaunchResult {
+  const bootstrapArgs = teamworkBootstrapArgs(agentId, TEAMWORK_BOOTSTRAP_PROMPT);
+  if (!bootstrapArgs) {
+    return { initialCommand, injected: false, skippedReason: "unsupported-agent" };
+  }
+  return { initialCommand: appendShellArgs(initialCommand, bootstrapArgs), injected: true };
+}
+
 export async function prepareTeamworkAgentLaunch(repoPath: string, agentId: string, initialCommand: string): Promise<TeamworkAgentLaunchResult> {
   const bootstrapArgs = teamworkBootstrapArgs(agentId, TEAMWORK_BOOTSTRAP_PROMPT);
   if (!bootstrapArgs) {

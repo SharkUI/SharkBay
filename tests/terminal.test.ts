@@ -302,7 +302,7 @@ describe("terminal cwd validation", () => {
       await expect(output).resolves.toContain("sharkbay-service-ok");
       await expect(exited).resolves.toBeUndefined();
     } finally {
-      manager.close({ sessionId: session.id });
+      try { manager.close({ sessionId: session.id }); } catch { /* session already cleaned up on natural exit */ }
     }
   });
 });

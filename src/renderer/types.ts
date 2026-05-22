@@ -61,6 +61,7 @@ export type InstallToolInput = {
 export type ListInstallRecipesInput = {
   targetId: string;
   toolId?: string;
+  refresh?: boolean;
 };
 
 export type InstallToolResult = {
@@ -692,7 +693,7 @@ export type SharkBayBridge = {
     onUpdate?: (callback: (event: BrowserUpdateEvent) => void) => () => void;
   };
   agents?: {
-    listClis?: (input?: { cwdUri?: string }) => Promise<AgentCli[]>;
+    listClis?: (input?: { cwdUri?: string; refresh?: boolean }) => Promise<AgentCli[]>;
     listInstallRecipes?: (input: ListInstallRecipesInput) => Promise<InstallRecipe[]>;
     installTool?: (input: InstallToolInput) => Promise<InstallToolResult>;
     onStatus?: (callback: (event: AgentProjectStatusEvent) => void) => () => void;

@@ -73,7 +73,7 @@ describe("CoreService agent listing", () => {
     await core.readMachineProfile(runtime, "local");
     claudeAvailable = true;
 
-    await expect(core.listAgentClis(runtime, { cwdUri: "local:/tmp/project" })).resolves.toEqual([
+    await expect(core.listAgentClis(runtime, { cwdUri: "local:/tmp/project", refresh: true })).resolves.toEqual([
       expect.objectContaining({ id: "codex", executablePath: "/usr/local/bin/codex" }),
       expect.objectContaining({ id: "claude", executablePath: "/Users/test/.local/bin/claude" }),
     ]);

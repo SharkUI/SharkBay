@@ -17,11 +17,24 @@ describe("Agent bundled detector", () => {
         updatedAt: "2026-05-16T00:00:00Z",
       },
       which: async (command) => command === "codex" ? "/opt/homebrew/bin/codex" : null,
-      run: async (command) => ({
-        stdout: command.includes("codex") ? "codex 1.2.3\n" : "",
-        stderr: "",
-        exitCode: 0,
-      }),
+      run: async (command) => {
+        if (command.includes("command -v")) {
+          const lines = [
+            "codex\t/opt/homebrew/bin/codex",
+            "claude\t",
+            "gemini\t",
+            "kiro\t",
+            "deepseek\t",
+            "qwen\t",
+            "opencode\t",
+          ].join("\n");
+          return { stdout: `${lines}\n`, stderr: "", exitCode: 0 };
+        }
+        if (command.includes("--version")) {
+          return { stdout: "codex\tcodex 1.2.3\n", stderr: "", exitCode: 0 };
+        }
+        return { stdout: "", stderr: "", exitCode: 0 };
+      },
       readTextFile: async () => null,
     };
 

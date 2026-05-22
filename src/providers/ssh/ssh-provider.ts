@@ -193,7 +193,11 @@ export class SshProvider extends EventEmitter implements ExecutionProvider {
   async readProjectProfile(runtime: IpcRuntimeLike, projectUri: string, _options?: ProfileReadOptions): Promise<ProjectProfile> {
     const parsed = parseProjectUri(projectUri);
     if (parsed.kind !== "ssh") throw new Error("Project URI is not SSH");
-    const git = await readRemoteGitMetadata(runtime, projectUri, { secretStore: this.secretStore, runner: this.runner });
+    const [git, harnessCheck] = await Promise.all([
+      readRemoteGitMetadata(runtime, projectUri, { secretStore: this.secretStore, runner: this.runner }),
+      this.runCommand(runtime, parsed.machineId, `test -d ${shellQuote(parsed.path + "/.sharkbay")} && echo yes || echo no`, { timeoutMs: 5000 }).catch(() => ({ stdout: "no", stderr: "", exitCode: 1 })),
+    ]);
+    const hasTeamworkHarness = harnessCheck.stdout.trim() === "yes";
     return {
       projectUri,
       targetId: parsed.machineId,
@@ -201,6 +205,7 @@ export class SshProvider extends EventEmitter implements ExecutionProvider {
       detectedAt: new Date().toISOString(),
       name: path.posix.basename(parsed.path) || parsed.machineId,
       displayPath: `${parsed.machineId}:${parsed.path}`,
+      hasTeamworkHarness,
       vcs: {
         type: git.isGitRepository ? "git" : "none",
         root: git.gitRoot,
