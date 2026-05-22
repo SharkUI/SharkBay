@@ -5,11 +5,13 @@ import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import {
   cleanLocalExcludeContent,
+  getHarnessUpdateStatus,
   installHarness,
   isHarnessInstalled,
   prepareTeamworkAgentLaunch,
   TEAMWORK_BOOTSTRAP_PROMPT,
   uninstallHarness,
+  updateHarnessFiles,
 } from "../src/main/teamwork-harness.js";
 import { makeTempRoot, writeJson, writeText } from "./helpers.js";
 
@@ -41,13 +43,117 @@ describe("teamwork harness install", () => {
     expect(protocol).toContain("Repo: SharkUI/AIBF");
     expect(protocol).not.toContain("- Agent:");
     expect(protocol).toContain("agent: # e.g. Codex GPT-5.5");
+    expect(protocol).toContain("sessionId: # omit this line if unavailable");
+    expect(protocol).toContain(".sharkbay/harness/agent-session-id.sh");
     expect(protocol).toContain("branch: main");
     expect(protocol).toContain("Set `branch` to the current Git branch when the task is created.");
     expect(protocol).toContain("Use the actual task executor identity in `agent`");
+    const sessionHelper = await fs.stat(path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"));
+    expect(sessionHelper.mode & 0o111).not.toBe(0);
+    const sessionHelperText = await fs.readFile(path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"), "utf8");
+    expect(sessionHelperText).toContain("*kiro*)");
+    expect(sessionHelperText).toContain("*deepseek*)");
+    expect(sessionHelperText).toContain(".deepseek/audit.log");
+    expect(sessionHelperText).toContain("*opencode*)");
+    expect(sessionHelperText).toContain(".local\\/share\\/opencode\\/log");
+    expect(sessionHelperText).toContain("*claude*|*gemini*|*qwen*)");
+    expect(sessionHelperText).toContain("codex|claude|deepseek|gemini|kiro|opencode|qwen");
     const exclude = await fs.readFile(path.join(repo, ".git", "info", "exclude"), "utf8");
     expect(exclude).toContain("/.sharkbay/");
     expect(exclude).not.toContain("/AGENTS.md");
     expect(exclude).not.toContain("/CLAUDE.md");
+  });
+
+  it("resolves DeepSeek session id from the audit log", async () => {
+    const root = await makeTempRoot("teamwork-deepseek-session");
+    const repo = await createRealGitRepoFixture(root);
+    const workspace = await fs.realpath(repo);
+    await installHarness(repo, harnessOptions);
+
+    const home = path.join(root, "home");
+    const sessionId = "5129eadb-161a-40de-8b6a-764d2176f724";
+    await writeText(path.join(home, ".deepseek", "audit.log"), [
+      '{"ts":"2026-05-21T14:34:59.403154+00:00","event":"tool.approval.auto_approve","details":{"tool_name":"exec_shell","session_id":"old-session","mode":"AGENT"}}',
+      `{"ts":"2026-05-21T14:35:06.441658+00:00","event":"tool.approval.auto_approve","details":{"tool_name":"exec_shell","approval_key":"shell:bash","session_id":"${sessionId}","mode":"AGENT"}}`,
+      "",
+    ].join("\n"));
+    await writeJson(path.join(home, ".deepseek", "sessions", `${sessionId}.json`), {
+      metadata: {
+        id: sessionId,
+        workspace,
+        updated_at: "2026-05-21T14:35:06Z",
+      },
+    });
+
+    const { stdout } = await execFileAsync("sh", [path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"), "deepseek"], {
+      cwd: workspace,
+      env: { ...process.env, HOME: home },
+    });
+
+    expect(stdout.trim()).toBe(sessionId);
+  });
+
+  it("resolves OpenCode session id from the active process logs", async () => {
+    const root = await makeTempRoot("teamwork-opencode-session");
+    const repo = await createRealGitRepoFixture(root);
+    const workspace = await fs.realpath(repo);
+    await installHarness(repo, harnessOptions);
+
+    const home = path.join(root, "home");
+    const logDir = path.join(home, ".local", "share", "opencode", "log");
+    const mainLog = path.join(logDir, "2026-05-21T152022.log");
+    const sessionLog = path.join(logDir, "2026-05-21T152023.log");
+    const sessionId = "ses_1b4e0115bffeHMF5TVmEhAbyhJ";
+    await writeText(mainLog, "INFO service=default args=[] process_role=main run_id=c21572ad opencode\n");
+    await writeText(sessionLog, [
+      `INFO service=session id=${sessionId} directory=${workspace} path= title=New session created`,
+      `INFO service=permission permission=bash pattern=.sharkbay/harness/agent-session-id.sh "OpenCode" evaluated`,
+      `INFO service=session.processor session.id=${sessionId} messageID=msg_123 process`,
+      "",
+    ].join("\n"));
+
+    const bin = path.join(root, "bin");
+    await writeText(path.join(bin, "ps"), [
+      "#!/bin/sh",
+      "case \"$2\" in",
+      "  command=) echo opencode ;;",
+      "  ppid=) echo 1 ;;",
+      "esac",
+      "",
+    ].join("\n"));
+    await writeText(path.join(bin, "lsof"), [
+      "#!/bin/sh",
+      `printf '%s\\n' 'opencode 48565 shark txt REG 1,2 1 ${mainLog}'`,
+      `printf '%s\\n' 'opencode 48565 shark txt REG 1,2 1 ${sessionLog}'`,
+      "",
+    ].join("\n"));
+    await writeText(path.join(bin, "opencode"), [
+      "#!/bin/sh",
+      "if [ \"$1\" = db ] && [ \"$2\" = path ]; then",
+      `  printf '%s\\n' '${path.join(home, ".local", "share", "opencode", "opencode.db")}'`,
+      "  exit 0",
+      "fi",
+      "cat <<'JSON'",
+      "[",
+      "  {",
+      `    "id": "${sessionId}",`,
+      `    "directory": "${workspace}",`,
+      "    \"path\": \"\"",
+      "  }",
+      "]",
+      "JSON",
+      "",
+    ].join("\n"));
+    await fs.chmod(path.join(bin, "ps"), 0o755);
+    await fs.chmod(path.join(bin, "lsof"), 0o755);
+    await fs.chmod(path.join(bin, "opencode"), 0o755);
+
+    const { stdout } = await execFileAsync("sh", [path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"), "opencode"], {
+      cwd: workspace,
+      env: { ...process.env, HOME: home, PATH: `${bin}${path.delimiter}${process.env.PATH}` },
+    });
+
+    expect(stdout.trim()).toBe(sessionId);
   });
 
   it("installs without touching existing user root instruction files", async () => {
@@ -70,6 +176,35 @@ describe("teamwork harness install", () => {
     await expect(installHarness(repo, harnessOptions)).rejects.toThrow(/requires a Git repository/);
     await expect(fs.stat(path.join(repo, ".git")).catch(() => null)).resolves.toBeNull();
     await expect(isHarnessInstalled(repo)).resolves.toBe(false);
+  });
+
+  it("reports harness drift and updates managed files only when requested", async () => {
+    const root = await makeTempRoot("teamwork-harness-update");
+    const repo = await createRealGitRepoFixture(root);
+    await installHarness(repo, harnessOptions);
+    const protocolPath = path.join(repo, ".sharkbay", "harness", "protocol.md");
+    const helperPath = path.join(repo, ".sharkbay", "harness", "agent-session-id.sh");
+    const originalProtocol = await fs.readFile(protocolPath, "utf8");
+    await writeText(protocolPath, `${originalProtocol}\n# local stale copy\n`);
+    await fs.rm(helperPath);
+
+    const staleStatus = await getHarnessUpdateStatus(repo);
+    expect(staleStatus).toEqual({
+      required: true,
+      files: [
+        { path: ".sharkbay/harness/protocol.md", reason: "changed" },
+        { path: ".sharkbay/harness/agent-session-id.sh", reason: "missing" },
+      ],
+    });
+
+    await expect(prepareTeamworkAgentLaunch(repo, "codex", "codex")).resolves.toMatchObject({ injected: true });
+    await expect(fs.readFile(protocolPath, "utf8")).resolves.toBe(`${originalProtocol}\n# local stale copy\n`);
+    await expect(fs.stat(helperPath).catch(() => null)).resolves.toBeNull();
+
+    await expect(updateHarnessFiles(repo)).resolves.toEqual({ required: false, files: [] });
+    await expect(fs.readFile(protocolPath, "utf8")).resolves.toBe(originalProtocol);
+    const helperStat = await fs.stat(helperPath);
+    expect(helperStat.mode & 0o111).not.toBe(0);
   });
 
   it("injects a Teamwork bootstrap prompt without creating agent entry files", async () => {
@@ -96,7 +231,10 @@ describe("teamwork harness install", () => {
     const result = await prepareTeamworkAgentLaunch(repo, "claude", "claude");
 
     expect(result.injected).toBe(true);
-    expect(result.initialCommand).toContain("claude 'I'\\''m working in SharkBay Teamwork mode");
+    const sessionMatch = result.initialCommand.match(/^SHARKBAY_SESSION_ID='([^']+)' claude '--session-id' '([^']+)'/);
+    expect(sessionMatch?.[1]).toBe(sessionMatch?.[2]);
+    expect(result.initialCommand).toContain("claude '--session-id'");
+    expect(result.initialCommand).toContain("'I'\\''m working in SharkBay Teamwork mode");
     await expect(fs.readFile(path.join(repo, "CLAUDE.md"), "utf8")).resolves.toBe("# Project Claude Rules\n\nKeep this text.\n");
   });
 
@@ -105,17 +243,25 @@ describe("teamwork harness install", () => {
     const repo = await createRealGitRepoFixture(root);
     await installHarness(repo, harnessOptions);
 
-    await expect(prepareTeamworkAgentLaunch(repo, "gemini", "gemini")).resolves.toMatchObject({
-      injected: true,
-      initialCommand: expect.stringContaining("gemini '-i' 'I'\\''m working in SharkBay Teamwork mode"),
-    });
-    await expect(prepareTeamworkAgentLaunch(repo, "qwen", "qwen")).resolves.toMatchObject({
-      injected: true,
-      initialCommand: expect.stringContaining("qwen '-i' 'I'\\''m working in SharkBay Teamwork mode"),
-    });
+    const geminiResult = await prepareTeamworkAgentLaunch(repo, "gemini", "gemini");
+    const geminiSessionMatch = geminiResult.initialCommand.match(/^SHARKBAY_SESSION_ID='([^']+)' gemini '--session-id' '([^']+)'/);
+    expect(geminiResult.injected).toBe(true);
+    expect(geminiSessionMatch?.[1]).toBe(geminiSessionMatch?.[2]);
+    expect(geminiResult.initialCommand).toContain("gemini '--session-id'");
+    expect(geminiResult.initialCommand).toContain("'-i' 'I'\\''m working in SharkBay Teamwork mode");
+    const qwenResult = await prepareTeamworkAgentLaunch(repo, "qwen", "qwen");
+    const qwenSessionMatch = qwenResult.initialCommand.match(/^SHARKBAY_SESSION_ID='([^']+)' qwen '--session-id' '([^']+)'/);
+    expect(qwenResult.injected).toBe(true);
+    expect(qwenSessionMatch?.[1]).toBe(qwenSessionMatch?.[2]);
+    expect(qwenResult.initialCommand).toContain("qwen '--session-id'");
+    expect(qwenResult.initialCommand).toContain("'-i' 'I'\\''m working in SharkBay Teamwork mode");
     await expect(prepareTeamworkAgentLaunch(repo, "kiro", "kiro-cli")).resolves.toMatchObject({
       injected: true,
       initialCommand: expect.stringContaining("kiro-cli 'chat' 'I'\\''m working in SharkBay Teamwork mode"),
+    });
+    await expect(prepareTeamworkAgentLaunch(repo, "deepseek", "deepseek")).resolves.toMatchObject({
+      injected: true,
+      initialCommand: expect.stringContaining("deepseek 'I'\\''m working in SharkBay Teamwork mode"),
     });
     await expect(prepareTeamworkAgentLaunch(repo, "opencode", "opencode")).resolves.toMatchObject({
       injected: true,
@@ -133,9 +279,9 @@ describe("teamwork harness install", () => {
       skippedReason: "not-installed",
     });
     await installHarness(repo, harnessOptions);
-    await expect(prepareTeamworkAgentLaunch(repo, "deepseek", "deepseek")).resolves.toMatchObject({
+    await expect(prepareTeamworkAgentLaunch(repo, "unknown-agent", "unknown-agent")).resolves.toMatchObject({
       injected: false,
-      initialCommand: "deepseek",
+      initialCommand: "unknown-agent",
       skippedReason: "unsupported-agent",
     });
   });

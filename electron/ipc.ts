@@ -87,7 +87,7 @@ import { readGitMetadata } from "../src/main/git.js";
 import { resolveRepoPath } from "../src/main/path-safety.js";
 import { testRemoteMachineConnection } from "../src/main/remote-machines.js";
 import { createDefaultSecretStore } from "../src/main/secrets.js";
-import { assertHarnessInstallable, checkRepoPermission, generateMachineId, getMachineId, installHarness, isHarnessInstalled, resolveGitHubIdentity, uninstallHarness } from "../src/main/teamwork-harness.js";
+import { assertHarnessInstallable, checkRepoPermission, generateMachineId, getHarnessUpdateStatus, getMachineId, installHarness, isHarnessInstalled, resolveGitHubIdentity, uninstallHarness, updateHarnessFiles } from "../src/main/teamwork-harness.js";
 import { deleteTeamContextBranch, hasLocalContextBranch, TeamworkSync } from "../src/main/teamwork-sync.js";
 import { scanTasks, watchTasks } from "../src/main/teamwork-tasks.js";
 import { generateKnowledgeSite, getKnowledgeSitePath } from "../src/main/knowledge-site.js";
@@ -150,9 +150,11 @@ async function getTeamworkStatus(repoPath: string): Promise<TeamworkStatus> {
   const installed = harnessInstalled && contextAvailable;
   const sync = await syncForStatus(repoPath, installed);
   const syncStatus = sync?.getStatus();
+  const harnessUpdate = harnessInstalled ? await getHarnessUpdateStatus(repoPath) : { required: false, files: [] };
   return {
     installed,
     harnessInstalled,
+    harnessUpdate,
     syncEnabled: syncStatus?.enabled ?? false,
     lastSyncAt: syncStatus?.lastSyncAt ?? null,
     pendingCount: syncStatus?.pendingCount ?? 0,
@@ -192,6 +194,7 @@ async function installTeamwork(repoPath: string): Promise<TeamworkStatus> {
   return {
     installed: true,
     harnessInstalled: true,
+    harnessUpdate: { required: false, files: [] },
     syncEnabled: syncStatus.enabled,
     lastSyncAt: syncStatus.lastSyncAt,
     pendingCount: syncStatus.pendingCount,
@@ -421,6 +424,9 @@ export async function registerIpcHandlers(
   handle<TerminalInput, TerminalSession | null>(channels.terminalInput, (payload) =>
     requireCore().call("inputTerminal", [payload])
   );
+  ipcMain.on(channels.terminalInput, (_event, payload: TerminalInput) => {
+    void requireCore().call("inputTerminal", [payload]);
+  });
   handle<TerminalResizeInput, TerminalSession | null>(channels.resizeTerminal, (payload) =>
     requireCore().call("resizeTerminal", [payload])
   );
@@ -492,6 +498,12 @@ export async function registerIpcHandlers(
       teamworkSyncInstances.set(repoPath, sync);
     }
     await sync.syncOnce();
+  });
+
+  handle<{ repoPath: string }, TeamworkStatus>(channels.teamworkUpdateHarness, async (payload) => {
+    const repoPath = await resolveTeamworkRepoPath(runtime, payload.repoPath);
+    await updateHarnessFiles(repoPath);
+    return getTeamworkStatus(repoPath);
   });
 
   handle<{ repoPath: string }, KnowledgeSiteResult>(channels.knowledgeSiteGenerate, async (payload) => {

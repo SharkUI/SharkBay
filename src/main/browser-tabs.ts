@@ -115,6 +115,12 @@ export class BrowserManager extends EventEmitter<BrowserManagerEvents> {
       if (!record.window.isDestroyed()) {
         record.window.setTopBrowserView(record.view);
       }
+      if (!record.window.isDestroyed() && !record.window.isFocused()) {
+        record.window.focus();
+      }
+      if (!record.view.webContents.isDestroyed()) {
+        record.view.webContents.focus();
+      }
     } else {
       this.detach(record);
     }

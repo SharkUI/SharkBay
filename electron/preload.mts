@@ -128,6 +128,7 @@ const sharkBayApi = {
   terminal: {
     create: (input: TerminalCreateInput) => invoke<TerminalSession>(channels.createTerminal, input),
     input: (input: TerminalInput) => invoke<TerminalSession>(channels.terminalInput, input),
+    inputFire: (input: TerminalInput) => { ipcRenderer.send(channels.terminalInput, input); },
     resize: (input: TerminalResizeInput) => invoke<TerminalSession>(channels.resizeTerminal, input),
     close: (input: TerminalCloseInput) => invoke<TerminalSession>(channels.closeTerminal, input),
     onData: (callback: (event: TerminalDataEvent) => void) => {
@@ -199,6 +200,7 @@ const sharkBayApi = {
     uninstall: (input: TeamworkUninstallInput) => invoke<TeamworkUninstallResult>(channels.teamworkUninstall, input),
     resolveIdentity: () => invoke<GitHubIdentity>(channels.teamworkResolveIdentity),
     syncNow: (input: { repoPath: string }) => invoke<void>(channels.teamworkSyncNow, input),
+    updateHarness: (input: { repoPath: string }) => invoke<TeamworkStatus>(channels.teamworkUpdateHarness, input),
     onTasksChanged: (callback: (event: TeamworkTasksChangedEvent) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: TeamworkTasksChangedEvent) => callback(payload);
       ipcRenderer.on(channels.teamworkTasksChanged, listener);

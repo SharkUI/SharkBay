@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SharkBay Settings UI Redesign</title>
+    <link rel="stylesheet" href="../../src/styles/app.css" />
+    <style>
+      body {
+        background: #f7f5ef;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .mock-shell {
+        width: 1000px;
+        height: 700px;
+        background: #f1efe8;
+        border: 1px solid #dcd7ca;
+        border-radius: 12px;
+        box-shadow: 0 16px 32px rgba(0,0,0,0.1);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .settings-surface {
+        padding: 32px;
+        flex: 1;
+        overflow: auto;
+      }
+      .settings-layout {
+        max-width: 1000px;
+        margin: 0 auto;
+        gap: 24px;
+      }
+      .settings-shell {
+        grid-template-columns: 240px minmax(0, 1fr);
+        gap: 32px;
+        align-items: start;
+      }
+      .settings-nav {
+        background: transparent;
+        border: none;
+        padding: 0;
+        gap: 24px;
+      }
+      .settings-nav-group {
+        gap: 6px;
+      }
+      .settings-nav-section-title {
+        padding: 0 12px;
+        margin-bottom: 8px;
+        color: #737d7f;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+      }
+      .settings-nav-item {
+        border-radius: 8px;
+        padding: 10px 12px;
+        min-height: 0;
+        color: #5a6b70;
+        transition: all 0.2s;
+      }
+      .settings-nav-item:hover {
+        background: rgba(45, 88, 96, 0.05);
+        color: #172528;
+      }
+      .settings-nav-item.is-selected {
+        background: #2d5860;
+        color: #ffffff;
+      }
+      .settings-nav-item.is-selected small {
+        color: rgba(255, 255, 255, 0.7);
+      }
+      .settings-content {
+        background: #ffffff;
+        border-radius: 12px;
+        padding: 32px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+        border: 1px solid #e2ddd3;
+        min-height: 500px;
+      }
+      .settings-section-heading {
+        margin-bottom: 24px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid #f0ece3;
+      }
+      .settings-section-heading h4 {
+        font-size: 20px;
+      }
+      
+      /* Refined Cards */
+      .workflow-panel {
+        background: transparent;
+        border: none;
+        padding: 0;
+        gap: 24px;
+      }
+      .root-list {
+        background: #faf9f6;
+        border: 1px solid #e8e4db;
+        border-radius: 8px;
+      }
+      .root-row {
+        padding: 12px 16px;
+        border-bottom: 1px solid #e8e4db;
+      }
+      .root-row:last-child {
+        border-bottom: none;
+      }
+      
+      /* Remote Machines Refinement */
+      .remote-machine-card {
+        border: 1px solid #e2ddd3;
+        border-radius: 8px;
+        padding: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #faf9f6;
+      }
+      .remote-machine-info {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .remote-machine-title {
+        font-weight: 600;
+        font-size: 15px;
+        color: #243033;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .remote-machine-meta {
+        font-size: 13px;
+        color: #697477;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="mock-shell">
+      <div class="view-surface settings-surface">
+        <div class="settings-layout">
+          <div class="detail-header settings-header">
+            <div>
+              <h3 style="font-size: 24px; margin-bottom: 4px;">Settings</h3>
+              <div class="path-line">Manage your environment and preferences</div>
+            </div>
+          </div>
+
+          <div class="settings-shell">
+            <aside class="settings-nav">
+              <div class="settings-nav-group">
+                <div class="settings-nav-section-title">Environment</div>
+                <button class="settings-nav-item is-selected">
+                  <span>Local Workspace</span>
+                  <small>Projects & Status</small>
+                </button>
+                <button class="settings-nav-item">
+                  <span>Remote Hosts</span>
+                  <small>SSH & Connections</small>
+                </button>
+              </div>
+
+              <div class="settings-nav-group" style="margin-top: 16px;">
+                <div class="settings-nav-section-title">System</div>
+                <button class="settings-nav-item">
+                  <span>Extensions</span>
+                  <small>Installed plugins</small>
+                </button>
+                <button class="settings-nav-item">
+                  <span>Appearance</span>
+                  <small>System theme</small>
+                </button>
+                <button class="settings-nav-item">
+                  <span>Diagnostics</span>
+                  <small>Health & Performance</small>
+                </button>
+              </div>
+            </aside>
+
+            <section class="settings-content">
+              <div class="settings-section-heading">
+                <h4>Local Workspace</h4>
+                <span>Manage directories SharkBay has access to</span>
+              </div>
+
+              <section class="workflow-panel">
+                <div class="workflow-copy" style="margin-bottom: 16px;">
+                  <h3 style="font-size: 15px; color: #364448; margin-bottom: 4px;">Configured Projects</h3>
+                  <p style="color: #697477; font-size: 13px;">SharkBay agents can only operate within these designated workspaces.</p>
+                </div>
+                
+                <div class="root-list">
+                  <div class="root-row">
+                    <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#697477" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                      <span class="truncate" style="font-weight: 500; color: #243033;">/Users/shark/Projects/SharkBay</span>
+                    </div>
+                    <span class="machine-tag">Local</span>
+                    <button class="button secondary compact">Remove</button>
+                  </div>
+                  <div class="root-row">
+                    <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#697477" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                      <span class="truncate" style="font-weight: 500; color: #243033;">/var/www/html/api</span>
+                    </div>
+                    <span class="machine-tag">Remote: GPU Worker</span>
+                    <button class="button secondary compact">Remove</button>
+                  </div>
+                </div>
+                
+                <button class="button compact" style="align-self: flex-start; margin-top: 8px;">+ Add Project</button>
+              </section>
+
+              <section class="workflow-panel" style="margin-top: 48px;">
+                <div class="workflow-copy" style="margin-bottom: 16px;">
+                  <h3 style="font-size: 15px; color: #364448; margin-bottom: 4px;">System Health</h3>
+                </div>
+                <div class="settings-facts-grid" style="grid-template-columns: repeat(2, 1fr);">
+                  <div class="fact"><span>Status</span><strong style="color: #2e6b52;">Healthy</strong></div>
+                  <div class="fact"><span>Scanned Projects</span><strong>2 Active</strong></div>
+                </div>
+              </section>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

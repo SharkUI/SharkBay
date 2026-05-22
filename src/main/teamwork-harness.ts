@@ -1,8 +1,8 @@
-import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { resolveCommandPath } from "./command-path.js";
 
 const execFileAsync = promisify(execFile);
@@ -15,6 +15,149 @@ const LEGACY_EXCLUDE_ENTRIES = [] as string[];
 const EXCLUDE_REMOVAL_ENTRIES = new Set([...EXCLUDE_ENTRIES, ...LEGACY_EXCLUDE_ENTRIES]);
 const EXCLUDE_BACKUP_FILE = "git-info-exclude.backup";
 const EXCLUDE_MISSING_MARKER = "git-info-exclude.missing";
+const AGENT_SESSION_ID_SCRIPT = [
+  "#!/bin/sh",
+  "set -eu",
+  "",
+  "agent=\"$(printf '%s' \"${1:-}\" | tr '[:upper:]' '[:lower:]')\"",
+  "",
+  "case \"$agent\" in",
+  "  *kiro*)",
+  "    pid=\"$PPID\"",
+  "    kiro_pid=\"\"",
+  "    while [ -n \"$pid\" ] && [ \"$pid\" != \"1\" ]; do",
+  "      cmd=\"$(ps -o command= -p \"$pid\" 2>/dev/null || true)\"",
+  "      case \"$cmd\" in",
+  "        *kiro-cli*|*kiro_cli*|*Kiro\\ CLI*) kiro_pid=\"$pid\"; break ;;",
+  "      esac",
+  "      pid=\"$(ps -o ppid= -p \"$pid\" 2>/dev/null | tr -d ' ' || true)\"",
+  "    done",
+  "    if [ -z \"$kiro_pid\" ]; then",
+  "      echo \"kiro process not found\" >&2",
+  "      exit 1",
+  "    fi",
+  "    for lock in \"$HOME\"/.kiro/sessions/cli/*.lock; do",
+  "      [ -f \"$lock\" ] || continue",
+  "      lock_pid=\"$(sed -n 's/.*\"pid\":\\([0-9][0-9]*\\).*/\\1/p' \"$lock\")\"",
+  "      [ \"$lock_pid\" = \"$kiro_pid\" ] || continue",
+  "      session_id=\"$(basename \"$lock\" .lock)\"",
+  "      meta=\"$HOME/.kiro/sessions/cli/$session_id.json\"",
+  "      cwd=\"$(sed -n 's/.*\"cwd\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p' \"$meta\" 2>/dev/null)\"",
+  "      if [ \"$cwd\" = \"$PWD\" ]; then",
+  "        printf '%s\\n' \"$session_id\"",
+  "        exit 0",
+  "      fi",
+  "    done",
+  "    echo \"kiro session id not found\" >&2",
+  "    exit 1",
+  "    ;;",
+  "  *deepseek*)",
+  "    audit=\"$HOME/.deepseek/audit.log\"",
+  "    if [ ! -f \"$audit\" ]; then",
+  "      echo \"deepseek audit log not found\" >&2",
+  "      exit 1",
+  "    fi",
+  "    latest_event=\"$(",
+  "      tail -n 100 \"$audit\" |",
+  "        awk '/\"session_id\"[[:space:]]*:/ { line=$0 } END { if (line) print line }'",
+  "    )\"",
+  "    session_id=\"$(printf '%s\\n' \"$latest_event\" | sed -n 's/.*\"session_id\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p')\"",
+  "    if [ -z \"$session_id\" ]; then",
+  "      echo \"deepseek session id not found\" >&2",
+  "      exit 1",
+  "    fi",
+  "    meta=\"$HOME/.deepseek/sessions/$session_id.json\"",
+  "    if [ ! -f \"$meta\" ]; then",
+  "      echo \"deepseek session metadata not found\" >&2",
+  "      exit 1",
+  "    fi",
+  "    workspace=\"$(sed -n 's/.*\"workspace\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p' \"$meta\" 2>/dev/null | head -n 1)\"",
+  "    if [ \"$workspace\" != \"$PWD\" ]; then",
+  "      echo \"deepseek session workspace mismatch\" >&2",
+  "      exit 1",
+  "    fi",
+  "    printf '%s\\n' \"$session_id\"",
+  "    exit 0",
+  "    ;;",
+  "  *opencode*)",
+  "    pid=\"$PPID\"",
+  "    opencode_pid=\"\"",
+  "    while [ -n \"$pid\" ] && [ \"$pid\" != \"1\" ]; do",
+  "      cmd=\"$(ps -o command= -p \"$pid\" 2>/dev/null || true)\"",
+  "      case \"$cmd\" in",
+  "        *opencode*) opencode_pid=\"$pid\"; break ;;",
+  "      esac",
+  "      pid=\"$(ps -o ppid= -p \"$pid\" 2>/dev/null | tr -d ' ' || true)\"",
+  "    done",
+  "    if [ -z \"$opencode_pid\" ]; then",
+  "      echo \"opencode process not found\" >&2",
+  "      exit 1",
+  "    fi",
+  "    log_files=\"$(",
+  "      lsof -p \"$opencode_pid\" 2>/dev/null |",
+  "        awk '/\\/\\.local\\/share\\/opencode\\/log\\/.*\\.log$/ {print $NF}' |",
+  "        sort -u",
+  "    )\"",
+  "    if [ -z \"$log_files\" ]; then",
+  "      echo \"opencode log not found\" >&2",
+  "      exit 1",
+  "    fi",
+  "    for log in $log_files; do",
+  "      [ -f \"$log\" ] || continue",
+  "      session_id=\"$(",
+  "        tail -n 1000 \"$log\" |",
+  "          sed -n -e 's/.*session\\.id=\\(ses_[^[:space:]]*\\).*/\\1/p' -e 's/.*service=session id=\\(ses_[^[:space:]]*\\).*/\\1/p' |",
+  "          tail -n 1",
+  "      )\"",
+  "      [ -n \"$session_id\" ] || continue",
+  "      db_row=\"$(opencode db \"select id, directory, path from session where id = '$session_id' limit 1\" --format json 2>/dev/null || true)\"",
+  "      directory=\"$(printf '%s\\n' \"$db_row\" | sed -n 's/.*\"directory\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p' | head -n 1)\"",
+  "      path_value=\"$(printf '%s\\n' \"$db_row\" | sed -n 's/.*\"path\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p' | head -n 1)\"",
+  "      if [ \"$directory\" = \"$PWD\" ] || [ \"$path_value\" = \"$PWD\" ]; then",
+  "        printf '%s\\n' \"$session_id\"",
+  "        exit 0",
+  "      fi",
+  "    done",
+  "    echo \"opencode session id not found\" >&2",
+  "    exit 1",
+  "    ;;",
+  "  *claude*|*gemini*|*qwen*)",
+  "    if [ -z \"${SHARKBAY_SESSION_ID:-}\" ]; then",
+  "      echo \"SHARKBAY_SESSION_ID not set\" >&2",
+  "      exit 1",
+  "    fi",
+  "    printf '%s\\n' \"$SHARKBAY_SESSION_ID\"",
+  "    exit 0",
+  "    ;;",
+  "  *codex*) ;;",
+  "  *)",
+  "    echo \"usage: $0 codex|claude|deepseek|gemini|kiro|opencode|qwen\" >&2",
+  "    exit 64",
+  "    ;;",
+  "esac",
+  "",
+  "transcript=\"$(",
+  "  lsof -p \"$PPID\" 2>/dev/null |",
+  "    awk '/\\/\\.codex\\/sessions\\/.*\\.jsonl$/ {print $NF; exit}'",
+  ")\"",
+  "",
+  "if [ -z \"$transcript\" ]; then",
+  "  echo \"codex session transcript not found\" >&2",
+  "  exit 1",
+  "fi",
+  "",
+  "session_id=\"$(",
+  "  head -n 1 \"$transcript\" |",
+  "    sed -n 's/.*\"payload\":{\"id\":\"\\([^\"]*\\)\".*/\\1/p'",
+  ")\"",
+  "",
+  "if [ -z \"$session_id\" ]; then",
+  "  echo \"codex session id not found\" >&2",
+  "  exit 1",
+  "fi",
+  "",
+  "printf '%s\\n' \"$session_id\"",
+].join("\n") + "\n";
 export const TEAMWORK_BOOTSTRAP_PROMPT = [
   "I'm working in SharkBay Teamwork mode for this project.",
   "Please read `.sharkbay/harness/protocol.md` first and follow it for the rest of this session.",
@@ -30,6 +173,30 @@ export type GitHubIdentity = {
   login: string;
   id: number;
   avatarUrl: string;
+};
+
+type ProtocolOptions = {
+  githubLogin: string;
+  githubUserId: number;
+  machineId: string;
+  agent: string;
+  repo?: string;
+};
+
+type ManagedHarnessFile = {
+  path: string;
+  content: string;
+  executable?: boolean;
+};
+
+export type TeamworkHarnessFileIssue = {
+  path: string;
+  reason: "missing" | "changed";
+};
+
+export type TeamworkHarnessUpdateStatus = {
+  required: boolean;
+  files: TeamworkHarnessFileIssue[];
 };
 
 export async function resolveGitHubIdentity(): Promise<GitHubIdentity> {
@@ -56,25 +223,57 @@ export function generateMachineId(): string {
   return randomBytes(3).toString("hex");
 }
 
+function managedHarnessFiles(options: ProtocolOptions): ManagedHarnessFile[] {
+  return [
+    {
+      path: ".sharkbay/harness/protocol.md",
+      content: generateProtocol(options),
+    },
+    {
+      path: ".sharkbay/harness/agent-session-id.sh",
+      content: AGENT_SESSION_ID_SCRIPT,
+      executable: true,
+    },
+  ];
+}
+
+async function writeManagedHarnessFiles(repoPath: string, options: ProtocolOptions): Promise<void> {
+  const sbDir = join(repoPath, ".sharkbay");
+  const harnessDir = join(sbDir, "harness");
+
+  await mkdir(harnessDir, { recursive: true });
+  await mkdir(join(sbDir, "tasks"), { recursive: true });
+  await mkdir(join(sbDir, "team-context"), { recursive: true });
+
+  await writeFile(join(sbDir, "machine-id"), options.machineId, "utf-8");
+  for (const file of managedHarnessFiles(options)) {
+    await writeFile(join(repoPath, file.path), file.content, "utf-8");
+    if (file.executable) await chmod(join(repoPath, file.path), 0o755);
+  }
+}
+
+export async function getHarnessUpdateStatus(repoPath: string): Promise<TeamworkHarnessUpdateStatus> {
+  if (!await hasSharkbayHarnessDir(repoPath)) return { required: false, files: [] };
+  const options = await resolveProtocolOptions(repoPath, "", { resolveIdentity: false, generateMachineId: false });
+  return compareManagedHarnessFiles(repoPath, options);
+}
+
+export async function updateHarnessFiles(repoPath: string): Promise<TeamworkHarnessUpdateStatus> {
+  await assertHarnessInstallable(repoPath);
+  const options = await resolveProtocolOptions(repoPath, "", { resolveIdentity: true, generateMachineId: true });
+  await writeManagedHarnessFiles(repoPath, options);
+  await ensureLocalExclude(repoPath);
+  return compareManagedHarnessFiles(repoPath, options);
+}
+
 export async function installHarness(
   repoPath: string,
-  options: { githubLogin: string; githubUserId: number; machineId: string; agent: string; repo?: string },
+  options: ProtocolOptions,
 ): Promise<void> {
   await assertHarnessInstallable(repoPath);
 
-  const sbDir = join(repoPath, ".sharkbay");
-  const harnessDir = join(sbDir, "harness");
-  const tasksDir = join(sbDir, "tasks");
-  const teamContextDir = join(sbDir, "team-context");
-
-  await mkdir(harnessDir, { recursive: true });
-  await mkdir(tasksDir, { recursive: true });
-  await mkdir(teamContextDir, { recursive: true });
-
-  await writeFile(join(sbDir, "machine-id"), options.machineId, "utf-8");
-  await writeFile(join(harnessDir, "protocol.md"), generateProtocol(options), "utf-8");
-
-  await backupLocalExclude(repoPath, harnessDir);
+  await writeManagedHarnessFiles(repoPath, options);
+  await backupLocalExclude(repoPath, join(repoPath, ".sharkbay", "harness"));
   await ensureLocalExclude(repoPath);
 }
 
@@ -234,6 +433,33 @@ export function cleanLocalExcludeContent(content: string): { content: string; re
   };
 }
 
+async function compareManagedHarnessFiles(repoPath: string, options: ProtocolOptions): Promise<TeamworkHarnessUpdateStatus> {
+  const files: TeamworkHarnessFileIssue[] = [];
+  for (const file of managedHarnessFiles(options)) {
+    const filePath = join(repoPath, file.path);
+    let current: string;
+    try {
+      current = await readFile(filePath, "utf-8");
+    } catch {
+      files.push({ path: file.path, reason: "missing" });
+      continue;
+    }
+
+    let changed = current !== file.content;
+    if (!changed && file.executable) {
+      try {
+        const fileStat = await stat(filePath);
+        changed = (fileStat.mode & 0o111) === 0;
+      } catch {
+        changed = true;
+      }
+    }
+    if (changed) files.push({ path: file.path, reason: "changed" });
+  }
+
+  return { required: files.length > 0, files };
+}
+
 export async function ensureLocalExclude(repoPath: string): Promise<void> {
   const excludePath = join(repoPath, ".git", "info", "exclude");
   await mkdir(join(repoPath, ".git", "info"), { recursive: true });
@@ -273,9 +499,7 @@ export async function prepareTeamworkAgentLaunch(repoPath: string, agentId: stri
     return { initialCommand, injected: false, skippedReason: "not-installed" };
   }
 
-  const protocolOptions = await resolveProtocolOptions(harnessRoot, agentId);
-  await ensureProtocolFiles(harnessRoot, protocolOptions);
-  return { initialCommand: appendShellArgs(initialCommand, bootstrapArgs), injected: true };
+  return { initialCommand: appendShellArgs(withLaunchSessionId(agentId, initialCommand), bootstrapArgs), injected: true };
 }
 
 async function hasSharkbayHarnessDir(repoPath: string): Promise<boolean> {
@@ -301,11 +525,18 @@ async function resolveHarnessRoot(repoPath: string): Promise<string> {
 
 function teamworkBootstrapArgs(agentId: string, prompt: string): string[] | null {
   const normalized = agentId.trim().toLowerCase();
-  if (normalized === "codex" || normalized === "claude") return [prompt];
+  if (normalized === "codex" || normalized === "claude" || normalized === "deepseek") return [prompt];
   if (normalized === "gemini" || normalized === "qwen") return ["-i", prompt];
   if (normalized === "kiro") return ["chat", prompt];
   if (normalized === "opencode") return ["--prompt", prompt];
   return null;
+}
+
+function withLaunchSessionId(agentId: string, command: string): string {
+  const normalized = agentId.trim().toLowerCase();
+  if (normalized !== "claude" && normalized !== "gemini" && normalized !== "qwen") return command;
+  const sessionId = randomUUID();
+  return `SHARKBAY_SESSION_ID=${shellQuote(sessionId)} ${appendShellArgs(command, ["--session-id", sessionId])}`;
 }
 
 function appendShellArgs(command: string, args: string[]): string {
@@ -317,11 +548,18 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
-async function resolveProtocolOptions(repoPath: string, agentId: string): Promise<{ githubLogin: string; githubUserId: number; machineId: string; agent: string; repo?: string }> {
+async function resolveProtocolOptions(
+  repoPath: string,
+  agentId: string,
+  options: { resolveIdentity?: boolean; generateMachineId?: boolean } = {},
+): Promise<ProtocolOptions> {
   const existing = await readExistingProtocolOptions(repoPath);
-  const machineId = await getMachineId(repoPath) ?? existing.machineId ?? generateMachineId();
+  const shouldResolveIdentity = options.resolveIdentity ?? true;
+  const machineId = await getMachineId(repoPath)
+    ?? existing.machineId
+    ?? (options.generateMachineId === false ? "unknown" : generateMachineId());
   let identity: GitHubIdentity | null = null;
-  if (!existing.githubLogin || !existing.githubUserId) {
+  if (shouldResolveIdentity && (!existing.githubLogin || !existing.githubUserId)) {
     try {
       identity = await resolveGitHubIdentity();
     } catch {
@@ -357,20 +595,6 @@ function readProtocolField(content: string, field: string): string | null {
   const escaped = field.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const match = content.match(new RegExp(`^- ${escaped}:\\s*(.*)$`, "m"));
   return match?.[1]?.trim() || null;
-}
-
-async function ensureProtocolFiles(
-  repoPath: string,
-  options: { githubLogin: string; githubUserId: number; machineId: string; agent: string; repo?: string },
-): Promise<void> {
-  const sbDir = join(repoPath, ".sharkbay");
-  const harnessDir = join(sbDir, "harness");
-  await mkdir(harnessDir, { recursive: true });
-  await mkdir(join(sbDir, "tasks"), { recursive: true });
-  await mkdir(join(sbDir, "team-context"), { recursive: true });
-  await writeFile(join(sbDir, "machine-id"), options.machineId, "utf-8");
-  await writeFile(join(harnessDir, "protocol.md"), generateProtocol(options), "utf-8");
-  await ensureLocalExclude(repoPath);
 }
 
 async function resolveRepoName(repoPath: string): Promise<string> {
@@ -496,6 +720,7 @@ actor: ${opts.githubLogin}
 githubUserId: ${opts.githubUserId}
 machine: ${opts.machineId}
 agent: # e.g. Codex GPT-5.5
+sessionId: # omit this line if unavailable
 branch: main
 createdAt: 2026-05-15T10:30:00Z
 updatedAt: 2026-05-15T10:30:00Z
@@ -506,6 +731,10 @@ Use the actual task executor identity in \`agent\`, for example:
 - Kiro Claude 4.6
 - Claude Code Sonnet 4.5
 - Gemini CLI 2.5 Pro
+
+When creating a task, run \`.sharkbay/harness/agent-session-id.sh "<agent>"\`.
+If it prints a session id, add \`sessionId: <id>\` immediately after
+\`agent\`. If it fails or prints no id, omit the \`sessionId\` line.
 
 Set \`branch\` to the current Git branch when the task is created. Keep that
 original task-creation branch even if later work switches branches.

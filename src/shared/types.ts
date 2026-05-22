@@ -809,6 +809,7 @@ export type TaskViewModel = {
 export type TeamworkStatus = {
   installed: boolean;
   harnessInstalled: boolean;
+  harnessUpdate: TeamworkHarnessUpdateStatus;
   syncEnabled: boolean;
   lastSyncAt: string | null;
   pendingCount: number;
@@ -817,6 +818,16 @@ export type TeamworkStatus = {
   branch?: string;
   githubLogin?: string;
   permission?: string;
+};
+
+export type TeamworkHarnessFileIssue = {
+  path: string;
+  reason: "missing" | "changed";
+};
+
+export type TeamworkHarnessUpdateStatus = {
+  required: boolean;
+  files: TeamworkHarnessFileIssue[];
 };
 
 export type GitHubIdentity = {

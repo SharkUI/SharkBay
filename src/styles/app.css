@@ -1640,6 +1640,8 @@ button.project-file-toggle:focus-visible {
 .teamwork-action-card { padding: 11px 12px 12px; }
 .teamwork-action-card .summary-text { margin-top: 3px; }
 .teamwork-action-card .button-row { justify-content: flex-end; }
+.teamwork-harness-card { border-color: rgba(186, 115, 25, 0.42); background: rgba(255, 248, 235, 0.78); }
+.teamwork-harness-files { color: #7a5a28; overflow-wrap: anywhere; }
 .task-list-direct .queue-item { grid-template-columns: 34px minmax(0, 1fr) auto; min-height: 46px; padding: 9px 10px; }
 .task-list-direct .phase-pill,
 .task-detail-header .phase-pill {

@@ -598,6 +598,7 @@ export type GitHubIdentity = {
 export type TeamworkStatus = {
   installed: boolean;
   harnessInstalled: boolean;
+  harnessUpdate: TeamworkHarnessUpdateStatus;
   syncEnabled: boolean;
   lastSyncAt: string | null;
   pendingCount: number;
@@ -606,6 +607,16 @@ export type TeamworkStatus = {
   branch?: string;
   githubLogin?: string;
   permission?: string;
+};
+
+export type TeamworkHarnessFileIssue = {
+  path: string;
+  reason: "missing" | "changed";
+};
+
+export type TeamworkHarnessUpdateStatus = {
+  required: boolean;
+  files: TeamworkHarnessFileIssue[];
 };
 
 export type TeamworkInstallInput = {
@@ -663,6 +674,7 @@ export type SharkBayBridge = {
   terminal?: {
     create?: (input: TerminalCreateInput) => Promise<TerminalSession>;
     input?: (input: TerminalInput) => Promise<TerminalSession>;
+    inputFire?: (input: TerminalInput) => void;
     resize?: (input: TerminalResizeInput) => Promise<TerminalSession>;
     close?: (input: TerminalCloseInput) => Promise<TerminalSession>;
     onData?: (callback: (event: TerminalDataEvent) => void) => () => void;
@@ -708,6 +720,7 @@ export type SharkBayBridge = {
     uninstall?: (input: TeamworkUninstallInput) => Promise<TeamworkUninstallResult>;
     resolveIdentity?: () => Promise<GitHubIdentity>;
     syncNow?: (input: { repoPath: string }) => Promise<void>;
+    updateHarness?: (input: { repoPath: string }) => Promise<TeamworkStatus>;
     onTasksChanged?: (callback: (event: TeamworkTasksChangedEvent) => void) => () => void;
   };
   knowledgeSite?: {

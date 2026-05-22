@@ -42,6 +42,7 @@ describe("IPC channels", () => {
       teamworkUninstall: "teamwork:uninstall",
       teamworkResolveIdentity: "teamwork:resolveIdentity",
       teamworkSyncNow: "teamwork:syncNow",
+      teamworkUpdateHarness: "teamwork:updateHarness",
       teamworkTasksChanged: "teamwork:tasksChanged",
       knowledgeSiteGenerate: "knowledgeSite:generate",
       knowledgeSiteGetPath: "knowledgeSite:getPath",

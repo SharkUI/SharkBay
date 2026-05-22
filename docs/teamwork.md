@@ -42,12 +42,13 @@ When a supported agent is launched from SharkBay and Teamwork is installed, Shar
 
 - Codex: positional prompt
 - Claude: positional prompt
+- DeepSeek: positional prompt
 - Gemini: `-i <prompt>`
 - Qwen: `-i <prompt>`
 - Kiro: `chat <prompt>`
 - OpenCode: `--prompt <prompt>`
 
-DeepSeek is not currently treated as a bootstrap-supported agent because its documented prompt forms are non-interactive or ambiguous.
+SharkBay does not silently rewrite installed harness files during agent launch. The `TEAM` tab compares managed harness files such as `.sharkbay/harness/protocol.md` and `.sharkbay/harness/agent-session-id.sh` with the current generated source. If a managed file is missing or changed, the `TEAM` tab shows a prompt above Knowledge Site; the user must click Update Harness before SharkBay overwrites or adds those files.
 
 ## Task Files
 
