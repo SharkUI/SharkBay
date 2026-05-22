@@ -6,6 +6,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import defaultProjectIconUrl from "./assets/shark-fin.png";
 import { CodeEditor } from "./code-editor";
+import { buildAgentSessionRestoreCommand, type AgentSessionRestoreCommand } from "../shared/agent-session-restore";
 import type {
   AgentCli,
   AgentProjectStatusEvent,
@@ -149,6 +150,7 @@ type TerminalPaneHandle = {
   openGitDiff: (projectUri: string, projectName: string, relativePath: string) => Promise<void>;
   openBrowserTab: (projectUri: string, projectName: string, initialUrl: string) => Promise<void>;
   prefillCommand: (projectUri: string, projectName: string, displayPath: string, command: string, title: string) => Promise<{ usedExistingTerminal: boolean }>;
+  openAgentSession: (projectUri: string, projectName: string, command: string, title: string) => Promise<void>;
 };
 
 type AgentStatusByProjectPath = Record<string, string>;
@@ -158,6 +160,7 @@ const minDetailColumnWidth = 340;
 const minTerminalColumnWidth = 420;
 const terminalWorkingThresholdMs = 5000;
 const terminalQuietDoneMs = 5000;
+const maxPendingTerminalOutputChars = 1024 * 1024;
 const defaultProjectColumnWidth = minProjectColumnWidth;
 const defaultDetailColumnWidth = minDetailColumnWidth;
 const resizerColumnWidth = 12;
@@ -1038,6 +1041,7 @@ function DashboardView({
       <section className="detail-panel" aria-hidden={detailPanelHidden}>
         {selectedCandidate ? (
           <ProjectDetailPane
+            agentClis={agentClis}
             detail={detail}
             candidate={selectedCandidate}
             setToast={setToast}
@@ -1050,6 +1054,9 @@ function DashboardView({
             }
             onOpenBrowserTab={(url) =>
               terminalPaneRef.current?.openBrowserTab(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, url) ?? Promise.resolve()
+            }
+            onRestoreAgentSession={(restore) =>
+              terminalPaneRef.current?.openAgentSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, restore.command, restore.title) ?? Promise.resolve()
             }
           />
         ) : (
@@ -1091,6 +1098,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const activeProjectIdRef = useRef<string | null>(null);
   const creatingProjects = useRef(new Set<string>());
   const quietTimers = useRef(new Map<string, ReturnType<typeof window.setTimeout>>());
+  const pendingTerminalOutput = useRef(new Map<string, string>());
   const focusRequestNonce = useRef(0);
   const [tabFocusRequest, setTabFocusRequest] = useState<{ projectId: string; nonce: number } | null>(null);
   const selectedSpace = candidate?.id ? spaces[candidate.id] ?? null : null;
@@ -1100,7 +1108,16 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   useEffect(() => { spacesRef.current = spaces; }, [spaces]);
   useEffect(() => { activeProjectIdRef.current = activeProjectId; }, [activeProjectId]);
   useEffect(() => { setInstallAgentDialogOpen(false); }, [candidate?.id]);
-  useEffect(() => () => { for (const timer of quietTimers.current.values()) window.clearTimeout(timer); quietTimers.current.clear(); }, []);
+  useEffect(() => {
+    const pending = pendingTerminalOutput.current;
+    for (const [sessionId, data] of [...pending]) {
+      const tab = findTerminalTab(spaces, sessionId);
+      if (!tab) continue;
+      pending.delete(sessionId);
+      writeTerminalOutputToTab(sessionId, tab, data);
+    }
+  }, [spaces]);
+  useEffect(() => () => { for (const timer of quietTimers.current.values()) window.clearTimeout(timer); quietTimers.current.clear(); pendingTerminalOutput.current.clear(); }, []);
 
   useEffect(() => {
     const hasDirtyEditor = Object.values(spaces).some((space) =>
@@ -1219,6 +1236,9 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
         initialCommandTitle: title,
       });
       return { usedExistingTerminal: false };
+    },
+    openAgentSession: async (projectUri, projectName, command, title) => {
+      await openProjectTab(projectUri, projectUri, projectName, selectedSpace?.displayPath ?? projectUri, false, { initialCommand: command, initialCommandTitle: title });
     },
   }));
 
@@ -1347,9 +1367,26 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
 
   function appendTerminalOutput(event: TerminalDataEvent) {
     const tab = findTerminalTab(spacesRef.current, event.sessionId);
-    tab?.terminal.write(event.data);
-    if (tab && isRunningServiceTab(tab)) recordServiceUrl(event.sessionId, event.data);
-    recordTerminalOutputActivity(event.sessionId);
+    if (!tab) {
+      bufferPendingTerminalOutput(event);
+      return;
+    }
+    writeTerminalOutputToTab(event.sessionId, tab, event.data);
+  }
+
+  function writeTerminalOutputToTab(sessionId: string, tab: TerminalShellTab, data: string) {
+    tab.terminal.write(data);
+    if (isRunningServiceTab(tab)) recordServiceUrl(sessionId, data);
+    recordTerminalOutputActivity(sessionId);
+  }
+
+  function bufferPendingTerminalOutput(event: TerminalDataEvent) {
+    const existing = pendingTerminalOutput.current.get(event.sessionId) ?? "";
+    const combined = `${existing}${event.data}`;
+    pendingTerminalOutput.current.set(
+      event.sessionId,
+      combined.length > maxPendingTerminalOutputChars ? combined.slice(-maxPendingTerminalOutputChars) : combined,
+    );
   }
 
   function recordTerminalOutputActivity(sessionId: string) {
@@ -1407,6 +1444,13 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     clearTerminalQuietTimer(event.sessionId);
     const message = `\r\n[process exited${event.exitCode === null ? "" : ` with code ${event.exitCode}`}${event.signal ? `, signal ${event.signal}` : ""}]\r\n`;
     const match = findTerminalTabWithSpace(spacesRef.current, event.sessionId);
+    const pending = pendingTerminalOutput.current.get(event.sessionId);
+    if (pending && match?.tab) {
+      pendingTerminalOutput.current.delete(event.sessionId);
+      match.tab.terminal.write(pending);
+    } else if (!match?.tab) {
+      pendingTerminalOutput.current.delete(event.sessionId);
+    }
     match?.tab.terminal.write(message);
     if (match?.tab) {
       const hint = explainEarlyTerminalExit(match.tab, event);
@@ -2673,7 +2717,8 @@ function EditorSurface({ active, appearanceTheme, tab, onChange, onSave }: {
   );
 }
 
-function ProjectDetailPane({ detail, candidate, setToast, onRefresh, onOpenFileInEditor, onOpenGitDiff, onOpenBrowserTab }: {
+function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, onOpenFileInEditor, onOpenGitDiff, onOpenBrowserTab, onRestoreAgentSession }: {
+  agentClis: AgentCli[];
   detail: ProjectDetail | null;
   candidate: ProjectCandidate;
   setToast: (toast: Toast) => void;
@@ -2681,6 +2726,7 @@ function ProjectDetailPane({ detail, candidate, setToast, onRefresh, onOpenFileI
   onOpenFileInEditor: (relativePath: string) => Promise<void>;
   onOpenGitDiff: (relativePath: string) => Promise<void>;
   onOpenBrowserTab: (url: string) => Promise<void>;
+  onRestoreAgentSession: (restore: AgentSessionRestoreCommand) => Promise<void>;
 }) {
   const isRemote = candidate.providerKind === "ssh";
   const isLocal = candidate.providerKind === "local";
@@ -2717,7 +2763,15 @@ function ProjectDetailPane({ detail, candidate, setToast, onRefresh, onOpenFileI
       </div>
       {isLocal ? (
         <div aria-labelledby="project-detail-tab-team" className="detail-tab-panel" hidden={visibleDetailTab !== "team"} id="project-detail-tabpanel-team" role="tabpanel">
-          <TasksDetailTab active={visibleDetailTab === "team"} candidate={candidate} setToast={setToast} onOpenBrowserTab={onOpenBrowserTab} onRefresh={onRefresh} />
+          <TasksDetailTab
+            active={visibleDetailTab === "team"}
+            agentClis={agentClis}
+            candidate={candidate}
+            setToast={setToast}
+            onOpenBrowserTab={onOpenBrowserTab}
+            onRefresh={onRefresh}
+            onRestoreAgentSession={onRestoreAgentSession}
+          />
         </div>
       ) : null}
       <div aria-labelledby="project-detail-tab-stack" className="detail-tab-panel" hidden={visibleDetailTab !== "stack"} id="project-detail-tabpanel-stack" role="tabpanel">
@@ -2759,12 +2813,14 @@ function taskPill(task: TaskViewModel): { label: string; cls: string } {
   return { label: task.status, cls: "phase-waiting" };
 }
 
-function TasksDetailTab({ active, candidate, setToast, onOpenBrowserTab, onRefresh }: {
+function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserTab, onRefresh, onRestoreAgentSession }: {
   active: boolean;
+  agentClis: AgentCli[];
   candidate: ProjectCandidate;
   setToast: (toast: Toast) => void;
   onOpenBrowserTab: (url: string) => Promise<void>;
   onRefresh: () => Promise<void>;
+  onRestoreAgentSession: (restore: AgentSessionRestoreCommand) => Promise<void>;
 }) {
   const repoPath = localPathFromCandidate(candidate);
   const [tasks, setTasks] = useState<TaskViewModel[]>([]);
@@ -2871,6 +2927,14 @@ function TasksDetailTab({ active, candidate, setToast, onOpenBrowserTab, onRefre
     }
   }
 
+  async function restoreTaskSession(restore: AgentSessionRestoreCommand) {
+    try {
+      await onRestoreAgentSession(restore);
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    }
+  }
+
   if (!repoPath) return <EmptyState title="Teamwork unavailable" body="Teamwork is available for local Git projects." />;
 
   if (selected) {
@@ -2950,21 +3014,53 @@ function TasksDetailTab({ active, candidate, setToast, onOpenBrowserTab, onRefre
         {tasks.map((task) => {
           const pill = taskPill(task);
           const createdTime = task.createdAt ? formatRelativeTime(task.createdAt) : null;
+          const restore = taskRestoreCommand(task, status, agentClis);
           return (
-            <button className="queue-item" key={task.taskId} type="button" onClick={() => setSelectedTaskId(task.taskId)}>
-              <span className="task-avatar">
-                {task.owner.avatarUrl ? <img alt="" src={task.owner.avatarUrl} /> : task.owner.githubLogin.slice(0, 2).toUpperCase()}
-              </span>
-              <span className="task-row-main">
-                <span className="task-title">{task.title}</span>
-                <small>{task.taskTag} · {task.owner.githubLogin}{createdTime ? ` · ${createdTime}` : ""}</small>
-              </span>
-              <span className={cx("phase-pill", pill.cls)}>{pill.label}</span>
-            </button>
+            <div className={cx("task-card-stack", restore && "has-restore-session")} key={task.taskId}>
+              <button className="queue-item" type="button" onClick={() => setSelectedTaskId(task.taskId)}>
+                <span className="task-avatar">
+                  {task.owner.avatarUrl ? <img alt="" src={task.owner.avatarUrl} /> : task.owner.githubLogin.slice(0, 2).toUpperCase()}
+                </span>
+                <span className="task-row-main">
+                  <span className="task-title">{task.title}</span>
+                  <small>{task.taskTag} · {task.owner.githubLogin}{createdTime ? ` · ${createdTime}` : ""}</small>
+                </span>
+                <span className={cx("phase-pill", pill.cls)}>{pill.label}</span>
+              </button>
+              {restore ? <TaskSessionRestoreCard agentName={task.agent ?? restore.label} restore={restore} onRestore={() => void restoreTaskSession(restore)} /> : null}
+            </div>
           );
         })}
       </div>
     </>
+  );
+}
+
+function taskRestoreCommand(task: TaskViewModel, status: TeamworkStatus | null, agentClis: AgentCli[]): AgentSessionRestoreCommand | null {
+  if (!status?.githubUserId || !status.machineId) return null;
+  if (task.owner.githubUserId !== status.githubUserId) return null;
+  if (task.machine !== status.machineId) return null;
+  return buildAgentSessionRestoreCommand({ agentName: task.agent, sessionId: task.sessionId, availableAgents: agentClis });
+}
+
+function TaskSessionRestoreCard({ agentName, restore, onRestore }: {
+  agentName: string;
+  restore: AgentSessionRestoreCommand;
+  onRestore: () => void;
+}) {
+  const iconAgent: AgentCli = {
+    id: restore.agentId,
+    label: restore.label,
+    command: "",
+    executablePath: "",
+    shortLabel: restore.shortLabel,
+  };
+  return (
+    <div className="task-session-restore-card">
+      <span className="task-session-agent-icon"><AgentCliIcon agent={iconAgent} /></span>
+      <span className="task-session-agent-name">{agentName}</span>
+      <button className="task-session-restore-link" type="button" onClick={onRestore}>restore session</button>
+    </div>
   );
 }
 

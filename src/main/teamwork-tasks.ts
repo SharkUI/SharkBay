@@ -11,6 +11,7 @@ export type TaskViewModel = {
   sync: "local" | "pending" | "synced" | "failed";
   owner: { githubLogin: string; githubUserId?: number; avatarUrl?: string };
   agent?: string;
+  sessionId?: string;
   machine?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -60,6 +61,7 @@ export async function parseTaskFile(filePath: string): Promise<TaskViewModel | n
     sync: (fm["sync"] as TaskViewModel["sync"]) ?? (isTeam ? "synced" : "local"),
     owner: { githubLogin, githubUserId, avatarUrl: githubAvatarUrl(githubLogin, githubUserId) },
     agent: fm["agent"],
+    sessionId: fm["sessionId"],
     machine: fm["machine"],
     createdAt: fm["createdAt"],
     updatedAt: fm["updatedAt"],

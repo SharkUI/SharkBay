@@ -572,6 +572,7 @@ export type TaskViewModel = {
   sync: "local" | "pending" | "synced" | "failed";
   owner: { githubLogin: string; githubUserId?: number; avatarUrl?: string };
   agent?: string;
+  sessionId?: string;
   machine?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -607,6 +608,8 @@ export type TeamworkStatus = {
   repo?: string;
   branch?: string;
   githubLogin?: string;
+  githubUserId?: number;
+  machineId?: string;
   permission?: string;
 };
 

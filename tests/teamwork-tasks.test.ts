@@ -19,6 +19,7 @@ describe("teamwork task scanning", () => {
       title: "New task",
       createdAt: "2026-05-16T03:00:00Z",
       githubUserId: 123456,
+      sessionId: "11111111-1111-4111-8111-111111111111",
     });
 
     const tasks = await scanTasks(repo);
@@ -30,6 +31,7 @@ describe("teamwork task scanning", () => {
     expect(tasks[0]?.owner.avatarUrl).toBe("https://avatars.githubusercontent.com/u/123456?v=4");
     expect(tasks[1]?.owner.avatarUrl).toBe("https://avatars.githubusercontent.com/u/3960864?v=4");
     expect(tasks[0]?.frontmatter).toEqual(expect.objectContaining({ title: "New task", githubUserId: "123456" }));
+    expect(tasks[0]?.sessionId).toBe("11111111-1111-4111-8111-111111111111");
     expect(tasks[0]?.bodyMarkdown).toContain("## Summary");
     expect(tasks[0]?.rawMarkdown).toContain("kind: sharkbay_task");
     expect(tasks[0]?.sourcePath).toContain("NEW001-u123456-mabc123-new-task.md");
@@ -39,7 +41,7 @@ describe("teamwork task scanning", () => {
 async function writeTask(
   repo: string,
   relativePath: string,
-  input: { taskId: string; taskTag: string; title: string; createdAt: string; githubUserId: number },
+  input: { taskId: string; taskTag: string; title: string; createdAt: string; githubUserId: number; sessionId?: string },
 ): Promise<void> {
   await writeText(path.join(repo, relativePath), [
     "---",
@@ -53,6 +55,7 @@ async function writeTask(
     `githubUserId: ${input.githubUserId}`,
     "machine: jl25uj",
     "agent: codex",
+    input.sessionId ? `sessionId: ${input.sessionId}` : null,
     `createdAt: ${input.createdAt}`,
     `updatedAt: ${input.createdAt}`,
     `completedAt: ${input.createdAt}`,

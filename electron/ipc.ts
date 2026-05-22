@@ -87,7 +87,7 @@ import { readGitMetadata } from "../src/main/git.js";
 import { resolveRepoPath } from "../src/main/path-safety.js";
 import { testRemoteMachineConnection } from "../src/main/remote-machines.js";
 import { createDefaultSecretStore } from "../src/main/secrets.js";
-import { assertHarnessInstallable, checkRepoPermission, generateMachineId, getHarnessUpdateStatus, getMachineId, installHarness, isHarnessInstalled, resolveGitHubIdentity, uninstallHarness, updateHarnessFiles } from "../src/main/teamwork-harness.js";
+import { assertHarnessInstallable, checkRepoPermission, generateMachineId, getHarnessUpdateStatus, getLocalHarnessIdentity, getMachineId, installHarness, isHarnessInstalled, resolveGitHubIdentity, uninstallHarness, updateHarnessFiles } from "../src/main/teamwork-harness.js";
 import { deleteTeamContextBranch, hasLocalContextBranch, TeamworkSync } from "../src/main/teamwork-sync.js";
 import { scanTasks, watchTasks } from "../src/main/teamwork-tasks.js";
 import { generateKnowledgeSite, getKnowledgeSitePath } from "../src/main/knowledge-site.js";
@@ -153,6 +153,7 @@ async function getTeamworkStatus(repoPath: string): Promise<TeamworkStatus> {
   const harnessInstalled = await isHarnessInstalled(repoPath);
   const contextAvailable = await hasLocalContextBranch(repoPath);
   const installed = harnessInstalled && contextAvailable;
+  const identity = harnessInstalled ? await getLocalHarnessIdentity(repoPath) : {};
   const sync = await syncForStatus(repoPath, installed);
   const syncStatus = sync?.getStatus();
   const harnessUpdate = harnessInstalled ? await getHarnessUpdateStatus(repoPath) : { required: false, files: [] };
@@ -164,6 +165,9 @@ async function getTeamworkStatus(repoPath: string): Promise<TeamworkStatus> {
     lastSyncAt: syncStatus?.lastSyncAt ?? null,
     pendingCount: syncStatus?.pendingCount ?? 0,
     lastError: syncStatus?.lastError ?? null,
+    githubLogin: identity.githubLogin,
+    githubUserId: identity.githubUserId,
+    machineId: identity.machineId,
   };
 }
 
@@ -205,6 +209,8 @@ async function installTeamwork(repoPath: string): Promise<TeamworkStatus> {
     pendingCount: syncStatus.pendingCount,
     lastError: syncStatus.lastError,
     githubLogin: identity.login,
+    githubUserId: identity.id,
+    machineId,
     repo,
     branch: gitMeta.currentBranch ?? undefined,
     permission,

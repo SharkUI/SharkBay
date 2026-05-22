@@ -1628,6 +1628,8 @@ button.project-file-toggle:focus-visible {
 }
 
 .task-list-direct { gap: 8px; margin-top: 4px; }
+.task-card-stack { position: relative; display: grid; }
+.task-card-stack .queue-item { position: relative; z-index: 2; }
 .mock-task-detail { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; min-height: 0; overflow: hidden; }
 .detail-tab-panel:has(.mock-task-detail) { align-content: stretch; grid-template-rows: minmax(0, 1fr); overflow: hidden; }
 .task-title { min-width: 0; overflow: hidden; color: var(--ink); font-size: 12px; font-weight: 680; text-overflow: ellipsis; white-space: nowrap; }
@@ -1643,6 +1645,55 @@ button.project-file-toggle:focus-visible {
 .teamwork-harness-card { border-color: rgba(186, 115, 25, 0.42); background: rgba(255, 248, 235, 0.78); }
 .teamwork-harness-files { color: #7a5a28; overflow-wrap: anywhere; }
 .task-list-direct .queue-item { grid-template-columns: 34px minmax(0, 1fr) auto; min-height: 46px; padding: 9px 10px; }
+.task-session-restore-card {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  margin: -4px 8px 0 28px;
+  padding: 8px 9px 6px;
+  color: #435257;
+  background: #f1f5f2;
+  border: 1px solid #dce5de;
+  border-top: 0;
+  border-radius: 0 0 6px 6px;
+}
+.task-session-agent-icon {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  color: #6f8383;
+}
+.task-session-agent-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-session-restore-link {
+  color: #2d5860;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 400;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.task-session-restore-link:hover,
+.task-session-restore-link:focus-visible {
+  color: #163b42;
+  outline: none;
+}
 .task-list-direct .phase-pill,
 .task-detail-header .phase-pill {
   min-height: 18px;
@@ -3867,6 +3918,7 @@ body.is-resizing-columns .app-shell[data-theme="night"] .column-resizer::before 
 .app-shell[data-theme="night"] .project-file-row,
 .app-shell[data-theme="night"] .dirty-file-row,
 .app-shell[data-theme="night"] .queue-item,
+.app-shell[data-theme="night"] .task-session-restore-card,
 .app-shell[data-theme="night"] .decision-item,
 .app-shell[data-theme="night"] .fact,
 .app-shell[data-theme="night"] .artifact-card,
@@ -3878,6 +3930,14 @@ body.is-resizing-columns .app-shell[data-theme="night"] .column-resizer::before 
   color: #d9e5df;
   background: #182426;
   border-color: #32474b;
+}
+
+.app-shell[data-theme="night"] .task-session-agent-icon {
+  color: #7f9995;
+}
+
+.app-shell[data-theme="night"] .task-session-restore-link {
+  color: #8fc1bb;
 }
 
 .app-shell[data-theme="night"] .project-row:hover,

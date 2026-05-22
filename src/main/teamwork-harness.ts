@@ -199,6 +199,12 @@ export type TeamworkHarnessUpdateStatus = {
   files: TeamworkHarnessFileIssue[];
 };
 
+export type TeamworkLocalIdentity = {
+  githubLogin?: string;
+  githubUserId?: number;
+  machineId?: string;
+};
+
 export async function resolveGitHubIdentity(): Promise<GitHubIdentity> {
   const ghPath = await resolveGitHubCliPath();
   const { stdout } = await execFileAsync(ghPath, ["api", "user", "--jq", ".login + \"\\n\" + (.id|tostring) + \"\\n\" + .avatar_url"], { timeout: 10_000 });
@@ -306,6 +312,15 @@ export async function getMachineId(repoPath: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+export async function getLocalHarnessIdentity(repoPath: string): Promise<TeamworkLocalIdentity> {
+  const existing = await readExistingProtocolOptions(repoPath);
+  return {
+    githubLogin: existing.githubLogin,
+    githubUserId: existing.githubUserId,
+    machineId: await getMachineId(repoPath) ?? existing.machineId,
+  };
 }
 
 export type TeamworkUninstallResult = {
