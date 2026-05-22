@@ -25,7 +25,7 @@ import type {
 } from "../shared/types.js";
 
 const execFileAsync = promisify(execFile);
-const defaultTerminalInspectIntervalMs = 1000;
+const defaultTerminalInspectIntervalMs = 2000;
 const staleSubmittedCommandMs = 2000;
 const interactiveForegroundProcesses = new Set(["btop", "claude", "codex", "htop", "top"]);
 
@@ -157,6 +157,12 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
       this.stopTitleInspection(session);
       void this.runCleanup(session);
       this.emit("exit", { sessionId: id, exitCode, signal: signal === undefined ? null : String(signal) });
+      // Release the pty master fd / kqueue and drop the session from the map.
+      // Without this, shells that exit on their own (user types `exit`, agent
+      // CLI quits, crash) accumulate as leaked `(revoked)` fds and eventually
+      // cause `posix_spawnp failed` when opening new terminals.
+      try { session.pty.kill(); } catch { /* process already gone */ }
+      this.sessions.delete(id);
     });
     if (!spec.isRemote) {
       this.startTitleInspection(session);
@@ -301,7 +307,19 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
 
     session.inspecting = true;
     try {
-      if (session.pid !== null) {
+      const foregroundProcess = safeForegroundProcess(session.pty);
+      if (foregroundProcess) {
+        session.foregroundProcess = foregroundProcess;
+      }
+
+      // The shell's cwd only changes when something other than an idle shell
+      // is running (cd in a foreground command, or a non-shell foreground
+      // process like an editor). Skip the per-tick lsof spawn when we know
+      // the shell is idle — `lsof` is a fork+exec that adds posix_spawn
+      // pressure across all open terminals.
+      const shellForeground = isShellForeground(session.foregroundProcess, session.shell);
+      const cwdMaybeStale = !shellForeground || session.activeCommandLine !== null;
+      if (session.pid !== null && cwdMaybeStale) {
         const currentCwd = await this.inspectProcessCwd(session.pid);
         if (this.sessions.get(sessionId) !== session || session.status !== "running") {
           return;
@@ -311,12 +329,6 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
         }
       }
 
-      const foregroundProcess = safeForegroundProcess(session.pty);
-      if (foregroundProcess) {
-        session.foregroundProcess = foregroundProcess;
-      }
-
-      const shellForeground = isShellForeground(session.foregroundProcess, session.shell);
       if (!shellForeground) {
         session.foregroundCommandObserved = true;
       } else if (session.foregroundCommandObserved) {

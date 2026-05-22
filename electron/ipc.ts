@@ -117,14 +117,19 @@ function requireCore(): CoreClient {
   return core;
 }
 
-export function closeAllTerminalSessions(): void {
-  void core?.dispose();
+export async function closeAllTerminalSessions(): Promise<void> {
   browserManager.closeAll();
-  void portForwardManager.closeAll();
   for (const sync of teamworkSyncInstances.values()) sync.stop();
   teamworkSyncInstances.clear();
   for (const cleanup of teamworkWatcherCleanups.values()) cleanup();
   teamworkWatcherCleanups.clear();
+  // Wait for the utility process to finish disposing its ptys before the
+  // Electron parent exits — otherwise the host SIGTERMs the utility process
+  // mid-cleanup and spawned shells orphan to launchd.
+  await Promise.allSettled([
+    core?.dispose() ?? Promise.resolve(),
+    portForwardManager.closeAll(),
+  ]);
 }
 
 async function resolveTeamworkRepoPath(runtime: IpcRuntime, repoPath: string): Promise<string> {

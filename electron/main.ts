@@ -155,6 +155,16 @@ app.on("window-all-closed", () => {
   }
 });
 
-app.on("before-quit", () => {
-  closeAllTerminalSessions();
+let quitting = false;
+app.on("before-quit", (event) => {
+  if (quitting) return;
+  quitting = true;
+  // before-quit fires synchronously and the app exits as soon as it
+  // returns, so closing terminals must actually be awaited. Defer the real
+  // quit until pty disposal completes, otherwise the utility process is
+  // SIGTERMed mid-cleanup and shells orphan.
+  event.preventDefault();
+  closeAllTerminalSessions()
+    .catch(() => { /* best effort */ })
+    .finally(() => app.exit(0));
 });
