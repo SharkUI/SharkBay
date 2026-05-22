@@ -265,7 +265,7 @@ describe("teamwork harness install", () => {
     });
     await expect(prepareTeamworkAgentLaunch(repo, "opencode", "opencode")).resolves.toMatchObject({
       injected: true,
-      initialCommand: expect.stringContaining("opencode '--prompt' 'I'\\''m working in SharkBay Teamwork mode"),
+      initialCommand: expect.stringContaining("opencode 'run' '-i' 'I'\\''m working in SharkBay Teamwork mode"),
     });
   });
 
