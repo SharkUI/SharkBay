@@ -51,8 +51,11 @@ export function createAgentMachineDetector(): MachineDetector {
       const batchScript = commands
         .map((cmd) => `printf '%s\\t%s\\n' '${cmd}' "$(command -v '${cmd}' 2>/dev/null || true)"`)
         .join("; ");
-      // Use the user's default login shell so PATH from ~/.zshrc, ~/.bashrc, nvm, etc. is loaded
-      const wrappedScript = `$SHELL -l -c ${shellQuote(batchScript)} 2>/dev/null || bash -l -c ${shellQuote(batchScript)} 2>/dev/null || sh -l -c ${shellQuote(batchScript)}`;
+      // -ilc (interactive + login) sources ~/.zshrc / ~/.bashrc where fnm/nvm/asdf
+      // init typically lives. Plain -l only sources login files (~/.zprofile etc).
+      // Required for packaged Electron apps launched from Finder/Dock which have
+      // a sparse PATH that won't include version manager dirs otherwise.
+      const wrappedScript = `$SHELL -ilc ${shellQuote(batchScript)} 2>/dev/null || $SHELL -lc ${shellQuote(batchScript)} 2>/dev/null || bash -ilc ${shellQuote(batchScript)} 2>/dev/null || bash -lc ${shellQuote(batchScript)} 2>/dev/null || sh -lc ${shellQuote(batchScript)}`;
       const batchResult = await ctx.run(wrappedScript, { timeoutMs: 10000 }).catch((err) => {
         console.error("[agent-detector] detection failed:", err instanceof Error ? err.message : err);
         return null;
@@ -84,7 +87,7 @@ export function createAgentMachineDetector(): MachineDetector {
             return `printf '%s\\t%s\\n' '${agent.command}' "$(${shellQuote(p)} --version 2>/dev/null | head -1 || true)"`;
           })
           .join("; ");
-        const wrappedVersionScript = `$SHELL -l -c ${shellQuote(versionScript)} 2>/dev/null || bash -l -c ${shellQuote(versionScript)} 2>/dev/null || sh -l -c ${shellQuote(versionScript)}`;
+        const wrappedVersionScript = `$SHELL -ilc ${shellQuote(versionScript)} 2>/dev/null || $SHELL -lc ${shellQuote(versionScript)} 2>/dev/null || bash -ilc ${shellQuote(versionScript)} 2>/dev/null || bash -lc ${shellQuote(versionScript)} 2>/dev/null || sh -lc ${shellQuote(versionScript)}`;
         const versionResult = await ctx.run(wrappedVersionScript, { timeoutMs: 10000 }).catch(() => null);
         if (versionResult?.stdout) {
           for (const line of versionResult.stdout.split(/\r?\n/)) {
