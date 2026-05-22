@@ -12,8 +12,9 @@ agent: Codex GPT-5.5
 sessionId: 019e4b2b-d196-77b0-ab25-3a51f6f15046
 branch: main
 createdAt: 2026-05-22T01:32:16Z
-updatedAt: 2026-05-22T01:46:08Z
-completedAt: 2026-05-22T01:46:08Z
+updatedAt: 2026-05-22T02:08:12Z
+completedAt: 2026-05-22T02:08:12Z
+commit: ca62c289d47438bf4fe93876d6bfdf1325370a44
 ---
 
 ## Summary
@@ -34,6 +35,8 @@ Confirmed the packaged app already included the Q24IBU input IPC change, so the 
 - Identified renderer output handling as a likely contributor: every terminal output chunk caused React state updates even when terminal activity state did not change.
 - Added equality guards around terminal activity updates and changed shared tab mapping to preserve state identity when a mapper returns the same tab.
 - Packed a fresh local app at `release/mac-arm64/SharkBay.app`.
+- Preparing a focused commit for only the renderer output activity guard; unrelated dirty files and unrelated App.tsx hunks are left unstaged.
+- Committed the focused renderer fix as `ca62c289d47438bf4fe93876d6bfdf1325370a44`.
 
 ## Verification
 - Inspected source, `dist-electron`, `dist/renderer`, `release/latest-mac.yml`, `release/builder-debug.yml`, and `release/SharkBay-0.1.0-arm64-mac.zip`.
