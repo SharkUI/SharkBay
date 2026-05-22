@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import type { CSSProperties, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
+import type { CSSProperties, Dispatch, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, SetStateAction } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal as XTerm } from "@xterm/xterm";
@@ -14,7 +14,13 @@ import type {
   BrowserBounds,
   BrowserSession,
   BrowserUpdateEvent,
+  CreateWorktreeInput,
+  CreateWorktreeResult,
   DiagnosticsSnapshot,
+  GitBranchSummary,
+  RemoveWorktreeInput,
+  RemoveWorktreeResult,
+  WorktreeStatus,
   InstallLogEvent,
   InstallRecipe,
   InstallToolResult,
@@ -142,6 +148,7 @@ type TerminalPaneHandle = {
   openFileInEditor: (projectUri: string, projectName: string, relativePath: string) => Promise<void>;
   openGitDiff: (projectUri: string, projectName: string, relativePath: string) => Promise<void>;
   openBrowserTab: (projectUri: string, projectName: string, initialUrl: string) => Promise<void>;
+  prefillCommand: (projectUri: string, projectName: string, displayPath: string, command: string, title: string) => Promise<{ usedExistingTerminal: boolean }>;
 };
 
 type AgentStatusByProjectPath = Record<string, string>;
@@ -182,8 +189,16 @@ const terminalThemes: Record<AppearanceTheme, NonNullable<ConstructorParameters<
     green: "#4c845d",
     magenta: "#7a677f",
     red: "#b85f51",
-    white: "#fffdfa",
+    white: "#263235",
     yellow: "#9a6b16",
+    brightBlack: "#697477",
+    brightRed: "#b85f51",
+    brightGreen: "#4c845d",
+    brightYellow: "#9a6b16",
+    brightBlue: "#2d6474",
+    brightMagenta: "#7a677f",
+    brightCyan: "#367f86",
+    brightWhite: "#1f2528",
   },
   night: {
     background: "#101719",
@@ -276,6 +291,50 @@ async function renameProjectAlias(uri: string, name: string): Promise<void> {
   const handler = getBridge().config?.renameProject;
   if (!handler) throw new Error("Project rename is not exposed by the preload API.");
   await handler({ uri, name });
+}
+
+async function createWorktree(input: CreateWorktreeInput): Promise<CreateWorktreeResult> {
+  const handler = getBridge().config?.createWorktree;
+  if (!handler) throw new Error("Worktree creation is not exposed by the preload API.");
+  return handler(input);
+}
+
+async function removeWorktree(input: RemoveWorktreeInput): Promise<RemoveWorktreeResult> {
+  const handler = getBridge().config?.removeWorktree;
+  if (!handler) throw new Error("Worktree removal is not exposed by the preload API.");
+  return handler(input);
+}
+
+async function getWorktreeStatus(projectUri: string): Promise<WorktreeStatus> {
+  const handler = getBridge().projects?.getWorktreeStatus;
+  if (!handler) throw new Error("Worktree status is not exposed by the preload API.");
+  return handler({ projectUri });
+}
+
+async function listGitBranches(projectUri: string): Promise<GitBranchSummary> {
+  const handler = getBridge().projects?.listGitBranches;
+  if (!handler) throw new Error("Git branch listing is not exposed by the preload API.");
+  return handler({ projectUri });
+}
+
+function backfillRemoteWorktreeInfo(
+  candidates: ProjectCandidate[],
+  setCandidates: Dispatch<SetStateAction<ProjectCandidate[]>>,
+): void {
+  const handler = getBridge().projects?.getWorktreeInfo;
+  if (!handler) return;
+  const targets = candidates.filter((candidate) => candidate.providerKind === "ssh" && candidate.worktreeBranch == null);
+  for (const candidate of targets) {
+    handler({ projectUri: candidate.uri })
+      .then((info) => {
+        if (info.isLinkedWorktree == null) return;
+        setCandidates((current) => current.map((entry) => entry.uri === candidate.uri
+          ? { ...entry, isLinkedWorktree: info.isLinkedWorktree, worktreeBranch: info.worktreeBranch }
+          : entry,
+        ));
+      })
+      .catch(() => undefined);
+  }
 }
 
 async function addRemoteMachine(input: RemoteMachineInput): Promise<AppConfig> {
@@ -545,6 +604,7 @@ export function App() {
         if (current && nextCandidates.some((c) => c.id === current)) return current;
         return nextCandidates[0]?.id ?? null;
       });
+      void backfillRemoteWorktreeInfo(nextCandidates, setCandidates);
       return { candidates: nextCandidates };
     } catch (error) {
       setToast({ tone: "error", message: asMessage(error) });
@@ -568,9 +628,17 @@ export function App() {
   async function refreshWorkspace(options: RefreshOptions = { showToast: true }) {
     if (refreshInFlight.current) return;
     refreshInFlight.current = true;
+    const previouslySelected = selectedCandidate;
     try {
-      await refreshProjects(options);
-      if (selectedCandidate) await refreshDetail(selectedCandidate, options);
+      const { candidates: nextCandidates } = await refreshProjects(options);
+      if (previouslySelected) {
+        const stillPresent = nextCandidates.some((c) => c.id === previouslySelected.id);
+        if (stillPresent) {
+          await refreshDetail(previouslySelected, options);
+        } else {
+          setDetail(null);
+        }
+      }
     } finally {
       refreshInFlight.current = false;
     }
@@ -635,6 +703,22 @@ export function App() {
               }}
               onRemoveProject={async (uri) => { await removeProject(uri); await refreshProjects({ showToast: true }); }}
               onRenameProject={async (uri, name) => { await renameProjectAlias(uri, name); await refreshProjects({ showToast: false }); }}
+              onCreateWorktree={async (input) => {
+                const result = await createWorktree(input);
+                if (result.ok) {
+                  await refreshProjects({ showToast: false });
+                  setSelectedId(result.newProjectUri);
+                  setToast({ tone: "success", message: `Worktree created: ${result.branch}` });
+                }
+                return result;
+              }}
+              onWorktreeRemoved={async (uri) => {
+                setCandidates((current) => current.filter((c) => c.id !== uri));
+                setSelectedId((current) => current === uri ? null : current);
+                setDetail((current) => current && current.uri === uri ? null : current);
+                void refreshProjects({ showToast: false, setBusy: false });
+                setToast({ tone: "success", message: "Worktree removed." });
+              }}
               onUninstallTeamwork={async (repoPath, cleanTeamContext) => { await uninstallTeamwork(repoPath, cleanTeamContext); await refreshProjects({ showToast: false }); }}
               projectAliases={projectAliases}
             />
@@ -704,6 +788,8 @@ function DashboardView({
   onPickProject,
   onRemoveProject,
   onRenameProject,
+  onCreateWorktree,
+  onWorktreeRemoved,
   onUninstallTeamwork,
 }: {
   appearanceTheme: AppearanceTheme;
@@ -724,6 +810,8 @@ function DashboardView({
   onPickProject: () => Promise<void>;
   onRemoveProject: (uri: string) => Promise<void>;
   onRenameProject: (uri: string, name: string) => Promise<void>;
+  onCreateWorktree: (input: CreateWorktreeInput) => Promise<CreateWorktreeResult>;
+  onWorktreeRemoved: (uri: string) => Promise<void>;
   onUninstallTeamwork: (repoPath: string, cleanTeamContext?: boolean) => Promise<void>;
 }) {
   const gridRef = useRef<HTMLDivElement | null>(null);
@@ -866,6 +954,7 @@ function DashboardView({
               onSelect={setSelectedId}
               onRemoveProject={onRemoveProject}
               onRenameProject={onRenameProject}
+              onCreateWorktree={onCreateWorktree}
               onUninstallTeamwork={onUninstallTeamwork}
             />
           ) : (
@@ -884,6 +973,30 @@ function DashboardView({
       />
 
       <section className="panel terminal-panel">
+        {selectedCandidate?.isLinkedWorktree ? (
+          <WorktreeStatusBar
+            candidate={selectedCandidate}
+            onPush={async (branch) => {
+              const candidate = selectedCandidate;
+              if (!candidate) return;
+              const command = `git push -u origin ${branch}`;
+              const result = await terminalPaneRef.current?.prefillCommand(
+                candidate.uri,
+                projectAliases[candidate.uri] || candidate.name,
+                candidate.displayPath,
+                command,
+                `Push ${branch}`,
+              );
+              if (result && !result.usedExistingTerminal) {
+                setToast({ tone: "success", message: `No terminal open — ran ${command} in a new tab.` });
+              }
+            }}
+            onRemoveSuccess={async () => {
+              await onWorktreeRemoved(selectedCandidate.uri);
+            }}
+            setToast={setToast}
+          />
+        ) : null}
         <TerminalPane
           ref={terminalPaneRef}
           appearanceTheme={appearanceTheme}
@@ -1061,6 +1174,29 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     openBrowserTab: async (projectUri, projectName, initialUrl) => {
       await openBrowserTab(projectUri, projectUri, projectName, selectedSpace?.displayPath ?? projectUri, initialUrl);
     },
+    prefillCommand: async (projectUri, projectName, displayPath, command, title) => {
+      const space = spacesRef.current[projectUri];
+      const activeTab = space?.tabs.find((tab): tab is TerminalShellTab => tab.kind === "terminal" && tab.session.id === space.activeId);
+      const runningTerminal = activeTab && activeTab.session.status === "running"
+        ? activeTab
+        : space?.tabs.find((tab): tab is TerminalShellTab => tab.kind === "terminal" && tab.session.status === "running");
+      if (runningTerminal) {
+        setActiveTab(projectUri, runningTerminal.session.id);
+        setActiveProjectId(projectUri);
+        onActiveTabKindChange("terminal");
+        try {
+          await sendTerminalInput(runningTerminal.session.id, command);
+        } catch (error) {
+          setToast({ tone: "error", message: asMessage(error) });
+        }
+        return { usedExistingTerminal: true };
+      }
+      await openProjectTab(projectUri, projectUri, projectName, displayPath, false, {
+        initialCommand: command,
+        initialCommandTitle: title,
+      });
+      return { usedExistingTerminal: false };
+    },
   }));
 
   async function openEditorTab(projectUri: string, projectName: string, displayPath: string, relativePath: string) {
@@ -1150,7 +1286,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     }
   }
 
-  async function openProjectTab(projectId: string, cwdUri: string, projectName: string, displayPath: string, quiet = false, options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "initialCommandTitle" | "service"> = {}) {
+  async function openProjectTab(projectId: string, cwdUri: string, projectName: string, displayPath: string, quiet = false, options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "initialCommandTitle" | "initialCommandSubmit" | "service"> = {}) {
     try {
       const session = await createTerminal(cwdUri, projectName, options);
       const terminal = createXTerm(session.id, appearanceTheme, setToast, recordTerminalInputActivity);
@@ -1674,7 +1810,7 @@ type ProjectMenuState = {
   canUninstallTeamwork: boolean;
 };
 
-function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, runningServiceProjectIds, terminalActivityByProjectId, selectedId, onSelect, onRemoveProject, onRenameProject, onUninstallTeamwork }: {
+function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, runningServiceProjectIds, terminalActivityByProjectId, selectedId, onSelect, onRemoveProject, onRenameProject, onCreateWorktree, onUninstallTeamwork }: {
   agentStatusByProjectPath: AgentStatusByProjectPath;
   candidates: ProjectCandidate[];
   projectAliases: Record<string, string>;
@@ -1684,6 +1820,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
   onSelect: (id: string) => void;
   onRemoveProject: (uri: string) => Promise<void>;
   onRenameProject: (uri: string, name: string) => Promise<void>;
+  onCreateWorktree: (input: CreateWorktreeInput) => Promise<CreateWorktreeResult>;
   onUninstallTeamwork: (repoPath: string, cleanTeamContext?: boolean) => Promise<void>;
 }) {
   const [menuOpen, setMenuOpen] = useState<ProjectMenuState | null>(null);
@@ -1691,6 +1828,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
   const [renameValue, setRenameValue] = useState("");
   const [confirmRemove, setConfirmRemove] = useState<{ uri: string; name: string } | null>(null);
   const [confirmUninstall, setConfirmUninstall] = useState<ConfirmUninstallState | null>(null);
+  const [worktreeDialog, setWorktreeDialog] = useState<{ candidate: ProjectCandidate } | null>(null);
   const [removing, setRemoving] = useState(false);
   const [uninstalling, setUninstalling] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -1799,7 +1937,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
                 openProjectMenu(candidate, rect.left + 24, rect.top + 24);
               }}
             >
-              <ProjectIcon name={displayName} sources={candidate.iconSources ?? []} />
+              <ProjectIcon name={displayName} sources={candidate.iconSources ?? []} worktreeBranch={candidate.worktreeBranch ?? null} />
               <span className="project-row-main">
                 <span className="cell-title">
                   {hasRunningService ? <span className="project-service-dot" aria-label="Service running" /> : null}
@@ -1915,6 +2053,24 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
           </button>
           {(() => {
             const candidate = candidates.find((c) => c.id === menuOpen.id);
+            if (!candidate) return null;
+            const supportsWorktree = candidate.providerKind === "local" || candidate.providerKind === "ssh";
+            if (!supportsWorktree) return null;
+            return (
+              <button
+                className="project-context-menu-item"
+                type="button"
+                onClick={() => {
+                  setMenuOpen(null);
+                  setWorktreeDialog({ candidate });
+                }}
+              >
+                New Worktree…
+              </button>
+            );
+          })()}
+          {(() => {
+            const candidate = candidates.find((c) => c.id === menuOpen.id);
             const repoPath = candidate ? localPathFromCandidate(candidate) : null;
             if (!candidate || !repoPath || !menuOpen.canUninstallTeamwork) return null;
             return (
@@ -1943,19 +2099,433 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
           </button>
         </div>
       ) : null}
+      {worktreeDialog ? (
+        <NewWorktreeDialog
+          candidate={worktreeDialog.candidate}
+          displayName={projectAliases[worktreeDialog.candidate.uri] || worktreeDialog.candidate.name}
+          onClose={() => setWorktreeDialog(null)}
+          onCreate={onCreateWorktree}
+        />
+      ) : null}
     </section>
   );
 }
 
-function ProjectIcon({ name, sources }: { name: string; sources: NonNullable<ProjectCandidate["iconSources"]> }) {
+function NewWorktreeDialog({ candidate, displayName, onClose, onCreate }: {
+  candidate: ProjectCandidate;
+  displayName: string;
+  onClose: () => void;
+  onCreate: (input: CreateWorktreeInput) => Promise<CreateWorktreeResult>;
+}) {
+  const [name, setName] = useState("");
+  const [base, setBase] = useState<string>("");
+  const [branches, setBranches] = useState<GitBranchSummary | null>(null);
+  const [branchesLoading, setBranchesLoading] = useState(true);
+  const [branchesError, setBranchesError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setBranchesLoading(true);
+    setBranchesError(null);
+    listGitBranches(candidate.uri)
+      .then((result) => {
+        if (cancelled) return;
+        setBranches(result);
+        const preferred = result.current && result.localBranches.includes(result.current)
+          ? result.current
+          : result.localBranches[0] ?? result.remoteBranches[0] ?? "";
+        setBase(preferred);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setBranchesError(asMessage(err));
+      })
+      .finally(() => {
+        if (!cancelled) setBranchesLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [candidate.uri]);
+
+  useEffect(() => {
+    nameInputRef.current?.focus();
+  }, []);
+
+  const trimmedName = name.trim();
+  const previewBaseName = candidate.providerKind === "ssh"
+    ? candidate.displayPath.split(":").slice(1).join(":").split("/").filter(Boolean).pop() ?? candidate.name
+    : candidate.name;
+  const targetDir = trimmedName ? `${previewBaseName}-${trimmedName}` : `${previewBaseName}-…`;
+  const targetLocationLabel = candidate.providerKind === "ssh"
+    ? `on ${candidate.displayPath.split(":")[0] ?? "remote machine"}`
+    : "as a sibling directory";
+  const hasAnyBranch = Boolean(branches && (branches.localBranches.length || branches.remoteBranches.length));
+  const noCommitsYet = Boolean(branches && !hasAnyBranch);
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (!trimmedName || !base || submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const result = await onCreate({ sourceProjectUri: candidate.uri, name: trimmedName, base });
+      if (result.ok) {
+        onClose();
+      } else {
+        setError(result.message);
+      }
+    } catch (err) {
+      setError(asMessage(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) onClose(); }}
+    >
+      <section
+        aria-modal="true"
+        className="modal-panel"
+        role="dialog"
+        aria-labelledby="new-worktree-title"
+        style={{ maxWidth: "480px" }}
+      >
+        <div className="modal-header">
+          <div>
+            <h3 id="new-worktree-title">New worktree</h3>
+            <p>Create a new git worktree from <strong>{displayName}</strong>.</p>
+          </div>
+          <button aria-label="Close" className="icon-button" disabled={submitting} type="button" onClick={onClose}>x</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div style={{ padding: "12px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <span>Name</span>
+              <input
+                ref={nameInputRef}
+                className="input"
+                disabled={submitting}
+                placeholder="fix-login"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
+              <span className="form-hint">Used as the branch name and as a suffix on the worktree directory.</span>
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <span>Base branch</span>
+              <select
+                className="input"
+                disabled={submitting || branchesLoading || Boolean(branchesError) || !hasAnyBranch}
+                value={base}
+                onChange={(event) => setBase(event.target.value)}
+              >
+                {branchesLoading ? <option value="">Loading branches…</option> : null}
+                {!branchesLoading && noCommitsYet ? <option value="">No branches yet</option> : null}
+                {!branchesLoading && branches ? (
+                  <>
+                    {branches.localBranches.length ? (
+                      <optgroup label="Local">
+                        {branches.localBranches.map((branch) => (
+                          <option key={`local-${branch}`} value={branch}>{branch}</option>
+                        ))}
+                      </optgroup>
+                    ) : null}
+                    {branches.remoteBranches.length ? (
+                      <optgroup label="Remote-tracking">
+                        {branches.remoteBranches.map((branch) => (
+                          <option key={`remote-${branch}`} value={branch}>{branch}</option>
+                        ))}
+                      </optgroup>
+                    ) : null}
+                  </>
+                ) : null}
+              </select>
+              {branchesError ? <span className="form-hint is-danger">{branchesError}</span> : null}
+              {noCommitsYet ? (
+                <span className="form-hint is-danger">
+                  This repository has no commits yet. Make at least one commit before creating worktrees.
+                </span>
+              ) : null}
+            </label>
+            <div className="worktree-preview">
+              <div>Will create directory <code>{targetDir}</code> {targetLocationLabel}.</div>
+              <div>Branch <code>{trimmedName || "…"}</code> from <code>{base || "…"}</code>.</div>
+            </div>
+            {error ? <div className="inline-errors"><div>{error}</div></div> : null}
+          </div>
+          <div className="remote-machine-form-actions" style={{ padding: "12px 16px 16px" }}>
+            <button className="button secondary" disabled={submitting} type="button" onClick={onClose}>Cancel</button>
+            <button
+              className="button"
+              disabled={submitting || !trimmedName || !base || branchesLoading || Boolean(branchesError) || !hasAnyBranch}
+              type="submit"
+            >
+              {submitting ? "Creating…" : "Create worktree"}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function WorktreeStatusBar({ candidate, onPush, onRemoveSuccess, setToast }: {
+  candidate: ProjectCandidate;
+  onPush: (branch: string) => Promise<void>;
+  onRemoveSuccess: () => Promise<void>;
+  setToast: (toast: Toast) => void;
+}) {
+  const [status, setStatus] = useState<WorktreeStatus | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [removeDialog, setRemoveDialog] = useState<{ dirtyCount: number; allowForce: boolean } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const refresh = useMemo(() => {
+    return async () => {
+      setLoading(true);
+      try {
+        const next = await getWorktreeStatus(candidate.uri);
+        setStatus(next);
+      } catch (error) {
+        setToast({ tone: "error", message: asMessage(error) });
+      } finally {
+        setLoading(false);
+      }
+    };
+  }, [candidate.uri, setToast]);
+
+  useEffect(() => {
+    setStatus(null);
+    void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleClick(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setMenuOpen(false);
+    }
+    document.addEventListener("pointerdown", handleClick, true);
+    return () => document.removeEventListener("pointerdown", handleClick, true);
+  }, [menuOpen]);
+
+  const branch = status?.branch ?? candidate.worktreeBranch ?? "(unknown)";
+  const baseLabel = status?.base ?? "(no base)";
+  const ahead = status?.ahead ?? null;
+  const behind = status?.behind ?? null;
+  const dirty = status?.dirtyCount ?? 0;
+  const isClean = dirty === 0;
+  const upstreamHint = status && status.hasUpstream === false ? " (no upstream)" : "";
+
+  async function handleRemoveAttempt(force: boolean) {
+    const result = await removeWorktree({ projectUri: candidate.uri, force });
+    if (result.ok) {
+      setRemoveDialog(null);
+      await onRemoveSuccess();
+      return;
+    }
+    if (result.reason === "dirty") {
+      setRemoveDialog({ dirtyCount: result.dirtyCount ?? 1, allowForce: true });
+      return;
+    }
+    setToast({ tone: "error", message: result.message });
+  }
+
+  return (
+    <>
+      <div className="worktree-status-bar">
+        <span className="worktree-status-icon" aria-hidden="true">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <circle cx="4" cy="4" r="1.6" fill="currentColor" />
+            <circle cx="4" cy="12" r="1.6" fill="currentColor" />
+            <circle cx="12" cy="8" r="1.6" fill="currentColor" />
+            <path d="M4 4v8M4 8h4c2 0 4-1 4-2v2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none" />
+          </svg>
+        </span>
+        <span className="worktree-status-branch">
+          <strong>{branch}</strong>
+          <span className="worktree-status-divider">·</span>
+          <span title={`Base: ${baseLabel}`}>base {baseLabel}{upstreamHint}</span>
+        </span>
+        <span className="worktree-status-chips">
+          {ahead != null && behind != null ? (
+            <span className="worktree-status-chip" title={`${ahead} ahead, ${behind} behind`}>
+              <span className="is-up">↑{ahead}</span>
+              <span className="is-down">↓{behind}</span>
+            </span>
+          ) : null}
+          <span className={cx("worktree-status-chip", isClean ? "is-clean" : "is-dirty")}>
+            {isClean ? "clean" : `${dirty} uncommitted`}
+          </span>
+          {loading ? <span className="worktree-status-chip is-loading">refreshing…</span> : null}
+        </span>
+        <span className="worktree-status-actions">
+          <button
+            className="icon-button"
+            type="button"
+            title="Refresh"
+            disabled={loading}
+            onClick={() => { void refresh(); }}
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M13 4V2M13 4a5 5 0 1 0 1 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+              <path d="M13 4l-2-1M13 4l1-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </button>
+          <div className="worktree-status-menu-wrapper">
+            <button
+              className="button secondary worktree-status-actions-button"
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+            >
+              Actions
+            </button>
+            {menuOpen ? (
+              <div ref={menuRef} className="project-context-menu worktree-status-menu">
+                <button
+                  className="project-context-menu-item"
+                  type="button"
+                  disabled={!branch || branch === "(unknown)"}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    if (status?.branch) void onPush(status.branch);
+                  }}
+                >
+                  Push branch
+                  <span className="project-context-menu-hint">Types git push into the active terminal (review then press Enter)</span>
+                </button>
+                <button
+                  className="project-context-menu-item is-danger"
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setRemoveDialog({ dirtyCount: 0, allowForce: false });
+                  }}
+                >
+                  Remove Worktree…
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </span>
+      </div>
+      {removeDialog ? (
+        <RemoveWorktreeDialog
+          candidate={candidate}
+          dirtyCount={removeDialog.dirtyCount}
+          allowForce={removeDialog.allowForce}
+          onClose={() => setRemoveDialog(null)}
+          onConfirm={(force) => handleRemoveAttempt(force)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function RemoveWorktreeDialog({ candidate, dirtyCount, allowForce, onClose, onConfirm }: {
+  candidate: ProjectCandidate;
+  dirtyCount: number;
+  allowForce: boolean;
+  onClose: () => void;
+  onConfirm: (force: boolean) => Promise<void>;
+}) {
+  const [submitting, setSubmitting] = useState(false);
+  const branch = candidate.worktreeBranch ?? "(unknown)";
+  const isDirty = dirtyCount > 0;
+
+  async function run(force: boolean) {
+    setSubmitting(true);
+    try {
+      await onConfirm(force);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) onClose(); }}
+    >
+      <section
+        aria-modal="true"
+        className="modal-panel"
+        role="dialog"
+        aria-labelledby="remove-worktree-title"
+        style={{ maxWidth: "460px" }}
+      >
+        <div className="modal-header">
+          <div>
+            <h3 id="remove-worktree-title">Remove worktree?</h3>
+            <p>
+              This will run <code>git worktree remove</code> on <strong>{branch}</strong> and
+              unregister the project from SharkBay.
+            </p>
+          </div>
+          <button aria-label="Close" className="icon-button" disabled={submitting} type="button" onClick={onClose}>x</button>
+        </div>
+        <div style={{ padding: "12px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+          {isDirty ? (
+            <div className="worktree-warning">
+              <strong>{dirtyCount} uncommitted change{dirtyCount === 1 ? "" : "s"}</strong> in this worktree.
+              Git refused the safe remove. You can cancel and commit/stash first,
+              or force-discard below — that <em>permanently deletes</em> the
+              uncommitted work.
+            </div>
+          ) : (
+            <div className="form-hint">
+              Files on disk in the worktree directory will be deleted by git. The main
+              repository and its other worktrees are not affected.
+            </div>
+          )}
+        </div>
+        <div className="remote-machine-form-actions" style={{ padding: "12px 16px 16px" }}>
+          <button className="button secondary" disabled={submitting} type="button" onClick={onClose}>Cancel</button>
+          {allowForce ? (
+            <button
+              className="button is-danger"
+              disabled={submitting}
+              type="button"
+              onClick={() => void run(true)}
+            >
+              {submitting ? "Removing…" : "Force discard"}
+            </button>
+          ) : (
+            <button
+              className="button"
+              disabled={submitting}
+              type="button"
+              onClick={() => void run(false)}
+            >
+              {submitting ? "Removing…" : "Remove"}
+            </button>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ProjectIcon({ name, sources, worktreeBranch }: { name: string; sources: NonNullable<ProjectCandidate["iconSources"]>; worktreeBranch?: string | null }) {
   const signature = sources.map((s) => s.url).join("|");
   const [failedCount, setFailedCount] = useState(0);
   useEffect(() => { setFailedCount(0); }, [signature]);
   const source = sources[failedCount];
   const imageUrl = source?.url ?? defaultProjectIconUrl;
   const isSharkAppIcon = source?.kind === "local" && /^shark(?:-(?:morning|day|night))?\.png$/u.test(source.label);
+  const isWorktree = Boolean(worktreeBranch);
+  const tooltip = isWorktree ? `${name} · worktree of ${worktreeBranch}` : `${name} icon`;
   return (
-    <span className={cx("project-icon", !source && "is-default", isSharkAppIcon && "is-shark-app")} aria-hidden="true" title={`${name} icon`}>
+    <span className={cx("project-icon", !source && "is-default", isSharkAppIcon && "is-shark-app", isWorktree && "is-worktree")} aria-hidden="true" title={tooltip}>
       <img
         alt=""
         draggable={false}
@@ -1965,6 +2535,16 @@ function ProjectIcon({ name, sources }: { name: string; sources: NonNullable<Pro
           return sources.length;
         })}
       />
+      {isWorktree ? (
+        <span className="project-icon-worktree-badge" aria-hidden="true" title={`Worktree on ${worktreeBranch}`}>
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
+            <circle cx="4" cy="4" r="1.6" fill="currentColor" />
+            <circle cx="4" cy="12" r="1.6" fill="currentColor" />
+            <circle cx="12" cy="8" r="1.6" fill="currentColor" />
+            <path d="M4 4v8M4 8h4c2 0 4-1 4-2v2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none" />
+          </svg>
+        </span>
+      ) : null}
     </span>
   );
 }

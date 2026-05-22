@@ -163,7 +163,9 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
     }
     if (initialCommand && (!input.service || spec.isRemote)) {
       session.foregroundCommandObserved = false;
-      ptyProcess.write(`${input.service ? serviceCommandLine(initialCommand) : initialCommand}\r`);
+      const submit = input.initialCommandSubmit !== false;
+      const payload = input.service ? serviceCommandLine(initialCommand) : initialCommand;
+      ptyProcess.write(submit ? `${payload}\r` : payload);
     }
 
     return publicSession(session);

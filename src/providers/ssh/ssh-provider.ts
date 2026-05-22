@@ -2,15 +2,20 @@ import path from "node:path";
 import { EventEmitter } from "node:events";
 import { getConfiguredRoots } from "../../main/config.js";
 import { listRemoteProjectFiles, readRemoteProjectFile, writeRemoteProjectFile } from "../../main/remote-files.js";
-import { readRemoteGitDirtyFiles, readRemoteGitHistory, readRemoteGitMetadata } from "../../main/remote-git.js";
+import { readRemoteGitBranches, readRemoteGitDirtyFiles, readRemoteGitHistory, readRemoteGitMetadata, readRemoteWorktreeInfoForMachine, readRemoteWorktreeStatus, remoteAddWorktree, removeRemoteWorktree } from "../../main/remote-git.js";
 import { remoteShellCommand, runSshCommand, sshArgsForRemoteMachine, type SshCommandRunner } from "../../main/remote-machines.js";
 import { createDefaultSecretStore, type SecretStore } from "../../main/secrets.js";
 import { TerminalManager } from "../../main/terminal.js";
 import type {
+  CreateWorktreeResult,
   ExecutionTarget,
+  GitBranchSummary,
   GitDirtyFile,
   GitEvent,
   GitMetadata,
+  RemoveWorktreeResult,
+  WorktreeInfoResult,
+  WorktreeStatus,
   IpcRuntimeLike,
   MachineProfile,
   PathExistsInput,
@@ -101,6 +106,31 @@ export class SshProvider extends EventEmitter implements ExecutionProvider {
 
   readGitDirtyFiles(runtime: IpcRuntimeLike, projectUri: string): Promise<GitDirtyFile[]> {
     return readRemoteGitDirtyFiles(runtime, projectUri, { secretStore: this.secretStore, runner: this.runner });
+  }
+
+  readGitBranches(runtime: IpcRuntimeLike, projectUri: string): Promise<GitBranchSummary> {
+    return readRemoteGitBranches(runtime, projectUri, { secretStore: this.secretStore, runner: this.runner });
+  }
+
+  async readGitWorktreeInfo(runtime: IpcRuntimeLike, projectUri: string): Promise<WorktreeInfoResult> {
+    const parsed = parseProjectUri(projectUri);
+    if (parsed.kind !== "ssh") return { isLinkedWorktree: null, worktreeBranch: null };
+    const config = await getConfiguredRoots(runtime);
+    const machine = config.configuredRemoteMachines.find((item) => item.id === parsed.machineId);
+    if (!machine) return { isLinkedWorktree: null, worktreeBranch: null };
+    return readRemoteWorktreeInfoForMachine(machine, parsed.path, { secretStore: this.secretStore, runner: this.runner });
+  }
+
+  readGitWorktreeStatus(runtime: IpcRuntimeLike, projectUri: string): Promise<WorktreeStatus> {
+    return readRemoteWorktreeStatus(runtime, projectUri, { secretStore: this.secretStore, runner: this.runner });
+  }
+
+  removeGitWorktree(runtime: IpcRuntimeLike, projectUri: string, options: { force?: boolean }): Promise<RemoveWorktreeResult> {
+    return removeRemoteWorktree(runtime, projectUri, { secretStore: this.secretStore, runner: this.runner, force: options.force });
+  }
+
+  createGitWorktree(runtime: IpcRuntimeLike, projectUri: string, input: { branch: string; base: string; targetPath: string }): Promise<CreateWorktreeResult> {
+    return remoteAddWorktree(runtime, projectUri, input, { secretStore: this.secretStore, runner: this.runner });
   }
 
   async createMachineProbeContext(runtime: IpcRuntimeLike, targetId: string): Promise<MachineProbeContext> {

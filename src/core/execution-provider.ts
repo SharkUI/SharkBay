@@ -1,6 +1,8 @@
 import type {
+  CreateWorktreeResult,
   ExecutionTarget,
   ExecutionTargetKind,
+  GitBranchSummary,
   GitDirtyFile,
   GitEvent,
   GitMetadata,
@@ -16,12 +18,15 @@ import type {
   ProjectScanInput,
   ReadFileInput,
   ReadFileResult,
+  RemoveWorktreeResult,
   ScanProjectsResult,
   TerminalCloseInput,
   TerminalCreateInput,
   TerminalInput,
   TerminalResizeInput,
   TerminalSession,
+  WorktreeInfoResult,
+  WorktreeStatus,
   WriteFileInput,
   WriteFileResult,
 } from "../shared/types.js";
@@ -107,6 +112,11 @@ export interface ExecutionProvider {
   readGitMetadata(runtime: IpcRuntimeLike, projectUri: string): Promise<GitMetadata>;
   readGitHistory(runtime: IpcRuntimeLike, projectUri: string): Promise<GitEvent[]>;
   readGitDirtyFiles(runtime: IpcRuntimeLike, projectUri: string): Promise<GitDirtyFile[]>;
+  readGitBranches(runtime: IpcRuntimeLike, projectUri: string): Promise<GitBranchSummary>;
+  readGitWorktreeInfo(runtime: IpcRuntimeLike, projectUri: string): Promise<WorktreeInfoResult>;
+  readGitWorktreeStatus(runtime: IpcRuntimeLike, projectUri: string): Promise<WorktreeStatus>;
+  createGitWorktree(runtime: IpcRuntimeLike, projectUri: string, input: { branch: string; base: string; targetPath: string }): Promise<CreateWorktreeResult>;
+  removeGitWorktree(runtime: IpcRuntimeLike, projectUri: string, options: { force?: boolean }): Promise<RemoveWorktreeResult>;
 
   createMachineProbeContext(runtime: IpcRuntimeLike, targetId: string): Promise<MachineProbeContext>;
   createProjectProbeContext(runtime: IpcRuntimeLike, projectUri: string): Promise<ProjectProbeContext>;

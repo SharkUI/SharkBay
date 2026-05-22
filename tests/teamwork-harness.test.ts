@@ -213,6 +213,20 @@ describe("teamwork harness install", () => {
     expect(cleaned.content).toBe("# local\n/AGENTS.md\n/CLAUDE.md\n/GEMINI.md\n/QWEN.md\n/.kiro/steering/sharkbay-protocol.md\n.env\n");
   });
 
+  it("injects bootstrap prompt when launched from a linked worktree", async () => {
+    const root = await makeTempRoot("teamwork-bootstrap-linked-worktree");
+    const mainRepo = await createRealGitRepoFixture(root, "MainRepo");
+    await execFileAsync("git", ["commit", "--allow-empty", "-m", "init"], { cwd: mainRepo });
+    await installHarness(mainRepo, harnessOptions);
+    const worktreePath = path.join(root, "linked-wt");
+    await execFileAsync("git", ["worktree", "add", "-b", "feature", worktreePath], { cwd: mainRepo });
+
+    const result = await prepareTeamworkAgentLaunch(worktreePath, "codex", "codex");
+
+    expect(result.injected).toBe(true);
+    expect(result.initialCommand).toContain("codex 'I'\\''m working in SharkBay Teamwork mode");
+  });
+
 });
 
 async function createRealGitRepoFixture(root: string, name = "FixtureApp"): Promise<string> {

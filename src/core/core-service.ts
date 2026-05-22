@@ -1,12 +1,22 @@
 import { EventEmitter } from "node:events";
 import path from "node:path";
-import { getConfiguredRoots } from "../main/config.js";
+import { addConfiguredProject, getConfiguredRoots, removeConfiguredProject } from "../main/config.js";
 import { resolveProjectIconSources, resolveRemoteProjectIconSources } from "../main/project-icons.js";
 import { resolveProjectUri } from "../main/path-safety.js";
 import type {
   IpcRuntimeLike,
   AgentCli,
+  CreateWorktreeInput,
+  CreateWorktreeResult,
   DiagnosticsSnapshot,
+  GitBranchSummary,
+  ListGitBranchesInput,
+  RemoveWorktreeInput,
+  RemoveWorktreeResult,
+  WorktreeInfoInput,
+  WorktreeInfoResult,
+  WorktreeStatus,
+  WorktreeStatusInput,
   InstallLogEvent,
   InstallLogStream,
   InstallToolInput,
@@ -37,7 +47,7 @@ import type {
   TerminalUpdateEvent,
 } from "../shared/types.js";
 import type { ExecutionProvider } from "./execution-provider.js";
-import { parseProjectUri } from "./project-uri.js";
+import { parseProjectUri, toLocalProjectUri, toSshProjectUri } from "./project-uri.js";
 import { ExecutionProviderRegistry } from "./provider-registry.js";
 import { PluginHost, type PluginSummary } from "../plugins/plugin-host.js";
 import { bundledPlugins } from "../plugins/bundled-plugins.js";
@@ -217,6 +227,8 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
         repoUrl: gitMeta.remoteOrigin,
         currentBranch: gitMeta.currentBranch,
         dirtyWorktree: gitMeta.dirtyWorktree,
+        isLinkedWorktree: gitMeta.isLinkedWorktree,
+        worktreeBranch: gitMeta.worktreeBranch,
         gitHistory,
         gitDirtyFiles,
       };
@@ -240,6 +252,8 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
       repoUrl: gitMeta.remoteOrigin,
       currentBranch: gitMeta.currentBranch,
       dirtyWorktree: gitMeta.dirtyWorktree,
+      isLinkedWorktree: gitMeta.isLinkedWorktree,
+      worktreeBranch: gitMeta.worktreeBranch,
       gitHistory,
       gitDirtyFiles,
     };
@@ -247,6 +261,72 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
 
   listProjectFiles(runtime: IpcRuntimeLike, input: ProjectFilesInput): Promise<ProjectFilesResult> {
     return this.providers.providerForUri(input.projectUri).listProjectFiles(runtime, input);
+  }
+
+  listGitBranches(runtime: IpcRuntimeLike, input: ListGitBranchesInput): Promise<GitBranchSummary> {
+    return this.providers.providerForUri(input.projectUri).readGitBranches(runtime, input.projectUri);
+  }
+
+  getWorktreeInfo(runtime: IpcRuntimeLike, input: WorktreeInfoInput): Promise<WorktreeInfoResult> {
+    return this.providers.providerForUri(input.projectUri).readGitWorktreeInfo(runtime, input.projectUri);
+  }
+
+  getWorktreeStatus(runtime: IpcRuntimeLike, input: WorktreeStatusInput): Promise<WorktreeStatus> {
+    return this.providers.providerForUri(input.projectUri).readGitWorktreeStatus(runtime, input.projectUri);
+  }
+
+  async removeWorktree(runtime: IpcRuntimeLike, input: RemoveWorktreeInput): Promise<RemoveWorktreeResult> {
+    const result = await this.providers.providerForUri(input.projectUri).removeGitWorktree(runtime, input.projectUri, { force: input.force });
+    if (result.ok) {
+      const parsed = parseProjectUri(input.projectUri);
+      if (parsed.kind === "local") {
+        await removeConfiguredProject(runtime, { path: parsed.path });
+      } else if (parsed.kind === "ssh") {
+        await removeConfiguredProject(runtime, { uri: input.projectUri });
+      }
+    }
+    return result;
+  }
+
+  async createWorktree(runtime: IpcRuntimeLike, input: CreateWorktreeInput): Promise<CreateWorktreeResult> {
+    const trimmedName = input.name.trim();
+    if (!trimmedName) {
+      return { ok: false, reason: "invalid-name", message: "Worktree name is required" };
+    }
+    if (!input.base.trim()) {
+      return { ok: false, reason: "invalid-name", message: "Base branch is required" };
+    }
+    const parsed = parseProjectUri(input.sourceProjectUri);
+    const provider = this.providers.providerForUri(input.sourceProjectUri);
+
+    if (parsed.kind === "local") {
+      const baseName = path.basename(parsed.path);
+      const targetPath = path.join(path.dirname(parsed.path), `${baseName}-${trimmedName}`);
+      const result = await provider.createGitWorktree(runtime, input.sourceProjectUri, {
+        branch: trimmedName,
+        base: input.base,
+        targetPath,
+      });
+      if (!result.ok) return result;
+      await addConfiguredProject(runtime, { path: targetPath });
+      return { ...result, newProjectUri: toLocalProjectUri(targetPath) };
+    }
+
+    if (parsed.kind === "ssh") {
+      const baseName = path.posix.basename(parsed.path);
+      const remoteTargetPath = path.posix.join(path.posix.dirname(parsed.path), `${baseName}-${trimmedName}`);
+      const result = await provider.createGitWorktree(runtime, input.sourceProjectUri, {
+        branch: trimmedName,
+        base: input.base,
+        targetPath: remoteTargetPath,
+      });
+      if (!result.ok) return result;
+      const newUri = toSshProjectUri(parsed.machineId, remoteTargetPath);
+      await addConfiguredProject(runtime, { uri: newUri });
+      return { ...result, newProjectUri: newUri };
+    }
+
+    return { ok: false, reason: "unsupported-target", message: `Worktree creation is not supported for ${parsed.kind} projects` };
   }
 
   readProjectFile(runtime: IpcRuntimeLike, input: ReadFileInput): Promise<ReadFileResult> {

@@ -309,6 +309,8 @@ export type ProjectCandidate = {
   iconSources?: ProjectIconSource[];
   services?: ProjectDevService[];
   dirtyWorktree?: boolean | null;
+  isLinkedWorktree?: boolean | null;
+  worktreeBranch?: string | null;
 };
 
 export type ProjectFilesInput = {
@@ -377,7 +379,60 @@ export type ProjectSummary = {
   repoUrl: string | null;
   currentBranch: string | null;
   dirtyWorktree: boolean | null;
+  isLinkedWorktree?: boolean | null;
+  worktreeBranch?: string | null;
 };
+
+export type GitBranchSummary = {
+  current: string | null;
+  localBranches: string[];
+  remoteBranches: string[];
+};
+
+export type ListGitBranchesInput = {
+  projectUri: string;
+};
+
+export type WorktreeInfoInput = {
+  projectUri: string;
+};
+
+export type WorktreeInfoResult = {
+  isLinkedWorktree: boolean | null;
+  worktreeBranch: string | null;
+};
+
+export type WorktreeStatusInput = {
+  projectUri: string;
+};
+
+export type WorktreeStatus = {
+  branch: string | null;
+  base: string | null;
+  ahead: number | null;
+  behind: number | null;
+  dirtyCount: number | null;
+  hasUpstream: boolean;
+};
+
+export type RemoveWorktreeInput = {
+  projectUri: string;
+  force?: boolean;
+};
+
+export type RemoveWorktreeResult =
+  | { ok: true }
+  | { ok: false; reason: "dirty" | "not-worktree" | "git-error" | "unsupported-target"; message: string; dirtyCount?: number };
+
+export type CreateWorktreeInput = {
+  sourceProjectUri: string;
+  name: string;
+  base: string;
+};
+
+export type CreateWorktreeResult =
+  | { ok: true; targetPath: string; newProjectUri: string; branch: string }
+  | { ok: false; reason: "target-exists" | "branch-exists" | "invalid-name" | "not-git" | "git-error" | "unsupported-target"; message: string };
 
 export type ProjectDetail = ProjectSummary & {
   gitHistory?: GitEvent[];
@@ -397,6 +452,7 @@ export type TerminalCreateInput = {
   title?: string;
   initialCommand?: string;
   initialCommandTitle?: string;
+  initialCommandSubmit?: boolean;
   agentId?: string;
   service?: { id: string; label: string; command: string };
   cols?: number;
@@ -586,6 +642,8 @@ export type SharkBayBridge = {
     addProject?: (input: { path?: string; uri?: string }) => Promise<AppConfig | void>;
     removeProject?: (input: { path?: string; uri?: string }) => Promise<AppConfig | void>;
     renameProject?: (input: { uri: string; name: string }) => Promise<AppConfig | void>;
+    createWorktree?: (input: CreateWorktreeInput) => Promise<CreateWorktreeResult>;
+    removeWorktree?: (input: RemoveWorktreeInput) => Promise<RemoveWorktreeResult>;
     addRemoteMachine?: (input: RemoteMachineInput) => Promise<AppConfig>;
     removeRemoteMachine?: (input: { id: string }) => Promise<AppConfig>;
     testRemoteMachine?: (input: { id: string } | RemoteMachineInput) => Promise<RemoteMachineTestResult>;
@@ -598,6 +656,9 @@ export type SharkBayBridge = {
     listFiles?: (input: ProjectFilesInput) => Promise<ProjectFilesResult>;
     readFile?: (input: ReadFileInput) => Promise<ReadFileResult>;
     writeFile?: (input: WriteFileInput) => Promise<WriteFileResult>;
+    listGitBranches?: (input: ListGitBranchesInput) => Promise<GitBranchSummary>;
+    getWorktreeInfo?: (input: WorktreeInfoInput) => Promise<WorktreeInfoResult>;
+    getWorktreeStatus?: (input: WorktreeStatusInput) => Promise<WorktreeStatus>;
   };
   terminal?: {
     create?: (input: TerminalCreateInput) => Promise<TerminalSession>;

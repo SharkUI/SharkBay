@@ -1,5 +1,5 @@
 import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { randomBytes } from "node:crypto";
@@ -268,12 +268,13 @@ export async function prepareTeamworkAgentLaunch(repoPath: string, agentId: stri
   if (!bootstrapArgs) {
     return { initialCommand, injected: false, skippedReason: "unsupported-agent" };
   }
-  if (!await hasSharkbayHarnessDir(repoPath)) {
+  const harnessRoot = await resolveHarnessRoot(repoPath);
+  if (!await hasSharkbayHarnessDir(harnessRoot)) {
     return { initialCommand, injected: false, skippedReason: "not-installed" };
   }
 
-  const protocolOptions = await resolveProtocolOptions(repoPath, agentId);
-  await ensureProtocolFiles(repoPath, protocolOptions);
+  const protocolOptions = await resolveProtocolOptions(harnessRoot, agentId);
+  await ensureProtocolFiles(harnessRoot, protocolOptions);
   return { initialCommand: appendShellArgs(initialCommand, bootstrapArgs), injected: true };
 }
 
@@ -284,6 +285,18 @@ async function hasSharkbayHarnessDir(repoPath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+async function resolveHarnessRoot(repoPath: string): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync("git", ["-C", repoPath, "rev-parse", "--path-format=absolute", "--git-common-dir"], { timeout: 3_000 });
+    const commonDir = stdout.trim();
+    const { stdout: gitDirOut } = await execFileAsync("git", ["-C", repoPath, "rev-parse", "--absolute-git-dir"], { timeout: 3_000 });
+    if (commonDir && gitDirOut.trim() !== commonDir) {
+      return dirname(commonDir);
+    }
+  } catch { /* not a git repo or git unavailable */ }
+  return repoPath;
 }
 
 function teamworkBootstrapArgs(agentId: string, prompt: string): string[] | null {

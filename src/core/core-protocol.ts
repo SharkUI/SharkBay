@@ -1,12 +1,22 @@
 import type {
   AgentCli,
+  CreateWorktreeInput,
+  CreateWorktreeResult,
   DiagnosticsSnapshot,
+  GitBranchSummary,
   InstallLogEvent,
   InstallRecipe,
   InstallToolInput,
   InstallToolResult,
   IpcRuntimeLike,
+  ListGitBranchesInput,
   ListInstallRecipesInput,
+  RemoveWorktreeInput,
+  RemoveWorktreeResult,
+  WorktreeInfoInput,
+  WorktreeInfoResult,
+  WorktreeStatus,
+  WorktreeStatusInput,
   MachineProfile,
   PathExistsInput,
   PathExistsResult,
@@ -39,6 +49,11 @@ export type CoreMethodMap = {
   installTool: { args: [IpcRuntimeLike, InstallToolInput]; result: InstallToolResult };
   getProjectDetail: { args: [IpcRuntimeLike, { projectUri: string }]; result: ProjectDetail };
   listProjectFiles: { args: [IpcRuntimeLike, ProjectFilesInput]; result: ProjectFilesResult };
+  listGitBranches: { args: [IpcRuntimeLike, ListGitBranchesInput]; result: GitBranchSummary };
+  getWorktreeInfo: { args: [IpcRuntimeLike, WorktreeInfoInput]; result: WorktreeInfoResult };
+  getWorktreeStatus: { args: [IpcRuntimeLike, WorktreeStatusInput]; result: WorktreeStatus };
+  createWorktree: { args: [IpcRuntimeLike, CreateWorktreeInput]; result: CreateWorktreeResult };
+  removeWorktree: { args: [IpcRuntimeLike, RemoveWorktreeInput]; result: RemoveWorktreeResult };
   readProjectFile: { args: [IpcRuntimeLike, ReadFileInput]; result: ReadFileResult };
   writeProjectFile: { args: [IpcRuntimeLike, WriteFileInput]; result: WriteFileResult };
   readMachineProfile: { args: [IpcRuntimeLike, string, ProfileReadOptions | undefined]; result: MachineProfile };

@@ -6,13 +6,15 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { getConfiguredRoots } from "../../main/config.js";
 import { readLocalProjectFile, writeLocalProjectFile } from "../../main/file-content.js";
-import { readGitDirtyFiles, readGitHistory, readGitMetadata } from "../../main/git.js";
+import { addLocalWorktree, listLocalGitBranches, readGitDirtyFiles, readGitHistory, readGitMetadata, readLocalWorktreeStatus, removeLocalWorktree } from "../../main/git.js";
 import { listProjectFiles } from "../../main/project-files.js";
 import { scanProjects } from "../../main/scanner.js";
 import { TerminalManager } from "../../main/terminal.js";
 import { resolveCommandPath } from "../../main/command-path.js";
 import type {
+  CreateWorktreeResult,
   ExecutionTarget,
+  GitBranchSummary,
   GitDirtyFile,
   GitEvent,
   GitMetadata,
@@ -28,12 +30,15 @@ import type {
   ProjectScanInput,
   ReadFileInput,
   ReadFileResult,
+  RemoveWorktreeResult,
   ScanProjectsResult,
   TerminalCloseInput,
   TerminalCreateInput,
   TerminalInput,
   TerminalResizeInput,
   TerminalSession,
+  WorktreeInfoResult,
+  WorktreeStatus,
   WriteFileInput,
   WriteFileResult,
 } from "../../shared/types.js";
@@ -111,6 +116,27 @@ export class LocalProvider extends EventEmitter implements ExecutionProvider {
 
   readGitDirtyFiles(_runtime: IpcRuntimeLike, projectUri: string): Promise<GitDirtyFile[]> {
     return readGitDirtyFiles(localPathFromUri(projectUri));
+  }
+
+  readGitBranches(_runtime: IpcRuntimeLike, projectUri: string): Promise<GitBranchSummary> {
+    return listLocalGitBranches(localPathFromUri(projectUri));
+  }
+
+  async readGitWorktreeInfo(_runtime: IpcRuntimeLike, projectUri: string): Promise<WorktreeInfoResult> {
+    const meta = await readGitMetadata(localPathFromUri(projectUri));
+    return { isLinkedWorktree: meta.isLinkedWorktree, worktreeBranch: meta.worktreeBranch };
+  }
+
+  readGitWorktreeStatus(_runtime: IpcRuntimeLike, projectUri: string): Promise<WorktreeStatus> {
+    return readLocalWorktreeStatus(localPathFromUri(projectUri));
+  }
+
+  removeGitWorktree(_runtime: IpcRuntimeLike, projectUri: string, options: { force?: boolean }): Promise<RemoveWorktreeResult> {
+    return removeLocalWorktree(localPathFromUri(projectUri), options);
+  }
+
+  createGitWorktree(_runtime: IpcRuntimeLike, projectUri: string, input: { branch: string; base: string; targetPath: string }): Promise<CreateWorktreeResult> {
+    return addLocalWorktree(localPathFromUri(projectUri), input);
   }
 
   async createMachineProbeContext(runtime: IpcRuntimeLike, targetId: string): Promise<MachineProbeContext> {

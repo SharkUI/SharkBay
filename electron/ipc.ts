@@ -22,7 +22,17 @@ import type {
   BrowserSession,
   BrowserUpdateEvent,
   CreatePortForwardInput,
+  CreateWorktreeInput,
+  CreateWorktreeResult,
   DetectRemotePortsInput,
+  GitBranchSummary,
+  ListGitBranchesInput,
+  RemoveWorktreeInput,
+  RemoveWorktreeResult,
+  WorktreeInfoInput,
+  WorktreeInfoResult,
+  WorktreeStatus,
+  WorktreeStatusInput,
   InstallToolInput,
   InstallToolResult,
   InstallRecipe,
@@ -329,6 +339,21 @@ export async function registerIpcHandlers(
   );
   handle<ProjectFilesInput, ProjectFilesResult>(channels.listProjectFiles, (payload) =>
     requireCore().call("listProjectFiles", [runtime, payload])
+  );
+  handle<ListGitBranchesInput, GitBranchSummary>(channels.listGitBranches, (payload) =>
+    requireCore().call("listGitBranches", [runtime, payload])
+  );
+  handle<WorktreeInfoInput, WorktreeInfoResult>(channels.getWorktreeInfo, (payload) =>
+    requireCore().call("getWorktreeInfo", [runtime, payload])
+  );
+  handle<WorktreeStatusInput, WorktreeStatus>(channels.getWorktreeStatus, (payload) =>
+    requireCore().call("getWorktreeStatus", [runtime, payload])
+  );
+  handle<CreateWorktreeInput, CreateWorktreeResult>(channels.createWorktree, (payload) =>
+    requireCore().call("createWorktree", [runtime, payload])
+  );
+  handle<RemoveWorktreeInput, RemoveWorktreeResult>(channels.removeWorktree, (payload) =>
+    requireCore().call("removeWorktree", [runtime, payload])
   );
   handle<ReadFileInput, ReadFileResult>(channels.readProjectFile, (payload) =>
     requireCore().call("readProjectFile", [runtime, payload])

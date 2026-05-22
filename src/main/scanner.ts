@@ -52,6 +52,8 @@ export async function scanConfiguredRoots(configuredRoots: string[], options: { 
         iconSources,
         services,
         dirtyWorktree: gitMetadata.dirtyWorktree,
+        isLinkedWorktree: gitMetadata.isLinkedWorktree,
+        worktreeBranch: gitMetadata.worktreeBranch,
       });
     }
   }
@@ -90,6 +92,8 @@ async function resolveRemoteProjects(configuredRemoteProjects: string[], remoteM
         iconSources: [],
         services: [],
         dirtyWorktree: null,
+        isLinkedWorktree: null,
+        worktreeBranch: null,
       });
     } catch {
       // Skip invalid remote project URIs.
@@ -125,6 +129,8 @@ async function resolveManualProjects(configuredProjects: string[]): Promise<Proj
         iconSources,
         services,
         dirtyWorktree: gitMetadata.dirtyWorktree,
+        isLinkedWorktree: gitMetadata.isLinkedWorktree,
+        worktreeBranch: gitMetadata.worktreeBranch,
       });
     } catch {
       // Skip projects that can't be resolved (missing, permission errors, etc.)
