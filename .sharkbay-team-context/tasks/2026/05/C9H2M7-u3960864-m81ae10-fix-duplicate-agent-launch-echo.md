@@ -12,12 +12,12 @@ agent: Codex GPT-5
 sessionId: 019e4e03-2826-7453-a296-c1eb7e6a0af9
 branch: main
 createdAt: 2026-05-22T04:58:01Z
-updatedAt: 2026-05-22T05:01:27Z
-completedAt: 2026-05-22T05:01:27Z
+updatedAt: 2026-05-22T05:06:04Z
+completedAt: 2026-05-22T05:06:04Z
 ---
 
 ## Summary
-Delayed terminal initial-command writes until shell startup output settles, preventing SharkBay Teamwork agent launches from showing the long bootstrap command twice. Added regression coverage that confirms delayed initial commands still execute.
+Changed local initial command startup so SharkBay Teamwork agent launches are executed by the shell itself instead of being typed into an initializing pty. Added regression coverage that confirms initial commands run without echoing the full command text.
 
 ## Files
 - .sharkbay/tasks/C9H2M7-u3960864-m81ae10-fix-duplicate-agent-launch-echo.md
@@ -30,6 +30,9 @@ Delayed terminal initial-command writes until shell startup output settles, prev
 - Reproduced the early pty write behavior where zsh echoes the initial command before prompt rendering, then redraws it again at the prompt.
 - Updated `TerminalManager` to schedule initial commands after a quiet shell-startup window, with a maximum delay fallback.
 - Added terminal test coverage for non-service initial-command execution after shell startup.
+- Reopened after user reported the duplicate launch command still appears during manual testing.
+- Changed local non-service initial commands to launch through shell `-lic` arguments instead of being written into the pty as typed input.
+- Extended regression coverage to assert the initial command executes without echoing the full command text.
 
 ## Verification
 - `npm test -- tests/terminal.test.ts tests/teamwork-harness.test.ts`
@@ -38,3 +41,4 @@ Delayed terminal initial-command writes until shell startup output settles, prev
 
 ## Notes
 - User reported Claude startup showing the full `SHARKBAY_SESSION_ID ... claude --session-id ... bootstrap prompt` command twice.
+- The first delay-based fix was insufficient because a shell can emit its first prompt output after the quiet timer has already fired.
