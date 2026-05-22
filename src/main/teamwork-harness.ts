@@ -531,7 +531,7 @@ function teamworkBootstrapArgs(agentId: string, prompt: string): string[] | null
   if (normalized === "deepseek") return [];
   if (normalized === "gemini" || normalized === "qwen") return ["-i", prompt];
   if (normalized === "kiro") return ["chat", prompt];
-  if (normalized === "opencode") return ["--prompt", prompt];
+  if (normalized === "opencode") return [];
   return null;
 }
 

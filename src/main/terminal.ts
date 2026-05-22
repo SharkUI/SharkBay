@@ -102,7 +102,7 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
     let delayedBootstrapPrompt: string | null = null;
     if (!spec.isRemote && input.agentId && initialCommand && !input.service) {
       const launch = await prepareTeamworkAgentLaunch(spec.projectRoot, input.agentId, initialCommand);
-      if (launch.injected && input.agentId === "deepseek" && launch.initialCommand === initialCommand) {
+      if (launch.injected && (input.agentId === "deepseek" || input.agentId === "opencode") && launch.initialCommand === initialCommand) {
         delayedBootstrapPrompt = TEAMWORK_BOOTSTRAP_PROMPT;
       }
       initialCommand = launch.initialCommand;
