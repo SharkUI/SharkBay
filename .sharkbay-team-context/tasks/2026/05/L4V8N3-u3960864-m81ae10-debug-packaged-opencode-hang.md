@@ -5,6 +5,8 @@ taskTag: L4V8N3
 mode: task
 title: Debug packaged OpenCode hang
 status: completed
+completedAt: 2026-05-22T03:45:54Z
+commit: 6ba43df58fbefc597c20296eca358d9c1dbd058a
 actor: SharkUI
 githubUserId: 3960864
 machine: 81ae10
@@ -12,7 +14,7 @@ agent: Codex GPT-5.5
 sessionId: 019e4b2b-d196-77b0-ab25-3a51f6f15046
 branch: main
 createdAt: 2026-05-22T02:16:38Z
-updatedAt: 2026-05-22T03:05:15Z
+updatedAt: 2026-05-22T03:45:54Z
 ---
 
 ## Summary
