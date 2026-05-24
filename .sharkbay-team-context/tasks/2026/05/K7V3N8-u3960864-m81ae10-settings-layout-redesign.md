@@ -12,27 +12,29 @@ agent: Kiro Claude 4.6
 sessionId: 4daee965-1411-4a2e-8683-51b107b1a1ef
 branch: main
 createdAt: 2026-05-24T04:55:00Z
-updatedAt: 2026-05-24T05:11:00Z
-completedAt: 2026-05-24T05:11:00Z
+updatedAt: 2026-05-24T05:32:00Z
+completedAt: 2026-05-24T05:32:00Z
 ---
 
 ## Summary
-Rewrote settings view to 1:1 match Codex layout: left nav with icons + single-line labels, border-right separator, back button at top, full-bleed content area with generous padding.
+Rewrote settings to 1:1 match Codex layout. Removed Local Machine section entirely. Replaced theme segmented control with SVG preview cards from git history (commit 6aab3cfb).
 
 ## Files
 - src/renderer/App.tsx
 - src/styles/app.css
 
 ## Work
-- Rewrote SettingsView TSX: removed header, added back button in nav, nav items now icon+label (no descriptions), flat list.
-- Added 5 icon components: SettingsGearIcon, SunIcon, PuzzleIcon, ActivityIcon, ServerIcon.
-- Removed unused sectionMeta function.
-- Rewrote settings CSS: nav is 220px with border-right separator, items are flex icon+label, content has no card border/bg (just padding 32px 40px), section heading 22px bold.
-- settings-surface changed to padding:0 overflow:hidden for full-bleed.
+- Removed Local Machine nav item and content panel (project removal available from main screen).
+- Default section changed to Appearance.
+- Nav items now have icons (SettingsGearIcon removed, SunIcon, PuzzleIcon, ActivityIcon, ServerIcon added).
+- Replaced segmented theme control with ThemePreviewSvg cards showing 3-column layout preview per theme.
+- Added settings-theme-grid, settings-theme-card, settings-theme-preview, settings-theme-label CSS.
+- Added night theme overrides for theme cards, back button, nav border.
+- Nav uses border-right separator, back button at top, full-bleed content area.
 
 ## Verification
 - npm run typecheck passes.
 
 ## Notes
-- Prior task B4Z7T1 had a similar design direction.
-- Content panels (ProjectWorkflowPanel, DiagnosticsSettingsPanel, etc.) unchanged.
+- ThemePreviewSvg and card design restored from commit 6aab3cfb.
+- ProjectWorkflowPanel and SettingsStatusPanel still exist in code but are no longer rendered in settings.
