@@ -12,8 +12,10 @@ agent: Codex GPT-5
 sessionId: 019e64b4-2e32-7dd2-b80a-774ed2ef3f9d
 branch: main
 createdAt: 2026-05-26T14:35:14Z
-updatedAt: 2026-05-26T14:38:11Z
-completedAt: 2026-05-26T14:38:11Z
+updatedAt: 2026-05-26T14:50:22Z
+completedAt: 2026-05-26T14:50:22Z
+commits:
+  - 18c5cf0b08088e3d4a8253707ce3f87b14e4f4d5
 ---
 
 ## Summary
@@ -30,6 +32,7 @@ Refined the SharkBay harness Code Intelligence wording so agents prefer the conf
 - Noted related prior tasks `J5K8N2-u3960864-m81ae10` and `R3M7Q8-u3960864-m81ae10` to keep this as a usage-only wording change.
 - Located the generated protocol source and matching harness test assertion.
 - Updated the current protocol, generated protocol template, and harness test assertion for the new CodeGraph preference wording.
+- Committed the tracked generated protocol template and test changes.
 
 ## Verification
 - `env -u SHARKBAY_RESTORED_SESSION_ID npm test -- tests/teamwork-harness.test.ts`
@@ -39,4 +42,4 @@ Refined the SharkBay harness Code Intelligence wording so agents prefer the conf
 
 ## Notes
 - User requested that CodeGraph be stated as installed/configured and preferred over `rg` for code searches, and that the `codegraph context "..."` example include quoted arguments.
-- No commit was produced.
+- `.sharkbay/` local harness and task files are ignored by Git; the commit will include the tracked generator and test updates.
