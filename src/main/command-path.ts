@@ -69,23 +69,47 @@ export async function resolveCommandPath(
 ): Promise<string | null> {
   if (!/^[\w.-]+$/u.test(command)) return null;
 
-  const shellPaths = await getShellPaths(homeDirectory);
-  for (const dir of shellPaths) {
+  const searchPaths = await resolveCommandSearchPaths(homeDirectory, fallbackDirectories);
+  for (const dir of searchPaths) {
     const p = path.join(dir, command);
     if (await isExecutableFile(p)) return p;
   }
-
-  const fnmDirectories = await discoverFnmBinDirectories(homeDirectory);
-
-  for (const directory of [...fnmDirectories, ...fallbackDirectories]) {
-    const executablePath = directory.startsWith("/")
-      ? path.join(directory, command)
-      : path.join(homeDirectory, directory, command);
-    if (await isExecutableFile(executablePath)) {
-      return executablePath;
-    }
-  }
   return null;
+}
+
+export async function resolveCommandSearchPaths(
+  homeDirectory = os.homedir(),
+  fallbackDirectories = hardcodedFallbackDirectories
+): Promise<string[]> {
+  const shellPaths = await getShellPaths(homeDirectory);
+  const [fnmDirectories, nvmDirectories] = await Promise.all([
+    discoverFnmBinDirectories(homeDirectory),
+    discoverNvmBinDirectories(homeDirectory),
+  ]);
+
+  const paths: string[] = [];
+  const seen = new Set<string>();
+  for (const directory of [...shellPaths, ...fnmDirectories, ...nvmDirectories, ...fallbackDirectories]) {
+    const absolute = directory.startsWith("/")
+      ? directory
+      : path.join(homeDirectory, directory);
+    if (seen.has(absolute)) continue;
+    seen.add(absolute);
+    paths.push(absolute);
+  }
+  return paths;
+}
+
+export function prependPathDirectories(envPath: string | undefined, directories: string[]): string {
+  const existing = (envPath ?? "").split(path.delimiter).filter(Boolean);
+  const seen = new Set<string>();
+  const merged: string[] = [];
+  for (const directory of [...directories, ...existing]) {
+    if (seen.has(directory)) continue;
+    seen.add(directory);
+    merged.push(directory);
+  }
+  return merged.join(path.delimiter);
 }
 
 async function discoverFnmBinDirectories(homeDirectory: string): Promise<string[]> {
@@ -95,6 +119,18 @@ async function discoverFnmBinDirectories(homeDirectory: string): Promise<string[
     return entries
       .filter((entry) => entry.isDirectory())
       .map((entry) => path.join(fnmVersionsDir, entry.name, "installation", "bin"));
+  } catch {
+    return [];
+  }
+}
+
+async function discoverNvmBinDirectories(homeDirectory: string): Promise<string[]> {
+  const nvmVersionsDir = path.join(homeDirectory, ".nvm", "versions", "node");
+  try {
+    const entries = await fs.readdir(nvmVersionsDir, { withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => path.join(nvmVersionsDir, entry.name, "bin"));
   } catch {
     return [];
   }

@@ -10,7 +10,7 @@ import { createDefaultSecretStore, type SecretStore } from "./secrets.js";
 import type { AgentCli, AgentProjectStatusEvent, IpcRuntimeLike, RemoteMachine } from "../shared/types.js";
 import type { TokenUsageCollector } from "./token-usage-collector.js";
 
-export { resolveCommandPath } from "./command-path.js";
+export { prependPathDirectories, resolveCommandPath, resolveCommandSearchPaths } from "./command-path.js";
 
 export type AgentSessionState = {
   agentId: string;
