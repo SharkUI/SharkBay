@@ -1,13 +1,13 @@
 import type { BundledPlugin, MachineDetector, ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
 import { probeTools } from "./tool-probe.js";
 
-const pluginId = "com.sharkbay.language.rust";
+const pluginId = "xyz.sharkbay.language.rust";
 
 export function rustBundledPlugin(): BundledPlugin {
   return {
     manifest: {
       id: pluginId,
-      name: "Rust Support",
+      name: "Rust Project Detection",
       version: "1.0.0",
       publisher: "SharkBay",
       engines: { sharkbay: "^0.2.0" },

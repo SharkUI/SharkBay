@@ -13,6 +13,7 @@ export class TokenUsageCollector {
   private db: TokenUsageDb;
   private batch: TokenEvent[] = [];
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private codexTotalUsageBySource = new Map<string, string>();
   private readonly batchSize = 50;
   private readonly flushIntervalMs = 5000;
 
@@ -140,6 +141,13 @@ export class TokenUsageCollector {
     const inputTokens = toInt(lastUsage.input_tokens);
     const outputTokens = toInt(lastUsage.output_tokens);
     if (inputTokens === 0 && outputTokens === 0) return null;
+
+    const totalUsageKey = codexTotalUsageKey(info.total_token_usage);
+    if (totalUsageKey) {
+      const previousTotalUsageKey = this.codexTotalUsageBySource.get(sourceFile);
+      if (previousTotalUsageKey === totalUsageKey) return null;
+      this.codexTotalUsageBySource.set(sourceFile, totalUsageKey);
+    }
 
     const timestamp = typeof record.timestamp === "string"
       ? record.timestamp
@@ -323,6 +331,19 @@ export class TokenUsageCollector {
 
 function toInt(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.round(value) : 0;
+}
+
+export function codexTotalUsageKey(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const usage = value as Record<string, unknown>;
+  const inputTokens = toInt(usage.input_tokens);
+  const outputTokens = toInt(usage.output_tokens);
+  const cachedInputTokens = toInt(usage.cached_input_tokens);
+  const reasoningOutputTokens = toInt(usage.reasoning_output_tokens);
+  if (inputTokens === 0 && outputTokens === 0 && cachedInputTokens === 0 && reasoningOutputTokens === 0) {
+    return null;
+  }
+  return `${inputTokens}:${outputTokens}:${cachedInputTokens}:${reasoningOutputTokens}`;
 }
 
 async function discoverJsonlFiles(root: string, nested: boolean): Promise<string[]> {

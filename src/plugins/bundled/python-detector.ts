@@ -1,13 +1,13 @@
 import type { BundledPlugin, MachineDetector, ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
 import { probeTools } from "./tool-probe.js";
 
-const pluginId = "com.sharkbay.language.python";
+const pluginId = "xyz.sharkbay.language.python";
 
 export function pythonBundledPlugin(): BundledPlugin {
   return {
     manifest: {
       id: pluginId,
-      name: "Python Support",
+      name: "Python Project Detection",
       version: "1.0.0",
       publisher: "SharkBay",
       engines: { sharkbay: "^0.2.0" },

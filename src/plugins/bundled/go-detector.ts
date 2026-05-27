@@ -1,13 +1,13 @@
 import type { BundledPlugin, MachineDetector, ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
 import { probeTools } from "./tool-probe.js";
 
-const pluginId = "com.sharkbay.language.go";
+const pluginId = "xyz.sharkbay.language.go";
 
 export function goBundledPlugin(): BundledPlugin {
   return {
     manifest: {
       id: pluginId,
-      name: "Go Support",
+      name: "Go Project Detection",
       version: "1.0.0",
       publisher: "SharkBay",
       engines: { sharkbay: "^0.2.0" },

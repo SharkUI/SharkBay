@@ -4,7 +4,7 @@ import { parsePluginManifest } from "../src/plugins/plugin-manifest.js";
 describe("plugin manifest", () => {
   it("parses marketplace-ready plugin metadata and permissions", () => {
     expect(parsePluginManifest({
-      id: "com.sharkbay.language.node",
+      id: "xyz.sharkbay.language.node",
       name: "Node.js Support",
       version: "1.0.0",
       publisher: "SharkBay",
@@ -21,7 +21,7 @@ describe("plugin manifest", () => {
         projectDetectors: [{ id: "node.project", label: "Node.js Project Detector" }],
       },
     })).toEqual({
-      id: "com.sharkbay.language.node",
+      id: "xyz.sharkbay.language.node",
       name: "Node.js Support",
       version: "1.0.0",
       publisher: "SharkBay",

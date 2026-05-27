@@ -14,6 +14,7 @@ import type {
   BrowserResizeInput,
   BrowserSession,
   BrowserUpdateEvent,
+  CodeGraphProjectStatus,
   CreatePortForwardInput,
   DetectRemotePortsInput,
   InstallToolInput,
@@ -112,6 +113,10 @@ const sharkBayApi = {
     listFiles: (input: ProjectFilesInput) => invoke<ProjectFilesResult>(channels.listProjectFiles, input),
     readFile: (input: ReadFileInput) => invoke<ReadFileResult>(channels.readProjectFile, input),
     writeFile: (input: WriteFileInput) => invoke<WriteFileResult>(channels.writeProjectFile, input)
+  },
+  codeGraph: {
+    getStatus: (input: { projectUri: string }) => invoke<CodeGraphProjectStatus>(channels.codeGraphGetStatus, input),
+    ensureStatus: (input: { projectUri: string }) => invoke<CodeGraphProjectStatus>(channels.codeGraphEnsureStatus, input)
   },
   terminal: {
     create: (input: TerminalCreateInput) => invoke<TerminalSession>(channels.createTerminal, input),

@@ -1,4 +1,5 @@
 import { agentBundledPlugin, createAgentInstallRecipes } from "./bundled/agent-detector.js";
+import { codeGraphBundledPlugin } from "./bundled/codegraph-detector.js";
 import { coreBundledPlugin } from "./bundled/core-detectors.js";
 import { goBundledPlugin } from "./bundled/go-detector.js";
 import { javaBundledPlugin } from "./bundled/java-detector.js";
@@ -16,6 +17,7 @@ export function bundledPlugins(): BundledPlugin[] {
     goBundledPlugin(),
     rustBundledPlugin(),
     javaBundledPlugin(),
+    codeGraphBundledPlugin(),
   ];
 }
 

@@ -15,6 +15,7 @@ import type {
   BrowserBounds,
   BrowserSession,
   BrowserUpdateEvent,
+  CodeGraphProjectStatus,
   DiagnosticsSnapshot,
   InstallLogEvent,
   InstallRecipe,
@@ -47,6 +48,7 @@ import {
   firstHttpUrl,
   projectTerminalActivityStates,
   resolveSelectedCandidate,
+  shouldEnsureCodeGraphForSelection,
   shouldKeepCurrentServiceUrl,
   shouldResetTerminalObservationForInput,
   terminalActivityAfterQuiet,
@@ -84,6 +86,12 @@ const remoteConnectionMethods: Array<{
 type Toast = {
   tone: "info" | "error" | "success";
   message: string;
+};
+
+type CodeGraphStatusView = {
+  loading: boolean;
+  status: CodeGraphProjectStatus | null;
+  error: string | null;
 };
 
 type RefreshOptions = {
@@ -156,6 +164,7 @@ const minTerminalColumnWidth = 420;
 const terminalWorkingThresholdMs = 5000;
 const terminalQuietDoneMs = 5000;
 const maxPendingTerminalOutputChars = 1024 * 1024;
+const codeGraphSyncDebounceMs = 10000;
 const defaultProjectColumnWidth = minProjectColumnWidth;
 const defaultDetailColumnWidth = minDetailColumnWidth;
 const resizerColumnWidth = 12;
@@ -336,6 +345,18 @@ async function listProjectFiles(project: ProjectCandidate | ProjectDetail, direc
   const handler = getBridge().projects?.listFiles;
   if (!handler) throw new Error("Project files are not exposed by the preload API.");
   return handler({ projectUri: project.uri, directoryPath });
+}
+
+async function readCodeGraphStatus(projectUri: string): Promise<CodeGraphProjectStatus> {
+  const handler = getBridge().codeGraph?.getStatus;
+  if (!handler) throw new Error("CodeGraph status is not exposed by the preload API.");
+  return handler({ projectUri });
+}
+
+async function ensureCodeGraphStatus(projectUri: string): Promise<CodeGraphProjectStatus> {
+  const handler = getBridge().codeGraph?.ensureStatus;
+  if (!handler) throw new Error("CodeGraph status maintenance is not exposed by the preload API.");
+  return handler({ projectUri });
 }
 
 async function createTerminal(
@@ -2132,9 +2153,80 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
   const isLocal = candidate.providerKind === "local";
   const availableTabs = detailTabs.filter((tab) => (!tab.remoteOnly || isRemote) && (!tab.localOnly || isLocal));
   const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>("git");
+  const [codeGraphStatus, setCodeGraphStatus] = useState<CodeGraphStatusView>({ loading: false, status: null, error: null });
+  const lastCodeGraphDirtyCount = useRef<{ projectUri: string; count: number } | null>(null);
+  const currentDetail = detail?.uri === candidate.uri ? detail : null;
+  const isGitManaged = currentDetail ? currentDetail.dirtyWorktree !== null : null;
+  const gitDirtyFileCount = currentDetail ? currentDetail.gitDirtyFiles?.length ?? 0 : null;
   const visibleDetailTab = availableTabs.some((tab) => tab.id === activeDetailTab)
     ? activeDetailTab
     : availableTabs[0]?.id ?? "git";
+
+  useEffect(() => {
+    let cancelled = false;
+    setCodeGraphStatus({ loading: true, status: null, error: null });
+    void readCodeGraphStatus(candidate.uri)
+      .then((status) => {
+        if (!cancelled) setCodeGraphStatus({ loading: false, status, error: null });
+      })
+      .catch((error) => {
+        if (!cancelled) setCodeGraphStatus({ loading: false, status: null, error: asMessage(error) });
+      });
+    return () => { cancelled = true; };
+  }, [candidate.uri]);
+
+  useEffect(() => {
+    const statusState = codeGraphStatus.status?.state;
+    if (!statusState || !shouldEnsureCodeGraphForSelection({ providerKind: candidate.providerKind, isGitManaged, statusState })) return;
+    let cancelled = false;
+    setCodeGraphStatus((current) => ({ ...current, loading: true, error: null }));
+    void ensureCodeGraphStatus(candidate.uri)
+      .then((status) => {
+        if (!cancelled) setCodeGraphStatus({ loading: false, status, error: null });
+      })
+      .catch((error) => {
+        if (!cancelled) setCodeGraphStatus({ loading: false, status: null, error: asMessage(error) });
+      });
+    return () => { cancelled = true; };
+  }, [candidate.providerKind, candidate.uri, codeGraphStatus.status?.state, isGitManaged]);
+
+  useEffect(() => {
+    if (!isLocal || isGitManaged !== false) return;
+    let cancelled = false;
+    setCodeGraphStatus({ loading: true, status: null, error: null });
+    void ensureCodeGraphStatus(candidate.uri)
+      .then((status) => {
+        if (!cancelled) setCodeGraphStatus({ loading: false, status, error: null });
+      })
+      .catch((error) => {
+        if (!cancelled) setCodeGraphStatus({ loading: false, status: null, error: asMessage(error) });
+      });
+    return () => { cancelled = true; };
+  }, [candidate.uri, isLocal, isGitManaged]);
+
+  useEffect(() => {
+    if (!isLocal || isGitManaged !== true || gitDirtyFileCount === null) return;
+    const previous = lastCodeGraphDirtyCount.current;
+    lastCodeGraphDirtyCount.current = { projectUri: candidate.uri, count: gitDirtyFileCount };
+    if (!previous || previous.projectUri !== candidate.uri || previous.count === gitDirtyFileCount) return;
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setCodeGraphStatus({ loading: true, status: null, error: null });
+      void ensureCodeGraphStatus(candidate.uri)
+        .then((status) => {
+          if (!cancelled) setCodeGraphStatus({ loading: false, status, error: null });
+        })
+        .catch((error) => {
+          if (!cancelled) setCodeGraphStatus({ loading: false, status: null, error: asMessage(error) });
+        });
+    }, codeGraphSyncDebounceMs);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [candidate.uri, gitDirtyFileCount, isGitManaged, isLocal]);
 
   function handleDetailTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, tab: DetailTab) {
     const currentIndex = availableTabs.findIndex((item) => item.id === tab);
@@ -2178,7 +2270,7 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
         <StackDetailTab active={visibleDetailTab === "stack"} candidate={candidate} setToast={setToast} />
       </div>
       <div aria-labelledby="project-detail-tab-files" className="detail-tab-panel" hidden={visibleDetailTab !== "files"} id="project-detail-tabpanel-files" role="tabpanel">
-        <FilesDetailTab active={visibleDetailTab === "files"} candidate={candidate} detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} />
+        <FilesDetailTab active={visibleDetailTab === "files"} candidate={candidate} codeGraphStatus={codeGraphStatus} detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} />
       </div>
       {isRemote ? (
         <div aria-labelledby="project-detail-tab-forwards" className="detail-tab-panel" hidden={visibleDetailTab !== "forwards"} id="project-detail-tabpanel-forwards" role="tabpanel">
@@ -2888,9 +2980,10 @@ function detectedPortKey(port: RemoteDetectedPort): string {
   return `${port.machineId}:${port.remoteHost}:${port.remotePort}`;
 }
 
-function FilesDetailTab({ active, candidate, detail, setToast, onOpenFileInEditor }: {
+function FilesDetailTab({ active, candidate, codeGraphStatus, detail, setToast, onOpenFileInEditor }: {
   active: boolean;
   candidate: ProjectCandidate;
+  codeGraphStatus: CodeGraphStatusView;
   detail: ProjectDetail | null;
   setToast: (toast: Toast) => void;
   onOpenFileInEditor: (relativePath: string) => Promise<void>;
@@ -2947,17 +3040,39 @@ function FilesDetailTab({ active, candidate, detail, setToast, onOpenFileInEdito
     setExpandedDirectories((current) => new Set(current).add(item.path));
   }
 
-  if (state.loading && !state.files.length) return <EmptyState title="Loading files" body="Reading project files." />;
-  if (state.error) return <EmptyState title="Files unavailable" body={state.error} />;
-  if (!state.files.length) return <EmptyState title="No files" body="This project has no visible files." />;
+  const fileContent = (() => {
+    if (state.loading && !state.files.length) return <EmptyState title="Loading files" body="Reading project files." />;
+    if (state.error) return <EmptyState title="Files unavailable" body={state.error} />;
+    if (!state.files.length) return <EmptyState title="No files" body="This project has no visible files." />;
+    return (
+      <section className="subpanel files-card">
+        <div className="project-file-tree" role="tree" aria-label="Project files">
+          {state.files.map((item) => (
+            <ProjectFileTreeItemRow key={item.path} item={item} level={1} expandedDirectories={expandedDirectories} loadingDirectories={loadingDirectories} onToggleDirectory={toggleDirectory} onOpenFile={openFile} />
+          ))}
+        </div>
+      </section>
+    );
+  })();
 
   return (
-    <section className="subpanel files-card">
-      <div className="project-file-tree" role="tree" aria-label="Project files">
-        {state.files.map((item) => (
-          <ProjectFileTreeItemRow key={item.path} item={item} level={1} expandedDirectories={expandedDirectories} loadingDirectories={loadingDirectories} onToggleDirectory={toggleDirectory} onOpenFile={openFile} />
-        ))}
-      </div>
+    <>
+      <CodeGraphStatusSummary codeGraphStatus={codeGraphStatus} />
+      {fileContent}
+    </>
+  );
+}
+
+function CodeGraphStatusSummary({ codeGraphStatus }: { codeGraphStatus: CodeGraphStatusView }) {
+  const line = codeGraphStatus.loading
+    ? "Checking CodeGraph index."
+    : codeGraphStatus.error
+      ? `CodeGraph status unavailable: ${codeGraphStatus.error}`
+      : codeGraphStatus.status?.summary ?? "CodeGraph status unavailable.";
+  return (
+    <section className="subpanel codegraph-status-card" aria-label="CodeGraph status summary">
+      <h4>CodeGraph</h4>
+      <div className="codegraph-status-line">{line}</div>
     </section>
   );
 }
@@ -3424,7 +3539,7 @@ function AgentCliUsageSection({ agentId }: { agentId: string }) {
   }, [agentId, range]);
 
   const isCredits = agentId === "kiro";
-  const hasData = report && (report.totals.inputTokens > 0 || report.totals.outputTokens > 0 || (report.totals.costUsd ?? 0) > 0);
+  const hasData = report && (usageTotalInput(report.totals) > 0 || report.totals.outputTokens > 0 || (report.totals.costUsd ?? 0) > 0);
 
   return (
     <div className="agent-clis-usage">
@@ -3447,9 +3562,11 @@ function AgentCliUsageSection({ agentId }: { agentId: string }) {
               <span className="agent-clis-usage-stat"><small>Credits</small>{(report!.totals.costUsd ?? 0).toFixed(2)}</span>
             ) : (
               <>
-                <span className="agent-clis-usage-stat"><small>Input</small>{fmtTokens(report!.totals.inputTokens)}</span>
+                <span className="agent-clis-usage-stat"><small>Fresh input</small>{fmtTokens(report!.totals.inputTokens)}</span>
                 <span className="agent-clis-usage-stat"><small>Output</small>{fmtTokens(report!.totals.outputTokens)}</span>
-                {report!.totals.cacheReadTokens > 0 && <span className="agent-clis-usage-stat"><small>Cached</small>{fmtTokens(report!.totals.cacheReadTokens)}</span>}
+                {report!.totals.cacheCreationTokens > 0 && <span className="agent-clis-usage-stat"><small>Cache write</small>{fmtTokens(report!.totals.cacheCreationTokens)}</span>}
+                {report!.totals.cacheReadTokens > 0 && <span className="agent-clis-usage-stat"><small>Cache read</small>{fmtTokens(report!.totals.cacheReadTokens)}</span>}
+                <span className="agent-clis-usage-stat"><small>Total input</small>{fmtTokens(usageTotalInput(report!.totals))}</span>
               </>
             )}
           </div>
@@ -3460,6 +3577,28 @@ function AgentCliUsageSection({ agentId }: { agentId: string }) {
       )}
     </div>
   );
+}
+
+type UsageTokenTotals = Pick<UsageGroupRowView, "inputTokens" | "outputTokens" | "cacheCreationTokens" | "cacheReadTokens" | "totalInputTokens">;
+
+function emptyUsageGroupRow(key: string): UsageGroupRowView {
+  return {
+    key,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheCreationTokens: 0,
+    cacheReadTokens: 0,
+    totalInputTokens: 0,
+    costUsd: null,
+  };
+}
+
+function usageTotalInput(row: UsageTokenTotals): number {
+  return row.totalInputTokens ?? row.inputTokens + row.cacheCreationTokens + row.cacheReadTokens;
+}
+
+function usageTotalTokens(row: UsageTokenTotals): number {
+  return usageTotalInput(row) + row.outputTokens;
 }
 
 function UsageBarChart({ byDay, rangeDays, isCredits }: { byDay: UsageGroupRowView[]; rangeDays: number | null; isCredits: boolean }) {
@@ -3474,23 +3613,23 @@ function UsageBarChart({ byDay, rangeDays, isCredits }: { byDay: UsageGroupRowVi
     const result: UsageGroupRowView[] = [];
     for (let i = count - 1; i >= 0; i--) {
       const key = new Date(now.getTime() - i * 86400000).toISOString().slice(0, 10);
-      result.push(map.get(key) ?? { key, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, costUsd: null });
+      result.push(map.get(key) ?? emptyUsageGroupRow(key));
     }
     return result;
   }, [byDay, rangeDays]);
 
-  const maxVal = Math.max(...days.map((d) => isCredits ? (d.costUsd ?? 0) : d.inputTokens + d.outputTokens), 1);
+  const maxVal = Math.max(...days.map((d) => isCredits ? (d.costUsd ?? 0) : usageTotalTokens(d)), 1);
 
   return (
     <div className="agent-clis-usage-chart">
       {days.map((day, i) => {
         const pct = isCredits
           ? ((day.costUsd ?? 0) / maxVal) * 100
-          : ((day.inputTokens + day.outputTokens) / maxVal) * 100;
+          : (usageTotalTokens(day) / maxVal) * 100;
         const showLabel = days.length <= 10 || i === 0 || i === days.length - 1;
         return (
           <div key={day.key} className="agent-clis-usage-bar-col">
-            <div className="agent-clis-usage-bar" style={{ height: `${Math.max(pct, 1)}%` }} title={`${day.key}: ${isCredits ? `${(day.costUsd ?? 0).toFixed(2)} credits` : `${(day.inputTokens + day.outputTokens).toLocaleString()} tokens`}`} />
+            <div className="agent-clis-usage-bar" style={{ height: `${Math.max(pct, 1)}%` }} title={`${day.key}: ${isCredits ? `${(day.costUsd ?? 0).toFixed(2)} credits` : `${usageTotalTokens(day).toLocaleString()} tokens`}`} />
             <span className="agent-clis-usage-bar-label">{showLabel ? day.key.slice(5) : "\u00A0"}</span>
           </div>
         );
@@ -3501,6 +3640,7 @@ function UsageBarChart({ byDay, rangeDays, isCredits }: { byDay: UsageGroupRowVi
 
 function UsageProjectBreakdown({ rows, isCredits }: { rows: UsageGroupRowView[]; isCredits: boolean }) {
   if (rows.length === 0) return null;
+  const showCacheCreation = rows.some((row) => row.cacheCreationTokens > 0);
   return (
     <div className="agent-clis-usage-breakdown">
       <small className="agent-clis-usage-breakdown-title">By project</small>
@@ -3509,7 +3649,7 @@ function UsageProjectBreakdown({ rows, isCredits }: { rows: UsageGroupRowView[];
           <thead>
             <tr>
               <th>Project</th>
-              {isCredits ? <th>Credits</th> : <><th>Input</th><th>Output</th><th>Cache</th></>}
+              {isCredits ? <th>Credits</th> : <><th>Fresh</th><th>Out</th>{showCacheCreation && <th>Write</th>}<th>Read</th><th>Total</th></>}
             </tr>
           </thead>
           <tbody>
@@ -3522,7 +3662,9 @@ function UsageProjectBreakdown({ rows, isCredits }: { rows: UsageGroupRowView[];
                   <>
                     <td className="agent-clis-usage-table-value">{fmtTokens(row.inputTokens)}</td>
                     <td className="agent-clis-usage-table-value">{fmtTokens(row.outputTokens)}</td>
+                    {showCacheCreation && <td className={cx("agent-clis-usage-table-value", row.cacheCreationTokens === 0 && "is-dim")}>{row.cacheCreationTokens > 0 ? fmtTokens(row.cacheCreationTokens) : "—"}</td>}
                     <td className={cx("agent-clis-usage-table-value", row.cacheReadTokens === 0 && "is-dim")}>{row.cacheReadTokens > 0 ? fmtTokens(row.cacheReadTokens) : "—"}</td>
+                    <td className="agent-clis-usage-table-value">{fmtTokens(usageTotalInput(row))}</td>
                   </>
                 )}
               </tr>
@@ -3536,6 +3678,7 @@ function UsageProjectBreakdown({ rows, isCredits }: { rows: UsageGroupRowView[];
 
 function UsageDailyBreakdown({ rows, isCredits }: { rows: UsageGroupRowView[]; isCredits: boolean }) {
   if (rows.length === 0) return null;
+  const showCacheCreation = rows.some((row) => row.cacheCreationTokens > 0);
   return (
     <div className="agent-clis-usage-breakdown">
       <small className="agent-clis-usage-breakdown-title">By day</small>
@@ -3544,7 +3687,7 @@ function UsageDailyBreakdown({ rows, isCredits }: { rows: UsageGroupRowView[]; i
           <thead>
             <tr>
               <th>Date</th>
-              {isCredits ? <th>Credits</th> : <><th>Input</th><th>Output</th><th>Cache</th></>}
+              {isCredits ? <th>Credits</th> : <><th>Fresh</th><th>Out</th>{showCacheCreation && <th>Write</th>}<th>Read</th><th>Total</th></>}
             </tr>
           </thead>
           <tbody>
@@ -3557,7 +3700,9 @@ function UsageDailyBreakdown({ rows, isCredits }: { rows: UsageGroupRowView[]; i
                   <>
                     <td className="agent-clis-usage-table-value">{fmtTokens(row.inputTokens)}</td>
                     <td className="agent-clis-usage-table-value">{fmtTokens(row.outputTokens)}</td>
+                    {showCacheCreation && <td className={cx("agent-clis-usage-table-value", row.cacheCreationTokens === 0 && "is-dim")}>{row.cacheCreationTokens > 0 ? fmtTokens(row.cacheCreationTokens) : "—"}</td>}
                     <td className={cx("agent-clis-usage-table-value", row.cacheReadTokens === 0 && "is-dim")}>{row.cacheReadTokens > 0 ? fmtTokens(row.cacheReadTokens) : "—"}</td>
+                    <td className="agent-clis-usage-table-value">{fmtTokens(usageTotalInput(row))}</td>
                   </>
                 )}
               </tr>
@@ -3704,8 +3849,8 @@ function ExtensionsSettingsPanel({ active, setToast }: { active: boolean; setToa
               </div>
               <button
                 className={cx("button", "secondary", "compact")}
-                disabled={busyId === plugin.id || plugin.source === "bundled" && plugin.id === "com.sharkbay.core"}
-                title={plugin.source === "bundled" && plugin.id === "com.sharkbay.core" ? "Core plugin cannot be disabled" : undefined}
+                disabled={busyId === plugin.id || plugin.source === "bundled" && plugin.id === "xyz.sharkbay.core"}
+                title={plugin.source === "bundled" && plugin.id === "xyz.sharkbay.core" ? "Core plugin cannot be disabled" : undefined}
                 type="button"
                 onClick={() => void toggle(plugin)}
               >

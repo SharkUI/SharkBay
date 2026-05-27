@@ -1,5 +1,6 @@
 import type {
   AgentCli,
+  CodeGraphProjectStatus,
   DiagnosticsSnapshot,
   InstallLogEvent,
   InstallRecipe,
@@ -41,6 +42,9 @@ export type CoreMethodMap = {
   listProjectFiles: { args: [IpcRuntimeLike, ProjectFilesInput]; result: ProjectFilesResult };
   readProjectFile: { args: [IpcRuntimeLike, ReadFileInput]; result: ReadFileResult };
   writeProjectFile: { args: [IpcRuntimeLike, WriteFileInput]; result: WriteFileResult };
+  readCodeGraphStatus: { args: [IpcRuntimeLike, { projectUri: string }]; result: CodeGraphProjectStatus };
+  ensureCodeGraphStatus: { args: [IpcRuntimeLike, { projectUri: string }]; result: CodeGraphProjectStatus };
+  removeCodeGraphIndexes: { args: [IpcRuntimeLike, { projectUris: string[] }]; result: void };
   readMachineProfile: { args: [IpcRuntimeLike, string, ProfileReadOptions | undefined]; result: MachineProfile };
   readProjectProfile: { args: [IpcRuntimeLike, string, ProfileReadOptions | undefined]; result: ProjectProfile };
   pathExistsOnTarget: { args: [IpcRuntimeLike, PathExistsInput]; result: PathExistsResult };

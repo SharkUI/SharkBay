@@ -4,6 +4,7 @@ import {
   observeServiceUrl,
   projectTerminalActivityStates,
   resolveSelectedCandidate,
+  shouldEnsureCodeGraphForSelection,
   shouldKeepCurrentServiceUrl,
   shouldResetTerminalObservationForInput,
   terminalActivityAfterQuiet,
@@ -80,6 +81,29 @@ describe("renderer workflow contracts", () => {
     expect(firstHttpUrl(nextOutput)).toBe("http://localhost:3000");
     expect(shouldKeepCurrentServiceUrl("http://localhost:3000", "https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory")).toBe(true);
     expect(shouldKeepCurrentServiceUrl("https://nextjs.org/docs", "http://127.0.0.1:3000")).toBe(false);
+  });
+
+  it("initializes unindexed local Git projects when selected", () => {
+    expect(shouldEnsureCodeGraphForSelection({
+      providerKind: "local",
+      isGitManaged: true,
+      statusState: "uninitialized",
+    })).toBe(true);
+    expect(shouldEnsureCodeGraphForSelection({
+      providerKind: "local",
+      isGitManaged: true,
+      statusState: "stale",
+    })).toBe(false);
+    expect(shouldEnsureCodeGraphForSelection({
+      providerKind: "local",
+      isGitManaged: false,
+      statusState: "uninitialized",
+    })).toBe(false);
+    expect(shouldEnsureCodeGraphForSelection({
+      providerKind: "ssh",
+      isGitManaged: true,
+      statusState: "uninitialized",
+    })).toBe(false);
   });
 
   it("observes service URLs across streamed terminal chunks", () => {

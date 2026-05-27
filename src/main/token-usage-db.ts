@@ -36,9 +36,12 @@ export type UsageReportFilter = {
 
 export type UsageGroupRow = {
   key: string;
+  /** Fresh, non-cache-read input tokens. Codex raw input includes cache reads, so reports subtract them. */
   inputTokens: number;
   outputTokens: number;
+  cacheCreationTokens: number;
   cacheReadTokens: number;
+  totalInputTokens: number;
   costUsd: number | null;
 };
 
@@ -46,16 +49,63 @@ export type UsageReportResult = {
   byProject: UsageGroupRow[];
   byAgent: UsageGroupRow[];
   byDay: UsageGroupRow[];
-  totals: { inputTokens: number; outputTokens: number; cacheReadTokens: number; costUsd: number | null };
+  totals: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheCreationTokens: number;
+    cacheReadTokens: number;
+    totalInputTokens: number;
+    costUsd: number | null;
+  };
 };
 
 export type UsageGroupSqlRow = {
   key: string | null;
   input_tokens: number | null;
   output_tokens: number | null;
+  cache_creation_tokens: number | null;
   cache_read_tokens: number | null;
+  total_input_tokens: number | null;
   cost_usd: number | null;
 };
+
+export function usageFreshInputTokens(input: {
+  agentId: string;
+  inputTokens: number;
+  cacheReadTokens: number;
+}): number {
+  if (input.agentId === "codex") {
+    return Math.max(input.inputTokens - input.cacheReadTokens, 0);
+  }
+  return input.inputTokens;
+}
+
+export function usageTotalInputTokens(input: {
+  agentId: string;
+  inputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+}): number {
+  if (input.agentId === "codex") {
+    return input.inputTokens + input.cacheCreationTokens;
+  }
+  return input.inputTokens + input.cacheCreationTokens + input.cacheReadTokens;
+}
+
+const freshInputTokensSql = `
+  CASE
+    WHEN agent_id = 'codex' AND input_tokens > cache_read_tokens THEN input_tokens - cache_read_tokens
+    WHEN agent_id = 'codex' THEN 0
+    ELSE input_tokens
+  END
+`;
+
+const totalInputTokensSql = `
+  CASE
+    WHEN agent_id = 'codex' THEN input_tokens + cache_creation_tokens
+    ELSE input_tokens + cache_creation_tokens + cache_read_tokens
+  END
+`;
 
 export class TokenUsageDb {
   private db: Database.Database;
@@ -147,7 +197,7 @@ export class TokenUsageDb {
     const where = `WHERE ${conditions.join(" AND ")}`;
     const row = this.db.prepare(`
       SELECT
-        COALESCE(SUM(input_tokens), 0) AS input_tokens,
+        COALESCE(SUM(${totalInputTokensSql}), 0) AS input_tokens,
         COALESCE(SUM(output_tokens), 0) AS output_tokens
       FROM token_events
       ${where}
@@ -192,29 +242,35 @@ export class TokenUsageDb {
 
     const byProject = this.db.prepare(`
       SELECT project_path AS key,
-        SUM(input_tokens) AS input_tokens,
+        SUM(${freshInputTokensSql}) AS input_tokens,
         SUM(output_tokens) AS output_tokens,
+        SUM(cache_creation_tokens) AS cache_creation_tokens,
         SUM(cache_read_tokens) AS cache_read_tokens,
+        SUM(${totalInputTokensSql}) AS total_input_tokens,
         SUM(cost_usd) AS cost_usd
       FROM token_events ${where}
-      GROUP BY project_path ORDER BY input_tokens DESC
+      GROUP BY project_path ORDER BY total_input_tokens DESC
     `).all(...params) as UsageGroupSqlRow[];
 
     const byAgent = this.db.prepare(`
       SELECT agent_id AS key,
-        SUM(input_tokens) AS input_tokens,
+        SUM(${freshInputTokensSql}) AS input_tokens,
         SUM(output_tokens) AS output_tokens,
+        SUM(cache_creation_tokens) AS cache_creation_tokens,
         SUM(cache_read_tokens) AS cache_read_tokens,
+        SUM(${totalInputTokensSql}) AS total_input_tokens,
         SUM(cost_usd) AS cost_usd
       FROM token_events ${where}
-      GROUP BY agent_id ORDER BY input_tokens DESC
+      GROUP BY agent_id ORDER BY total_input_tokens DESC
     `).all(...params) as UsageGroupSqlRow[];
 
     const byDay = this.db.prepare(`
       SELECT DATE(recorded_at) AS key,
-        SUM(input_tokens) AS input_tokens,
+        SUM(${freshInputTokensSql}) AS input_tokens,
         SUM(output_tokens) AS output_tokens,
+        SUM(cache_creation_tokens) AS cache_creation_tokens,
         SUM(cache_read_tokens) AS cache_read_tokens,
+        SUM(${totalInputTokensSql}) AS total_input_tokens,
         SUM(cost_usd) AS cost_usd
       FROM token_events ${where}
       GROUP BY DATE(recorded_at) ORDER BY key DESC
@@ -222,12 +278,21 @@ export class TokenUsageDb {
 
     const totals = this.db.prepare(`
       SELECT
-        COALESCE(SUM(input_tokens), 0) AS input_tokens,
+        COALESCE(SUM(${freshInputTokensSql}), 0) AS input_tokens,
         COALESCE(SUM(output_tokens), 0) AS output_tokens,
+        COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens,
         COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
+        COALESCE(SUM(${totalInputTokensSql}), 0) AS total_input_tokens,
         SUM(cost_usd) AS cost_usd
       FROM token_events ${where}
-    `).get(...params) as { input_tokens: number; output_tokens: number; cache_read_tokens: number; cost_usd: number | null };
+    `).get(...params) as {
+      input_tokens: number;
+      output_tokens: number;
+      cache_creation_tokens: number;
+      cache_read_tokens: number;
+      total_input_tokens: number;
+      cost_usd: number | null;
+    };
 
     return {
       byProject: byProject.map(toUsageGroupRow),
@@ -236,7 +301,9 @@ export class TokenUsageDb {
       totals: {
         inputTokens: totals.input_tokens,
         outputTokens: totals.output_tokens,
+        cacheCreationTokens: totals.cache_creation_tokens,
         cacheReadTokens: totals.cache_read_tokens,
+        totalInputTokens: totals.total_input_tokens,
         costUsd: totals.cost_usd,
       },
     };
@@ -259,7 +326,9 @@ export function toUsageGroupRow(row: UsageGroupSqlRow): UsageGroupRow {
     key: row.key ?? "Unknown",
     inputTokens: row.input_tokens ?? 0,
     outputTokens: row.output_tokens ?? 0,
+    cacheCreationTokens: row.cache_creation_tokens ?? 0,
     cacheReadTokens: row.cache_read_tokens ?? 0,
+    totalInputTokens: row.total_input_tokens ?? row.input_tokens ?? 0,
     costUsd: row.cost_usd ?? null,
   };
 }

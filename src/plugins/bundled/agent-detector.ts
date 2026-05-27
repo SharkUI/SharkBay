@@ -2,7 +2,7 @@ import type { ToolProfile } from "../../shared/types.js";
 import type { InstallRecipe } from "../../shared/types.js";
 import type { BundledPlugin, MachineDetector } from "../plugin-host.js";
 
-const pluginId = "com.sharkbay.agents";
+const pluginId = "xyz.sharkbay.agents";
 
 export function agentBundledPlugin(): BundledPlugin {
   return {

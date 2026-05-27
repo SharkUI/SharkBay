@@ -2,13 +2,13 @@ import path from "node:path";
 import type { BundledPlugin, MachineDetector, ProjectDetector } from "../plugin-host.js";
 import { probeTools } from "./tool-probe.js";
 
-const pluginId = "com.sharkbay.core";
+const pluginId = "xyz.sharkbay.core";
 
 export function coreBundledPlugin(): BundledPlugin {
   return {
     manifest: {
       id: pluginId,
-      name: "SharkBay Core Detectors",
+      name: "Core Environment Detection",
       version: "1.0.0",
       publisher: "SharkBay",
       engines: { sharkbay: "^0.2.0" },

@@ -163,16 +163,32 @@ const AGENT_SESSION_ID_SCRIPT = [
   "",
   "printf '%s\\n' \"$session_id\"",
 ].join("\n") + "\n";
-export const TEAMWORK_BOOTSTRAP_PROMPT = [
+const TEAMWORK_BOOTSTRAP_INTRO = [
   "I'm working in SharkBay Teamwork mode for this project.",
   "Please read `.sharkbay/harness/protocol.md` first and follow it for the rest of this session.",
-  "This bootstrap message itself does not require a task record.",
+];
+
+const TEAMWORK_BOOTSTRAP_CODEGRAPH_PROMPT = "CodeGraph is installed and configured for this project; when searching or understanding project code, use CodeGraph before rg/grep/ broad file reads.";
+
+const TEAMWORK_BOOTSTRAP_TASK_PROMPT = [
   "If a later request involves editing project files, generating persisted project artifacts, running a multi-step implementation or verification workflow, or preparing a commit, create or update the required task under `.sharkbay/tasks/` before making project changes.",
   "Keep Files and Work updated while working; finish by filling Summary and Verification; record the commit hash if a commit is produced.",
   "Treat `.sharkbay/team-context/` as read-only.",
-  "If the protocol file is missing or unreadable, ask me whether to continue without SharkBay task tracking.",
-  "After reading the protocol, wait for my next instruction.",
-].join(" ");
+];
+
+export type TeamworkBootstrapPromptOptions = {
+  codeGraphEnabled?: boolean;
+};
+
+export function teamworkBootstrapPrompt(options: TeamworkBootstrapPromptOptions = {}): string {
+  return [
+    ...TEAMWORK_BOOTSTRAP_INTRO,
+    ...(options.codeGraphEnabled ? [TEAMWORK_BOOTSTRAP_CODEGRAPH_PROMPT] : []),
+    ...TEAMWORK_BOOTSTRAP_TASK_PROMPT,
+  ].join(" ");
+}
+
+export const TEAMWORK_BOOTSTRAP_PROMPT = teamworkBootstrapPrompt();
 
 export type GitHubIdentity = {
   login: string;
@@ -506,11 +522,18 @@ export async function ensureLocalExclude(repoPath: string): Promise<void> {
 export type TeamworkAgentLaunchResult = {
   initialCommand: string;
   injected: boolean;
+  bootstrapPrompt?: string;
   skippedReason?: "not-installed" | "unsupported-agent";
 };
 
-export async function prepareTeamworkAgentLaunch(repoPath: string, agentId: string, initialCommand: string): Promise<TeamworkAgentLaunchResult> {
-  const bootstrapArgs = teamworkBootstrapArgs(agentId, TEAMWORK_BOOTSTRAP_PROMPT);
+export async function prepareTeamworkAgentLaunch(
+  repoPath: string,
+  agentId: string,
+  initialCommand: string,
+  options: TeamworkBootstrapPromptOptions = {},
+): Promise<TeamworkAgentLaunchResult> {
+  const bootstrapPrompt = teamworkBootstrapPrompt(options);
+  const bootstrapArgs = teamworkBootstrapArgs(agentId, bootstrapPrompt);
   if (!bootstrapArgs) {
     return { initialCommand, injected: false, skippedReason: "unsupported-agent" };
   }
@@ -518,7 +541,7 @@ export async function prepareTeamworkAgentLaunch(repoPath: string, agentId: stri
     return { initialCommand, injected: false, skippedReason: "not-installed" };
   }
 
-  return { initialCommand: appendShellArgs(withLaunchSessionId(agentId, initialCommand), bootstrapArgs), injected: true };
+  return { initialCommand: appendShellArgs(withLaunchSessionId(agentId, initialCommand), bootstrapArgs), injected: true, bootstrapPrompt };
 }
 
 async function hasSharkbayHarnessDir(repoPath: string): Promise<boolean> {
@@ -672,6 +695,19 @@ Useful searches:
 
 If a previous task affects the current work, read that task record and mention
 its taskId in the current task's Work Summary or Notes For Future Agents.
+
+## Code Intelligence
+
+This project has CodeGraph installed and configured. When searching code,
+prefer CodeGraph over \`rg\`, \`grep\`, or broad file reads:
+- \`codegraph query <symbol-or-name>\`
+- \`codegraph callers <symbol>\`
+- \`codegraph callees <symbol>\`
+- \`codegraph impact <symbol>\`
+- \`codegraph affected <changed-files>\`
+
+Use \`codegraph context "what you need to understand"\` only for initial
+exploration when no clear symbol or file is known.
 
 ## When To Create Or Update A Task
 

@@ -9,11 +9,17 @@ import {
   installHarness,
   isHarnessInstalled,
   prepareTeamworkAgentLaunch,
+  teamworkBootstrapPrompt,
   TEAMWORK_BOOTSTRAP_PROMPT,
   uninstallHarness,
   updateHarnessFiles,
 } from "../src/main/teamwork-harness.js";
-import { makeTempRoot, writeJson, writeText } from "./helpers.js";
+import { SharkBayCoreService } from "../src/core/core-service.js";
+import { LocalProvider } from "../src/providers/local/local-provider.js";
+import { CODEGRAPH_PLUGIN_ID, codeGraphBundledPlugin } from "../src/plugins/bundled/codegraph-detector.js";
+import { PluginHost } from "../src/plugins/plugin-host.js";
+import type { IpcRuntimeLike, TerminalCreateInput, TerminalSession } from "../src/shared/types.js";
+import { makeTempRoot, makeTestRuntime, writeJson, writeText } from "./helpers.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -24,6 +30,23 @@ const harnessOptions = {
   agent: "codex",
   repo: "SharkUI/AIBF",
 };
+
+class CaptureTerminalProvider extends LocalProvider {
+  readonly terminalInputs: TerminalCreateInput[] = [];
+
+  override createTerminal(_runtime: IpcRuntimeLike, input: TerminalCreateInput): Promise<TerminalSession> {
+    this.terminalInputs.push(input);
+    return Promise.resolve({
+      id: `term-${this.terminalInputs.length}`,
+      cwdUri: input.cwdUri,
+      title: "Terminal",
+      shell: "zsh",
+      pid: null,
+      status: "running",
+      createdAt: "2026-05-27T00:00:00Z",
+    });
+  }
+}
 
 describe("teamwork harness install", () => {
   it("writes only local harness files and ignores the sharkbay directory", async () => {
@@ -50,6 +73,11 @@ describe("teamwork harness install", () => {
     expect(protocol).toContain("date -u +%Y-%m-%dT%H:%M:%SZ");
     expect(protocol).toContain("Never estimate, round, backfill, or fabricate timestamps.");
     expect(protocol).toContain("Use the actual task executor identity in `agent`");
+    expect(protocol).toContain("## Code Intelligence");
+    expect(protocol).toContain("This project has CodeGraph installed and configured.");
+    expect(protocol).toContain("prefer CodeGraph over `rg`, `grep`, or broad file reads");
+    expect(protocol).toContain("codegraph query <symbol-or-name>");
+    expect(protocol).toContain('Use `codegraph context "what you need to understand"` only for initial');
     const sessionHelper = await fs.stat(path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"));
     expect(sessionHelper.mode & 0o111).not.toBe(0);
     const sessionHelperText = await fs.readFile(path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"), "utf8");
@@ -230,14 +258,42 @@ describe("teamwork harness install", () => {
     const repo = await createRealGitRepoFixture(root);
     await installHarness(repo, harnessOptions);
 
-    const result = await prepareTeamworkAgentLaunch(repo, "codex", "codex");
+    const result = await prepareTeamworkAgentLaunch(repo, "codex", "codex", { codeGraphEnabled: true });
 
     expect(result.injected).toBe(true);
     expect(result.initialCommand).toContain("codex 'I'\\''m working in SharkBay Teamwork mode");
     expect(result.initialCommand).toContain(".sharkbay/harness/protocol.md");
-    expect(TEAMWORK_BOOTSTRAP_PROMPT).toContain("This bootstrap message itself does not require a task record.");
+    expect(teamworkBootstrapPrompt({ codeGraphEnabled: true })).toBe([
+      "I'm working in SharkBay Teamwork mode for this project.",
+      "Please read `.sharkbay/harness/protocol.md` first and follow it for the rest of this session.",
+      "CodeGraph is installed and configured for this project; when searching or understanding project code, use CodeGraph before rg/grep/ broad file reads.",
+      "If a later request involves editing project files, generating persisted project artifacts, running a multi-step implementation or verification workflow, or preparing a commit, create or update the required task under `.sharkbay/tasks/` before making project changes.",
+      "Keep Files and Work updated while working; finish by filling Summary and Verification; record the commit hash if a commit is produced.",
+      "Treat `.sharkbay/team-context/` as read-only.",
+    ].join(" "));
+    expect(TEAMWORK_BOOTSTRAP_PROMPT).not.toContain("CodeGraph is installed and configured");
     await expect(fs.stat(path.join(repo, "AGENTS.md")).catch(() => null)).resolves.toBeNull();
     await expect(fs.stat(path.join(repo, "QWEN.md")).catch(() => null)).resolves.toBeNull();
+  });
+
+  it("passes CodeGraph plugin enabled state into terminal bootstrap preparation", async () => {
+    const runtime = await makeTestRuntime("teamwork-bootstrap-codegraph-enabled");
+    const provider = new CaptureTerminalProvider();
+    const host = new PluginHost();
+    host.registerPlugin(codeGraphBundledPlugin(), { source: "bundled" });
+    const core = new SharkBayCoreService([provider], host);
+
+    await core.createTerminal(runtime, { cwdUri: "local:/tmp/project", agentId: "codex", initialCommand: "codex" });
+    expect(provider.terminalInputs[0]?.teamworkBootstrap?.codeGraphEnabled).toBe(true);
+
+    core.setPluginEnabled(CODEGRAPH_PLUGIN_ID, false);
+    await core.createTerminal(runtime, {
+      cwdUri: "local:/tmp/project",
+      agentId: "codex",
+      initialCommand: "codex",
+      teamworkBootstrap: { codeGraphEnabled: true },
+    });
+    expect(provider.terminalInputs[1]?.teamworkBootstrap?.codeGraphEnabled).toBe(false);
   });
 
   it("keeps existing user entry files unchanged during bootstrap preparation", async () => {

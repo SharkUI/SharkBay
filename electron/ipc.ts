@@ -14,6 +14,7 @@ import type {
   AppConfig,
   AppearanceTheme,
   AppearanceThemeInput,
+  CodeGraphProjectStatus,
   UsageReportFilter,
   UsageReportResult,
   UsageSummary,
@@ -73,6 +74,8 @@ import type {
   TerminalUpdateEvent
 } from "../src/shared/types.js";
 import { ipcChannels as channels } from "../src/shared/ipc-channels.js";
+import { toLocalProjectUri } from "../src/core/project-uri.js";
+import { CODEGRAPH_PLUGIN_ID } from "../src/plugins/bundled/codegraph-detector.js";
 import { AgentSessionWatcher } from "../src/main/agent-clis.js";
 import { TokenUsageDb } from "../src/main/token-usage-db.js";
 import { TokenUsageCollector } from "../src/main/token-usage-collector.js";
@@ -359,6 +362,12 @@ export async function registerIpcHandlers(
   handle<WriteFileInput, WriteFileResult>(channels.writeProjectFile, (payload) =>
     requireCore().call("writeProjectFile", [runtime, payload])
   );
+  handle<{ projectUri: string }, CodeGraphProjectStatus>(channels.codeGraphGetStatus, (payload) =>
+    requireCore().call("readCodeGraphStatus", [runtime, payload])
+  );
+  handle<{ projectUri: string }, CodeGraphProjectStatus>(channels.codeGraphEnsureStatus, (payload) =>
+    requireCore().call("ensureCodeGraphStatus", [runtime, payload])
+  );
   handle<{ cwdUri?: string } | undefined, AgentCli[]>(channels.listAgentClis, (payload) =>
     requireCore().call("listAgentClis", [runtime, payload])
   );
@@ -381,8 +390,16 @@ export async function registerIpcHandlers(
     requireCore().call("listPlugins", [])
   );
   handle<{ pluginId: string; enabled: boolean }, PluginSummary[]>(channels.setPluginEnabled, async (payload) => {
-    await setPluginEnabledConfig(runtime, payload.pluginId, payload.enabled);
-    return requireCore().call("setPluginEnabled", [payload.pluginId, payload.enabled]);
+    const config = await setPluginEnabledConfig(runtime, payload.pluginId, payload.enabled);
+    const plugins = await requireCore().call("setPluginEnabled", [payload.pluginId, payload.enabled]);
+    if (payload.pluginId === CODEGRAPH_PLUGIN_ID && !payload.enabled) {
+      const projectUris = [
+        ...config.configuredProjects.map((projectPath) => toLocalProjectUri(projectPath)),
+        ...config.configuredRemoteProjects,
+      ];
+      await requireCore().call("removeCodeGraphIndexes", [runtime, { projectUris }]);
+    }
+    return plugins;
   });
   handle<void, DiagnosticsSnapshot>(channels.readDiagnostics, () =>
     requireCore().call("readDiagnostics", [])

@@ -1260,6 +1260,22 @@ body.is-resizing-columns * {
   padding: 8px;
 }
 
+.codegraph-status-card {
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px;
+}
+
+.codegraph-status-line {
+  min-width: 0;
+  overflow: hidden;
+  color: #263235;
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .project-file-tree {
   display: grid;
   gap: 1px;
@@ -2578,6 +2594,7 @@ button.project-file-toggle:focus-visible {
 }
 .agent-clis-usage-summary {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 14px;
 }
@@ -2645,10 +2662,12 @@ button.project-file-toggle:focus-visible {
   background: #ffffff;
   border: 1px solid #e8e4dc;
   border-radius: 8px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 .agent-clis-usage-table {
   width: 100%;
+  min-width: 520px;
   font-size: 12px;
   border-collapse: collapse;
 }
@@ -4142,6 +4161,10 @@ body.is-resizing-columns .app-shell[data-theme="night"] .column-resizer::before 
 .app-shell[data-theme="night"] .project-panel-title,
 .app-shell[data-theme="night"] .section-heading {
   color: #9fb0ac;
+}
+
+.app-shell[data-theme="night"] .codegraph-status-line {
+  color: #edf2ef;
 }
 
 .app-shell[data-theme="night"] .settings-nav,

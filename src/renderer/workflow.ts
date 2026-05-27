@@ -13,6 +13,7 @@ export type WorkflowProjectCandidate = {
 
 export type WorkflowProjectTerminalActivityState = "working" | "idle";
 export type WorkflowTerminalActivityState = "idle" | "working" | "done";
+export type WorkflowCodeGraphStatusState = "disabled" | "unsupported" | "not-installed" | "uninitialized" | "stale" | "indexed" | "error";
 
 export type WorkflowTerminalActivityTab = {
   activityState: WorkflowTerminalActivityState;
@@ -68,6 +69,16 @@ export function terminalActivityForCandidate(
 
 export function terminalActivityAfterQuiet(activityState: WorkflowTerminalActivityState): WorkflowTerminalActivityState {
   return activityState === "working" ? "done" : "idle";
+}
+
+export function shouldEnsureCodeGraphForSelection(input: {
+  providerKind: WorkflowProjectCandidate["providerKind"];
+  isGitManaged: boolean | null;
+  statusState: WorkflowCodeGraphStatusState;
+}): boolean {
+  return input.providerKind === "local"
+    && input.isGitManaged === true
+    && input.statusState === "uninitialized";
 }
 
 export function firstHttpUrl(data: string): string | null {

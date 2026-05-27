@@ -13,7 +13,7 @@ function completedJob(overrides: Partial<ScheduledJob<unknown>> = {}): Scheduled
     status: "completed",
     startedAt: "2026-05-16T00:00:00.000Z",
     finishedAt: "2026-05-16T00:00:00.250Z",
-    dedupeKey: "machine:local:com.sharkbay.core:core.machine",
+    dedupeKey: "machine:local:xyz.sharkbay.core:core.machine",
     ...overrides,
   };
 }
@@ -26,7 +26,7 @@ describe("DiagnosticsCollector", () => {
     const snapshot = collector.snapshot();
     expect(snapshot.recentJobs).toHaveLength(2);
     expect(snapshot.detectorAggregates).toEqual([
-      expect.objectContaining({ detectorKey: "com.sharkbay.core.core.machine", runs: 2, failureCount: 0 }),
+      expect.objectContaining({ detectorKey: "xyz.sharkbay.core.core.machine", runs: 2, failureCount: 0 }),
     ]);
     expect(snapshot.detectorAggregates[0]?.avgDurationMs).toBeGreaterThan(0);
   });

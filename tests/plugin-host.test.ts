@@ -40,13 +40,14 @@ describe("PluginHost", () => {
     for (const plugin of bundledPlugins()) host.registerPlugin(plugin);
     const ids = host.listPlugins().map((p) => p.id).sort();
     expect(ids).toEqual([
-      "com.sharkbay.agents",
-      "com.sharkbay.core",
-      "com.sharkbay.language.go",
-      "com.sharkbay.language.java",
-      "com.sharkbay.language.node",
-      "com.sharkbay.language.python",
-      "com.sharkbay.language.rust",
+      "xyz.sharkbay.agents",
+      "xyz.sharkbay.codegraph",
+      "xyz.sharkbay.core",
+      "xyz.sharkbay.language.go",
+      "xyz.sharkbay.language.java",
+      "xyz.sharkbay.language.node",
+      "xyz.sharkbay.language.python",
+      "xyz.sharkbay.language.rust",
     ]);
     expect(host.listMachineDetectors().length).toBeGreaterThan(0);
     expect(host.listProjectDetectors().length).toBeGreaterThan(0);

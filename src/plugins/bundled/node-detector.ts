@@ -2,13 +2,13 @@ import type { BundledPlugin, MachineDetector, ProjectDetector, ProjectProfilePat
 import type { DetectedPackageManager, ProjectProfile } from "../../shared/types.js";
 import { probeTools } from "./tool-probe.js";
 
-const pluginId = "com.sharkbay.language.node";
+const pluginId = "xyz.sharkbay.language.node";
 
 export function nodeBundledPlugin(): BundledPlugin {
   return {
     manifest: {
       id: pluginId,
-      name: "Node.js Support",
+      name: "Node.js Project Detection",
       version: "1.0.0",
       publisher: "SharkBay",
       engines: { sharkbay: "^0.2.0" },

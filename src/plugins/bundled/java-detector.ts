@@ -1,13 +1,13 @@
 import type { BundledPlugin, MachineDetector, ProjectDetector, ProjectProfilePatch } from "../plugin-host.js";
 import { probeTools } from "./tool-probe.js";
 
-const pluginId = "com.sharkbay.language.java";
+const pluginId = "xyz.sharkbay.language.java";
 
 export function javaBundledPlugin(): BundledPlugin {
   return {
     manifest: {
       id: pluginId,
-      name: "Java Support",
+      name: "Java Project Detection",
       version: "1.0.0",
       publisher: "SharkBay",
       engines: { sharkbay: "^0.2.0" },
