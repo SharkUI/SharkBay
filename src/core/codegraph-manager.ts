@@ -98,7 +98,7 @@ export class CodeGraphManager {
           return status(projectUri, "uninitialized", "CodeGraph not initialized");
         }
         await this.runCommand(codegraphPath, ["init", "-i", parsed.path], { cwd: parsed.path, timeout: 120_000 });
-        await ensureGitignoreEntry(parsed.path, ".codegraph").catch(() => {});
+        await ensureGitExcludeEntry(parsed.path, ".codegraph").catch(() => {});
         current = await this.readStatusJson(codegraphPath, parsed.path);
       }
       if (current.initialized && pendingChangeCount(current) > 0) {
@@ -138,7 +138,7 @@ export class CodeGraphManager {
     } else {
       await fs.rm(path.join(parsed.path, ".codegraph"), { recursive: true, force: true });
     }
-    await removeGitignoreEntry(parsed.path, ".codegraph").catch(() => {});
+    await removeGitExcludeEntry(parsed.path, ".codegraph").catch(() => {});
   }
 }
 
@@ -197,28 +197,33 @@ function status(
   };
 }
 
-export async function ensureGitignoreEntry(projectPath: string, entry: string): Promise<void> {
-  const gitignorePath = path.join(projectPath, ".gitignore");
+export async function ensureGitExcludeEntry(projectPath: string, entry: string): Promise<void> {
+  const excludePath = path.join(projectPath, ".git", "info", "exclude");
   try {
-    const content = await fs.readFile(gitignorePath, "utf-8");
+    const content = await fs.readFile(excludePath, "utf-8");
     const lines = content.split("\n");
     if (lines.some((line) => line.trim() === entry || line.trim() === `${entry}/`)) return;
     const separator = content.length > 0 && !content.endsWith("\n") ? "\n" : "";
-    await fs.writeFile(gitignorePath, `${content}${separator}${entry}\n`, "utf-8");
+    await fs.writeFile(excludePath, `${content}${separator}${entry}\n`, "utf-8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      await fs.writeFile(gitignorePath, `${entry}\n`, "utf-8");
+      await fs.mkdir(path.join(projectPath, ".git", "info"), { recursive: true });
+      await fs.writeFile(excludePath, `${entry}\n`, "utf-8");
       return;
     }
     throw error;
   }
 }
 
-export async function removeGitignoreEntry(projectPath: string, entry: string): Promise<void> {
-  const gitignorePath = path.join(projectPath, ".gitignore");
-  const content = await fs.readFile(gitignorePath, "utf-8");
-  const lines = content.split("\n");
-  const filtered = lines.filter((line) => line.trim() !== entry && line.trim() !== `${entry}/`);
-  if (filtered.length === lines.length) return;
-  await fs.writeFile(gitignorePath, filtered.join("\n"), "utf-8");
+export async function removeGitExcludeEntry(projectPath: string, entry: string): Promise<void> {
+  const excludePath = path.join(projectPath, ".git", "info", "exclude");
+  try {
+    const content = await fs.readFile(excludePath, "utf-8");
+    const lines = content.split("\n");
+    const filtered = lines.filter((line) => line.trim() !== entry && line.trim() !== `${entry}/`);
+    if (filtered.length === lines.length) return;
+    await fs.writeFile(excludePath, filtered.join("\n"), "utf-8");
+  } catch {
+    // exclude file doesn't exist — nothing to remove
+  }
 }

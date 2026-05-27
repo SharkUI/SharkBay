@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildCodeGraphCommandEnv, CodeGraphManager, ensureGitignoreEntry, removeGitignoreEntry } from "../src/core/codegraph-manager.js";
+import { buildCodeGraphCommandEnv, CodeGraphManager, ensureGitExcludeEntry, removeGitExcludeEntry } from "../src/core/codegraph-manager.js";
 import { toLocalProjectUri } from "../src/core/project-uri.js";
 
 describe("CodeGraphManager", () => {
@@ -89,85 +89,106 @@ describe("CodeGraphManager", () => {
   });
 });
 
-describe("ensureGitignoreEntry", () => {
+describe("ensureGitExcludeEntry", () => {
   async function makeTmpDir(): Promise<string> {
-    return fs.mkdtemp(path.join(tmpdir(), "sharkbay-test-"));
+    const dir = await fs.mkdtemp(path.join(tmpdir(), "sharkbay-test-"));
+    await fs.mkdir(path.join(dir, ".git", "info"), { recursive: true });
+    return dir;
   }
 
-  it("creates .gitignore with the entry when file does not exist", async () => {
+  it("creates exclude file with the entry when file does not exist", async () => {
     const dir = await makeTmpDir();
-    await ensureGitignoreEntry(dir, ".codegraph");
-    const content = await fs.readFile(path.join(dir, ".gitignore"), "utf-8");
+    await fs.rm(path.join(dir, ".git", "info", "exclude"), { force: true });
+    await ensureGitExcludeEntry(dir, ".codegraph");
+    const content = await fs.readFile(path.join(dir, ".git", "info", "exclude"), "utf-8");
     expect(content).toBe(".codegraph\n");
     await fs.rm(dir, { recursive: true });
   });
 
-  it("appends entry to existing .gitignore", async () => {
+  it("appends entry to existing exclude file", async () => {
     const dir = await makeTmpDir();
-    await fs.writeFile(path.join(dir, ".gitignore"), "node_modules\n");
-    await ensureGitignoreEntry(dir, ".codegraph");
-    const content = await fs.readFile(path.join(dir, ".gitignore"), "utf-8");
+    await fs.writeFile(path.join(dir, ".git", "info", "exclude"), "node_modules\n");
+    await ensureGitExcludeEntry(dir, ".codegraph");
+    const content = await fs.readFile(path.join(dir, ".git", "info", "exclude"), "utf-8");
     expect(content).toBe("node_modules\n.codegraph\n");
     await fs.rm(dir, { recursive: true });
   });
 
   it("does not duplicate entry if already present", async () => {
     const dir = await makeTmpDir();
-    await fs.writeFile(path.join(dir, ".gitignore"), "node_modules\n.codegraph\n");
-    await ensureGitignoreEntry(dir, ".codegraph");
-    const content = await fs.readFile(path.join(dir, ".gitignore"), "utf-8");
+    await fs.writeFile(path.join(dir, ".git", "info", "exclude"), "node_modules\n.codegraph\n");
+    await ensureGitExcludeEntry(dir, ".codegraph");
+    const content = await fs.readFile(path.join(dir, ".git", "info", "exclude"), "utf-8");
     expect(content).toBe("node_modules\n.codegraph\n");
     await fs.rm(dir, { recursive: true });
   });
 
   it("recognizes entry with trailing slash as already present", async () => {
     const dir = await makeTmpDir();
-    await fs.writeFile(path.join(dir, ".gitignore"), ".codegraph/\n");
-    await ensureGitignoreEntry(dir, ".codegraph");
-    const content = await fs.readFile(path.join(dir, ".gitignore"), "utf-8");
+    await fs.writeFile(path.join(dir, ".git", "info", "exclude"), ".codegraph/\n");
+    await ensureGitExcludeEntry(dir, ".codegraph");
+    const content = await fs.readFile(path.join(dir, ".git", "info", "exclude"), "utf-8");
     expect(content).toBe(".codegraph/\n");
     await fs.rm(dir, { recursive: true });
   });
 
   it("handles file without trailing newline", async () => {
     const dir = await makeTmpDir();
-    await fs.writeFile(path.join(dir, ".gitignore"), "node_modules");
-    await ensureGitignoreEntry(dir, ".codegraph");
-    const content = await fs.readFile(path.join(dir, ".gitignore"), "utf-8");
+    await fs.writeFile(path.join(dir, ".git", "info", "exclude"), "node_modules");
+    await ensureGitExcludeEntry(dir, ".codegraph");
+    const content = await fs.readFile(path.join(dir, ".git", "info", "exclude"), "utf-8");
     expect(content).toBe("node_modules\n.codegraph\n");
+    await fs.rm(dir, { recursive: true });
+  });
+
+  it("creates .git/info directory if missing", async () => {
+    const dir = await fs.mkdtemp(path.join(tmpdir(), "sharkbay-test-"));
+    await ensureGitExcludeEntry(dir, ".codegraph");
+    const content = await fs.readFile(path.join(dir, ".git", "info", "exclude"), "utf-8");
+    expect(content).toBe(".codegraph\n");
     await fs.rm(dir, { recursive: true });
   });
 });
 
-describe("removeGitignoreEntry", () => {
+describe("removeGitExcludeEntry", () => {
   async function makeTmpDir(): Promise<string> {
-    return fs.mkdtemp(path.join(tmpdir(), "sharkbay-test-"));
+    const dir = await fs.mkdtemp(path.join(tmpdir(), "sharkbay-test-"));
+    await fs.mkdir(path.join(dir, ".git", "info"), { recursive: true });
+    return dir;
   }
 
-  it("removes the entry from .gitignore", async () => {
+  it("removes the entry from exclude file", async () => {
     const dir = await makeTmpDir();
-    await fs.writeFile(path.join(dir, ".gitignore"), "node_modules\n.codegraph\n");
-    await removeGitignoreEntry(dir, ".codegraph");
-    const content = await fs.readFile(path.join(dir, ".gitignore"), "utf-8");
+    await fs.writeFile(path.join(dir, ".git", "info", "exclude"), "node_modules\n.codegraph\n");
+    await removeGitExcludeEntry(dir, ".codegraph");
+    const content = await fs.readFile(path.join(dir, ".git", "info", "exclude"), "utf-8");
     expect(content).toBe("node_modules\n");
     await fs.rm(dir, { recursive: true });
   });
 
   it("removes entry with trailing slash", async () => {
     const dir = await makeTmpDir();
-    await fs.writeFile(path.join(dir, ".gitignore"), "node_modules\n.codegraph/\n");
-    await removeGitignoreEntry(dir, ".codegraph");
-    const content = await fs.readFile(path.join(dir, ".gitignore"), "utf-8");
+    await fs.writeFile(path.join(dir, ".git", "info", "exclude"), "node_modules\n.codegraph/\n");
+    await removeGitExcludeEntry(dir, ".codegraph");
+    const content = await fs.readFile(path.join(dir, ".git", "info", "exclude"), "utf-8");
     expect(content).toBe("node_modules\n");
     await fs.rm(dir, { recursive: true });
   });
 
   it("does nothing when entry is not present", async () => {
     const dir = await makeTmpDir();
-    await fs.writeFile(path.join(dir, ".gitignore"), "node_modules\n");
-    await removeGitignoreEntry(dir, ".codegraph");
-    const content = await fs.readFile(path.join(dir, ".gitignore"), "utf-8");
+    await fs.writeFile(path.join(dir, ".git", "info", "exclude"), "node_modules\n");
+    await removeGitExcludeEntry(dir, ".codegraph");
+    const content = await fs.readFile(path.join(dir, ".git", "info", "exclude"), "utf-8");
     expect(content).toBe("node_modules\n");
+    await fs.rm(dir, { recursive: true });
+  });
+
+  it("does nothing when exclude file does not exist", async () => {
+    const dir = await fs.mkdtemp(path.join(tmpdir(), "sharkbay-test-"));
+    await removeGitExcludeEntry(dir, ".codegraph");
+    const exists = await fs.access(path.join(dir, ".git", "info", "exclude")).then(() => true).catch(() => false);
+    expect(exists).toBe(false);
     await fs.rm(dir, { recursive: true });
   });
 });
