@@ -10,7 +10,7 @@ import { readGitDirtyFiles, readGitHistory, readGitMetadata } from "../../main/g
 import { listProjectFiles } from "../../main/project-files.js";
 import { scanProjects } from "../../main/scanner.js";
 import { TerminalManager } from "../../main/terminal.js";
-import { resolveCommandPath } from "../../main/command-path.js";
+import { prependPathDirectories, resolveCommandPath, resolveCommandSearchPaths } from "../../main/command-path.js";
 import type {
   ExecutionTarget,
   GitDirtyFile,
@@ -228,10 +228,19 @@ export class LocalProvider extends EventEmitter implements ExecutionProvider {
   async runCommand(_runtime: IpcRuntimeLike, uriOrTargetId: string, command: string, options: RunCommandOptions = {}): Promise<CommandResult> {
     const cwd = options.cwdUri ? localPathFromUri(options.cwdUri) : uriOrTargetId.startsWith("local:") ? localPathFromUri(uriOrTargetId) : os.homedir();
     try {
+      const commandSearchPaths = await resolveCommandSearchPaths();
+      const env = {
+        ...process.env,
+        PATH: prependPathDirectories(process.env.PATH, commandSearchPaths),
+        ...options.env,
+      };
+      if (options.env?.PATH) {
+        env.PATH = prependPathDirectories(options.env.PATH, commandSearchPaths);
+      }
       const result = await execFileAsync("/bin/sh", ["-lc", command], {
         cwd,
         timeout: options.timeoutMs ?? 8000,
-        env: { ...process.env, ...options.env },
+        env,
         maxBuffer: 1024 * 1024,
       });
       return { stdout: result.stdout, stderr: result.stderr, exitCode: 0 };

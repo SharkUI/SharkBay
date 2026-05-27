@@ -10,6 +10,7 @@ import { parseProjectUri } from "../core/project-uri.js";
 import { resolveProjectUri } from "./path-safety.js";
 import { createAskPassScript, sshArgsForRemoteMachine } from "./remote-machines.js";
 import { createDefaultSecretStore, type SecretStore } from "./secrets.js";
+import { prependPathDirectories, resolveCommandSearchPaths } from "./command-path.js";
 import { prepareTeamworkAgentLaunch } from "./teamwork-harness.js";
 import type {
   IpcRuntimeLike,
@@ -241,12 +242,14 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
     }
     const resolved = await resolveTerminalCwd(runtime, cwdUri);
     const shell = preferredShell();
+    const commandSearchPaths = await resolveCommandSearchPaths();
     return {
       cwd: resolved.cwd,
       cwdUri: resolved.cwdUri,
       command: terminalCommand(shell),
       env: {
         ...process.env,
+        PATH: prependPathDirectories(process.env.PATH, commandSearchPaths),
         TERM: process.env.TERM || "xterm-256color",
         COLORTERM: process.env.COLORTERM || "truecolor",
         ...terminalShellEnvironment,
