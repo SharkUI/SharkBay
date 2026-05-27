@@ -12,8 +12,10 @@ agent: Codex GPT-5
 sessionId: 019e64b4-2e32-7dd2-b80a-774ed2ef3f9d
 branch: main
 createdAt: 2026-05-27T03:40:26Z
-updatedAt: 2026-05-27T03:51:30Z
-completedAt: 2026-05-27T03:51:30Z
+updatedAt: 2026-05-27T04:01:31Z
+completedAt: 2026-05-27T04:01:31Z
+commits:
+  - 5c594f1cc6813226ed9b5d8abb53066a1bd78352
 ---
 
 ## Summary
@@ -36,6 +38,7 @@ Gated the Teamwork bootstrap CodeGraph guidance on the CodeGraph extension enabl
 - Split the bootstrap prompt into base text plus optional CodeGraph guidance, and used the launch result prompt for delayed DeepSeek/OpenCode injection.
 - Wired terminal creation to receive the CodeGraph enabled state from `SharkBayCoreService.createTerminal`.
 - Added tests for conditional prompt composition and for overriding caller-provided bootstrap state with the plugin host state.
+- Committed the tracked bootstrap gating files.
 
 ## Verification
 - `env -u SHARKBAY_RESTORED_SESSION_ID npm test -- tests/teamwork-harness.test.ts`
@@ -46,4 +49,3 @@ Gated the Teamwork bootstrap CodeGraph guidance on the CodeGraph extension enabl
 ## Notes
 - User requested reading the CodeGraph plugin enabled state before bootstrap injection.
 - Existing unrelated modified renderer files were left untouched.
-- No commit was produced.
