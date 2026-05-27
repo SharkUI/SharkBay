@@ -111,7 +111,7 @@ export class BrowserManager extends EventEmitter<BrowserManagerEvents> {
     if (input.active) {
       this.hideOtherViews(record);
       this.attach(record);
-      setBrowserBounds(record.view, input.bounds);
+      setBrowserBounds(record.view, input.bounds, browserViewBoundsScale(record.window));
       if (!record.window.isDestroyed()) {
         record.window.setTopBrowserView(record.view);
       }
@@ -220,13 +220,24 @@ export function normalizeBrowserUrl(value: string | null | undefined): string {
   }
 }
 
-function setBrowserBounds(view: BrowserView, bounds: BrowserBounds): void {
-  view.setBounds({
-    x: integer(bounds.x),
-    y: integer(bounds.y),
-    width: positiveDimension(bounds.width),
-    height: positiveDimension(bounds.height),
-  });
+function setBrowserBounds(view: BrowserView, bounds: BrowserBounds, scale = 1): void {
+  view.setBounds(scaleBrowserBounds(bounds, scale));
+}
+
+function browserViewBoundsScale(window: BrowserWindow): number {
+  if (window.isDestroyed() || window.webContents.isDestroyed()) return 1;
+  const zoomFactor = window.webContents.getZoomFactor();
+  return Number.isFinite(zoomFactor) && zoomFactor > 0 ? zoomFactor : 1;
+}
+
+export function scaleBrowserBounds(bounds: BrowserBounds, scale: number): BrowserBounds {
+  const factor = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  return {
+    x: integer(bounds.x * factor),
+    y: integer(bounds.y * factor),
+    width: positiveDimension(bounds.width * factor),
+    height: positiveDimension(bounds.height * factor),
+  };
 }
 
 function integer(value: number): number {
