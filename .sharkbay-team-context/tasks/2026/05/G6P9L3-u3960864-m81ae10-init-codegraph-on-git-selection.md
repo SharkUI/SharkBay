@@ -12,8 +12,8 @@ agent: Codex GPT-5
 sessionId: 019e675b-d21b-7a62-afcf-78e643d41de6
 branch: main
 createdAt: 2026-05-27T02:58:57Z
-updatedAt: 2026-05-27T03:01:33Z
-completedAt: 2026-05-27T03:01:33Z
+updatedAt: 2026-05-27T03:02:56Z
+completedAt: 2026-05-27T03:02:56Z
 ---
 
 ## Summary
@@ -29,6 +29,7 @@ Selected local Git projects now initialize CodeGraph immediately when the curren
 - Searched team context and found K3D9P4-u3960864-m81ae10 as the prior CodeGraph sync-trigger change.
 - Added a renderer workflow predicate for selected local Git projects whose CodeGraph status is uninitialized.
 - Wired the project detail CodeGraph status read to immediately run ensure for that missing-init case while leaving stale Git indexes on the dirty-count debounce path.
+- Matched project detail to the selected candidate before using Git status so stale detail cannot trigger CodeGraph maintenance for the wrong project.
 - Added renderer workflow regression coverage for local Git, stale status, non-Git, and remote cases.
 
 ## Verification
