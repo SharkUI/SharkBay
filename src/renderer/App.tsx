@@ -2355,7 +2355,7 @@ function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserT
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
           <span className="task-avatar task-detail-avatar">
-            {selected.owner.avatarUrl ? <img alt="" src={selected.owner.avatarUrl} /> : selected.owner.githubLogin.slice(0, 2).toUpperCase()}
+            {selected.owner.avatarUrl ? <CachedAvatar url={selected.owner.avatarUrl} /> : selected.owner.githubLogin.slice(0, 2).toUpperCase()}
           </span>
           <div className="task-detail-title">
             <h3>{selected.title}</h3>
@@ -2428,7 +2428,7 @@ function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserT
             <div className={cx("task-card-stack", restore && "has-restore-session")} key={task.taskId}>
               <button className="queue-item" type="button" onClick={() => setSelectedTaskId(task.taskId)}>
                 <span className="task-avatar">
-                  {task.owner.avatarUrl ? <img alt="" src={task.owner.avatarUrl} /> : task.owner.githubLogin.slice(0, 2).toUpperCase()}
+                  {task.owner.avatarUrl ? <CachedAvatar url={task.owner.avatarUrl} /> : task.owner.githubLogin.slice(0, 2).toUpperCase()}
                 </span>
                 <span className="task-row-main">
                   <span className="task-title">{task.title}</span>
@@ -3790,6 +3790,28 @@ function OpenCodeIcon() {
       <path d="M16 6H8v12h8V6zm4 16H4V2h16v20z" />
     </svg>
   );
+}
+
+function CachedAvatar({ url }: { url: string }) {
+  const cacheKey = `sharkbay:avatar:${url}`;
+  const [src, setSrc] = useState(() => localStorage.getItem(cacheKey) || url);
+  useEffect(() => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext("2d")!.drawImage(img, 0, 0);
+        const dataUrl = canvas.toDataURL("image/png");
+        localStorage.setItem(cacheKey, dataUrl);
+        setSrc(dataUrl);
+      } catch { /* cross-origin or quota errors — ignore */ }
+    };
+    img.src = url;
+  }, [url, cacheKey]);
+  return <img alt="" src={src} />;
 }
 
 function EmptyState({ title, body }: { title: string; body: string }) {
