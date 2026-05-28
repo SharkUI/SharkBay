@@ -257,7 +257,7 @@ export type TerminalCreateInput = {
   initialCommandTitle?: string;
   agentId?: string;
   service?: { id: string; label: string; command: string };
-  teamworkBootstrap?: { codeGraphEnabled?: boolean };
+  protocolBootstrap?: { codeGraphEnabled?: boolean };
   cols?: number;
   rows?: number;
 };
@@ -399,10 +399,10 @@ export type GitHubIdentity = {
   avatarUrl: string;
 };
 
-export type TeamworkStatus = {
+export type ProtocolStatus = {
   installed: boolean;
   harnessInstalled: boolean;
-  harnessUpdate: TeamworkHarnessUpdateStatus;
+  harnessUpdate: HarnessUpdateStatus;
   syncEnabled: boolean;
   lastSyncAt: string | null;
   pendingCount: number;
@@ -415,17 +415,17 @@ export type TeamworkStatus = {
   permission?: string;
 };
 
-export type TeamworkHarnessFileIssue = {
+export type HarnessFileIssue = {
   path: string;
   reason: "missing" | "changed";
 };
 
-export type TeamworkHarnessUpdateStatus = {
+export type HarnessUpdateStatus = {
   required: boolean;
-  files: TeamworkHarnessFileIssue[];
+  files: HarnessFileIssue[];
 };
 
-export type TeamworkInstallInput = {
+export type ProtocolInstallInput = {
   repoPath: string;
   githubLogin?: string;
   githubUserId?: number;
@@ -433,19 +433,19 @@ export type TeamworkInstallInput = {
   agent?: string;
 };
 
-export type TeamworkUninstallInput = {
+export type ProtocolUninstallInput = {
   repoPath: string;
   cleanTeamContext?: boolean;
 };
 
-export type TeamworkUninstallResult = {
+export type ProtocolUninstallResult = {
   removedPaths: string[];
   skippedPaths: string[];
   excludeRemovedLines: string[];
   contextBranchDeleted: boolean;
 };
 
-export type TeamworkTasksChangedEvent = {
+export type TasksChangedEvent = {
   repoPath: string;
   tasks: TaskViewModel[];
 };
@@ -510,16 +510,16 @@ export type SharkBayBridge = {
   diagnostics?: {
     read?: () => Promise<DiagnosticsSnapshot>;
   };
-  teamwork?: {
+  protocol?: {
     getTasks?: (input: { repoPath: string }) => Promise<TaskViewModel[]>;
-    getStatus?: (input: { repoPath: string }) => Promise<TeamworkStatus>;
-    install?: (input: TeamworkInstallInput) => Promise<TeamworkStatus>;
-    enable?: (input: { repoPath: string }) => Promise<TeamworkStatus>;
-    uninstall?: (input: TeamworkUninstallInput) => Promise<TeamworkUninstallResult>;
+    getStatus?: (input: { repoPath: string }) => Promise<ProtocolStatus>;
+    install?: (input: ProtocolInstallInput) => Promise<ProtocolStatus>;
+    enable?: (input: { repoPath: string }) => Promise<ProtocolStatus>;
+    uninstall?: (input: ProtocolUninstallInput) => Promise<ProtocolUninstallResult>;
     resolveIdentity?: () => Promise<GitHubIdentity>;
     syncNow?: (input: { repoPath: string }) => Promise<void>;
-    updateHarness?: (input: { repoPath: string }) => Promise<TeamworkStatus>;
-    onTasksChanged?: (callback: (event: TeamworkTasksChangedEvent) => void) => () => void;
+    updateHarness?: (input: { repoPath: string }) => Promise<ProtocolStatus>;
+    onTasksChanged?: (callback: (event: TasksChangedEvent) => void) => () => void;
   };
   knowledgeSite?: {
     generate?: (input: { repoPath: string }) => Promise<{ generated: boolean; sitePath: string; reason?: string }>;

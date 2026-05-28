@@ -3,7 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
-import { installHarness } from "../src/main/teamwork-harness.js";
+import { installHarness } from "../src/main/harness.js";
 import { deleteTeamContextBranch, hasLocalContextBranch, TeamworkSync } from "../src/main/teamwork-sync.js";
 import { makeTempRoot, writeText } from "./helpers.js";
 

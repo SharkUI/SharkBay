@@ -45,12 +45,12 @@ import type {
   TerminalResizeInput,
   TerminalSession,
   TerminalUpdateEvent,
-  TeamworkGetTasksInput,
-  TeamworkInstallInput,
-  TeamworkStatus,
-  TeamworkTasksChangedEvent,
-  TeamworkUninstallInput,
-  TeamworkUninstallResult,
+  TasksGetInput,
+  ProtocolInstallInput,
+  ProtocolStatus,
+  TasksChangedEvent,
+  ProtocolUninstallInput,
+  ProtocolUninstallResult,
   GitHubIdentity,
   UsageReportFilter,
   UsageReportResult,
@@ -163,19 +163,19 @@ const sharkBayApi = {
   diagnostics: {
     read: () => invoke<DiagnosticsSnapshot>(channels.readDiagnostics)
   },
-  teamwork: {
-    getTasks: (input: TeamworkGetTasksInput) => invoke<TaskViewModel[]>(channels.teamworkGetTasks, input),
-    getStatus: (input: { repoPath: string }) => invoke<TeamworkStatus>(channels.teamworkGetStatus, input),
-    install: (input: TeamworkInstallInput) => invoke<TeamworkStatus>(channels.teamworkInstall, input),
-    enable: (input: { repoPath: string }) => invoke<TeamworkStatus>(channels.teamworkEnable, input),
-    uninstall: (input: TeamworkUninstallInput) => invoke<TeamworkUninstallResult>(channels.teamworkUninstall, input),
-    resolveIdentity: () => invoke<GitHubIdentity>(channels.teamworkResolveIdentity),
-    syncNow: (input: { repoPath: string }) => invoke<void>(channels.teamworkSyncNow, input),
-    updateHarness: (input: { repoPath: string }) => invoke<TeamworkStatus>(channels.teamworkUpdateHarness, input),
-    onTasksChanged: (callback: (event: TeamworkTasksChangedEvent) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, payload: TeamworkTasksChangedEvent) => callback(payload);
-      ipcRenderer.on(channels.teamworkTasksChanged, listener);
-      return () => ipcRenderer.removeListener(channels.teamworkTasksChanged, listener);
+  protocol: {
+    getTasks: (input: TasksGetInput) => invoke<TaskViewModel[]>(channels.protocolGetTasks, input),
+    getStatus: (input: { repoPath: string }) => invoke<ProtocolStatus>(channels.protocolGetStatus, input),
+    install: (input: ProtocolInstallInput) => invoke<ProtocolStatus>(channels.protocolInstall, input),
+    enable: (input: { repoPath: string }) => invoke<ProtocolStatus>(channels.protocolEnable, input),
+    uninstall: (input: ProtocolUninstallInput) => invoke<ProtocolUninstallResult>(channels.protocolUninstall, input),
+    resolveIdentity: () => invoke<GitHubIdentity>(channels.protocolResolveIdentity),
+    syncNow: (input: { repoPath: string }) => invoke<void>(channels.protocolSyncNow, input),
+    updateHarness: (input: { repoPath: string }) => invoke<ProtocolStatus>(channels.protocolUpdateHarness, input),
+    onTasksChanged: (callback: (event: TasksChangedEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: TasksChangedEvent) => callback(payload);
+      ipcRenderer.on(channels.protocolTasksChanged, listener);
+      return () => ipcRenderer.removeListener(channels.protocolTasksChanged, listener);
     }
   },
   knowledgeSite: {

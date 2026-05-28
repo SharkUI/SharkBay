@@ -523,7 +523,7 @@ export type TerminalCreateInput = {
   initialCommandTitle?: string;
   agentId?: string;
   service?: { id: string; label: string; command: string };
-  teamworkBootstrap?: { codeGraphEnabled?: boolean };
+  protocolBootstrap?: { codeGraphEnabled?: boolean };
   cols?: number;
   rows?: number;
 };
@@ -659,10 +659,10 @@ export type TaskViewModel = {
   readOnly: boolean;
 };
 
-export type TeamworkStatus = {
+export type ProtocolStatus = {
   installed: boolean;
   harnessInstalled: boolean;
-  harnessUpdate: TeamworkHarnessUpdateStatus;
+  harnessUpdate: HarnessUpdateStatus;
   syncEnabled: boolean;
   lastSyncAt: string | null;
   pendingCount: number;
@@ -675,14 +675,14 @@ export type TeamworkStatus = {
   permission?: string;
 };
 
-export type TeamworkHarnessFileIssue = {
+export type HarnessFileIssue = {
   path: string;
   reason: "missing" | "changed";
 };
 
-export type TeamworkHarnessUpdateStatus = {
+export type HarnessUpdateStatus = {
   required: boolean;
-  files: TeamworkHarnessFileIssue[];
+  files: HarnessFileIssue[];
 };
 
 export type GitHubIdentity = {
@@ -691,7 +691,7 @@ export type GitHubIdentity = {
   avatarUrl: string;
 };
 
-export type TeamworkInstallInput = {
+export type ProtocolInstallInput = {
   repoPath: string;
   githubLogin?: string;
   githubUserId?: number;
@@ -699,23 +699,23 @@ export type TeamworkInstallInput = {
   agent?: string;
 };
 
-export type TeamworkUninstallInput = {
+export type ProtocolUninstallInput = {
   repoPath: string;
   cleanTeamContext?: boolean;
 };
 
-export type TeamworkUninstallResult = {
+export type ProtocolUninstallResult = {
   removedPaths: string[];
   skippedPaths: string[];
   excludeRemovedLines: string[];
   contextBranchDeleted: boolean;
 };
 
-export type TeamworkGetTasksInput = {
+export type TasksGetInput = {
   repoPath: string;
 };
 
-export type TeamworkTasksChangedEvent = {
+export type TasksChangedEvent = {
   repoPath: string;
   tasks: TaskViewModel[];
 };

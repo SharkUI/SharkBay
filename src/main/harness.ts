@@ -8,8 +8,8 @@ import { resolveCommandPath } from "./command-path.js";
 const execFileAsync = promisify(execFile);
 const ROOT_ADAPTER_FILES = ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "QWEN.md"] as const;
 const KIRO_STEERING_FILE = ".kiro/steering/sharkbay-protocol.md";
-const TEAMWORK_ENTRY_START = "<!-- sharkbay-teamwork:start -->";
-const TEAMWORK_ENTRY_END = "<!-- sharkbay-teamwork:end -->";
+const HARNESS_ENTRY_START = "<!-- sharkbay-harness:start -->";
+const HARNESS_ENTRY_END = "<!-- sharkbay-harness:end -->";
 const EXCLUDE_ENTRIES = ["/.sharkbay/"];
 const LEGACY_EXCLUDE_ENTRIES = [] as string[];
 const EXCLUDE_REMOVAL_ENTRIES = new Set([...EXCLUDE_ENTRIES, ...LEGACY_EXCLUDE_ENTRIES]);
@@ -163,32 +163,32 @@ const AGENT_SESSION_ID_SCRIPT = [
   "",
   "printf '%s\\n' \"$session_id\"",
 ].join("\n") + "\n";
-const TEAMWORK_BOOTSTRAP_INTRO = [
-  "I'm working in SharkBay Teamwork mode for this project.",
+const BOOTSTRAP_INTRO = [
+  "I'm working in SharkBay Task Protocol mode for this project.",
   "Please read `.sharkbay/harness/protocol.md` first and follow it for the rest of this session.",
 ];
 
-const TEAMWORK_BOOTSTRAP_CODEGRAPH_PROMPT = "CodeGraph is installed and configured for this project; when searching or understanding project code, use CodeGraph before rg/grep/ broad file reads.";
+const BOOTSTRAP_CODEGRAPH_PROMPT = "CodeGraph is installed and configured for this project; when searching or understanding project code, use CodeGraph before rg/grep/ broad file reads.";
 
-const TEAMWORK_BOOTSTRAP_TASK_PROMPT = [
+const BOOTSTRAP_TASK_PROMPT = [
   "If a later request involves editing project files, generating persisted project artifacts, running a multi-step implementation or verification workflow, or preparing a commit, create or update the required task under `.sharkbay/tasks/` before making project changes.",
   "Keep Files and Work updated while working; finish by filling Summary and Verification; record the commit hash if a commit is produced.",
   "Treat `.sharkbay/team-context/` as read-only.",
 ];
 
-export type TeamworkBootstrapPromptOptions = {
+export type BootstrapPromptOptions = {
   codeGraphEnabled?: boolean;
 };
 
-export function teamworkBootstrapPrompt(options: TeamworkBootstrapPromptOptions = {}): string {
+export function bootstrapPrompt(options: BootstrapPromptOptions = {}): string {
   return [
-    ...TEAMWORK_BOOTSTRAP_INTRO,
-    ...(options.codeGraphEnabled ? [TEAMWORK_BOOTSTRAP_CODEGRAPH_PROMPT] : []),
-    ...TEAMWORK_BOOTSTRAP_TASK_PROMPT,
+    ...BOOTSTRAP_INTRO,
+    ...(options.codeGraphEnabled ? [BOOTSTRAP_CODEGRAPH_PROMPT] : []),
+    ...BOOTSTRAP_TASK_PROMPT,
   ].join(" ");
 }
 
-export const TEAMWORK_BOOTSTRAP_PROMPT = teamworkBootstrapPrompt();
+export const BOOTSTRAP_PROMPT = bootstrapPrompt();
 
 export type GitHubIdentity = {
   login: string;
@@ -210,17 +210,17 @@ type ManagedHarnessFile = {
   executable?: boolean;
 };
 
-export type TeamworkHarnessFileIssue = {
+export type HarnessFileIssue = {
   path: string;
   reason: "missing" | "changed";
 };
 
-export type TeamworkHarnessUpdateStatus = {
+export type HarnessUpdateStatus = {
   required: boolean;
-  files: TeamworkHarnessFileIssue[];
+  files: HarnessFileIssue[];
 };
 
-export type TeamworkLocalIdentity = {
+export type HarnessLocalIdentity = {
   githubLogin?: string;
   githubUserId?: number;
   machineId?: string;
@@ -243,7 +243,7 @@ export async function checkRepoPermission(repo: string, login: string): Promise<
 async function resolveGitHubCliPath(): Promise<string> {
   const executablePath = await resolveCommandPath("gh");
   if (executablePath) return executablePath;
-  throw new Error("Teamwork requires the GitHub CLI (`gh`). Install it with `brew install gh`, then run `gh auth login`.");
+  throw new Error("Protocol requires the GitHub CLI (`gh`). Install it with `brew install gh`, then run `gh auth login`.");
 }
 
 export function generateMachineId(): string {
@@ -279,13 +279,13 @@ async function writeManagedHarnessFiles(repoPath: string, options: ProtocolOptio
   }
 }
 
-export async function getHarnessUpdateStatus(repoPath: string): Promise<TeamworkHarnessUpdateStatus> {
+export async function getHarnessUpdateStatus(repoPath: string): Promise<HarnessUpdateStatus> {
   if (!await hasSharkbayHarnessDir(repoPath)) return { required: false, files: [] };
   const options = await resolveProtocolOptions(repoPath, "", { resolveIdentity: false, generateMachineId: false });
   return compareManagedHarnessFiles(repoPath, options);
 }
 
-export async function updateHarnessFiles(repoPath: string): Promise<TeamworkHarnessUpdateStatus> {
+export async function updateHarnessFiles(repoPath: string): Promise<HarnessUpdateStatus> {
   await assertHarnessInstallable(repoPath);
   const options = await resolveProtocolOptions(repoPath, "", { resolveIdentity: true, generateMachineId: true });
   await writeManagedHarnessFiles(repoPath, options);
@@ -315,7 +315,7 @@ async function assertGitWorktree(repoPath: string): Promise<void> {
   } catch {
     // Re-throw a SharkBay-facing message below.
   }
-  throw new Error("Teamwork harness requires a Git repository. Run git init in this folder before installing Teamwork.");
+  throw new Error("Protocol harness requires a Git repository. Run git init in this folder before installing.");
 }
 
 export async function isHarnessInstalled(repoPath: string): Promise<boolean> {
@@ -335,7 +335,7 @@ export async function getMachineId(repoPath: string): Promise<string | null> {
   }
 }
 
-export async function getLocalHarnessIdentity(repoPath: string): Promise<TeamworkLocalIdentity> {
+export async function getLocalHarnessIdentity(repoPath: string): Promise<HarnessLocalIdentity> {
   const existing = await readExistingProtocolOptions(repoPath);
   return {
     githubLogin: existing.githubLogin,
@@ -344,13 +344,13 @@ export async function getLocalHarnessIdentity(repoPath: string): Promise<Teamwor
   };
 }
 
-export type TeamworkUninstallResult = {
+export type ProtocolUninstallResult = {
   removedPaths: string[];
   skippedPaths: string[];
   excludeRemovedLines: string[];
 };
 
-export async function uninstallHarness(repoPath: string): Promise<TeamworkUninstallResult> {
+export async function uninstallHarness(repoPath: string): Promise<ProtocolUninstallResult> {
   const removedPaths: string[] = [];
   const skippedPaths: string[] = [];
 
@@ -381,7 +381,7 @@ async function removeManagedEntryBlock(repoPath: string, name: string): Promise<
   } catch {
     return "missing";
   }
-  const stripped = removeTeamworkEntryBlock(existing);
+  const stripped = removeHarnessEntryBlock(existing);
   if (stripped === existing) return "skipped";
   if (stripped.trim().length === 0) {
     await rm(filePath, { force: true });
@@ -469,8 +469,8 @@ export function cleanLocalExcludeContent(content: string): { content: string; re
   };
 }
 
-async function compareManagedHarnessFiles(repoPath: string, options: ProtocolOptions): Promise<TeamworkHarnessUpdateStatus> {
-  const files: TeamworkHarnessFileIssue[] = [];
+async function compareManagedHarnessFiles(repoPath: string, options: ProtocolOptions): Promise<HarnessUpdateStatus> {
+  const files: HarnessFileIssue[] = [];
   for (const file of managedHarnessFiles(options)) {
     const filePath = join(repoPath, file.path);
     let current: string;
@@ -519,21 +519,21 @@ export async function ensureLocalExclude(repoPath: string): Promise<void> {
   }
 }
 
-export type TeamworkAgentLaunchResult = {
+export type AgentLaunchResult = {
   initialCommand: string;
   injected: boolean;
   bootstrapPrompt?: string;
   skippedReason?: "not-installed" | "unsupported-agent";
 };
 
-export async function prepareTeamworkAgentLaunch(
+export async function prepareAgentLaunch(
   repoPath: string,
   agentId: string,
   initialCommand: string,
-  options: TeamworkBootstrapPromptOptions = {},
-): Promise<TeamworkAgentLaunchResult> {
-  const bootstrapPrompt = teamworkBootstrapPrompt(options);
-  const bootstrapArgs = teamworkBootstrapArgs(agentId, bootstrapPrompt);
+  options: BootstrapPromptOptions = {},
+): Promise<AgentLaunchResult> {
+  const prompt = bootstrapPrompt(options);
+  const bootstrapArgs = agentBootstrapArgs(agentId, prompt);
   if (!bootstrapArgs) {
     return { initialCommand, injected: false, skippedReason: "unsupported-agent" };
   }
@@ -541,7 +541,7 @@ export async function prepareTeamworkAgentLaunch(
     return { initialCommand, injected: false, skippedReason: "not-installed" };
   }
 
-  return { initialCommand: appendShellArgs(withLaunchSessionId(agentId, initialCommand), bootstrapArgs), injected: true, bootstrapPrompt };
+  return { initialCommand: appendShellArgs(withLaunchSessionId(agentId, initialCommand), bootstrapArgs), injected: true, bootstrapPrompt: prompt };
 }
 
 async function hasSharkbayHarnessDir(repoPath: string): Promise<boolean> {
@@ -553,7 +553,7 @@ async function hasSharkbayHarnessDir(repoPath: string): Promise<boolean> {
   }
 }
 
-function teamworkBootstrapArgs(agentId: string, prompt: string): string[] | null {
+function agentBootstrapArgs(agentId: string, prompt: string): string[] | null {
   const normalized = agentId.trim().toLowerCase();
   if (normalized === "codex" || normalized === "claude") return [prompt];
   if (normalized === "deepseek") return [];
@@ -642,16 +642,16 @@ function githubRepoFromRemote(remoteOrigin: string | null): string | null {
   return match?.[1] ?? null;
 }
 
-function removeTeamworkEntryBlock(existing: string): string {
-  const start = existing.indexOf(TEAMWORK_ENTRY_START);
-  const end = existing.indexOf(TEAMWORK_ENTRY_END);
+function removeHarnessEntryBlock(existing: string): string {
+  const start = existing.indexOf(HARNESS_ENTRY_START);
+  const end = existing.indexOf(HARNESS_ENTRY_END);
   if (start < 0 && end < 0) return existing;
   if (start >= 0) {
     const before = existing.slice(0, start).trimEnd();
-    const after = end > start ? existing.slice(end + TEAMWORK_ENTRY_END.length).replace(/^\r?\n/, "") : "";
+    const after = end > start ? existing.slice(end + HARNESS_ENTRY_END.length).replace(/^\r?\n/, "") : "";
     return joinEntryParts(before, "", after);
   }
-  const after = existing.slice(end + TEAMWORK_ENTRY_END.length).replace(/^\r?\n/, "");
+  const after = existing.slice(end + HARNESS_ENTRY_END.length).replace(/^\r?\n/, "");
   return after;
 }
 

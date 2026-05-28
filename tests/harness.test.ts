@@ -8,12 +8,12 @@ import {
   getHarnessUpdateStatus,
   installHarness,
   isHarnessInstalled,
-  prepareTeamworkAgentLaunch,
-  teamworkBootstrapPrompt,
-  TEAMWORK_BOOTSTRAP_PROMPT,
+  prepareAgentLaunch,
+  bootstrapPrompt,
+  BOOTSTRAP_PROMPT,
   uninstallHarness,
   updateHarnessFiles,
-} from "../src/main/teamwork-harness.js";
+} from "../src/main/harness.js";
 import { SharkBayCoreService } from "../src/core/core-service.js";
 import { LocalProvider } from "../src/providers/local/local-provider.js";
 import { CODEGRAPH_PLUGIN_ID, codeGraphBundledPlugin } from "../src/plugins/bundled/codegraph-detector.js";
@@ -48,9 +48,9 @@ class CaptureTerminalProvider extends LocalProvider {
   }
 }
 
-describe("teamwork harness install", () => {
+describe("harness install", () => {
   it("writes only local harness files and ignores the sharkbay directory", async () => {
-    const root = await makeTempRoot("teamwork-harness");
+    const root = await makeTempRoot("harness-harness");
     const repo = await createRealGitRepoFixture(root);
 
     await installHarness(repo, harnessOptions);
@@ -96,7 +96,7 @@ describe("teamwork harness install", () => {
   });
 
   it("resolves DeepSeek session id from the audit log", async () => {
-    const root = await makeTempRoot("teamwork-deepseek-session");
+    const root = await makeTempRoot("harness-deepseek-session");
     const repo = await createRealGitRepoFixture(root);
     const workspace = await fs.realpath(repo);
     await installHarness(repo, harnessOptions);
@@ -125,7 +125,7 @@ describe("teamwork harness install", () => {
   });
 
   it("returns restored session id directly from the restore environment", async () => {
-    const root = await makeTempRoot("teamwork-restored-session");
+    const root = await makeTempRoot("harness-restored-session");
     const repo = await createRealGitRepoFixture(root);
     const workspace = await fs.realpath(repo);
     await installHarness(repo, harnessOptions);
@@ -140,7 +140,7 @@ describe("teamwork harness install", () => {
   });
 
   it("resolves OpenCode session id from the active process logs", async () => {
-    const root = await makeTempRoot("teamwork-opencode-session");
+    const root = await makeTempRoot("harness-opencode-session");
     const repo = await createRealGitRepoFixture(root);
     const workspace = await fs.realpath(repo);
     await installHarness(repo, harnessOptions);
@@ -203,7 +203,7 @@ describe("teamwork harness install", () => {
   });
 
   it("installs without touching existing user root instruction files", async () => {
-    const root = await makeTempRoot("teamwork-harness-conflict");
+    const root = await makeTempRoot("harness-harness-conflict");
     const repo = await createRealGitRepoFixture(root);
     const agentsPath = path.join(repo, "AGENTS.md");
     await writeText(agentsPath, "# Existing agent rules\n");
@@ -215,7 +215,7 @@ describe("teamwork harness install", () => {
   });
 
   it("refuses to install into a directory that is not a git worktree", async () => {
-    const root = await makeTempRoot("teamwork-harness-no-git");
+    const root = await makeTempRoot("harness-harness-no-git");
     const repo = path.join(root, "plain-folder");
     await fs.mkdir(repo, { recursive: true });
 
@@ -225,7 +225,7 @@ describe("teamwork harness install", () => {
   });
 
   it("reports harness drift and updates managed files only when requested", async () => {
-    const root = await makeTempRoot("teamwork-harness-update");
+    const root = await makeTempRoot("harness-harness-update");
     const repo = await createRealGitRepoFixture(root);
     await installHarness(repo, harnessOptions);
     const protocolPath = path.join(repo, ".sharkbay", "harness", "protocol.md");
@@ -243,7 +243,7 @@ describe("teamwork harness install", () => {
       ],
     });
 
-    await expect(prepareTeamworkAgentLaunch(repo, "codex", "codex")).resolves.toMatchObject({ injected: true });
+    await expect(prepareAgentLaunch(repo, "codex", "codex")).resolves.toMatchObject({ injected: true });
     await expect(fs.readFile(protocolPath, "utf8")).resolves.toBe(`${originalProtocol}\n# local stale copy\n`);
     await expect(fs.stat(helperPath).catch(() => null)).resolves.toBeNull();
 
@@ -253,115 +253,115 @@ describe("teamwork harness install", () => {
     expect(helperStat.mode & 0o111).not.toBe(0);
   });
 
-  it("injects a Teamwork bootstrap prompt without creating agent entry files", async () => {
-    const root = await makeTempRoot("teamwork-bootstrap");
+  it("injects a protocol bootstrap prompt without creating agent entry files", async () => {
+    const root = await makeTempRoot("harness-bootstrap");
     const repo = await createRealGitRepoFixture(root);
     await installHarness(repo, harnessOptions);
 
-    const result = await prepareTeamworkAgentLaunch(repo, "codex", "codex", { codeGraphEnabled: true });
+    const result = await prepareAgentLaunch(repo, "codex", "codex", { codeGraphEnabled: true });
 
     expect(result.injected).toBe(true);
-    expect(result.initialCommand).toContain("codex 'I'\\''m working in SharkBay Teamwork mode");
+    expect(result.initialCommand).toContain("codex 'I'\\''m working in SharkBay Task Protocol mode");
     expect(result.initialCommand).toContain(".sharkbay/harness/protocol.md");
-    expect(teamworkBootstrapPrompt({ codeGraphEnabled: true })).toBe([
-      "I'm working in SharkBay Teamwork mode for this project.",
+    expect(bootstrapPrompt({ codeGraphEnabled: true })).toBe([
+      "I'm working in SharkBay Task Protocol mode for this project.",
       "Please read `.sharkbay/harness/protocol.md` first and follow it for the rest of this session.",
       "CodeGraph is installed and configured for this project; when searching or understanding project code, use CodeGraph before rg/grep/ broad file reads.",
       "If a later request involves editing project files, generating persisted project artifacts, running a multi-step implementation or verification workflow, or preparing a commit, create or update the required task under `.sharkbay/tasks/` before making project changes.",
       "Keep Files and Work updated while working; finish by filling Summary and Verification; record the commit hash if a commit is produced.",
       "Treat `.sharkbay/team-context/` as read-only.",
     ].join(" "));
-    expect(TEAMWORK_BOOTSTRAP_PROMPT).not.toContain("CodeGraph is installed and configured");
+    expect(BOOTSTRAP_PROMPT).not.toContain("CodeGraph is installed and configured");
     await expect(fs.stat(path.join(repo, "AGENTS.md")).catch(() => null)).resolves.toBeNull();
     await expect(fs.stat(path.join(repo, "QWEN.md")).catch(() => null)).resolves.toBeNull();
   });
 
   it("passes CodeGraph plugin enabled state into terminal bootstrap preparation", async () => {
-    const runtime = await makeTestRuntime("teamwork-bootstrap-codegraph-enabled");
+    const runtime = await makeTestRuntime("harness-bootstrap-codegraph-enabled");
     const provider = new CaptureTerminalProvider();
     const host = new PluginHost();
     host.registerPlugin(codeGraphBundledPlugin(), { source: "bundled" });
     const core = new SharkBayCoreService([provider], host);
 
     await core.createTerminal(runtime, { cwdUri: "local:/tmp/project", agentId: "codex", initialCommand: "codex" });
-    expect(provider.terminalInputs[0]?.teamworkBootstrap?.codeGraphEnabled).toBe(true);
+    expect(provider.terminalInputs[0]?.protocolBootstrap?.codeGraphEnabled).toBe(true);
 
     core.setPluginEnabled(CODEGRAPH_PLUGIN_ID, false);
     await core.createTerminal(runtime, {
       cwdUri: "local:/tmp/project",
       agentId: "codex",
       initialCommand: "codex",
-      teamworkBootstrap: { codeGraphEnabled: true },
+      protocolBootstrap: { codeGraphEnabled: true },
     });
-    expect(provider.terminalInputs[1]?.teamworkBootstrap?.codeGraphEnabled).toBe(false);
+    expect(provider.terminalInputs[1]?.protocolBootstrap?.codeGraphEnabled).toBe(false);
   });
 
   it("keeps existing user entry files unchanged during bootstrap preparation", async () => {
-    const root = await makeTempRoot("teamwork-bootstrap-existing-entry");
+    const root = await makeTempRoot("harness-bootstrap-existing-entry");
     const repo = await createRealGitRepoFixture(root);
     await installHarness(repo, harnessOptions);
     await writeText(path.join(repo, "CLAUDE.md"), "# Project Claude Rules\n\nKeep this text.\n");
 
-    const result = await prepareTeamworkAgentLaunch(repo, "claude", "claude");
+    const result = await prepareAgentLaunch(repo, "claude", "claude");
 
     expect(result.injected).toBe(true);
     const sessionMatch = result.initialCommand.match(/^SHARKBAY_SESSION_ID='([^']+)' claude '--session-id' '([^']+)'/);
     expect(sessionMatch?.[1]).toBe(sessionMatch?.[2]);
     expect(result.initialCommand).toContain("claude '--session-id'");
-    expect(result.initialCommand).toContain("'I'\\''m working in SharkBay Teamwork mode");
+    expect(result.initialCommand).toContain("'I'\\''m working in SharkBay Task Protocol mode");
     await expect(fs.readFile(path.join(repo, "CLAUDE.md"), "utf8")).resolves.toBe("# Project Claude Rules\n\nKeep this text.\n");
   });
 
   it("uses agent-specific bootstrap command arguments", async () => {
-    const root = await makeTempRoot("teamwork-bootstrap-agent-args");
+    const root = await makeTempRoot("harness-bootstrap-agent-args");
     const repo = await createRealGitRepoFixture(root);
     await installHarness(repo, harnessOptions);
 
-    const geminiResult = await prepareTeamworkAgentLaunch(repo, "gemini", "gemini");
+    const geminiResult = await prepareAgentLaunch(repo, "gemini", "gemini");
     const geminiSessionMatch = geminiResult.initialCommand.match(/^SHARKBAY_SESSION_ID='([^']+)' gemini '--session-id' '([^']+)'/);
     expect(geminiResult.injected).toBe(true);
     expect(geminiSessionMatch?.[1]).toBe(geminiSessionMatch?.[2]);
     expect(geminiResult.initialCommand).toContain("gemini '--session-id'");
-    expect(geminiResult.initialCommand).toContain("'-i' 'I'\\''m working in SharkBay Teamwork mode");
-    const qwenResult = await prepareTeamworkAgentLaunch(repo, "qwen", "qwen");
+    expect(geminiResult.initialCommand).toContain("'-i' 'I'\\''m working in SharkBay Task Protocol mode");
+    const qwenResult = await prepareAgentLaunch(repo, "qwen", "qwen");
     const qwenSessionMatch = qwenResult.initialCommand.match(/^SHARKBAY_SESSION_ID='([^']+)' qwen '--session-id' '([^']+)'/);
     expect(qwenResult.injected).toBe(true);
     expect(qwenSessionMatch?.[1]).toBe(qwenSessionMatch?.[2]);
     expect(qwenResult.initialCommand).toContain("qwen '--session-id'");
-    expect(qwenResult.initialCommand).toContain("'-i' 'I'\\''m working in SharkBay Teamwork mode");
-    await expect(prepareTeamworkAgentLaunch(repo, "kiro", "kiro-cli")).resolves.toMatchObject({
+    expect(qwenResult.initialCommand).toContain("'-i' 'I'\\''m working in SharkBay Task Protocol mode");
+    await expect(prepareAgentLaunch(repo, "kiro", "kiro-cli")).resolves.toMatchObject({
       injected: true,
-      initialCommand: expect.stringContaining("kiro-cli 'chat' 'I'\\''m working in SharkBay Teamwork mode"),
+      initialCommand: expect.stringContaining("kiro-cli 'chat' 'I'\\''m working in SharkBay Task Protocol mode"),
     });
-    await expect(prepareTeamworkAgentLaunch(repo, "deepseek", "deepseek")).resolves.toMatchObject({
+    await expect(prepareAgentLaunch(repo, "deepseek", "deepseek")).resolves.toMatchObject({
       injected: true,
       initialCommand: "deepseek",
     });
-    await expect(prepareTeamworkAgentLaunch(repo, "opencode", "opencode")).resolves.toMatchObject({
+    await expect(prepareAgentLaunch(repo, "opencode", "opencode")).resolves.toMatchObject({
       injected: true,
       initialCommand: "opencode",
     });
   });
 
-  it("skips bootstrap injection when Teamwork is not installed or the agent is unsupported", async () => {
-    const root = await makeTempRoot("teamwork-bootstrap-skip");
+  it("skips bootstrap injection when protocol is not installed or the agent is unsupported", async () => {
+    const root = await makeTempRoot("harness-bootstrap-skip");
     const repo = await createRealGitRepoFixture(root);
 
-    await expect(prepareTeamworkAgentLaunch(repo, "codex", "codex")).resolves.toMatchObject({
+    await expect(prepareAgentLaunch(repo, "codex", "codex")).resolves.toMatchObject({
       injected: false,
       initialCommand: "codex",
       skippedReason: "not-installed",
     });
     await installHarness(repo, harnessOptions);
-    await expect(prepareTeamworkAgentLaunch(repo, "unknown-agent", "unknown-agent")).resolves.toMatchObject({
+    await expect(prepareAgentLaunch(repo, "unknown-agent", "unknown-agent")).resolves.toMatchObject({
       injected: false,
       initialCommand: "unknown-agent",
       skippedReason: "unsupported-agent",
     });
   });
 
-  it("uninstalls local teamwork files and removes only SharkBay exclude entries", async () => {
-    const root = await makeTempRoot("teamwork-harness-uninstall");
+  it("uninstalls local harness files and removes only SharkBay exclude entries", async () => {
+    const root = await makeTempRoot("harness-harness-uninstall");
     const repo = await createRealGitRepoFixture(root);
     await writeText(path.join(repo, ".git", "info", "exclude"), ["node_modules/", "dist/", ""].join("\n"));
 
@@ -382,7 +382,7 @@ describe("teamwork harness install", () => {
   });
 
   it("restores preexisting local exclude content exactly", async () => {
-    const root = await makeTempRoot("teamwork-harness-uninstall-exclude-restore");
+    const root = await makeTempRoot("harness-harness-uninstall-exclude-restore");
     const repo = await createRealGitRepoFixture(root);
     const originalExclude = ["node_modules/", "/.sharkbay/", "# user note", ""].join("\n");
     await writeText(path.join(repo, ".git", "info", "exclude"), originalExclude);
@@ -394,7 +394,7 @@ describe("teamwork harness install", () => {
   });
 
   it("preserves user exclude edits made after install while removing SharkBay's line", async () => {
-    const root = await makeTempRoot("teamwork-harness-uninstall-exclude-edits");
+    const root = await makeTempRoot("harness-harness-uninstall-exclude-edits");
     const repo = await createRealGitRepoFixture(root);
     await writeText(path.join(repo, ".git", "info", "exclude"), "node_modules/\n");
 
@@ -406,16 +406,16 @@ describe("teamwork harness install", () => {
     await expect(fs.readFile(path.join(repo, ".git", "info", "exclude"), "utf8")).resolves.toBe("node_modules/\n/AGENTS.md\n");
   });
 
-  it("removes only the Teamwork block from user-owned entry files during uninstall", async () => {
-    const root = await makeTempRoot("teamwork-harness-uninstall-user-file");
+  it("removes only the harness block from user-owned entry files during uninstall", async () => {
+    const root = await makeTempRoot("harness-harness-uninstall-user-file");
     const repo = await createRealGitRepoFixture(root);
     await installHarness(repo, harnessOptions);
     await writeText(path.join(repo, "AGENTS.md"), [
       "# User agent rules",
       "",
-      "<!-- sharkbay-teamwork:start -->",
+      "<!-- sharkbay-harness:start -->",
       "legacy managed block",
-      "<!-- sharkbay-teamwork:end -->",
+      "<!-- sharkbay-harness:end -->",
       "",
     ].join("\n"));
 

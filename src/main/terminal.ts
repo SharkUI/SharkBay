@@ -8,7 +8,7 @@ import * as pty from "./pty.js";
 import { getConfiguredRoots } from "./config.js";
 import { resolveProjectUri } from "./path-safety.js";
 import { prependPathDirectories, resolveCommandSearchPaths } from "./command-path.js";
-import { prepareTeamworkAgentLaunch } from "./teamwork-harness.js";
+import { prepareAgentLaunch } from "./harness.js";
 import type {
   IpcRuntimeLike,
   TerminalCloseInput,
@@ -94,8 +94,8 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
     const initialCommandTitle = initialCommand ? normalizeTerminalCommandLine(input.initialCommandTitle) : null;
     let delayedBootstrapPrompt: string | null = null;
     if (input.agentId && initialCommand && !input.service) {
-      const launch = await prepareTeamworkAgentLaunch(spec.projectRoot, input.agentId, initialCommand, {
-        codeGraphEnabled: input.teamworkBootstrap?.codeGraphEnabled ?? false,
+      const launch = await prepareAgentLaunch(spec.projectRoot, input.agentId, initialCommand, {
+        codeGraphEnabled: input.protocolBootstrap?.codeGraphEnabled ?? false,
       });
       if (launch.injected && (input.agentId === "deepseek" || input.agentId === "opencode") && launch.initialCommand === initialCommand) {
         delayedBootstrapPrompt = launch.bootstrapPrompt ?? null;

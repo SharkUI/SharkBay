@@ -1,11 +1,11 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { scanTasks } from "../src/main/teamwork-tasks.js";
+import { scanTasks } from "../src/main/tasks.js";
 import { makeTempRoot, writeText } from "./helpers.js";
 
-describe("teamwork task scanning", () => {
+describe("task scanning", () => {
   it("adds GitHub avatar URLs and sorts tasks by created time descending", async () => {
-    const repo = await makeTempRoot("teamwork-tasks");
+    const repo = await makeTempRoot("tasks");
     await writeTask(repo, ".sharkbay/tasks/OLD001-u3960864-mjl25uj-old-task.md", {
       taskId: "OLD001-u3960864-mjl25uj",
       taskTag: "OLD001",

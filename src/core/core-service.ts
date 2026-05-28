@@ -300,8 +300,8 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
     const provider = this.providers.providerForUri(input.cwdUri);
     const session = await provider.createTerminal(runtime, {
       ...input,
-      teamworkBootstrap: {
-        ...input.teamworkBootstrap,
+      protocolBootstrap: {
+        ...input.protocolBootstrap,
         codeGraphEnabled: this.isCodeGraphPluginEnabled(),
       },
     });

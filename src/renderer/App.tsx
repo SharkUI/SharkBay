@@ -28,7 +28,7 @@ import type {
   ScanResult,
   SharkBayBridge,
   TaskViewModel,
-  TeamworkStatus,
+  ProtocolStatus,
   TerminalDataEvent,
   TerminalExitEvent,
   TerminalCreateInput,
@@ -51,7 +51,7 @@ import {
 import type { WorkflowProjectTerminalActivityState } from "./workflow";
 
 type View = "dashboard" | "settings";
-type DetailTab = "team" | "git" | "files";
+type DetailTab = "tasks" | "git" | "files";
 type SettingsSection = "agent-clis" | "appearance" | "extensions" | "diagnostics";
 
 type Toast = {
@@ -143,7 +143,7 @@ const columnResizeStep = 40;
 const detailColumnStorageKey = "sharkbay.detailColumnWidth.v2";
 const projectColumnStorageKey = "sharkbay.projectColumnWidth.v2";
 const detailTabs: Array<{ id: DetailTab; label: string; remoteOnly?: boolean; localOnly?: boolean }> = [
-  { id: "team", label: "Team", localOnly: true },
+  { id: "tasks", label: "Tasks", localOnly: true },
   { id: "git", label: "Git" },
   { id: "files", label: "Files" },
 ];
@@ -274,9 +274,9 @@ async function pickAndAddProjects(): Promise<string[]> {
   return [projectPath];
 }
 
-async function uninstallTeamwork(repoPath: string, cleanTeamContext = false): Promise<void> {
-  const handler = getBridge().teamwork?.uninstall;
-  if (!handler) throw new Error("Teamwork uninstall is not exposed by the preload API.");
+async function uninstallProtocol(repoPath: string, cleanTeamContext = false): Promise<void> {
+  const handler = getBridge().protocol?.uninstall;
+  if (!handler) throw new Error("Protocol uninstall is not exposed by the preload API.");
   await handler({ repoPath, cleanTeamContext });
 }
 
@@ -597,7 +597,7 @@ export function App() {
               }}
               onRemoveProject={async (uri) => { await removeProject(uri); await refreshProjects({ showToast: true }); }}
               onRenameProject={async (uri, name) => { await renameProjectAlias(uri, name); await refreshProjects({ showToast: false }); }}
-              onUninstallTeamwork={async (repoPath, cleanTeamContext) => { await uninstallTeamwork(repoPath, cleanTeamContext); await refreshProjects({ showToast: false }); }}
+              onUninstallProtocol={async (repoPath, cleanTeamContext) => { await uninstallProtocol(repoPath, cleanTeamContext); await refreshProjects({ showToast: false }); }}
               projectAliases={projectAliases}
             />
           </div>
@@ -657,7 +657,7 @@ function DashboardView({
   onPickProject,
   onRemoveProject,
   onRenameProject,
-  onUninstallTeamwork,
+  onUninstallProtocol,
 }: {
   appearanceTheme: AppearanceTheme;
   bridgeAvailable: boolean;
@@ -678,7 +678,7 @@ function DashboardView({
   onPickProject: () => Promise<void>;
   onRemoveProject: (uri: string) => Promise<void>;
   onRenameProject: (uri: string, name: string) => Promise<void>;
-  onUninstallTeamwork: (repoPath: string, cleanTeamContext?: boolean) => Promise<void>;
+  onUninstallProtocol: (repoPath: string, cleanTeamContext?: boolean) => Promise<void>;
 }) {
   const gridRef = useRef<HTMLDivElement | null>(null);
   const terminalPaneRef = useRef<TerminalPaneHandle | null>(null);
@@ -832,7 +832,7 @@ function DashboardView({
               onSelect={setSelectedId}
               onRemoveProject={onRemoveProject}
               onRenameProject={onRenameProject}
-              onUninstallTeamwork={onUninstallTeamwork}
+              onUninstallProtocol={onUninstallProtocol}
             />
           ) : (
             <div className="empty-state compact-title-row" style={{ padding: "24px 16px" }}>
@@ -1706,10 +1706,10 @@ type ProjectMenuState = {
   id: string;
   x: number;
   y: number;
-  canUninstallTeamwork: boolean;
+  canUninstallProtocol: boolean;
 };
 
-function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, runningServiceProjectIds, terminalActivityByProjectId, selectedId, onSelect, onRemoveProject, onRenameProject, onUninstallTeamwork }: {
+function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, runningServiceProjectIds, terminalActivityByProjectId, selectedId, onSelect, onRemoveProject, onRenameProject, onUninstallProtocol }: {
   agentStatusByProjectPath: AgentStatusByProjectPath;
   candidates: ProjectCandidate[];
   projectAliases: Record<string, string>;
@@ -1719,7 +1719,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
   onSelect: (id: string) => void;
   onRemoveProject: (uri: string) => Promise<void>;
   onRenameProject: (uri: string, name: string) => Promise<void>;
-  onUninstallTeamwork: (repoPath: string, cleanTeamContext?: boolean) => Promise<void>;
+  onUninstallProtocol: (repoPath: string, cleanTeamContext?: boolean) => Promise<void>;
 }) {
   const [menuOpen, setMenuOpen] = useState<ProjectMenuState | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -1760,15 +1760,15 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
   }
 
   function openProjectMenu(candidate: ProjectCandidate, x: number, y: number) {
-    setMenuOpen({ id: candidate.id, x, y, canUninstallTeamwork: false });
+    setMenuOpen({ id: candidate.id, x, y, canUninstallProtocol: false });
     const repoPath = localPathFromCandidate(candidate);
-    const getStatus = getBridge().teamwork?.getStatus;
+    const getStatus = getBridge().protocol?.getStatus;
     if (!repoPath || !getStatus) return;
 
     void getStatus({ repoPath })
       .then((status) => {
         setMenuOpen((current) => current?.id === candidate.id
-          ? { ...current, canUninstallTeamwork: status.harnessInstalled }
+          ? { ...current, canUninstallProtocol: status.harnessInstalled }
           : current
         );
       })
@@ -1792,7 +1792,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
       const detail = await getProjectDetail(candidate);
       const owner = githubOwnerFromRemote(detail.repoUrl);
       if (owner) {
-        const resolveIdentity = getBridge().teamwork?.resolveIdentity;
+        const resolveIdentity = getBridge().protocol?.resolveIdentity;
         if (!resolveIdentity) throw new Error("GitHub identity lookup is not exposed by the preload API.");
         const identity = await resolveIdentity();
         canCleanTeamContext = owner.toLowerCase() === identity.login.toLowerCase();
@@ -1891,19 +1891,19 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
       ) : null}
       {confirmUninstall ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !uninstalling) setConfirmUninstall(null); }}>
-          <section aria-modal="true" className="modal-panel" role="dialog" aria-labelledby="confirm-uninstall-teamwork-title" style={{ maxWidth: "440px" }}>
+          <section aria-modal="true" className="modal-panel" role="dialog" aria-labelledby="confirm-uninstall-protocol-title" style={{ maxWidth: "440px" }}>
             <div className="modal-header">
               <div>
-                <h3 id="confirm-uninstall-teamwork-title">Uninstall Teamwork?</h3>
+                <h3 id="confirm-uninstall-protocol-title">Uninstall Protocol?</h3>
                 <p>
                   {confirmUninstall.cleanTeamContext
-                    ? <>This removes the local Teamwork harness from <strong>{confirmUninstall.name}</strong> and deletes the team context branch.</>
-                    : <>This removes the local Teamwork harness from <strong>{confirmUninstall.name}</strong>. Source files are not deleted.</>}
+                    ? <>This removes the local protocol harness from <strong>{confirmUninstall.name}</strong> and deletes the team context branch.</>
+                    : <>This removes the local protocol harness from <strong>{confirmUninstall.name}</strong>. Source files are not deleted.</>}
                 </p>
               </div>
               <button aria-label="Close" className="icon-button" disabled={uninstalling} type="button" onClick={() => setConfirmUninstall(null)}>x</button>
             </div>
-            <div className="teamwork-cleanup-options">
+            <div className="protocol-cleanup-options">
               {confirmUninstall.canCleanTeamContext ? (
                 <label className="checkbox-row">
                   <input
@@ -1926,7 +1926,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
                 const target = confirmUninstall;
                 if (!target) return;
                 setUninstalling(true);
-                try { await onUninstallTeamwork(target.repoPath, target.cleanTeamContext); setConfirmUninstall(null); } finally { setUninstalling(false); }
+                try { await onUninstallProtocol(target.repoPath, target.cleanTeamContext); setConfirmUninstall(null); } finally { setUninstalling(false); }
               }}>{uninstalling ? "Uninstalling" : confirmUninstall.checkingOwner ? "Checking" : "Uninstall"}</button>
             </div>
           </section>
@@ -1951,7 +1951,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
           {(() => {
             const candidate = candidates.find((c) => c.id === menuOpen.id);
             const repoPath = candidate ? localPathFromCandidate(candidate) : null;
-            if (!candidate || !repoPath || !menuOpen.canUninstallTeamwork) return null;
+            if (!candidate || !repoPath || !menuOpen.canUninstallProtocol) return null;
             return (
               <button
                 className="project-context-menu-item"
@@ -1961,7 +1961,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
                   void openUninstallDialog(candidate, repoPath);
                 }}
               >
-                Uninstall Teamwork
+                Uninstall Protocol
               </button>
             );
           })()}
@@ -2179,9 +2179,9 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
         <GitDetailTab detail={detail} candidate={candidate} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} />
       </div>
       {isLocal ? (
-        <div aria-labelledby="project-detail-tab-team" className="detail-tab-panel" hidden={visibleDetailTab !== "team"} id="project-detail-tabpanel-team" role="tabpanel">
+        <div aria-labelledby="project-detail-tab-tasks" className="detail-tab-panel" hidden={visibleDetailTab !== "tasks"} id="project-detail-tabpanel-tasks" role="tabpanel">
           <TasksDetailTab
-            active={visibleDetailTab === "team"}
+            active={visibleDetailTab === "tasks"}
             agentClis={agentClis}
             candidate={candidate}
             setToast={setToast}
@@ -2233,7 +2233,7 @@ function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserT
 }) {
   const repoPath = localPathFromCandidate(candidate);
   const [tasks, setTasks] = useState<TaskViewModel[]>([]);
-  const [status, setStatus] = useState<TeamworkStatus | null>(null);
+  const [status, setStatus] = useState<ProtocolStatus | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<"install" | "site" | "harness" | null>(null);
   const selected = useMemo(
@@ -2245,14 +2245,14 @@ function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserT
     if (!active || !repoPath) return;
     let cancelled = false;
     const activeRepoPath = repoPath;
-    const teamwork = getBridge().teamwork;
-    const getTasks = teamwork?.getTasks;
-    const getStatus = teamwork?.getStatus;
+    const protocol = getBridge().protocol;
+    const getTasks = protocol?.getTasks;
+    const getStatus = protocol?.getStatus;
     if (!getTasks || !getStatus) {
       return;
     }
-    const getTasksHandler: NonNullable<NonNullable<SharkBayBridge["teamwork"]>["getTasks"]> = getTasks;
-    const getStatusHandler: NonNullable<NonNullable<SharkBayBridge["teamwork"]>["getStatus"]> = getStatus;
+    const getTasksHandler: NonNullable<NonNullable<SharkBayBridge["protocol"]>["getTasks"]> = getTasks;
+    const getStatusHandler: NonNullable<NonNullable<SharkBayBridge["protocol"]>["getStatus"]> = getStatus;
 
     async function refresh(showToast: boolean) {
       try {
@@ -2273,7 +2273,7 @@ function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserT
 
     void refresh(true);
     const timer = window.setInterval(() => void refresh(false), 3000);
-    const unsubscribe = teamwork?.onTasksChanged?.((event) => {
+    const unsubscribe = protocol?.onTasksChanged?.((event) => {
       if (event.repoPath === activeRepoPath) {
         setTasks(event.tasks);
         setSelectedTaskId((current) => current && event.tasks.some((task) => task.taskId === current) ? current : null);
@@ -2286,15 +2286,15 @@ function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserT
     };
   }, [active, repoPath, setToast]);
 
-  async function installTeamworkHarness() {
+  async function installProtocolHarness() {
     if (!repoPath) return;
     setBusyAction("install");
     try {
-      const install = getBridge().teamwork?.install;
-      if (!install) throw new Error("Teamwork install API is not available.");
+      const install = getBridge().protocol?.install;
+      if (!install) throw new Error("Protocol install API is not available.");
       const nextStatus = await install({ repoPath });
       setStatus(nextStatus);
-      setToast({ tone: "success", message: "Teamwork installed." });
+      setToast({ tone: "success", message: "Protocol installed." });
       await onRefresh();
     } catch (error) {
       setToast({ tone: "error", message: asMessage(error) });
@@ -2320,15 +2320,15 @@ function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserT
     }
   }
 
-  async function updateTeamworkHarness() {
+  async function updateProtocolHarness() {
     if (!repoPath) return;
     setBusyAction("harness");
     try {
-      const updateHarness = getBridge().teamwork?.updateHarness;
-      if (!updateHarness) throw new Error("Teamwork harness update API is not available.");
+      const updateHarness = getBridge().protocol?.updateHarness;
+      if (!updateHarness) throw new Error("Protocol harness update API is not available.");
       const nextStatus = await updateHarness({ repoPath });
       setStatus(nextStatus);
-      setToast({ tone: "success", message: "Teamwork harness updated." });
+      setToast({ tone: "success", message: "Protocol harness updated." });
     } catch (error) {
       setToast({ tone: "error", message: asMessage(error) });
     } finally {
@@ -2344,7 +2344,7 @@ function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserT
     }
   }
 
-  if (!repoPath) return <EmptyState title="Teamwork unavailable" body="Teamwork is available for local Git projects." />;
+  if (!repoPath) return <EmptyState title="Task Protocol unavailable" body="Task Protocol is available for local Git projects." />;
 
   if (selected) {
     const pill = taskPill(selected);
@@ -2373,14 +2373,14 @@ function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserT
   return (
     <>
       {status && !status.installed ? (
-        <section className="subpanel confirm-panel teamwork-action-card">
+        <section className="subpanel confirm-panel protocol-action-card">
           <div>
-            <h4>Install Teamwork</h4>
+            <h4>Install Protocol</h4>
             <p className="summary-text">Requires a GitHub origin and write access. Installation creates the local harness and enables team sync.</p>
           </div>
           <div className="button-row">
-            <button className="button compact" disabled={busyAction !== null} type="button" onClick={() => void installTeamworkHarness()}>
-              {busyAction === "install" ? "Installing" : "Install Teamwork"}
+            <button className="button compact" disabled={busyAction !== null} type="button" onClick={() => void installProtocolHarness()}>
+              {busyAction === "install" ? "Installing" : "Install Protocol"}
             </button>
           </div>
         </section>
@@ -2388,16 +2388,16 @@ function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserT
 
       {status?.installed ? (
         status.harnessUpdate.required ? (
-          <section className="subpanel confirm-panel teamwork-action-card teamwork-harness-card">
+          <section className="subpanel confirm-panel protocol-action-card protocol-harness-card">
             <div>
               <h4>Harness Update</h4>
               <p className="summary-text">Harness files differ from the current source. Update them?</p>
-              <p className="summary-text teamwork-harness-files">
+              <p className="summary-text protocol-harness-files">
                 {status.harnessUpdate.files.length} {status.harnessUpdate.files.length === 1 ? "file" : "files"} need attention: {status.harnessUpdate.files.map((file) => file.path).join(", ")}
               </p>
             </div>
             <div className="button-row">
-              <button className="button compact" disabled={busyAction !== null} type="button" onClick={() => void updateTeamworkHarness()}>
+              <button className="button compact" disabled={busyAction !== null} type="button" onClick={() => void updateProtocolHarness()}>
                 {busyAction === "harness" ? "Updating" : "Update Harness"}
               </button>
             </div>
@@ -2406,7 +2406,7 @@ function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserT
       ) : null}
 
       {status?.installed ? (
-        <section className="subpanel confirm-panel teamwork-action-card">
+        <section className="subpanel confirm-panel protocol-action-card">
           <div>
             <h4>Knowledge Site</h4>
             <p className="summary-text">Browse project docs and team task history as a local site.</p>
@@ -2445,7 +2445,7 @@ function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserT
   );
 }
 
-function taskRestoreCommand(task: TaskViewModel, status: TeamworkStatus | null, agentClis: AgentCli[]): AgentSessionRestoreCommand | null {
+function taskRestoreCommand(task: TaskViewModel, status: ProtocolStatus | null, agentClis: AgentCli[]): AgentSessionRestoreCommand | null {
   if (!status?.githubUserId || !status.machineId) return null;
   if (task.owner.githubUserId !== status.githubUserId) return null;
   if (task.machine !== status.machineId) return null;
