@@ -105,7 +105,9 @@ function createMainWindow(): BrowserWindow {
   });
 
   window.once("ready-to-show", () => {
-    window.show();
+    const showWindow = () => { if (!window.isDestroyed()) window.show(); };
+    const timeout = setTimeout(showWindow, 5000);
+    ipcMain.once(channels.contentReady, () => { clearTimeout(timeout); showWindow(); });
   });
 
   window.webContents.setWindowOpenHandler(({ url }) => {

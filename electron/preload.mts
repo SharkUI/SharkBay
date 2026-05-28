@@ -188,6 +188,7 @@ const sharkBayApi = {
   },
   dock: {
     updateBadge: (count: number) => { ipcRenderer.send(channels.dockBadgeUpdate, count); },
+    contentReady: () => { ipcRenderer.send(channels.contentReady); },
   }
 };
 

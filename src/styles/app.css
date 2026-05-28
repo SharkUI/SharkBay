@@ -3333,7 +3333,9 @@ button.project-file-toggle:focus-visible {
 
 .terminal-tab-add + .terminal-browser-button,
 .terminal-browser-button + .terminal-agent-button,
-.terminal-agent-button + .terminal-agent-button {
+.terminal-agent-button + .terminal-agent-button,
+.terminal-browser-button + .terminal-agent-install-button,
+.terminal-agent-button + .terminal-agent-install-button {
   margin-left: 0;
 }
 

@@ -531,6 +531,7 @@ export type SharkBayBridge = {
   };
   dock?: {
     updateBadge?: (count: number) => void;
+    contentReady?: () => void;
   };
 };
 

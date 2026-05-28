@@ -31,11 +31,11 @@ export async function scanConfiguredRoots(configuredRoots: string[], options: { 
   for (const root of roots) {
     if (!root.available || !root.path) continue;
     const repos = await findGitRepos(root.path, maxDepth);
-    for (const repoPath of repos) {
+    const rootUri = toLocalProjectUri(root.path);
+    await Promise.all(repos.map(async (repoPath) => {
       const name = path.basename(repoPath);
       const projectUri = toLocalProjectUri(repoPath);
-      if (found.has(projectUri)) continue;
-      const rootUri = toLocalProjectUri(root.path);
+      if (found.has(projectUri)) return;
       const [iconSources, services, gitMetadata] = await Promise.all([
         resolveProjectIconSources(repoPath, [repoPath]),
         discoverProjectDevServices(repoPath),
@@ -53,7 +53,7 @@ export async function scanConfiguredRoots(configuredRoots: string[], options: { 
         services,
         dirtyWorktree: gitMetadata.dirtyWorktree,
       });
-    }
+    }));
   }
 
   const candidates = [...found.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -70,13 +70,11 @@ export async function scanProjects(runtime: IpcRuntimeLike, input?: ProjectScanI
 }
 
 async function resolveManualProjects(configuredProjects: string[]): Promise<ProjectCandidate[]> {
-  const candidates: ProjectCandidate[] = [];
-
-  for (const projectPath of configuredProjects) {
+  const results = await Promise.all(configuredProjects.map(async (projectPath) => {
     try {
       const real = await fs.realpath(path.resolve(projectPath));
       const stat = await fs.stat(real);
-      if (!stat.isDirectory()) continue;
+      if (!stat.isDirectory()) return null;
 
       const name = path.basename(real);
       const projectUri = toLocalProjectUri(real);
@@ -85,7 +83,7 @@ async function resolveManualProjects(configuredProjects: string[]): Promise<Proj
         discoverProjectDevServices(real),
         readGitMetadata(real),
       ]);
-      candidates.push({
+      return {
         id: projectUri,
         uri: projectUri,
         name,
@@ -96,13 +94,13 @@ async function resolveManualProjects(configuredProjects: string[]): Promise<Proj
         iconSources,
         services,
         dirtyWorktree: gitMetadata.dirtyWorktree,
-      });
+      } satisfies ProjectCandidate;
     } catch {
-      // Skip projects that can't be resolved (missing, permission errors, etc.)
+      return null;
     }
-  }
+  }));
 
-  return candidates;
+  return results.filter((c) => c !== null) as ProjectCandidate[];
 }
 
 function mergeProjectCandidates(scanned: ProjectCandidate[], manual: ProjectCandidate[]): ProjectCandidate[] {

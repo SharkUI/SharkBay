@@ -50,4 +50,5 @@ export const ipcChannels = {
   usageGetSummary: "usage:getSummary",
   usageGetReport: "usage:getReport",
   dockBadgeUpdate: "dock:badgeUpdate",
+  contentReady: "app:contentReady",
 } as const;

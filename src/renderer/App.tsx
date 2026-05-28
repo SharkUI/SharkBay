@@ -539,7 +539,7 @@ export function App() {
 
   useEffect(() => {
     if (!bridgeAvailable) return;
-    void refreshProjects();
+    void refreshProjects().then(() => getBridge().dock?.contentReady?.());
   }, [bridgeAvailable]);
 
   useEffect(() => {
@@ -1430,7 +1430,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                   />
                 );
               })}
-              {!space.tabs.length ? (<div className="xterm-empty-state"><EmptyState title="No terminal open" body="Open a tab for the selected project." /></div>) : null}
             </div>
           </div>
         ))}
@@ -1448,7 +1447,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                 <DownloadIcon />
               </button>
             </div>
-            <div className="xterm-surface-stack"><div className="xterm-empty-state"><EmptyState title="No terminal open" body={candidate ? "Open a tab for the selected project." : "Select a project to start a shell."} /></div></div>
+            <div className="xterm-surface-stack"></div>
           </div>
         ) : null}
       </div>
