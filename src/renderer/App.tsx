@@ -1021,7 +1021,8 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     const isRemote = false;
     const baseCommand = isRemote ? agent.command : (agent.executablePath || agent.command);
     const flags = getAgentLaunchFlags(agent.id);
-    const launchCommand = flags.length ? `${shellQuote(baseCommand)} ${flags.join(" ")}` : shellQuote(baseCommand);
+    const base = agent.id === "kiro" ? `${shellQuote(baseCommand)} chat` : shellQuote(baseCommand);
+    const launchCommand = flags.length ? `${base} ${flags.join(" ")}` : base;
     await openProjectTab(candidate.id, candidate.uri, displayProjectName ?? candidate.name, candidate.displayPath, false, { agentId: agent.id, initialCommand: launchCommand, initialCommandTitle: agent.label });
   }
 
@@ -2934,7 +2935,9 @@ const agentLaunchOptions: Record<string, AgentLaunchOption[]> = {
   gemini: [
     { flag: "--yolo", label: "YOLO mode", description: "Auto-approve all tool actions", type: "toggle" },
   ],
-  kiro: [],
+  kiro: [
+    { flag: "--trust-all-tools", label: "Trust all tools", description: "Allows the model to use any tool to run commands without asking for confirmation", type: "toggle" },
+  ],
   deepseek: [
     { flag: "--approval-policy full-auto", label: "Full auto", description: "Run all commands without approval", type: "toggle" },
   ],

@@ -329,9 +329,9 @@ describe("harness install", () => {
     expect(qwenSessionMatch?.[1]).toBe(qwenSessionMatch?.[2]);
     expect(qwenResult.initialCommand).toContain("qwen '--session-id'");
     expect(qwenResult.initialCommand).toContain("'-i' 'I'\\''m working in SharkBay Task Protocol mode");
-    await expect(prepareAgentLaunch(repo, "kiro", "kiro-cli")).resolves.toMatchObject({
+    await expect(prepareAgentLaunch(repo, "kiro", "kiro-cli chat")).resolves.toMatchObject({
       injected: true,
-      initialCommand: expect.stringContaining("kiro-cli 'chat' 'I'\\''m working in SharkBay Task Protocol mode"),
+      initialCommand: expect.stringContaining("kiro-cli chat 'I'\\''m working in SharkBay Task Protocol mode"),
     });
     await expect(prepareAgentLaunch(repo, "deepseek", "deepseek")).resolves.toMatchObject({
       injected: true,

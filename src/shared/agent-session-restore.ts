@@ -67,7 +67,7 @@ function restoreCommand(agentId: AgentSessionRestoreAgentId, executable: string,
   if (agentId === "codex") return `${restoredSessionEnv} ${commandWithFlags} resume ${id}`;
   if (agentId === "claude") return `${restoredSessionEnv} ${commandWithFlags} --resume ${id}`;
   if (agentId === "gemini" || agentId === "qwen") return `${restoredSessionEnv} ${commandWithFlags} --resume ${id}`;
-  if (agentId === "kiro") return `${restoredSessionEnv} ${commandWithFlags} chat --resume-id ${id}`;
+  if (agentId === "kiro") return `${restoredSessionEnv} ${command} chat ${flags ? `${flags} ` : ""}--resume-id ${id}`;
   if (agentId === "deepseek") return `${restoredSessionEnv} ${commandWithFlags} resume ${id}`;
   return `${restoredSessionEnv} ${commandWithFlags} --session ${id}`;
 }
