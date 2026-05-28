@@ -8,14 +8,11 @@ import type {
   InstallToolResult,
   IpcRuntimeLike,
   ListInstallRecipesInput,
-  MachineProfile,
   PathExistsInput,
   PathExistsResult,
-  ProfileReadOptions,
   ProjectDetail,
   ProjectFilesInput,
   ProjectFilesResult,
-  ProjectProfile,
   ProjectScanInput,
   ReadFileInput,
   ReadFileResult,
@@ -45,8 +42,6 @@ export type CoreMethodMap = {
   readCodeGraphStatus: { args: [IpcRuntimeLike, { projectUri: string }]; result: CodeGraphProjectStatus };
   ensureCodeGraphStatus: { args: [IpcRuntimeLike, { projectUri: string }]; result: CodeGraphProjectStatus };
   removeCodeGraphIndexes: { args: [IpcRuntimeLike, { projectUris: string[] }]; result: void };
-  readMachineProfile: { args: [IpcRuntimeLike, string, ProfileReadOptions | undefined]; result: MachineProfile };
-  readProjectProfile: { args: [IpcRuntimeLike, string, ProfileReadOptions | undefined]; result: ProjectProfile };
   pathExistsOnTarget: { args: [IpcRuntimeLike, PathExistsInput]; result: PathExistsResult };
   listPlugins: { args: []; result: PluginSummary[] };
   setPluginEnabled: { args: [string, boolean]; result: PluginSummary[] };

@@ -62,8 +62,6 @@ export type InstallRecipe = {
   verification: { command: string; args?: string[] };
 };
 
-export type ExecutionTargetKind = "local" | "container" | "wsl";
-
 export type DiagnosticsJobRecord = {
   id: string;
   kind: string;
@@ -127,115 +125,6 @@ export type PathExistsInput = {
 export type PathExistsResult =
   | { ok: true; kind: "file" | "directory" }
   | { ok: false; reason: "not-found" | "unreachable" | "error"; message: string };
-
-export type ProfileReadOptions = {
-  refresh?: boolean;
-  depth?: "quick" | "standard" | "deep";
-};
-
-export type ProfileWarning = {
-  code: string;
-  message: string;
-  source?: string;
-};
-
-export type ToolProfile = {
-  id: string;
-  command: string;
-  available: boolean;
-  path: string | null;
-  version: string | null;
-  sourcePluginId?: string;
-};
-
-export type MachineProfile = {
-  targetId: string;
-  targetKind: ExecutionTargetKind;
-  detectedAt: string;
-  expiresAt?: string;
-  hostname: string | null;
-  os: {
-    platform: "darwin" | "linux" | "windows" | "unknown";
-    name: string | null;
-    version: string | null;
-    arch: string | null;
-    kernel: string | null;
-  };
-  shell: { path: string | null; name: string | null };
-  tools: ToolProfile[];
-  languages: ToolProfile[];
-  packageManagers: ToolProfile[];
-  agents: ToolProfile[];
-  warnings: ProfileWarning[];
-};
-
-export type DetectedProfileItem = {
-  id: string;
-  confidence: number;
-  evidence: string[];
-  sourcePluginId?: string;
-};
-
-export type DetectedPackageManager = DetectedProfileItem & {
-  manifest?: string;
-  lockfile?: string;
-};
-
-export type ProjectServiceProfile = {
-  id: string;
-  label: string;
-  command: string;
-  cwdUri: string;
-  script?: string;
-  likelyPorts: number[];
-  sourcePluginId?: string;
-};
-
-export type ProjectWorkspaceProfile = {
-  name: string;
-  path: string;
-  packageManager?: string;
-};
-
-export type ProjectProfile = {
-  projectUri: string;
-  targetId: string;
-  targetKind: ExecutionTargetKind;
-  detectedAt: string;
-  expiresAt?: string;
-  name: string;
-  displayPath: string;
-  vcs: {
-    type: "git" | "none" | "unknown";
-    root: string | null;
-    branch: string | null;
-    remoteOrigin: string | null;
-    dirty: boolean | null;
-  };
-  languages: DetectedProfileItem[];
-  frameworks: DetectedProfileItem[];
-  packageManagers: DetectedPackageManager[];
-  commands: {
-    install?: string;
-    dev?: string;
-    build?: string;
-    test?: string;
-    lint?: string;
-    format?: string;
-  };
-  services: ProjectServiceProfile[];
-  env: {
-    files: string[];
-    exampleFiles: string[];
-    requiredKeys?: string[];
-  };
-  structure: {
-    monorepo: boolean;
-    workspaces: ProjectWorkspaceProfile[];
-    importantFiles: string[];
-  };
-  warnings: ProfileWarning[];
-};
 
 export type CodeGraphProjectStatus = {
   projectUri: string;
@@ -610,10 +499,6 @@ export type SharkBayBridge = {
     installTool?: (input: InstallToolInput) => Promise<InstallToolResult>;
     onStatus?: (callback: (event: AgentProjectStatusEvent) => void) => () => void;
     onInstallLog?: (callback: (event: InstallLogEvent) => void) => () => void;
-  };
-  profiles?: {
-    readMachine?: (input: { targetId: string; options?: ProfileReadOptions }) => Promise<MachineProfile>;
-    readProject?: (input: { projectUri: string; options?: ProfileReadOptions }) => Promise<ProjectProfile>;
   };
   targets?: {
     pathExists?: (input: PathExistsInput) => Promise<PathExistsResult>;

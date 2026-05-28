@@ -29,11 +29,8 @@ import type {
   KnowledgeSiteResult,
   ListInstallRecipesInput,
   DiagnosticsSnapshot,
-  MachineProfile,
   PathExistsInput,
   PathExistsResult,
-  ProfileReadOptions,
-  ProjectProfile,
   ProjectConfigInput,
   ProjectScanInput,
   ProjectDetail,
@@ -321,12 +318,6 @@ export async function registerIpcHandlers(
   );
   handle<InstallToolInput, InstallToolResult>(channels.installTool, (payload) =>
     requireCore().call("installTool", [runtime, payload])
-  );
-  handle<{ targetId: string; options?: ProfileReadOptions }, MachineProfile>(channels.readMachineProfile, (payload) =>
-    requireCore().call("readMachineProfile", [runtime, payload.targetId, payload.options])
-  );
-  handle<{ projectUri: string; options?: ProfileReadOptions }, ProjectProfile>(channels.readProjectProfile, (payload) =>
-    requireCore().call("readProjectProfile", [runtime, payload.projectUri, payload.options])
   );
   handle<PathExistsInput, PathExistsResult>(channels.pathExistsOnTarget, (payload) =>
     requireCore().call("pathExistsOnTarget", [runtime, payload])

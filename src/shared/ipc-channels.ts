@@ -43,8 +43,6 @@ export const ipcChannels = {
   installTool: "agents:installTool",
   installLog: "agents:installLog",
   agentStatus: "agents:status",
-  readMachineProfile: "profiles:readMachine",
-  readProjectProfile: "profiles:readProject",
   pathExistsOnTarget: "projects:pathExists",
   listPlugins: "plugins:list",
   setPluginEnabled: "plugins:setEnabled",

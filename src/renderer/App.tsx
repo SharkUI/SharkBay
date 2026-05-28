@@ -20,12 +20,10 @@ import type {
   InstallLogEvent,
   InstallRecipe,
   InstallToolResult,
-  MachineProfile,
   PluginSummary,
   ProjectCandidate,
   ProjectDetail,
   ProjectFileTreeItem,
-  ProjectProfile,
   ProjectSummary,
   ScanResult,
   SharkBayBridge,
@@ -53,7 +51,7 @@ import {
 import type { WorkflowProjectTerminalActivityState } from "./workflow";
 
 type View = "dashboard" | "settings";
-type DetailTab = "team" | "git" | "stack" | "files";
+type DetailTab = "team" | "git" | "files";
 type SettingsSection = "agent-clis" | "appearance" | "extensions" | "diagnostics";
 
 type Toast = {
@@ -147,7 +145,6 @@ const projectColumnStorageKey = "sharkbay.projectColumnWidth.v2";
 const detailTabs: Array<{ id: DetailTab; label: string; remoteOnly?: boolean; localOnly?: boolean }> = [
   { id: "team", label: "Team", localOnly: true },
   { id: "git", label: "Git" },
-  { id: "stack", label: "Stack" },
   { id: "files", label: "Files" },
 ];
 const appearanceThemes: Array<{ id: AppearanceTheme; label: string }> = [
@@ -2194,9 +2191,6 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
           />
         </div>
       ) : null}
-      <div aria-labelledby="project-detail-tab-stack" className="detail-tab-panel" hidden={visibleDetailTab !== "stack"} id="project-detail-tabpanel-stack" role="tabpanel">
-        <StackDetailTab active={visibleDetailTab === "stack"} candidate={candidate} setToast={setToast} />
-      </div>
       <div aria-labelledby="project-detail-tab-files" className="detail-tab-panel" hidden={visibleDetailTab !== "files"} id="project-detail-tabpanel-files" role="tabpanel">
         <FilesDetailTab active={visibleDetailTab === "files"} candidate={candidate} codeGraphStatus={codeGraphStatus} detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} />
       </div>
@@ -2510,113 +2504,6 @@ function ProjectFactsCard({ detail, candidate }: { detail: ProjectDetail | null;
       </div>
     </section>
   );
-}
-
-function StackDetailTab({ active, candidate, setToast }: { active: boolean; candidate: ProjectCandidate; setToast: (toast: Toast) => void }) {
-  const [profile, setProfile] = useState<ProjectProfile | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [fetchKey, setFetchKey] = useState(0);
-  const forceRefreshRef = useRef(false);
-
-  useEffect(() => {
-    if (!active) return;
-    let cancelled = false;
-    const readProject = getBridge().profiles?.readProject;
-    if (!readProject) { setLoadError("Project profile API is not available."); return; }
-    const wasForcedRefresh = forceRefreshRef.current;
-    forceRefreshRef.current = false;
-    setBusy(true);
-    setLoadError(null);
-    readProject({ projectUri: candidate.uri, options: wasForcedRefresh ? { refresh: true } : undefined })
-      .then((next) => { if (!cancelled) setProfile(next); })
-      .catch((error) => { if (!cancelled) setLoadError(asMessage(error)); })
-      .finally(() => { if (!cancelled) setBusy(false); });
-    return () => { cancelled = true; };
-  }, [active, candidate.uri, fetchKey]);
-
-  useEffect(() => {
-    if (!active) return;
-    const timer = window.setInterval(() => setFetchKey((current) => current + 1), 30000);
-    return () => window.clearInterval(timer);
-  }, [active, candidate.uri]);
-
-  function refresh() {
-    forceRefreshRef.current = true;
-    setFetchKey((current) => current + 1);
-    setToast({ tone: "info", message: "Refreshing project profile" });
-  }
-
-  if (loadError) return <div className="inline-connection-result is-error" role="status">{loadError}</div>;
-  if (!profile && busy) return <div className="empty-state compact-title-row" style={{ padding: "24px 16px" }}><span>Loading project profile…</span></div>;
-  if (!profile) return <EmptyState title="No project profile" body="Open the Stack tab again to detect this project." />;
-
-  const commandEntries = Object.entries(profile.commands).filter(([, value]) => value);
-  return (
-    <>
-      <section className="subpanel project-facts-card">
-        <div className="panel-title-row compact-title-row">
-          <h4>Stack</h4>
-          <button aria-label="Refresh project profile" className="icon-button" disabled={busy} type="button" onClick={refresh}><RefreshIcon /></button>
-        </div>
-        <div className="project-facts-list">
-          {profile.languages.length ? <ProfileChipFact label="Languages" items={profile.languages.map((item) => item.id)} /> : null}
-          {profile.frameworks.length ? <ProfileChipFact label="Frameworks" items={profile.frameworks.map((item) => item.id)} /> : null}
-          {profile.packageManagers.length ? <ProfileChipFact label="Package managers" items={profile.packageManagers.map((item) => item.id)} /> : null}
-          {profile.structure.monorepo ? <div className="repository-fact"><span>Structure</span><strong>Monorepo</strong></div> : null}
-        </div>
-      </section>
-      {commandEntries.length ? (
-        <section className="subpanel project-facts-card">
-          <div className="panel-title-row compact-title-row"><h4>Commands</h4></div>
-          <div className="project-facts-list">
-            {commandEntries.map(([key, value]) => (
-              <div className="repository-fact" key={key}><span>{key}</span><strong>{value}</strong></div>
-            ))}
-          </div>
-        </section>
-      ) : null}
-      {profile.services.length ? (
-        <section className="subpanel project-facts-card">
-          <div className="panel-title-row compact-title-row"><h4>Services</h4></div>
-          <div className="project-facts-list">
-            {profile.services.map((service) => (
-              <div className="repository-fact" key={service.id}><span>{service.label}</span><strong>{service.command}</strong></div>
-            ))}
-          </div>
-        </section>
-      ) : null}
-      {profile.env.files.length || profile.env.exampleFiles.length ? (
-        <section className="subpanel project-facts-card">
-          <div className="panel-title-row compact-title-row"><h4>Env files</h4></div>
-          <div className="project-facts-list">
-            {profile.env.files.map((file) => (<div className="repository-fact" key={`env-${file}`}><span>env</span><strong>{file}</strong></div>))}
-            {profile.env.exampleFiles.map((file) => (<div className="repository-fact" key={`example-${file}`}><span>example</span><strong>{file}</strong></div>))}
-          </div>
-        </section>
-      ) : null}
-      {profile.structure.importantFiles.length ? (
-        <section className="subpanel project-facts-card">
-          <div className="panel-title-row compact-title-row"><h4>Important files</h4></div>
-          <div className="project-facts-list">
-            {profile.structure.importantFiles.map((file) => (<div className="repository-fact" key={file}><span>file</span><strong>{file}</strong></div>))}
-          </div>
-        </section>
-      ) : null}
-      {profile.warnings.length ? (
-        <section className="subpanel project-facts-card">
-          <div className="panel-title-row compact-title-row"><h4>Warnings</h4></div>
-          <div className="project-facts-list">
-            {profile.warnings.map((warning, index) => (<div className="repository-fact is-warn" key={`${warning.code}-${index}`}><span>{warning.code}</span><strong>{warning.message}</strong></div>))}
-          </div>
-        </section>
-      ) : null}
-    </>
-  );
-}
-
-function ProfileChipFact({ label, items }: { label: string; items: string[] }) {
-  return <div className="repository-fact"><span>{label}</span><strong>{items.join(", ")}</strong></div>;
 }
 
 function DirtyFilesPanel({ detail, setToast, onOpenFileInEditor, onOpenGitDiff }: { detail: ProjectDetail | null; setToast: (toast: Toast) => void; onOpenFileInEditor: (relativePath: string) => Promise<void>; onOpenGitDiff: (relativePath: string) => Promise<void> }) {

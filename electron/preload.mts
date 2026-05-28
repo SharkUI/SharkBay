@@ -22,12 +22,9 @@ import type {
   ListInstallRecipesInput,
   DiagnosticsSnapshot,
   InstallLogEvent,
-  MachineProfile,
   PathExistsInput,
   PathExistsResult,
-  ProfileReadOptions,
   ProjectConfigInput,
-  ProjectProfile,
   ProjectScanInput,
   ProjectDetail,
   ProjectFilesInput,
@@ -155,12 +152,6 @@ const sharkBayApi = {
       ipcRenderer.on(channels.installLog, listener);
       return () => ipcRenderer.removeListener(channels.installLog, listener);
     }
-  },
-  profiles: {
-    readMachine: (input: { targetId: string; options?: ProfileReadOptions }) =>
-      invoke<MachineProfile>(channels.readMachineProfile, input),
-    readProject: (input: { projectUri: string; options?: ProfileReadOptions }) =>
-      invoke<ProjectProfile>(channels.readProjectProfile, input)
   },
   targets: {
     pathExists: (input: PathExistsInput) => invoke<PathExistsResult>(channels.pathExistsOnTarget, input)
