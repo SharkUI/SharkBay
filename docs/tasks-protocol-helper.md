@@ -1,6 +1,6 @@
-# Teamwork Protocol Helper Design
+# Task Protocol Helper Design
 
-This document sketches a revised SharkBay Teamwork protocol template. It is a design draft only; it does not describe the current implementation.
+This document sketches a revised SharkBay task protocol template. It is a design draft only; it does not describe the current implementation.
 
 ## Goals
 

@@ -9,7 +9,7 @@ This directory documents the current SharkBay implementation.
 - [Development guide](development.md) - setup, commands, tests, packaging, and local runtime notes.
 - [Testing](testing.md) - current test scope, commands, and coverage gaps.
 - [Release and packaging](release.md) - build outputs, Electron Builder config, native modules, and release checks.
-- [Teamwork](teamwork.md) - SharkBay Teamwork harness, task files, sync, and uninstall behavior.
+- [Task Protocol](tasks.md) - SharkBay protocol harness, task files, sync, and uninstall behavior.
 - [Agent guide](agents.md) - repository-specific instructions for automation agents and contributors.
 - [Roadmap](roadmap.md) - current baseline and next priorities.
 
@@ -17,7 +17,7 @@ This directory documents the current SharkBay implementation.
 
 The `docs/shared/` HTML files are retained as design references. They are not the source of truth for current behavior:
 
-- `docs/shared/teamwork-design.html` - historical Teamwork design proposal, partly implemented and partly superseded.
-- `docs/shared/teamwork-ui-mockup.html` - static UI mockup that reuses production CSS for visual reference.
+- `docs/shared/tasks-design.html` - historical task protocol design proposal, partly implemented and partly superseded.
+- `docs/shared/tasks-ui-mockup.html` - static UI mockup that reuses production CSS for visual reference.
 
 When docs and code disagree, treat code and tests as authoritative, then update the docs.

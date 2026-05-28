@@ -28,7 +28,7 @@ Real-time status indicators from agent transcripts — see what each agent is wo
 
 Manage local projects in a unified sidebar. Add, remove, and switch between repositories instantly.
 
-### GitHub-Compatible Teamwork
+### GitHub-Compatible Task Protocol
 
 Project-local `.sharkbay` harness with Markdown task records, synced through a GitHub remote branch. Works with any agent that reads files.
 
@@ -63,7 +63,7 @@ Auto-generated HTML site from project docs and team task history — readable, b
 - [Development guide](docs/development.md)
 - [Testing](docs/testing.md)
 - [Release and packaging](docs/release.md)
-- [Teamwork](docs/teamwork.md)
+- [Task Protocol](docs/tasks.md)
 - [Agent guide](docs/agents.md)
 - [Roadmap](docs/roadmap.md)
 
@@ -76,7 +76,7 @@ Electron · React · TypeScript · Vite · xterm · @lydell/node-pty · CodeMirr
 - macOS
 - Node.js >= 20.11
 - Git
-- `gh` CLI (only for Teamwork sync)
+- `gh` CLI (only for team context sync)
 
 ## Development
 

@@ -7,7 +7,7 @@
 - npm
 - Git
 - Native build tooling for Electron native modules
-- GitHub CLI `gh` only for Teamwork install/sync flows
+- GitHub CLI `gh` only for protocol install/sync flows
 
 ## Setup
 
@@ -76,7 +76,7 @@ During development, SharkBay writes runtime data outside the repository:
 - BrowserView partition data for embedded browser tabs.
 - Codex/Claude transcript reads from the user's home directory.
 
-When Teamwork is installed for a project, SharkBay writes repo-local `.sharkbay/` and a local `.git/info/exclude` entry for `/.sharkbay/`. Supported agent launches receive a first-message bootstrap prompt; SharkBay does not generate or repair per-agent entry files during launch.
+When protocol is installed for a project, SharkBay writes repo-local `.sharkbay/` and a local `.git/info/exclude` entry for `/.sharkbay/`. Supported agent launches receive a first-message bootstrap prompt; SharkBay does not generate or repair per-agent entry files during launch.
 
 ## Verification Guidance
 
@@ -84,4 +84,4 @@ When Teamwork is installed for a project, SharkBay writes repo-local `.sharkbay/
 - For IPC contract changes, update `src/shared/ipc-channels.ts`, preload types, renderer bridge use, and `tests/ipc-channels.test.ts` together.
 - For renderer workflow helper changes, update `tests/renderer-workflow.test.ts`.
 - For packaging changes, run `npm run build`; use `npm run pack` when native modules, resources, or Electron Builder config changed.
-- For Teamwork changes, run the Teamwork harness/sync/task tests and inspect generated local files in a temporary repository.
+- For protocol changes, run the protocol harness/sync/task tests and inspect generated local files in a temporary repository.

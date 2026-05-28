@@ -22,8 +22,8 @@ Vitest runs in the `node` environment and includes `tests/**/*.test.ts`.
 - terminal command/title/input behavior
 - embedded browser URL normalization
 - agent CLI discovery and transcript status parsing
-- Teamwork harness install/uninstall
-- Teamwork task parsing and context sync
+- Protocol harness install/uninstall
+- Task parsing and context sync
 - renderer workflow pure helpers
 
 ## Coverage Gaps
@@ -41,5 +41,5 @@ Vitest coverage is configured to write text and HTML reports to `coverage/` when
 - Main process logic: run the targeted unit test and `npm run typecheck`.
 - IPC changes: update channel constants, preload bridge, renderer types, and `tests/ipc-channels.test.ts`.
 - Renderer workflow helpers: update `tests/renderer-workflow.test.ts`.
-- Teamwork changes: run harness, task, and sync tests.
+- Protocol changes: run harness, task, and sync tests.
 - Docs-only changes: inspect rendered Markdown where useful and run `git diff --check`.
