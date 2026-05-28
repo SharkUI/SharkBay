@@ -107,4 +107,4 @@ npm run dist    # distributable macOS artifacts in release/
 
 ## License
 
-Private — not open source.
+SharkBay is licensed under the GNU General Public License v3.0 only. See [LICENSE](LICENSE).
