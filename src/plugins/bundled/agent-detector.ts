@@ -72,7 +72,7 @@ export function createAgentInstallRecipes(): InstallRecipe[] {
       id: "kiro.official.script",
       toolId: "kiro",
       label: "Install Kiro CLI with official script",
-      targetKinds: ["local", "ssh"],
+      targetKinds: ["local"],
       platforms: ["darwin", "linux"],
       preconditions: [{ tool: "curl", available: true }],
       steps: [{
@@ -103,7 +103,7 @@ function npmGlobalRecipe(toolId: string, label: string, command: string): Instal
     id: `${toolId}.npm.global`,
     toolId,
     label,
-    targetKinds: ["local", "ssh"],
+    targetKinds: ["local"],
     platforms: ["darwin", "linux", "unknown"],
     preconditions: [{ tool: "npm", available: true }],
     steps: [{ kind: "command", command, description: label }],

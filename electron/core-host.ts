@@ -1,7 +1,5 @@
 import { SharkBayCoreService } from "../src/core/core-service.js";
 import { LocalProvider } from "../src/providers/local/local-provider.js";
-import { SshProvider } from "../src/providers/ssh/ssh-provider.js";
-import { createDefaultSecretStore } from "../src/main/secrets.js";
 import {
   serializeError,
   type CoreEventMessage,
@@ -18,10 +16,8 @@ if (!parentPort) {
   throw new Error("core-host must be launched as an Electron utility process");
 }
 
-const secretStore = createDefaultSecretStore();
 const core = new SharkBayCoreService([
   new LocalProvider(),
-  new SshProvider({ secretStore }),
 ]);
 
 const forwardEvent = (name: CoreEventName, payload: unknown) => {

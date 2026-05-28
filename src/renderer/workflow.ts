@@ -3,7 +3,7 @@ export type WorkflowProjectCandidate = {
   uri: string;
   name: string;
   providerId: string;
-  providerKind: "local" | "ssh" | "container" | "wsl";
+  providerKind: "local" | "container" | "wsl";
   displayPath: string;
   rootUri: string;
   iconSources?: Array<{ kind: "local" | "favicon"; url: string; label: string }>;

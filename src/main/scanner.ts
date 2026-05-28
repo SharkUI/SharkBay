@@ -1,12 +1,12 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { IpcRuntimeLike, ProjectCandidate, ProjectScanInput, RemoteMachine, ScanProjectsResult } from "../shared/types.js";
+import type { IpcRuntimeLike, ProjectCandidate, ProjectScanInput, ScanProjectsResult } from "../shared/types.js";
 import { loadAppConfig, getRuntimeConfigPath } from "./config.js";
 import { discoverProjectDevServices } from "./dev-services.js";
 import { readGitMetadata } from "./git.js";
 import { resolveConfiguredRoots } from "./path-safety.js";
 import { resolveProjectIconSources } from "./project-icons.js";
-import { parseProjectUri, toLocalProjectUri } from "../core/project-uri.js";
+import { toLocalProjectUri } from "../core/project-uri.js";
 
 const ignoredDirectories = new Set([
   ".git",
@@ -64,38 +64,9 @@ export async function scanProjects(runtime: IpcRuntimeLike, input?: ProjectScanI
   const config = await loadAppConfig(getRuntimeConfigPath(runtime));
 
   const manualCandidates = await resolveManualProjects(config.configuredProjects);
-  const remoteCandidates = await resolveRemoteProjects(config.configuredRemoteProjects, config.configuredRemoteMachines);
-  const merged = mergeProjectCandidates([], [...manualCandidates, ...remoteCandidates]);
+  const merged = mergeProjectCandidates([], manualCandidates);
 
   return { roots: [], candidates: merged };
-}
-
-async function resolveRemoteProjects(configuredRemoteProjects: string[], remoteMachines: RemoteMachine[] = []): Promise<ProjectCandidate[]> {
-  const machines = new Map(remoteMachines.map((machine) => [machine.id, machine]));
-  const candidates: ProjectCandidate[] = [];
-  for (const projectUri of configuredRemoteProjects) {
-    try {
-      const parsed = parseProjectUri(projectUri);
-      if (parsed.kind !== "ssh") continue;
-      const name = path.posix.basename(parsed.path) || parsed.machineId;
-      const machine = machines.get(parsed.machineId);
-      candidates.push({
-        id: projectUri,
-        uri: projectUri,
-        name,
-        providerId: parsed.machineId,
-        providerKind: "ssh",
-        displayPath: `${machine?.label ?? parsed.machineId}:${parsed.path}`,
-        rootUri: projectUri,
-        iconSources: [],
-        services: [],
-        dirtyWorktree: null,
-      });
-    } catch {
-      // Skip invalid remote project URIs.
-    }
-  }
-  return candidates;
 }
 
 async function resolveManualProjects(configuredProjects: string[]): Promise<ProjectCandidate[]> {

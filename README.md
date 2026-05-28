@@ -26,7 +26,7 @@ Real-time status indicators from agent transcripts — see what each agent is wo
 
 ### Multi-Project Workspace
 
-Manage local and remote projects in a unified sidebar. Add, remove, and switch between repositories instantly.
+Manage local projects in a unified sidebar. Add, remove, and switch between repositories instantly.
 
 ### GitHub-Compatible Teamwork
 
@@ -56,10 +56,6 @@ Built-in CodeMirror editor with syntax highlighting for 20+ languages. Open, edi
 
 Auto-generated HTML site from project docs and team task history — readable, browsable context for humans and agents alike.
 
-### Remote Machines
-
-SSH into remote development machines with full support for file browsing, editing, Git status, terminals, and agent launches. Auth via ssh-config, ssh-agent, key file, or password (stored in macOS Keychain).
-
 ## Documentation
 
 - [Product notes](docs/product.md)
@@ -69,7 +65,6 @@ SSH into remote development machines with full support for file browsing, editin
 - [Release and packaging](docs/release.md)
 - [Teamwork](docs/teamwork.md)
 - [Agent guide](docs/agents.md)
-- [Remote machines](docs/remote-machine.md)
 - [Roadmap](docs/roadmap.md)
 
 ## Tech Stack

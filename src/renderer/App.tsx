@@ -27,11 +27,6 @@ import type {
   ProjectFileTreeItem,
   ProjectProfile,
   ProjectSummary,
-  RemoteMachine,
-  RemoteMachineInput,
-  RemoteMachineTestResult,
-  RemoteDetectedPort,
-  RemotePortForward,
   ScanResult,
   SharkBayBridge,
   TaskViewModel,
@@ -58,30 +53,8 @@ import {
 import type { WorkflowProjectTerminalActivityState } from "./workflow";
 
 type View = "dashboard" | "settings";
-type DetailTab = "team" | "git" | "stack" | "files" | "forwards";
-type SettingsSection = "agent-clis" | "appearance" | "extensions" | "diagnostics" | `remote-machine:${string}`;
-
-const remoteConnectionMethods: Array<{
-  id: RemoteMachineInput["authMode"];
-  label: string;
-  description: string;
-}> = [
-  {
-    id: "system-ssh-config",
-    label: "Use my SSH config",
-    description: "Best if you already run ssh server-name in Terminal.",
-  },
-  {
-    id: "ssh-agent",
-    label: "Enter server address",
-    description: "Use host, port, username, and optionally a saved password.",
-  },
-  {
-    id: "key-file",
-    label: "Use a specific key file",
-    description: "Choose this when the server needs a particular private key path.",
-  },
-];
+type DetailTab = "team" | "git" | "stack" | "files";
+type SettingsSection = "agent-clis" | "appearance" | "extensions" | "diagnostics";
 
 type Toast = {
   tone: "info" | "error" | "success";
@@ -176,7 +149,6 @@ const detailTabs: Array<{ id: DetailTab; label: string; remoteOnly?: boolean; lo
   { id: "git", label: "Git" },
   { id: "stack", label: "Stack" },
   { id: "files", label: "Files" },
-  { id: "forwards", label: "Port forwards", remoteOnly: true },
 ];
 const appearanceThemes: Array<{ id: AppearanceTheme; label: string }> = [
   { id: "morning", label: "Morning" },
@@ -290,24 +262,6 @@ async function renameProjectAlias(uri: string, name: string): Promise<void> {
   const handler = getBridge().config?.renameProject;
   if (!handler) throw new Error("Project rename is not exposed by the preload API.");
   await handler({ uri, name });
-}
-
-async function addRemoteMachine(input: RemoteMachineInput): Promise<AppConfig> {
-  const handler = getBridge().config?.addRemoteMachine;
-  if (!handler) throw new Error("Remote machine add is not exposed by the preload API.");
-  return handler(input);
-}
-
-async function removeRemoteMachine(id: string): Promise<AppConfig> {
-  const handler = getBridge().config?.removeRemoteMachine;
-  if (!handler) throw new Error("Remote machine remove is not exposed by the preload API.");
-  return handler({ id });
-}
-
-async function testRemoteMachine(input: { id: string } | RemoteMachineInput): Promise<RemoteMachineTestResult> {
-  const handler = getBridge().config?.testRemoteMachine;
-  if (!handler) throw new Error("Remote machine connection testing is not exposed by the preload API.");
-  return handler(input);
 }
 
 async function pickAndAddProjects(): Promise<string[]> {
@@ -501,10 +455,6 @@ function appearanceDescription(theme: AppearanceTheme): string {
   return "Day icon and colors";
 }
 
-function toRemoteProjectUri(machineId: string, remotePath: string): string {
-  return `ssh://${encodeURIComponent(machineId)}${encodeURI(remotePath)}`;
-}
-
 function localPathFromCandidate(candidate: ProjectCandidate): string | null {
   if (candidate.providerKind !== "local" || !candidate.uri.startsWith("local:")) return null;
   try {
@@ -518,21 +468,10 @@ function githubOwnerFromRemote(remoteOrigin: string | null | undefined): string 
   return remoteOrigin?.match(/github\.com[:/]([^/\s]+)\/[^/\s]+?(?:\.git)?$/)?.[1] ?? null;
 }
 
-function remoteProjectLabel(uri: string, machines: RemoteMachine[]): string {
-  const match = /^ssh:\/\/([^/]+)(\/.*)$/.exec(uri);
-  if (!match) return uri;
-  const machineId = decodeURIComponent(match[1] ?? "");
-  const remotePath = decodeURI(match[2] ?? "");
-  const machine = machines.find((item) => item.id === machineId);
-  return `${machine?.label ?? machineId}:${remotePath}`;
-}
-
 export function App() {
   const [view, setView] = useState<View>("dashboard");
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("appearance");
   const [configuredProjects, setConfiguredProjects] = useState<string[]>([]);
-  const [configuredRemoteProjects, setConfiguredRemoteProjects] = useState<string[]>([]);
-  const [remoteMachines, setRemoteMachines] = useState<RemoteMachine[]>([]);
   const [projectAliases, setProjectAliases] = useState<Record<string, string>>({});
   const [candidates, setCandidates] = useState<ProjectCandidate[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -560,8 +499,6 @@ export function App() {
       if (isAppConfig(rootConfig)) {
         setAppearanceTheme(normalizeAppearanceTheme(rootConfig.appearanceTheme));
         setConfiguredProjects(rootConfig.configuredProjects ?? []);
-        setConfiguredRemoteProjects(rootConfig.configuredRemoteProjects ?? []);
-        setRemoteMachines(rootConfig.configuredRemoteMachines ?? []);
         setProjectAliases(rootConfig.projectAliases ?? {});
       }
       const nextCandidates = scan.candidates ?? [];
@@ -645,7 +582,7 @@ export function App() {
               filteredCandidates={candidates}
               isVisible={view === "dashboard"}
               loading={loading}
-              remoteMachines={remoteMachines}
+              
               scanErrors={scanErrors}
               selectedCandidate={selectedCandidate}
               setSelectedId={setSelectedId}
@@ -653,7 +590,7 @@ export function App() {
               onRefresh={refreshWorkspace}
               onOpenSettings={() => setView("settings")}
               onOpenAgentCliSettings={() => { setSettingsSection("agent-clis"); setView("settings"); }}
-              onAddProject={async (pathOrUri) => { pathOrUri.startsWith("ssh://") ? await addProjectUri(pathOrUri) : await addProject(pathOrUri); await refreshProjects({ showToast: true }); }}
+              onAddProject={async (pathOrUri) => { await addProject(pathOrUri); await refreshProjects({ showToast: true }); }}
               onPickProject={async () => {
                 const paths = await pickAndAddProjects();
                 if (paths.length) {
@@ -672,8 +609,8 @@ export function App() {
               <SettingsView
                 appearanceTheme={appearanceTheme}
                 configuredProjects={configuredProjects}
-                configuredRemoteProjects={configuredRemoteProjects}
-                remoteMachines={remoteMachines}
+                
+                
                 bridgeAvailable={bridgeAvailable}
                 candidates={candidates}
                 scanErrors={scanErrors}
@@ -681,16 +618,6 @@ export function App() {
                 setToast={setToast}
                 onBack={() => setView("dashboard")}
                 onRemoveProject={async (path) => { await removeProject(path); await refreshProjects({ showToast: true }); }}
-                onAddRemoteMachine={async (input) => {
-                  const config = await addRemoteMachine(input);
-                  setRemoteMachines(config.configuredRemoteMachines ?? []);
-                  await refreshProjects({ showToast: false, setBusy: false });
-                }}
-                onRemoveRemoteMachine={async (id) => {
-                  const config = await removeRemoteMachine(id);
-                  setRemoteMachines(config.configuredRemoteMachines ?? []);
-                }}
-                onTestRemoteMachine={testRemoteMachine}
                 onThemeChange={async (theme) => {
                   const config = await updateAppearanceTheme(theme);
                   setAppearanceTheme(normalizeAppearanceTheme(config.appearanceTheme));
@@ -721,7 +648,6 @@ function DashboardView({
   filteredCandidates,
   isVisible,
   loading,
-  remoteMachines,
   projectAliases,
   scanErrors,
   selectedCandidate,
@@ -742,7 +668,7 @@ function DashboardView({
   filteredCandidates: ProjectCandidate[];
   isVisible: boolean;
   loading: boolean;
-  remoteMachines: RemoteMachine[];
+  
   projectAliases: Record<string, string>;
   scanErrors: string[];
   selectedCandidate: ProjectCandidate | null;
@@ -759,7 +685,6 @@ function DashboardView({
 }) {
   const gridRef = useRef<HTMLDivElement | null>(null);
   const terminalPaneRef = useRef<TerminalPaneHandle | null>(null);
-  const [addProjectDialogOpen, setAddProjectDialogOpen] = useState(false);
   const [runningServiceProjectIds, setRunningServiceProjectIds] = useState<Set<string>>(() => new Set());
   const [terminalActivityByProjectId, setTerminalActivityByProjectId] = useState<Record<string, ProjectTerminalActivityState>>({});
   const [agentClis, setAgentClis] = useState<AgentCli[]>([]);
@@ -876,7 +801,7 @@ function DashboardView({
         <div className="project-window-drag-strip" aria-hidden="true" />
         <div className="project-panel-header">
           <span className="project-panel-title">Projects</span>
-          <button aria-label="Add project" className="icon-button" title="Add project" type="button" onClick={() => setAddProjectDialogOpen(true)}>
+          <button aria-label="Add project" className="icon-button" title="Add project" type="button" onClick={() => void onPickProject()}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
           </button>
         </div>
@@ -903,7 +828,7 @@ function DashboardView({
             <div className="empty-state compact-title-row" style={{ padding: "24px 16px" }}>
               <strong>No projects</strong>
               <span>Add a project directory to get started.</span>
-              <button className="button" type="button" style={{ marginTop: "12px" }} onClick={() => setAddProjectDialogOpen(true)}>Add Project</button>
+              <button className="button" type="button" style={{ marginTop: "12px" }} onClick={() => void onPickProject()}>Add Project</button>
             </div>
           )}
         </div>
@@ -967,16 +892,6 @@ function DashboardView({
           <EmptyState title="No project selected" body="Select a project to get started." />
         )}
       </section>
-
-      {addProjectDialogOpen ? (
-        <AddProjectDialog
-          remoteMachines={remoteMachines}
-          setToast={setToast}
-          onAdd={async (pathOrUri) => { await onAddProject(pathOrUri); setAddProjectDialogOpen(false); }}
-          onClose={() => setAddProjectDialogOpen(false)}
-          onPickLocal={async () => { await onPickProject(); setAddProjectDialogOpen(false); }}
-        />
-      ) : null}
     </div>
   );
 }
@@ -1004,7 +919,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const focusRequestNonce = useRef(0);
   const [tabFocusRequest, setTabFocusRequest] = useState<{ projectId: string; nonce: number } | null>(null);
   const selectedSpace = candidate?.id ? spaces[candidate.id] ?? null : null;
-  const canCreate = bridgeAvailable && Boolean(candidate?.uri) && (candidate?.providerKind === "local" || candidate?.providerKind === "ssh");
+  const canCreate = bridgeAvailable && Boolean(candidate?.uri) && (candidate?.providerKind === "local");
   const services = candidate?.services ?? [];
 
   useEffect(() => { spacesRef.current = spaces; }, [spaces]);
@@ -1093,7 +1008,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
 
   async function openAgentProjectTab(agent: AgentCli) {
     if (!candidate?.uri) return;
-    const isRemote = candidate.providerKind === "ssh";
+    const isRemote = false;
     const baseCommand = isRemote ? agent.command : (agent.executablePath || agent.command);
     const flags = getAgentLaunchFlags(agent.id);
     const launchCommand = flags.length ? `${shellQuote(baseCommand)} ${flags.join(" ")}` : shellQuote(baseCommand);
@@ -2149,7 +2064,7 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
   onOpenBrowserTab: (url: string) => Promise<void>;
   onRestoreAgentSession: (restore: AgentSessionRestoreCommand) => Promise<void>;
 }) {
-  const isRemote = candidate.providerKind === "ssh";
+  const isRemote = false;
   const isLocal = candidate.providerKind === "local";
   const availableTabs = detailTabs.filter((tab) => (!tab.remoteOnly || isRemote) && (!tab.localOnly || isLocal));
   const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>("git");
@@ -2272,11 +2187,6 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
       <div aria-labelledby="project-detail-tab-files" className="detail-tab-panel" hidden={visibleDetailTab !== "files"} id="project-detail-tabpanel-files" role="tabpanel">
         <FilesDetailTab active={visibleDetailTab === "files"} candidate={candidate} codeGraphStatus={codeGraphStatus} detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} />
       </div>
-      {isRemote ? (
-        <div aria-labelledby="project-detail-tab-forwards" className="detail-tab-panel" hidden={visibleDetailTab !== "forwards"} id="project-detail-tabpanel-forwards" role="tabpanel">
-          <PortForwardsDetailTab active={visibleDetailTab === "forwards"} candidate={candidate} setToast={setToast} />
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -2751,234 +2661,6 @@ function GitHistoryItems({ events }: { events: NonNullable<ProjectDetail["gitHis
   );
 }
 
-function PortForwardsDetailTab({ active, candidate, setToast }: {
-  active: boolean;
-  candidate: ProjectCandidate;
-  setToast: (toast: Toast) => void;
-}) {
-  const machineId = candidate.providerId;
-  const [forwards, setForwards] = useState<RemotePortForward[]>([]);
-  const [detectedPorts, setDetectedPorts] = useState<RemoteDetectedPort[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [detecting, setDetecting] = useState(false);
-  const [remotePort, setRemotePort] = useState("8080");
-  const [localPort, setLocalPort] = useState("8080");
-  const [busy, setBusy] = useState(false);
-  const [forwardingKey, setForwardingKey] = useState<string | null>(null);
-  const [removingId, setRemovingId] = useState<string | null>(null);
-
-  async function refresh() {
-    const listHandler = getBridge().portForwards?.list;
-    const detectHandler = getBridge().portForwards?.detect;
-    if (!listHandler) return;
-    setLoading(true);
-    setDetecting(Boolean(detectHandler));
-    try {
-      const [items, detected] = await Promise.all([
-        listHandler({ machineId }),
-        detectHandler?.({ machineId }) ?? Promise.resolve([]),
-      ]);
-      setForwards(items);
-      setDetectedPorts(detected);
-    } catch (error) {
-      setToast({ tone: "error", message: asMessage(error) });
-    } finally {
-      setLoading(false);
-      setDetecting(false);
-    }
-  }
-
-  useEffect(() => { if (active) void refresh(); }, [active, machineId]);
-  useEffect(() => {
-    const unsubscribe = getBridge().portForwards?.onUpdate?.((event) => {
-      if (event.forward.machineId !== machineId) return;
-      setForwards((current) => {
-        const exists = current.some((item) => item.id === event.forward.id);
-        if (event.forward.status === "stopped" && !exists) return current;
-        if (!exists) return [...current, event.forward];
-        return current.map((item) => (item.id === event.forward.id ? event.forward : item));
-      });
-      setDetectedPorts((current) => current.map((port) => (
-        port.remotePort === event.forward.remotePort && port.machineId === event.forward.machineId
-          ? { ...port, forwarded: event.forward.status === "running" || event.forward.status === "starting", forwardId: event.forward.id, localPort: event.forward.localPort, status: event.forward.status }
-          : port
-      )));
-    });
-    return () => unsubscribe?.();
-  }, [machineId]);
-
-  async function addForward(event: FormEvent) {
-    event.preventDefault();
-    const handler = getBridge().portForwards?.create;
-    if (!handler) return;
-    const remote = Number.parseInt(remotePort, 10);
-    const local = Number.parseInt(localPort, 10);
-    if (!Number.isInteger(remote) || remote < 1 || remote > 65535 || !Number.isInteger(local) || local < 1 || local > 65535) {
-      setToast({ tone: "error", message: "Ports must be integers between 1 and 65535." });
-      return;
-    }
-    setBusy(true);
-    try {
-      await handler({ machineId, remotePort: remote, localPort: local });
-      setToast({ tone: "success", message: `Forwarding localhost:${local} → ${candidate.providerId}:${remote}` });
-      await refresh();
-    } catch (error) {
-      setToast({ tone: "error", message: asMessage(error) });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function removeForward(id: string) {
-    const handler = getBridge().portForwards?.remove;
-    if (!handler) return;
-    setRemovingId(id);
-    try {
-      await handler({ id });
-      setForwards((current) => current.filter((item) => item.id !== id));
-    } catch (error) {
-      setToast({ tone: "error", message: asMessage(error) });
-    } finally {
-      setRemovingId(null);
-    }
-  }
-
-  async function forwardDetected(port: RemoteDetectedPort, openAfterStart: boolean) {
-    const handler = getBridge().portForwards?.create;
-    if (!handler) return;
-    const key = detectedPortKey(port);
-    setForwardingKey(key);
-    try {
-      const forward = await handler({ machineId, remotePort: port.remotePort, remoteHost: port.remoteHost });
-      setToast({ tone: "success", message: `Forwarding localhost:${forward.localPort} → ${candidate.providerId}:${port.remotePort}` });
-      if (openAfterStart) openForward(forward, port.protocol);
-      await refresh();
-    } catch (error) {
-      setToast({ tone: "error", message: asMessage(error) });
-    } finally {
-      setForwardingKey(null);
-    }
-  }
-
-  function openForward(forward: RemotePortForward, protocol: "http" | "https" | null = "http") {
-    window.open(`${protocol ?? "http"}://127.0.0.1:${forward.localPort}`, "_blank", "noopener,noreferrer");
-  }
-
-  return (
-    <section className="subpanel port-forwards-panel">
-      <header className="port-forwards-toolbar">
-        <div className="port-forwards-title-block">
-          <h4>Port forwards</h4>
-          <span>{candidate.providerId}</span>
-        </div>
-        <div className="port-forwards-summary">
-          <span>{detectedPorts.length} detected</span>
-          <span>{forwards.length} active</span>
-          <button className="button secondary compact" disabled={detecting} type="button" onClick={() => void refresh()}>
-            {detecting ? "Scanning" : "Scan"}
-          </button>
-        </div>
-      </header>
-
-      <div className="port-forward-section">
-        <div className="port-forward-section-header">
-          <h5>Detected</h5>
-          <span>One-click tunnels for listening remote services.</span>
-        </div>
-        {detecting && !detectedPorts.length ? (
-          <div className="port-forward-empty">Scanning remote listeners...</div>
-        ) : detectedPorts.length ? (
-          <div className="port-forward-table">
-            {detectedPorts.map((port) => {
-              const forward = port.forwardId ? forwards.find((item) => item.id === port.forwardId) : forwards.find((item) => item.remotePort === port.remotePort && item.remoteHost === port.remoteHost);
-              const key = detectedPortKey(port);
-              return (
-                <div className={cx("port-forward-row", port.forwarded ? "is-running" : "is-detected")} key={key}>
-                  <div className="port-forward-service">
-                    <strong>{port.label}</strong>
-                    <span>{port.processName ? `${port.processName}${port.pid ? ` · pid ${port.pid}` : ""}` : "remote process"}</span>
-                  </div>
-                  <div className="port-forward-route">
-                    <span>{port.remoteHost}:{port.remotePort}</span>
-                    <span>{port.forwarded ? `127.0.0.1:${port.localPort}` : "not forwarded"}</span>
-                  </div>
-                  <span className={cx("port-forward-status", port.forwarded ? "is-running" : "is-detected")}>{port.forwarded ? "active" : "detected"}</span>
-                  <div className="port-forward-row-actions">
-                    {port.forwarded && forward ? (
-                      <button className="button secondary compact" type="button" onClick={() => openForward(forward, port.protocol)}>Open</button>
-                    ) : (
-                      <>
-                        <button className="button secondary compact" disabled={forwardingKey === key} type="button" onClick={() => void forwardDetected(port, false)}>
-                          {forwardingKey === key ? "Starting" : "Forward"}
-                        </button>
-                        {port.protocol ? (
-                          <button className="button compact" disabled={forwardingKey === key} type="button" onClick={() => void forwardDetected(port, true)}>Open</button>
-                        ) : null}
-                      </>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="port-forward-empty">No listening ports detected.</div>
-        )}
-      </div>
-
-      <div className="port-forward-section">
-        <div className="port-forward-section-header">
-          <h5>Manual</h5>
-          <span>Use this when a service is not discoverable yet.</span>
-        </div>
-        <form className="port-forward-form" onSubmit={(event) => void addForward(event)}>
-          <label><span>Remote</span><input className="input" inputMode="numeric" value={remotePort} onChange={(event) => setRemotePort(event.target.value)} placeholder="8080" /></label>
-          <label><span>Local</span><input className="input" inputMode="numeric" value={localPort} onChange={(event) => setLocalPort(event.target.value)} placeholder="auto" /></label>
-          <button className="button compact" disabled={busy} type="submit">{busy ? "Starting" : "Forward"}</button>
-        </form>
-      </div>
-
-      <div className="port-forward-section">
-        <div className="port-forward-section-header">
-          <h5>Active</h5>
-          <span>{forwards.length} tunnel{forwards.length === 1 ? "" : "s"} running or recently stopped.</span>
-        </div>
-        {loading && !forwards.length ? (
-          <div className="port-forward-empty">Loading forwards...</div>
-        ) : forwards.length ? (
-          <div className="port-forward-table">
-            {forwards.map((forward) => (
-              <div className={cx("port-forward-row", `is-${forward.status}`)} key={forward.id}>
-                <div className="port-forward-service">
-                  <strong>localhost:{forward.localPort}</strong>
-                  <span>{forward.status}</span>
-                </div>
-                <div className="port-forward-route">
-                  <span>127.0.0.1:{forward.localPort}</span>
-                  <span>{forward.remoteHost}:{forward.remotePort}</span>
-                </div>
-                <span className={cx("port-forward-status", `is-${forward.status}`)}>{forward.status}</span>
-                <div className="port-forward-row-actions">
-                  {forward.status === "running" ? <button className="button secondary compact" type="button" onClick={() => openForward(forward)}>Open</button> : null}
-                  <button className="button secondary compact" disabled={removingId === forward.id} type="button" onClick={() => void removeForward(forward.id)}>
-                    {removingId === forward.id ? "Stopping" : "Stop"}
-                  </button>
-                </div>
-                {forward.error ? <div className="port-forward-error">{forward.error}</div> : null}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="port-forward-empty">No active forwards.</div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function detectedPortKey(port: RemoteDetectedPort): string {
-  return `${port.machineId}:${port.remoteHost}:${port.remotePort}`;
-}
 
 function FilesDetailTab({ active, candidate, codeGraphStatus, detail, setToast, onOpenFileInEditor }: {
   active: boolean;
@@ -3174,21 +2856,13 @@ function updateProjectFileChildren(items: ProjectFileTreeItem[], targetPath: str
   });
 }
 
-function SettingsView({ appearanceTheme, configuredProjects, configuredRemoteProjects, remoteMachines, bridgeAvailable, candidates, scanErrors, initialSection, setToast, onBack, onRemoveProject, onAddRemoteMachine, onRemoveRemoteMachine, onTestRemoteMachine, onThemeChange }: {
-  appearanceTheme: AppearanceTheme; configuredProjects: string[]; configuredRemoteProjects: string[]; remoteMachines: RemoteMachine[]; bridgeAvailable: boolean; candidates: ProjectCandidate[]; scanErrors: string[]; initialSection?: SettingsSection; setToast: (toast: Toast) => void;
+function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, candidates, scanErrors, initialSection, setToast, onBack, onRemoveProject, onThemeChange }: {
+  appearanceTheme: AppearanceTheme; configuredProjects: string[];  bridgeAvailable: boolean; candidates: ProjectCandidate[]; scanErrors: string[]; initialSection?: SettingsSection; setToast: (toast: Toast) => void;
   onBack: () => void; onRemoveProject: (path: string) => Promise<void>;
-  onAddRemoteMachine: (input: RemoteMachineInput) => Promise<void>; onRemoveRemoteMachine: (id: string) => Promise<void>; onTestRemoteMachine: (input: { id: string } | RemoteMachineInput) => Promise<RemoteMachineTestResult>; onThemeChange: (theme: AppearanceTheme) => Promise<void>;
+  onThemeChange: (theme: AppearanceTheme) => Promise<void>;
 }) {
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection ?? "appearance");
-  const [remoteMachineModalOpen, setRemoteMachineModalOpen] = useState(false);
   useEffect(() => { if (initialSection) setActiveSection(initialSection); }, [initialSection]);
-  const activeRemoteMachineId = activeSection.startsWith("remote-machine:") ? activeSection.slice("remote-machine:".length) : null;
-  const activeRemoteMachine = activeRemoteMachineId ? remoteMachines.find((machine) => machine.id === activeRemoteMachineId) ?? null : null;
-
-  async function addRemoteMachine(input: RemoteMachineInput): Promise<void> {
-    await onAddRemoteMachine(input);
-    setRemoteMachineModalOpen(false);
-  }
 
   return (
     <div className="settings-layout">
@@ -3208,28 +2882,9 @@ function SettingsView({ appearanceTheme, configuredProjects, configuredRemotePro
             <button aria-current={activeSection === "diagnostics" ? "page" : undefined} className={cx("settings-nav-item", activeSection === "diagnostics" && "is-selected")} type="button" onClick={() => setActiveSection("diagnostics")}>
               <ActivityIcon /><span>Diagnostics</span>
             </button>
-            <div className="settings-nav-section-title">
-              <span>Remote machines</span>
-              <button aria-label="Add remote machine" className="settings-add-remote-button" disabled={!bridgeAvailable} title="Add remote machine" type="button" onClick={() => setRemoteMachineModalOpen(true)}>
-                <PlusIcon />
-              </button>
-            </div>
-            {remoteMachines.map((machine) => {
-              const sectionId = `remote-machine:${machine.id}` as const;
-              return (
-                <button aria-current={sectionId === activeSection ? "page" : undefined} className={cx("settings-nav-item", sectionId === activeSection && "is-selected")} key={machine.id} type="button" onClick={() => setActiveSection(sectionId)}>
-                  <ServerIcon /><span>{machine.label}</span>
-                </button>
-              );
-            })}
           </div>
         </aside>
         <section className="settings-content" aria-label="Settings content">
-          {activeRemoteMachine ? (
-            <div className="settings-section-panel">
-              <RemoteMachineDetailPanel machine={activeRemoteMachine} setToast={setToast} onRemove={async (id) => { await onRemoveRemoteMachine(id); setActiveSection("appearance"); }} onTest={onTestRemoteMachine} />
-            </div>
-          ) : null}
           <div className="settings-section-panel" hidden={activeSection !== "agent-clis"}>
             <div className="settings-section-heading"><h4>Agent CLIs</h4><span>Installed coding agents</span></div>
             <AgentClisSettingsPanel active={activeSection === "agent-clis"} bridgeAvailable={bridgeAvailable} setToast={setToast} />
@@ -3239,7 +2894,7 @@ function SettingsView({ appearanceTheme, configuredProjects, configuredRemotePro
             <ExtensionsSettingsPanel active={activeSection === "extensions"} setToast={setToast} />
           </div>
           <div className="settings-section-panel" hidden={activeSection !== "diagnostics"}>
-            <div className="settings-section-heading"><h4>Diagnostics</h4><span>Inspect job queue, cache hits, SSH latency</span></div>
+            <div className="settings-section-heading"><h4>Diagnostics</h4><span>Inspect job queue and cache hits</span></div>
             <DiagnosticsSettingsPanel active={activeSection === "diagnostics"} setToast={setToast} />
           </div>
           <div className="settings-section-panel" hidden={activeSection !== "appearance"}>
@@ -3248,14 +2903,6 @@ function SettingsView({ appearanceTheme, configuredProjects, configuredRemotePro
           </div>
         </section>
       </div>
-      {remoteMachineModalOpen ? (
-        <RemoteMachineDialog
-          setToast={setToast}
-          onAdd={addRemoteMachine}
-          onClose={() => setRemoteMachineModalOpen(false)}
-          onTest={onTestRemoteMachine}
-        />
-      ) : null}
     </div>
   );
 }
@@ -3309,21 +2956,6 @@ function DiagnosticsSettingsPanel({ active, setToast }: { active: boolean; setTo
           <Fact label="Project hits" value={String(snapshot.cache.project.hits)} />
           <Fact label="Project misses" value={String(snapshot.cache.project.misses)} tone={snapshot.cache.project.misses > snapshot.cache.project.hits ? "warn" : undefined} />
         </div>
-      </section>
-      <section className="workflow-panel">
-        <div className="panel-title-row compact-title-row"><h4>SSH latency</h4></div>
-        {snapshot.ssh.count === 0 ? (
-          <div className="form-note">No SSH commands recorded yet.</div>
-        ) : (
-          <div className="settings-facts-grid">
-            <Fact label="Samples" value={String(snapshot.ssh.count)} />
-            <Fact label="Errors" value={String(snapshot.ssh.errors)} tone={snapshot.ssh.errors > 0 ? "warn" : undefined} />
-            <Fact label="Avg" value={formatLatency(snapshot.ssh.avgMs)} />
-            <Fact label="p50" value={formatLatency(snapshot.ssh.p50Ms)} />
-            <Fact label="p95" value={formatLatency(snapshot.ssh.p95Ms)} />
-            <Fact label="Max" value={formatLatency(snapshot.ssh.maxMs)} />
-          </div>
-        )}
       </section>
       <section className="workflow-panel">
         <div className="panel-title-row compact-title-row"><h4>Detector activity</h4></div>
@@ -3915,14 +3547,13 @@ function ThemePreviewSvg({ theme }: { theme: AppearanceTheme }) {
   );
 }
 
-function ProjectWorkflowPanel({ configuredProjects, configuredRemoteProjects, remoteMachines, onRemoveProject, setToast }: {
-  configuredProjects: string[]; configuredRemoteProjects: string[]; remoteMachines: RemoteMachine[];
+function ProjectWorkflowPanel({ configuredProjects, onRemoveProject, setToast }: {
+  configuredProjects: string[]; 
   onRemoveProject: (path: string) => Promise<void>; setToast: (toast: Toast) => void;
 }) {
   const [busyPath, setBusyPath] = useState<string | null>(null);
   const projectEntries = [
     ...configuredProjects.map((value) => ({ value, label: value, machine: "Local" })),
-    ...configuredRemoteProjects.map((value) => ({ value, label: remoteProjectLabel(value, remoteMachines), machine: "Remote" })),
   ];
 
   async function remove(pathToRemove: string) {
@@ -3954,402 +3585,7 @@ function ProjectWorkflowPanel({ configuredProjects, configuredRemoteProjects, re
   );
 }
 
-function AddProjectDialog({ remoteMachines, setToast, onAdd, onClose, onPickLocal }: {
-  remoteMachines: RemoteMachine[];
-  setToast: (toast: Toast) => void;
-  onAdd: (pathOrUri: string) => Promise<void>;
-  onClose: () => void;
-  onPickLocal: () => Promise<void>;
-}) {
-  const [machineId, setMachineId] = useState("local");
-  const [remotePath, setRemotePath] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [busyLabel, setBusyLabel] = useState("Adding");
-  const [pathError, setPathError] = useState<string | null>(null);
-  const selectedRemoteMachine = remoteMachines.find((machine) => machine.id === machineId) ?? remoteMachines[0] ?? null;
-  const isLocal = machineId === "local";
-  const canAddRemote = Boolean(selectedRemoteMachine && remotePath.trim().startsWith("/") && !busy);
 
-  async function chooseLocal() {
-    setBusy(true);
-    try {
-      onClose();
-      await onPickLocal();
-    } catch (error) {
-      setToast({ tone: "error", message: asMessage(error) });
-    }
-  }
-
-  async function addRemote(event: FormEvent) {
-    event.preventDefault();
-    setPathError(null);
-    if (!selectedRemoteMachine || !remotePath.trim().startsWith("/")) {
-      setPathError("Enter an absolute remote project path.");
-      return;
-    }
-    const trimmedPath = remotePath.trim();
-    setBusy(true);
-    let closed = false;
-    try {
-      setBusyLabel("Verifying");
-      const verify = getBridge().targets?.pathExists;
-      if (verify) {
-        const verification = await verify({ targetId: selectedRemoteMachine.id, path: trimmedPath });
-        if (!verification.ok) {
-          setPathError(verification.reason === "not-found"
-            ? `Path does not exist on ${selectedRemoteMachine.label}: ${trimmedPath}`
-            : `Could not verify path on ${selectedRemoteMachine.label}: ${verification.message}`);
-          return;
-        }
-        if (verification.kind === "file") {
-          setPathError(`That path is a file, not a directory: ${trimmedPath}`);
-          return;
-        }
-      }
-      setBusyLabel("Adding");
-      onClose();
-      closed = true;
-      await onAdd(toRemoteProjectUri(selectedRemoteMachine.id, trimmedPath));
-      setToast({ tone: "success", message: "Remote project added." });
-    } catch (error) {
-      if (closed) setToast({ tone: "error", message: asMessage(error) });
-      else setPathError(asMessage(error));
-    } finally {
-      if (!closed) setBusy(false);
-    }
-  }
-
-  return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section aria-modal="true" className="modal-panel add-project-dialog" role="dialog" aria-labelledby="add-project-dialog-title">
-        <div className="modal-header">
-          <div>
-            <h3 id="add-project-dialog-title">Add Project</h3>
-            <p>Choose where the project lives, then add its directory.</p>
-          </div>
-          <button aria-label="Close" className="icon-button" type="button" onClick={onClose}>x</button>
-        </div>
-        <form className="remote-machine-form" onSubmit={(event) => void addRemote(event)}>
-          <label className="remote-machine-wide-field"><span>Machine</span>
-            <select className="input" value={machineId} onChange={(event) => setMachineId(event.target.value)}>
-              <option value="local">Local Machine</option>
-              {remoteMachines.map((machine) => <option key={machine.id} value={machine.id}>{machine.label}</option>)}
-            </select>
-          </label>
-          {isLocal ? (
-            <div className="remote-machine-form-actions">
-              <button className="button" disabled={busy} type="button" onClick={() => void chooseLocal()}>{busy ? "Selecting" : "Choose Local Folder…"}</button>
-            </div>
-          ) : (
-            <>
-              <label className="remote-machine-wide-field"><span>Remote project path</span><input className="input" placeholder={selectedRemoteMachine?.defaultProjectPath ?? "/home/app/project"} value={remotePath} onChange={(event) => { setRemotePath(event.target.value); setPathError(null); }} /></label>
-              <div className="remote-machine-form-note">SharkBay verifies the path exists on the remote before adding the project.</div>
-              {pathError ? (
-                <div className="inline-connection-result is-error" role="status" aria-live="polite">{pathError}</div>
-              ) : null}
-              <div className="remote-machine-form-actions">
-                <button className="button" disabled={!canAddRemote} type="submit">{busy ? busyLabel : "Add Remote Project"}</button>
-              </div>
-            </>
-          )}
-        </form>
-      </section>
-    </div>
-  );
-}
-
-function RemoteMachineDialog({ setToast, onAdd, onClose, onTest }: {
-  setToast: (toast: Toast) => void;
-  onAdd: (input: RemoteMachineInput) => Promise<void>;
-  onClose: () => void;
-  onTest: (input: { id: string } | RemoteMachineInput) => Promise<RemoteMachineTestResult>;
-}) {
-  const [label, setLabel] = useState("");
-  const [authMode, setAuthMode] = useState<RemoteMachineInput["authMode"]>("system-ssh-config");
-  const [sshConfigHost, setSshConfigHost] = useState("");
-  const [host, setHost] = useState("");
-  const [port, setPort] = useState("22");
-  const [username, setUsername] = useState("");
-  const [keyPath, setKeyPath] = useState("");
-  const [password, setPassword] = useState("");
-  const [defaultProjectPath, setDefaultProjectPath] = useState("");
-  const [busyAction, setBusyAction] = useState<string | null>(null);
-  const [connectionResult, setConnectionResult] = useState<RemoteMachineTestResult | null>(null);
-  const connectionReady = authMode === "system-ssh-config"
-    ? Boolean(sshConfigHost.trim())
-    : Boolean(host.trim())
-      && (authMode !== "key-file" || Boolean(keyPath.trim()));
-  const canTest = Boolean(connectionReady && !busyAction);
-  const canSubmit = Boolean(label.trim() && connectionReady && !busyAction);
-
-  function input(): RemoteMachineInput {
-    return {
-      label: label.trim(),
-      authMode: authMode === "ssh-agent" && password ? "password" : authMode,
-      sshConfigHost: authMode === "system-ssh-config" ? sshConfigHost.trim() : undefined,
-      host: authMode === "system-ssh-config" ? undefined : host.trim(),
-      port: authMode === "system-ssh-config" ? undefined : Number.parseInt(port, 10) || 22,
-      username: authMode === "system-ssh-config" ? undefined : username.trim() || undefined,
-      keyPath: authMode === "key-file" ? keyPath.trim() : undefined,
-      password: authMode === "ssh-agent" && password ? password : undefined,
-      defaultProjectPath: defaultProjectPath.trim() || undefined,
-    };
-  }
-
-  async function testDraft() {
-    setBusyAction("test-draft");
-    setConnectionResult(null);
-    try {
-      const result = await onTest({ ...input(), label: label.trim() || "Remote machine" });
-      setConnectionResult(result);
-      setToast({ tone: result.ok ? "success" : "error", message: result.message });
-    } catch (error) {
-      const message = asMessage(error);
-      setConnectionResult({ ok: false, message });
-      setToast({ tone: "error", message });
-    } finally {
-      setBusyAction(null);
-    }
-  }
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (!canSubmit) return;
-    setBusyAction("save");
-    try {
-      await onAdd(input());
-      setToast({ tone: "success", message: "Remote machine saved." });
-    } catch (error) {
-      setToast({ tone: "error", message: asMessage(error) });
-    } finally {
-      setBusyAction(null);
-    }
-  }
-
-  return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section aria-modal="true" className="modal-panel remote-machine-dialog" role="dialog" aria-labelledby="remote-machine-dialog-title">
-        <div className="modal-header">
-          <div>
-            <h3 id="remote-machine-dialog-title">Add Remote Machine</h3>
-            <p>Connect through SSH. Passwords are saved in the system Keychain; private key contents are never stored.</p>
-          </div>
-          <button aria-label="Close" className="icon-button" type="button" onClick={onClose}>x</button>
-        </div>
-        <form className="remote-machine-form" onSubmit={(event) => void submit(event)}>
-          <label><span>Machine name</span><input className="input" placeholder="GPU Worker" value={label} onChange={(event) => setLabel(event.target.value)} /></label>
-          <div className="remote-machine-wide-field remote-connection-methods">
-            <div className="remote-machine-field-label">How do you connect to this server?</div>
-            <div className="remote-connection-method-grid">
-              {remoteConnectionMethods.map((method) => (
-                <button
-                  aria-pressed={authMode === method.id}
-                  className={cx("remote-connection-method", authMode === method.id && "is-selected")}
-                  key={method.id}
-                  type="button"
-                  onClick={() => setAuthMode(method.id)}
-                >
-                  <strong>{method.label}</strong>
-                  <span>{method.description}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-          {authMode === "system-ssh-config" ? (
-            <label className="remote-machine-wide-field"><span>Server name in SSH config</span><input className="input" placeholder="gpu-01" value={sshConfigHost} onChange={(event) => setSshConfigHost(event.target.value)} /></label>
-          ) : (
-            <>
-              <label><span>Server address</span><input className="input" placeholder="1.2.3.4 or server.example.com" value={host} onChange={(event) => setHost(event.target.value)} /></label>
-              <label><span>Port</span><input className="input" inputMode="numeric" placeholder="22" value={port} onChange={(event) => setPort(event.target.value)} /></label>
-              <label><span>Username</span><input className="input" placeholder="ubuntu" value={username} onChange={(event) => setUsername(event.target.value)} /></label>
-              {authMode === "key-file" ? <label><span>Key file path</span><input className="input" placeholder="~/.ssh/id_ed25519" value={keyPath} onChange={(event) => setKeyPath(event.target.value)} /></label> : null}
-              {authMode === "ssh-agent" ? <label><span>Password optional</span><input className="input" type="password" placeholder="Leave empty to use SSH agent/keychain" value={password} onChange={(event) => setPassword(event.target.value)} /></label> : null}
-            </>
-          )}
-          <label className="remote-machine-wide-field"><span>Default project path</span><input className="input" placeholder="/home/app" value={defaultProjectPath} onChange={(event) => setDefaultProjectPath(event.target.value)} /></label>
-          <div className="remote-machine-form-note">
-            {authMode === "system-ssh-config"
-              ? "Enter the name you already use after ssh, for example gpu-01 from ssh gpu-01."
-              : authMode === "ssh-agent"
-                ? "Leave password empty to use SSH agent/keychain. If provided, SharkBay stores it in the system Keychain."
-                : authMode === "key-file"
-                  ? "SharkBay stores only the key file path, never the private key contents."
-                  : "SharkBay stores the password in the system Keychain and keeps only a secret reference in app config."}
-          </div>
-          {connectionResult ? (
-            <div className={cx("inline-connection-result", connectionResult.ok ? "is-success" : "is-error")} role="status" aria-live="polite">
-              {connectionResult.message}
-            </div>
-          ) : null}
-          <div className="remote-machine-form-actions">
-            <button className="button secondary" disabled={!canTest} type="button" onClick={() => void testDraft()}>{busyAction === "test-draft" ? "Testing" : "Test Connection"}</button>
-            <button className="button" disabled={!canSubmit} type="submit">{busyAction === "save" ? "Saving" : "Save"}</button>
-          </div>
-        </form>
-      </section>
-    </div>
-  );
-}
-
-function RemoteMachineDetailPanel({ machine, setToast, onRemove, onTest }: {
-  machine: RemoteMachine;
-  setToast: (toast: Toast) => void;
-  onRemove: (id: string) => Promise<void>;
-  onTest: (input: { id: string }) => Promise<RemoteMachineTestResult>;
-}) {
-  const [busyAction, setBusyAction] = useState<string | null>(null);
-  const [connectionResult, setConnectionResult] = useState<RemoteMachineTestResult | null>(null);
-  const [profileReloadKey, setProfileReloadKey] = useState(0);
-  async function test() {
-    setBusyAction("test");
-    setConnectionResult(null);
-    try {
-      const result = await onTest({ id: machine.id });
-      setConnectionResult(result);
-      setToast({ tone: result.ok ? "success" : "error", message: `${machine.label}: ${result.message}` });
-      if (result.ok) setProfileReloadKey((current) => current + 1);
-    } catch (error) {
-      const message = asMessage(error);
-      setConnectionResult({ ok: false, message });
-      setToast({ tone: "error", message });
-    } finally {
-      setBusyAction(null);
-    }
-  }
-  async function remove() {
-    setBusyAction("remove");
-    try {
-      await onRemove(machine.id);
-      setToast({ tone: "success", message: "Remote machine removed." });
-    } catch (error) {
-      setToast({ tone: "error", message: asMessage(error) });
-    } finally {
-      setBusyAction(null);
-    }
-  }
-  return (
-    <>
-      <section className="remote-machine-detail-card">
-        <header className="remote-machine-detail-hero">
-          <div>
-            <span className="machine-tag">Remote</span>
-            <h4>{machine.label}</h4>
-            <p>{machine.sshConfigHost ?? machine.host}</p>
-          </div>
-          <div className="remote-machine-detail-actions">
-            <button className="button secondary compact" disabled={Boolean(busyAction)} type="button" onClick={() => void test()}>{busyAction === "test" ? "Testing" : "Test"}</button>
-            <button className="button secondary compact" disabled={Boolean(busyAction)} type="button" onClick={() => void remove()}>{busyAction === "remove" ? "Removing" : "Remove"}</button>
-          </div>
-        </header>
-        <dl className="remote-machine-attributes">
-          <div><dt>Connection</dt><dd>{remoteMachineAuthLabel(machine.authMode)}</dd></div>
-          <div><dt>Host</dt><dd>{machine.sshConfigHost ?? machine.host}</dd></div>
-          <div><dt>Port</dt><dd>{machine.port}</dd></div>
-          <div><dt>Default project path</dt><dd>{machine.defaultProjectPath ?? "-"}</dd></div>
-        </dl>
-        {connectionResult ? (
-          <div className={cx("inline-connection-result", connectionResult.ok ? "is-success" : "is-error")} role="status" aria-live="polite">
-            {connectionResult.message}
-          </div>
-        ) : null}
-      </section>
-      <MachineProfileCard targetId={machine.id} setToast={setToast} reloadKey={profileReloadKey} />
-    </>
-  );
-}
-
-function MachineProfileCard({ targetId, setToast, reloadKey }: { targetId: string; setToast: (toast: Toast) => void; reloadKey: number }) {
-  const [profile, setProfile] = useState<MachineProfile | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [localReloadKey, setLocalReloadKey] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    const readMachine = getBridge().profiles?.readMachine;
-    if (!readMachine) { setLoadError("Machine profile API is not available."); return; }
-    const wantsRefresh = reloadKey > 0 || localReloadKey > 0;
-    setBusy(true);
-    setLoadError(null);
-    readMachine({ targetId, options: wantsRefresh ? { refresh: true } : undefined })
-      .then((next) => { if (!cancelled) setProfile(next); })
-      .catch((error) => { if (!cancelled) setLoadError(asMessage(error)); })
-      .finally(() => { if (!cancelled) setBusy(false); });
-    return () => { cancelled = true; };
-  }, [targetId, reloadKey, localReloadKey]);
-
-  function refresh() {
-    setLocalReloadKey((current) => current + 1);
-    setToast({ tone: "info", message: "Refreshing machine profile" });
-  }
-
-  return (
-    <section className="machine-profile-panel">
-      <header className="machine-profile-header">
-        <div>
-          <h4>Machine profile</h4>
-          <span>{busy ? "Refreshing" : profile ? "Last detected capabilities" : "Not probed yet"}</span>
-        </div>
-        <button aria-label="Refresh machine profile" className="icon-button" disabled={busy} type="button" onClick={refresh}><RefreshIcon /></button>
-      </header>
-      {loadError ? (
-        <div className="inline-connection-result is-error" role="status">{loadError}</div>
-      ) : !profile && busy ? (
-        <div className="machine-profile-empty">Probing machine...</div>
-      ) : !profile ? (
-        <div className="machine-profile-empty">No profile yet. Use Test Connection or Refresh to probe.</div>
-      ) : (
-        <>
-          <dl className="machine-profile-summary">
-            <div><dt>OS</dt><dd>{profile.os.name ? `${profile.os.name}${profile.os.version ? ` ${profile.os.version}` : ""}` : "Unknown"}</dd></div>
-            <div><dt>Arch</dt><dd>{profile.os.arch ?? "-"}</dd></div>
-            <div><dt>Hostname</dt><dd>{profile.hostname ?? "-"}</dd></div>
-            <div><dt>Shell</dt><dd>{profile.shell.name ?? profile.shell.path ?? "-"}</dd></div>
-          </dl>
-          <ToolList title="Agents" tools={profile.agents} />
-          <ToolList title="Languages" tools={profile.languages} />
-          <ToolList title="Tools" tools={profile.tools} />
-          <ToolList title="Package managers" tools={profile.packageManagers} />
-          {profile.warnings.length ? (
-            <div className="settings-list">
-              {profile.warnings.map((warning, index) => (
-                <div className="settings-list-row" key={`${warning.code}-${index}`}><span className="truncate">{warning.code}</span><small className="truncate">{warning.message}</small></div>
-              ))}
-            </div>
-          ) : null}
-        </>
-      )}
-    </section>
-  );
-}
-
-function ToolList({ title, tools }: { title: string; tools: MachineProfile["tools"] }) {
-  if (!tools.length) return null;
-  return (
-    <section className="machine-tool-section">
-      <div className="machine-tool-section-title">
-        <h5>{title}</h5>
-        <span>{tools.filter((tool) => tool.available).length}/{tools.length} available</span>
-      </div>
-      <div className="machine-tool-list">
-        {tools.map((tool) => (
-          <div className={cx("machine-tool-row", !tool.available && "is-missing")} key={tool.id}>
-            <span className={cx("machine-tool-state", tool.available ? "is-available" : "is-missing")} />
-            <strong>{tool.id}</strong>
-            <span>{tool.available ? (tool.version ?? tool.path ?? "available") : "missing"}</span>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function remoteMachineAuthLabel(authMode: RemoteMachine["authMode"]): string {
-  if (authMode === "ssh-agent") return "SSH agent";
-  if (authMode === "key-file") return "Key file";
-  if (authMode === "password") return "Password";
-  return "SSH config";
-}
 
 function SettingsStatusPanel({ candidates, scanErrors }: { candidates: ProjectCandidate[]; scanErrors: string[] }) {
   return (

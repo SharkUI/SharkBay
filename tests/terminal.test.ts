@@ -4,8 +4,6 @@ import { describe, expect, it } from "vitest";
 import { getRuntimeConfigPath } from "../src/main/config.js";
 import {
   applyTerminalInputData,
-  buildInteractiveSshArgs,
-  remoteInteractiveShellCommand,
   resolveTerminalCwd,
   terminalCommand,
   terminalDisplayTitle,
@@ -23,18 +21,6 @@ describe("terminal cwd validation", () => {
       SHELL_SESSIONS_DISABLE: "1",
       TERM_PROGRAM: "SharkBay",
     });
-  });
-
-  it("builds remote interactive ssh commands without sending -- to the remote shell", () => {
-    const command = remoteInteractiveShellCommand("/Users/jerry/Code/Veridia");
-    expect(command).toBe("cd '/Users/jerry/Code/Veridia' && exec ${SHELL:-/bin/sh} -l");
-    expect(buildInteractiveSshArgs(["jerry@60.165.239.32"], command)).toEqual([
-      "-tt",
-      "-o", "BatchMode=yes",
-      "-o", "ConnectTimeout=8",
-      "jerry@60.165.239.32",
-      "cd '/Users/jerry/Code/Veridia' && exec ${SHELL:-/bin/sh} -l",
-    ]);
   });
 
   it("allows configured project directories", async () => {

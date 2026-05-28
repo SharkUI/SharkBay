@@ -94,40 +94,6 @@ describe("scanner", () => {
     expect(candidate?.iconSources[0]?.url).toMatch(/^data:image\/png;base64,/);
   });
 
-  it("includes manually configured remote projects", async () => {
-    const runtime = await makeTestRuntime("scanner-remote-projects");
-    await writeJson(getRuntimeConfigPath(runtime), {
-      schemaVersion: 1,
-      configuredRoots: [],
-      configuredProjects: [],
-      configuredRemoteProjects: ["ssh://gpu-01/home/app/model-worker"],
-      configuredRemoteMachines: [{
-        id: "gpu-01",
-        label: "GPU Worker",
-        host: "gpu-01",
-        port: 22,
-        authMode: "system-ssh-config",
-        sshConfigHost: "gpu-01",
-        createdAt: "2026-05-15T00:00:00.000Z",
-        updatedAt: "2026-05-15T00:00:00.000Z",
-      }],
-      appearanceTheme: "day",
-      updatedAt: "2026-05-15",
-    });
-
-    const result = await scanProjects(runtime);
-
-    expect(result.candidates).toEqual([
-      expect.objectContaining({
-        id: "ssh://gpu-01/home/app/model-worker",
-        name: "model-worker",
-        providerId: "gpu-01",
-        providerKind: "ssh",
-        displayPath: "GPU Worker:/home/app/model-worker",
-      }),
-    ]);
-  });
-
   it("scans only individually configured projects in the app project list", async () => {
     const runtime = await makeTestRuntime("scanner-manual-only");
     const root = await makeTempRoot("scanner-manual-only-root");

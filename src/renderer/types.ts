@@ -12,46 +12,10 @@ export type AppConfig = {
   schemaVersion?: number;
   configuredRoots: string[];
   configuredProjects?: string[];
-  configuredRemoteProjects?: string[];
-  configuredRemoteMachines?: RemoteMachine[];
   projectAliases?: Record<string, string>;
   appearanceTheme?: AppearanceTheme;
   updatedAt?: string;
 };
-
-export type RemoteMachineAuthMode = "system-ssh-config" | "ssh-agent" | "key-file" | "password";
-
-export type RemoteMachine = {
-  id: string;
-  label: string;
-  host: string;
-  port: number;
-  username?: string;
-  sshConfigHost?: string;
-  authMode: RemoteMachineAuthMode;
-  keyPath?: string;
-  passwordSecretId?: string;
-  hasPassword?: boolean;
-  defaultProjectPath?: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type RemoteMachineInput = {
-  label: string;
-  authMode: RemoteMachineAuthMode;
-  sshConfigHost?: string;
-  host?: string;
-  port?: number;
-  username?: string;
-  keyPath?: string;
-  password?: string;
-  defaultProjectPath?: string;
-};
-
-export type RemoteMachineTestResult =
-  | { ok: true; message: string }
-  | { ok: false; message: string };
 
 export type InstallToolInput = {
   targetId: string;
@@ -87,7 +51,7 @@ export type InstallRecipe = {
   id: string;
   toolId: string;
   label: string;
-  targetKinds: Array<"local" | "ssh" | "container" | "wsl">;
+  targetKinds: Array<"local" | "container" | "wsl">;
   platforms: Array<"darwin" | "linux" | "windows" | "unknown">;
   preconditions: Array<{ tool: string; available: boolean }>;
   steps: Array<
@@ -98,7 +62,7 @@ export type InstallRecipe = {
   verification: { command: string; args?: string[] };
 };
 
-export type ExecutionTargetKind = "local" | "ssh" | "container" | "wsl";
+export type ExecutionTargetKind = "local" | "container" | "wsl";
 
 export type DiagnosticsJobRecord = {
   id: string;
@@ -121,16 +85,6 @@ export type DiagnosticsDetectorAggregate = {
   failureCount: number;
 };
 
-export type DiagnosticsLatencyStats = {
-  count: number;
-  errors: number;
-  minMs: number | null;
-  maxMs: number | null;
-  avgMs: number | null;
-  p50Ms: number | null;
-  p95Ms: number | null;
-};
-
 export type DiagnosticsCounter = {
   total: number;
   sinceIso: string;
@@ -145,7 +99,6 @@ export type DiagnosticsSnapshot = {
     machine: { hits: number; misses: number };
     project: { hits: number; misses: number };
   };
-  ssh: DiagnosticsLatencyStats;
   terminalData: DiagnosticsCounter;
 };
 
@@ -319,7 +272,7 @@ export type ProjectCandidate = {
   uri: string;
   name: string;
   providerId: string;
-  providerKind: "local" | "ssh" | "container" | "wsl";
+  providerKind: "local" | "container" | "wsl";
   displayPath: string;
   rootUri: string;
   iconSources?: ProjectIconSource[];
@@ -387,7 +340,7 @@ export type ProjectSummary = {
   uri: string;
   name: string;
   providerId: string;
-  providerKind: "local" | "ssh" | "container" | "wsl";
+  providerKind: "local" | "container" | "wsl";
   displayPath: string;
   iconSources?: ProjectIconSource[];
   repoUrl: string | null;
@@ -617,9 +570,6 @@ export type SharkBayBridge = {
     addProject?: (input: { path?: string; uri?: string }) => Promise<AppConfig | void>;
     removeProject?: (input: { path?: string; uri?: string }) => Promise<AppConfig | void>;
     renameProject?: (input: { uri: string; name: string }) => Promise<AppConfig | void>;
-    addRemoteMachine?: (input: RemoteMachineInput) => Promise<AppConfig>;
-    removeRemoteMachine?: (input: { id: string }) => Promise<AppConfig>;
-    testRemoteMachine?: (input: { id: string } | RemoteMachineInput) => Promise<RemoteMachineTestResult>;
     pickProjectFolder?: () => Promise<{ cancelled: boolean; paths: string[] }>;
     setAppearanceTheme?: (input: { theme: AppearanceTheme }) => Promise<AppConfig>;
   };
@@ -690,13 +640,6 @@ export type SharkBayBridge = {
     generate?: (input: { repoPath: string }) => Promise<{ generated: boolean; sitePath: string; reason?: string }>;
     getPath?: (input: { repoPath: string }) => Promise<string>;
   };
-  portForwards?: {
-    list?: (input?: { machineId?: string }) => Promise<RemotePortForward[]>;
-    detect?: (input: { machineId: string }) => Promise<RemoteDetectedPort[]>;
-    create?: (input: { machineId: string; remotePort: number; localPort?: number; remoteHost?: string }) => Promise<RemotePortForward>;
-    remove?: (input: { id: string }) => Promise<{ ok: true }>;
-    onUpdate?: (callback: (event: { forward: RemotePortForward }) => void) => () => void;
-  };
   usage?: {
     getSummary?: (input?: { periodDays?: number }) => Promise<UsageSummaryView>;
     getReport?: (input: UsageReportFilterView) => Promise<UsageReportResultView>;
@@ -739,33 +682,4 @@ export type UsageReportResultView = {
     totalInputTokens: number;
     costUsd: number | null;
   };
-};
-
-export type PortForwardStatus = "starting" | "running" | "stopped" | "error";
-
-export type RemotePortForward = {
-  id: string;
-  machineId: string;
-  remoteHost: string;
-  remotePort: number;
-  localPort: number;
-  status: PortForwardStatus;
-  error: string | null;
-  pid: number | null;
-  createdAt: string;
-};
-
-export type RemoteDetectedPort = {
-  machineId: string;
-  remoteHost: string;
-  remotePort: number;
-  processName: string | null;
-  pid: number | null;
-  source: "process";
-  label: string;
-  protocol: "http" | "https" | null;
-  forwarded: boolean;
-  forwardId?: string;
-  localPort?: number;
-  status?: PortForwardStatus;
 };

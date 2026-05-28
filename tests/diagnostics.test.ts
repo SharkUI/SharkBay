@@ -41,19 +41,6 @@ describe("DiagnosticsCollector", () => {
     expect(snapshot.cache.project).toEqual({ hits: 0, misses: 2 });
   });
 
-  it("summarizes ssh latency samples with percentiles", () => {
-    const collector = new DiagnosticsCollector();
-    for (const ms of [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]) collector.recordSshLatency(ms, true);
-    collector.recordSshLatency(500, false);
-    const snapshot = collector.snapshot();
-    expect(snapshot.ssh.count).toBe(11);
-    expect(snapshot.ssh.errors).toBe(1);
-    expect(snapshot.ssh.minMs).toBe(10);
-    expect(snapshot.ssh.maxMs).toBe(500);
-    expect(snapshot.ssh.p50Ms).toBe(60);
-    expect(snapshot.ssh.p95Ms).toBe(500);
-  });
-
   it("ignores jobs that did not start", () => {
     const collector = new DiagnosticsCollector();
     collector.recordJobUpdate(completedJob({ startedAt: undefined, finishedAt: undefined, status: "completed" }));
