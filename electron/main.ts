@@ -1,10 +1,11 @@
-import { app, BrowserWindow, Menu, nativeImage, shell } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, shell } from "electron";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { closeAllTerminalSessions, registerIpcHandlers } from "./ipc.js";
 import { createApplicationMenuTemplate } from "../src/main/application-menu.js";
 import { getRuntimeConfigPath, loadAppConfig } from "../src/main/config.js";
 import { appChannels } from "../src/shared/app-events.js";
+import { ipcChannels as channels } from "../src/shared/ipc-channels.js";
 import type { AppearanceTheme } from "../src/shared/types.js";
 
 const currentFile = fileURLToPath(import.meta.url);
@@ -138,7 +139,19 @@ app.whenReady().then(async () => {
 
   installApplicationMenu();
   installDockIcon();
+
+  ipcMain.on(channels.dockBadgeUpdate, (_event, count: number) => {
+    if (process.platform !== "darwin" || !app.dock) return;
+    const badge = count > 0 ? String(count) : "";
+    app.dock.setBadge(badge);
+    if (count > 0) app.dock.bounce("informational");
+  });
+
   mainWindow = createMainWindow();
+
+  mainWindow.on("focus", () => {
+    if (process.platform === "darwin" && app.dock) app.dock.setBadge("");
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

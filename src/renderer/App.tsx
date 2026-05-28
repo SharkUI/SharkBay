@@ -789,6 +789,19 @@ function DashboardView({
     return () => unsubscribe?.();
   }, [bridgeAvailable]);
 
+  useEffect(() => {
+    const updateBadge = getBridge().dock?.updateBadge;
+    if (!updateBadge) return;
+    const attentionCount = Object.values(terminalActivityByProjectId).filter((s) => s === "idle").length;
+    const send = () => { if (!document.hasFocus()) updateBadge(attentionCount); };
+    send();
+    const onBlur = () => updateBadge(attentionCount);
+    const onFocus = () => updateBadge(0);
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", onFocus);
+    return () => { window.removeEventListener("blur", onBlur); window.removeEventListener("focus", onFocus); };
+  }, [terminalActivityByProjectId]);
+
   const gridStyle = {
     gridTemplateColumns: detailPanelHidden
       ? `${projectColumnWidth}px ${resizerColumnWidth}px minmax(${minTerminalColumnWidth}px, 1fr) 0px 0px`

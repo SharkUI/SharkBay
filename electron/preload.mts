@@ -194,6 +194,9 @@ const sharkBayApi = {
   usage: {
     getSummary: (input?: { periodDays?: number }) => invoke<UsageSummary>(channels.usageGetSummary, input),
     getReport: (input: UsageReportFilter) => invoke<UsageReportResult>(channels.usageGetReport, input),
+  },
+  dock: {
+    updateBadge: (count: number) => { ipcRenderer.send(channels.dockBadgeUpdate, count); },
   }
 };
 

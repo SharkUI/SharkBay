@@ -644,6 +644,9 @@ export type SharkBayBridge = {
     getSummary?: (input?: { periodDays?: number }) => Promise<UsageSummaryView>;
     getReport?: (input: UsageReportFilterView) => Promise<UsageReportResultView>;
   };
+  dock?: {
+    updateBadge?: (count: number) => void;
+  };
 };
 
 export type UsageSummaryView = {
