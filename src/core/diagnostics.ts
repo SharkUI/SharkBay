@@ -2,13 +2,11 @@ import type {
   DiagnosticsCounter,
   DiagnosticsDetectorAggregate,
   DiagnosticsJobRecord,
-  DiagnosticsLatencyStats,
   DiagnosticsSnapshot,
 } from "../shared/types.js";
 import type { ScheduledJob } from "./job-scheduler.js";
 
 const MAX_RECENT_JOBS = 50;
-const MAX_LATENCY_SAMPLES = 100;
 
 type DetectorAggregateState = {
   detectorKey: string;
@@ -25,8 +23,6 @@ export class DiagnosticsCollector {
     machine: { hits: 0, misses: 0 },
     project: { hits: 0, misses: 0 },
   };
-  private readonly sshLatencies: number[] = [];
-  private sshErrors = 0;
   private terminalDataTotal = 0;
   private terminalDataSinceIso = new Date().toISOString();
   private readonly processStartedAt = new Date().toISOString();
@@ -74,12 +70,6 @@ export class DiagnosticsCollector {
     this.cacheCounts[category].misses += 1;
   }
 
-  recordSshLatency(latencyMs: number, ok: boolean): void {
-    this.sshLatencies.push(latencyMs);
-    if (this.sshLatencies.length > MAX_LATENCY_SAMPLES) this.sshLatencies.shift();
-    if (!ok) this.sshErrors += 1;
-  }
-
   recordTerminalData(): void {
     this.terminalDataTotal += 1;
   }
@@ -99,7 +89,6 @@ export class DiagnosticsCollector {
         machine: { ...this.cacheCounts.machine },
         project: { ...this.cacheCounts.project },
       },
-      ssh: this.computeLatencyStats(this.sshLatencies, this.sshErrors),
       terminalData: this.computeCounter(this.terminalDataTotal, this.terminalDataSinceIso),
     };
   }
@@ -117,23 +106,6 @@ export class DiagnosticsCollector {
       .sort((a, b) => b.runs - a.runs);
   }
 
-  private computeLatencyStats(samples: number[], errors: number): DiagnosticsLatencyStats {
-    if (!samples.length) {
-      return { count: 0, errors, minMs: null, maxMs: null, avgMs: null, p50Ms: null, p95Ms: null };
-    }
-    const sorted = [...samples].sort((a, b) => a - b);
-    const total = sorted.reduce((sum, value) => sum + value, 0);
-    return {
-      count: samples.length,
-      errors,
-      minMs: sorted[0] ?? null,
-      maxMs: sorted[sorted.length - 1] ?? null,
-      avgMs: total / samples.length,
-      p50Ms: percentile(sorted, 0.5),
-      p95Ms: percentile(sorted, 0.95),
-    };
-  }
-
   private computeCounter(total: number, sinceIso: string): DiagnosticsCounter {
     return { total, sinceIso };
   }
@@ -146,10 +118,4 @@ function detectorKeyForJob(job: ScheduledJob<unknown>): string | null {
   const parts = dedupeKey.split(":");
   if (parts.length < 4) return job.kind;
   return `${parts[parts.length - 2]}.${parts[parts.length - 1]}`;
-}
-
-function percentile(sorted: number[], q: number): number | null {
-  if (!sorted.length) return null;
-  const index = Math.min(sorted.length - 1, Math.floor(q * sorted.length));
-  return sorted[index] ?? null;
 }

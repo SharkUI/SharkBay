@@ -22,15 +22,11 @@ describe("config migration", () => {
       schemaVersion: 1,
       configuredRoots: [project],
       configuredProjects: [project],
-      configuredRemoteProjects: [],
-      configuredRemoteMachines: [],
       projectAliases: {},
       disabledPluginIds: [],
       appearanceTheme: "night",
     }));
     expect(persisted.configuredProjects).toEqual([project]);
-    expect(persisted.configuredRemoteProjects).toEqual([]);
-    expect(persisted.configuredRemoteMachines).toEqual([]);
     expect(persisted.disabledPluginIds).toEqual([]);
   });
 });

@@ -100,7 +100,7 @@ describe("renderer workflow contracts", () => {
       statusState: "uninitialized",
     })).toBe(false);
     expect(shouldEnsureCodeGraphForSelection({
-      providerKind: "ssh",
+      providerKind: "container",
       isGitManaged: true,
       statusState: "uninitialized",
     })).toBe(false);

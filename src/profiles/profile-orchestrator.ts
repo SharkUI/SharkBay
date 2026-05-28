@@ -129,7 +129,7 @@ function mergeProjectProfile(base: ProjectProfile, patches: ProjectProfilePatch[
   const parsed = parseProjectUri(projectUri);
   let profile: ProjectProfile = {
     ...base,
-    name: base.name || (parsed.kind === "local" ? parsed.path.split("/").pop() ?? "" : parsed.kind === "ssh" ? parsed.path.split("/").pop() ?? "" : base.name),
+    name: base.name || (parsed.kind === "local" ? parsed.path.split("/").pop() ?? "" : base.name),
   };
   for (const patch of patches) {
     profile = {

@@ -2,12 +2,8 @@ import { EventEmitter } from "node:events";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getConfiguredRoots } from "./config.js";
 import { resolveCommandPath } from "./command-path.js";
-import { parseProjectUri } from "../core/project-uri.js";
-import { quoteForRemoteShell, runSshCommand, sshArgsForRemoteMachine, type SshCommandRunner } from "./remote-machines.js";
-import { createDefaultSecretStore, type SecretStore } from "./secrets.js";
-import type { AgentCli, AgentProjectStatusEvent, IpcRuntimeLike, RemoteMachine } from "../shared/types.js";
+import type { AgentCli, AgentProjectStatusEvent, IpcRuntimeLike } from "../shared/types.js";
 import type { TokenUsageCollector } from "./token-usage-collector.js";
 
 export { prependPathDirectories, resolveCommandPath, resolveCommandSearchPaths } from "./command-path.js";
@@ -65,91 +61,10 @@ export async function listAvailableAgentClis(): Promise<AgentCli[]> {
 }
 
 export async function listAgentClisForUri(
-  runtime: IpcRuntimeLike,
-  cwdUri: string | undefined,
-  options: {
-    secretStore?: SecretStore;
-    runner?: SshCommandRunner;
-  } = {},
+  _runtime: IpcRuntimeLike,
+  _cwdUri: string | undefined,
 ): Promise<AgentCli[]> {
-  if (!cwdUri || !cwdUri.startsWith("ssh://")) {
-    return listAvailableAgentClis();
-  }
-  try {
-    const parsed = parseProjectUri(cwdUri);
-    if (parsed.kind !== "ssh") return listAvailableAgentClis();
-    const config = await getConfiguredRoots(runtime);
-    const machine = config.configuredRemoteMachines.find((item) => item.id === parsed.machineId);
-    if (!machine) return [];
-    return await detectRemoteAgentClis(machine, {
-      secretStore: options.secretStore ?? createDefaultSecretStore(),
-      runner: options.runner ?? runSshCommand,
-    });
-  } catch {
-    return [];
-  }
-}
-
-export async function detectRemoteAgentClis(
-  machine: RemoteMachine,
-  options: {
-    secretStore: SecretStore;
-    runner: SshCommandRunner;
-    timeoutMs?: number;
-  },
-): Promise<AgentCli[]> {
-  const password = machine.authMode === "password" && machine.passwordSecretId
-    ? (await options.secretStore.get(machine.passwordSecretId)) ?? null
-    : null;
-  const sshArgs = sshArgsForRemoteMachine(machine, Boolean(password));
-  if (!sshArgs.length) return [];
-
-  const commands = agentCliDefinitions.flatMap((definition) => definition.commands);
-  if (!commands.length) return [];
-  const probeScript = commands
-    .map((command) => `printf '%s\\t%s\\n' ${shellQuote(command)} "$(command -v ${shellQuote(command)} 2>/dev/null || true)"`)
-    .join("; ");
-
-  const runnerArgs = [
-    "-o", password ? "BatchMode=no" : "BatchMode=yes",
-    "-o", "ConnectTimeout=5",
-    ...sshArgs,
-    "--",
-    `sh -l -c ${quoteForRemoteShell(probeScript)}`,
-  ];
-
-  let result: { stdout: string; stderr: string };
-  try {
-    result = await options.runner(runnerArgs, options.timeoutMs ?? 8000, password ? { password } : undefined);
-  } catch {
-    return [];
-  }
-
-  const foundPaths = new Map<string, string>();
-  for (const line of result.stdout.split(/\r?\n/u)) {
-    if (!line.trim()) continue;
-    const [command, ...rest] = line.split("\t");
-    const remotePath = rest.join("\t").trim();
-    if (command && remotePath) foundPaths.set(command, remotePath);
-  }
-
-  const detected: AgentCli[] = [];
-  for (const definition of agentCliDefinitions) {
-    for (const command of definition.commands) {
-      const remotePath = foundPaths.get(command);
-      if (remotePath) {
-        detected.push({
-          id: definition.id,
-          label: definition.label,
-          command,
-          executablePath: remotePath,
-          shortLabel: definition.shortLabel,
-        });
-        break;
-      }
-    }
-  }
-  return detected;
+  return listAvailableAgentClis();
 }
 
 function shellQuote(value: string): string {

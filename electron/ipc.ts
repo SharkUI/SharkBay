@@ -4,9 +4,7 @@ import {
   getConfiguredRoots,
   removeConfiguredProject,
   renameProject,
-  removeConfiguredRemoteMachine,
   setAppearanceTheme,
-  upsertConfiguredRemoteMachine
 } from "../src/main/config.js";
 import type {
   AgentCli,
@@ -25,8 +23,6 @@ import type {
   BrowserResizeInput,
   BrowserSession,
   BrowserUpdateEvent,
-  CreatePortForwardInput,
-  DetectRemotePortsInput,
   InstallToolInput,
   InstallToolResult,
   InstallRecipe,
@@ -38,8 +34,6 @@ import type {
   PathExistsResult,
   ProfileReadOptions,
   ProjectProfile,
-  ListPortForwardsInput,
-  PortForwardEvent,
   ProjectConfigInput,
   ProjectScanInput,
   ProjectDetail,
@@ -49,14 +43,8 @@ import type {
   ReadFileResult,
   WriteFileInput,
   WriteFileResult,
-  RemoteDetectedPort,
-  RemoteMachineInput,
-  RemoteMachineTestResult,
-  RemotePortForward,
   RenameProjectInput,
   RemoveProjectInput,
-  RemovePortForwardInput,
-  RemoveRemoteMachineInput,
   ScanProjectsResult,
   GitHubIdentity,
   TaskViewModel,
@@ -80,11 +68,8 @@ import { AgentSessionWatcher } from "../src/main/agent-clis.js";
 import { TokenUsageDb } from "../src/main/token-usage-db.js";
 import { TokenUsageCollector } from "../src/main/token-usage-collector.js";
 import { BrowserManager } from "../src/main/browser-tabs.js";
-import { PortForwardManager } from "../src/main/port-forwards.js";
 import { readGitMetadata } from "../src/main/git.js";
 import { resolveRepoPath } from "../src/main/path-safety.js";
-import { testRemoteMachineConnection } from "../src/main/remote-machines.js";
-import { createDefaultSecretStore } from "../src/main/secrets.js";
 import { assertHarnessInstallable, checkRepoPermission, generateMachineId, getHarnessUpdateStatus, getLocalHarnessIdentity, getMachineId, installHarness, isHarnessInstalled, resolveGitHubIdentity, uninstallHarness, updateHarnessFiles } from "../src/main/teamwork-harness.js";
 import { deleteTeamContextBranch, hasLocalContextBranch, TeamworkSync } from "../src/main/teamwork-sync.js";
 import { scanTasks, watchTasks } from "../src/main/teamwork-tasks.js";
@@ -102,12 +87,10 @@ export type IpcCallbacks = {
   onAppearanceThemeChanged?: (theme: AppearanceTheme) => void;
 };
 
-const secretStore = createDefaultSecretStore();
 let core: CoreClient | null = null;
 let tokenUsageDb: TokenUsageDb | null = null;
 const agentSessionWatcher = new AgentSessionWatcher();
 const browserManager = new BrowserManager();
-const portForwardManager = new PortForwardManager({ secretStore });
 const teamworkSyncInstances = new Map<string, TeamworkSync>();
 const teamworkWatcherCleanups = new Map<string, () => void>();
 
@@ -119,7 +102,6 @@ function requireCore(): CoreClient {
 export function closeAllTerminalSessions(): void {
   void core?.dispose();
   browserManager.closeAll();
-  void portForwardManager.closeAll();
   for (const sync of teamworkSyncInstances.values()) sync.stop();
   teamworkSyncInstances.clear();
   for (const cleanup of teamworkWatcherCleanups.values()) cleanup();
@@ -249,7 +231,6 @@ export async function registerIpcHandlers(
   }
   agentSessionWatcher.removeAllListeners("status");
   browserManager.removeAllListeners("update");
-  portForwardManager.removeAllListeners("update");
   core.on("terminalData", (event) => {
     BrowserWindow.getAllWindows().forEach((window) => {
       window.webContents.send(channels.terminalData, event);
@@ -289,47 +270,11 @@ export async function registerIpcHandlers(
       window.webContents.send(channels.browserUpdate, event);
     });
   });
-  portForwardManager.on("update", (event: PortForwardEvent) => {
-    BrowserWindow.getAllWindows().forEach((window) => {
-      window.webContents.send(channels.portForwardUpdate, event);
-    });
-  });
 
   handle<void, AppConfig>(channels.listRoots, () => getConfiguredRoots(runtime));
   handle<ProjectConfigInput, AppConfig>(channels.addProject, (payload) => addConfiguredProject(runtime, payload));
   handle<RemoveProjectInput, AppConfig>(channels.removeProject, (payload) => removeConfiguredProject(runtime, payload));
   handle<RenameProjectInput, AppConfig>(channels.renameProject, (payload) => renameProject(runtime, payload));
-  handle<RemoteMachineInput, AppConfig>(channels.addRemoteMachine, async (payload) => {
-    const result = await upsertConfiguredRemoteMachine(runtime, payload);
-    if (payload.password && result.machine.passwordSecretId) {
-      await secretStore.set(result.machine.passwordSecretId, payload.password);
-      result.machine.hasPassword = true;
-    }
-    return result.config;
-  });
-  handle<RemoveRemoteMachineInput, AppConfig>(channels.removeRemoteMachine, async (payload) => {
-    const config = await getConfiguredRoots(runtime);
-    const machine = config.configuredRemoteMachines.find((item) => item.id === payload.id);
-    const nextConfig = await removeConfiguredRemoteMachine(runtime, payload);
-    if (machine?.passwordSecretId) await secretStore.delete(machine.passwordSecretId);
-    return nextConfig;
-  });
-  handle<{ id: string } | RemoteMachineInput, RemoteMachineTestResult>(channels.testRemoteMachine, (payload) =>
-    testRemoteMachineConnection(runtime, payload, undefined, secretStore)
-  );
-  handle<ListPortForwardsInput | undefined, RemotePortForward[]>(channels.listPortForwards, (payload) =>
-    Promise.resolve(portForwardManager.list(payload?.machineId))
-  );
-  handle<DetectRemotePortsInput, RemoteDetectedPort[]>(channels.detectRemotePorts, (payload) =>
-    portForwardManager.detect(runtime, payload)
-  );
-  handle<CreatePortForwardInput, RemotePortForward>(channels.createPortForward, (payload) =>
-    portForwardManager.create(runtime, payload)
-  );
-  handle<RemovePortForwardInput, { ok: true }>(channels.removePortForward, async (payload) => {
-    await portForwardManager.remove(payload);
-    return { ok: true };
-  });
   ipcMain.removeHandler(channels.pickProjectFolder);
   ipcMain.handle(channels.pickProjectFolder, async (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
@@ -393,10 +338,7 @@ export async function registerIpcHandlers(
     const config = await setPluginEnabledConfig(runtime, payload.pluginId, payload.enabled);
     const plugins = await requireCore().call("setPluginEnabled", [payload.pluginId, payload.enabled]);
     if (payload.pluginId === CODEGRAPH_PLUGIN_ID && !payload.enabled) {
-      const projectUris = [
-        ...config.configuredProjects.map((projectPath) => toLocalProjectUri(projectPath)),
-        ...config.configuredRemoteProjects,
-      ];
+      const projectUris = config.configuredProjects.map((projectPath) => toLocalProjectUri(projectPath));
       await requireCore().call("removeCodeGraphIndexes", [runtime, { projectUris }]);
     }
     return plugins;

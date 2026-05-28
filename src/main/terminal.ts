@@ -6,15 +6,11 @@ import path from "node:path";
 import { promisify } from "node:util";
 import * as pty from "./pty.js";
 import { getConfiguredRoots } from "./config.js";
-import { parseProjectUri } from "../core/project-uri.js";
 import { resolveProjectUri } from "./path-safety.js";
-import { createAskPassScript, sshArgsForRemoteMachine } from "./remote-machines.js";
-import { createDefaultSecretStore, type SecretStore } from "./secrets.js";
 import { prependPathDirectories, resolveCommandSearchPaths } from "./command-path.js";
 import { prepareTeamworkAgentLaunch } from "./teamwork-harness.js";
 import type {
   IpcRuntimeLike,
-  RemoteMachine,
   TerminalCloseInput,
   TerminalCreateInput,
   TerminalDataEvent,
@@ -48,7 +44,6 @@ type TerminalRecord = TerminalSession & {
   foregroundCommandObserved: boolean;
   inspectTimer: ReturnType<typeof setInterval> | null;
   inspecting: boolean;
-  isRemote: boolean;
   cleanup: (() => Promise<void>) | null;
 };
 
@@ -56,7 +51,6 @@ export type TerminalManagerOptions = {
   inspectIntervalMs?: number;
   inspectProcessCwd?: CwdInspector;
   now?: () => number;
-  secretStore?: SecretStore;
 };
 
 export type TerminalTitleInput = {
@@ -86,14 +80,12 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
   private inspectIntervalMs: number;
   private inspectProcessCwd: CwdInspector;
   private now: () => number;
-  private secretStore: SecretStore;
 
   constructor(options: TerminalManagerOptions = {}) {
     super();
     this.inspectIntervalMs = options.inspectIntervalMs ?? defaultTerminalInspectIntervalMs;
     this.inspectProcessCwd = options.inspectProcessCwd ?? resolveProcessCwd;
     this.now = options.now ?? Date.now;
-    this.secretStore = options.secretStore ?? createDefaultSecretStore();
   }
 
   async create(runtime: IpcRuntimeLike, input: TerminalCreateInput): Promise<TerminalSession> {
@@ -101,7 +93,7 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
     let initialCommand = normalizeTerminalCommandLine(input.initialCommand);
     const initialCommandTitle = initialCommand ? normalizeTerminalCommandLine(input.initialCommandTitle) : null;
     let delayedBootstrapPrompt: string | null = null;
-    if (!spec.isRemote && input.agentId && initialCommand && !input.service) {
+    if (input.agentId && initialCommand && !input.service) {
       const launch = await prepareTeamworkAgentLaunch(spec.projectRoot, input.agentId, initialCommand, {
         codeGraphEnabled: input.teamworkBootstrap?.codeGraphEnabled ?? false,
       });
@@ -110,8 +102,8 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
       }
       initialCommand = launch.initialCommand;
     }
-    const shellInitialCommand = !spec.isRemote && !input.service ? initialCommand : null;
-    const command = !spec.isRemote && input.service && initialCommand
+    const shellInitialCommand = !input.service ? initialCommand : null;
+    const command = input.service && initialCommand
       ? serviceTerminalCommand(spec.shell, initialCommand)
       : shellInitialCommand
         ? initialCommandTerminalCommand(spec.shell, shellInitialCommand)
@@ -125,9 +117,7 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
       env: spec.env,
     });
     const foregroundProcess = safeForegroundProcess(ptyProcess);
-    const initialTitle = spec.isRemote
-      ? remoteTerminalDisplayTitle(spec.projectRoot, input.service?.label, initialCommandTitle)
-      : terminalDisplayTitle({
+    const initialTitle = terminalDisplayTitle({
           projectRoot: spec.projectRoot,
           currentCwd: spec.projectRoot,
           shell: spec.shell,
@@ -157,13 +147,12 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
       foregroundCommandObserved: false,
       inspectTimer: null,
       inspecting: false,
-      isRemote: spec.isRemote,
       cleanup: spec.cleanup ?? null,
     };
 
     this.sessions.set(id, session);
-    const initialCommandLine = initialCommand && !shellInitialCommand && (!input.service || spec.isRemote)
-      ? input.service ? serviceCommandLine(initialCommand) : initialCommand
+    const initialCommandLine = initialCommand && !shellInitialCommand && !input.service
+      ? initialCommand
       : null;
     let pendingInitialCommand = initialCommandLine;
     let pendingInitialCommandQuietTimer: ReturnType<typeof setTimeout> | null = null;
@@ -211,9 +200,7 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
       void this.runCleanup(session);
       this.emit("exit", { sessionId: id, exitCode, signal: signal === undefined ? null : String(signal) });
     });
-    if (!spec.isRemote) {
-      this.startTitleInspection(session);
-    }
+    this.startTitleInspection(session);
     if (pendingInitialCommand) {
       session.foregroundCommandObserved = false;
       schedulePendingInitialCommand();
@@ -237,9 +224,6 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
     if (!cwdUri?.trim()) {
       throw new Error("Terminal cwd URI is required");
     }
-    if (cwdUri.startsWith("ssh://")) {
-      return resolveSshLaunchSpec(runtime, cwdUri, this.secretStore);
-    }
     const resolved = await resolveTerminalCwd(runtime, cwdUri);
     const shell = preferredShell();
     const commandSearchPaths = await resolveCommandSearchPaths();
@@ -256,7 +240,6 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
       },
       shell,
       projectRoot: resolved.cwd,
-      isRemote: false,
     };
   }
 
@@ -359,7 +342,7 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
 
   private async refreshTitle(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId);
-    if (!session || session.status !== "running" || session.inspecting || session.isRemote) {
+    if (!session || session.status !== "running" || session.inspecting) {
       return;
     }
 
@@ -432,96 +415,15 @@ type TerminalLaunchSpec = {
   env: NodeJS.ProcessEnv;
   shell: string;
   projectRoot: string;
-  isRemote: boolean;
   cleanup?: () => Promise<void>;
 };
 
-async function resolveSshLaunchSpec(
-  runtime: IpcRuntimeLike,
-  cwdUri: string,
-  secretStore: SecretStore,
-): Promise<TerminalLaunchSpec> {
-  const parsed = parseProjectUri(cwdUri);
-  if (parsed.kind !== "ssh") {
-    throw new Error("Terminal cwd URI is not an SSH project URI");
-  }
-  const config = await getConfiguredRoots(runtime);
-  const machine: RemoteMachine | undefined = config.configuredRemoteMachines.find(
-    (item) => item.id === parsed.machineId,
-  );
-  if (!machine) {
-    throw new Error(`Remote machine "${parsed.machineId}" is not configured`);
-  }
-
-  const password = machine.authMode === "password" && machine.passwordSecretId
-    ? (await secretStore.get(machine.passwordSecretId)) ?? null
-    : null;
-  const sshArgs = sshArgsForRemoteMachine(machine, Boolean(password));
-  if (!sshArgs.length) {
-    throw new Error("Remote machine SSH connection details are incomplete");
-  }
-  const remoteCommand = remoteInteractiveShellCommand(parsed.path);
-  const args = buildInteractiveSshArgs(sshArgs, remoteCommand, Boolean(password));
-
-  let env: NodeJS.ProcessEnv = {
-    ...process.env,
-    TERM: process.env.TERM || "xterm-256color",
-    COLORTERM: process.env.COLORTERM || "truecolor",
-    ...terminalShellEnvironment,
-  };
-  let cleanup: (() => Promise<void>) | undefined;
-  if (password) {
-    const askPass = await createAskPassScript();
-    env = {
-      ...env,
-      DISPLAY: process.env.DISPLAY || "sharkbay",
-      SSH_ASKPASS: askPass.scriptPath,
-      SSH_ASKPASS_REQUIRE: "force",
-      SHARKBAY_SSH_PASSWORD: password,
-    };
-    cleanup = () => fs.rm(askPass.dir, { recursive: true, force: true });
-  }
-
-  return {
-    cwd: os.homedir(),
-    cwdUri,
-    command: { file: "ssh", args },
-    env,
-    shell: "ssh",
-    projectRoot: parsed.path,
-    isRemote: true,
-    cleanup,
-  };
-}
-
-function remoteTerminalDisplayTitle(remotePath: string, serviceLabel?: string | null, initialCommandTitle?: string | null): string {
-  const label = serviceLabel?.trim();
-  if (label) return label;
-  const commandTitle = normalizeTerminalCommandLine(initialCommandTitle);
-  if (commandTitle) return commandTitle;
-  return remotePath || "remote";
+export function terminalCommand(shell: string): { file: string; args: string[] } {
+  return { file: shell, args: ["-l"] };
 }
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
-}
-
-export function remoteInteractiveShellCommand(remotePath: string): string {
-  return `cd ${shellQuote(remotePath)} && exec \${SHELL:-/bin/sh} -l`;
-}
-
-export function buildInteractiveSshArgs(sshArgs: string[], remoteCommand: string, usePassword = false): string[] {
-  return [
-    "-tt",
-    "-o", usePassword ? "BatchMode=no" : "BatchMode=yes",
-    "-o", "ConnectTimeout=8",
-    ...sshArgs,
-    remoteCommand,
-  ];
-}
-
-export function terminalCommand(shell: string): { file: string; args: string[] } {
-  return { file: shell, args: ["-l"] };
 }
 
 function serviceTerminalCommand(shell: string, command: string): { file: string; args: string[] } {

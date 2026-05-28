@@ -15,8 +15,6 @@ import type {
   BrowserSession,
   BrowserUpdateEvent,
   CodeGraphProjectStatus,
-  CreatePortForwardInput,
-  DetectRemotePortsInput,
   InstallToolInput,
   InstallToolResult,
   InstallRecipe,
@@ -24,11 +22,9 @@ import type {
   ListInstallRecipesInput,
   DiagnosticsSnapshot,
   InstallLogEvent,
-  ListPortForwardsInput,
   MachineProfile,
   PathExistsInput,
   PathExistsResult,
-  PortForwardEvent,
   ProfileReadOptions,
   ProjectConfigInput,
   ProjectProfile,
@@ -40,14 +36,8 @@ import type {
   ReadFileResult,
   WriteFileInput,
   WriteFileResult,
-  RemoteDetectedPort,
-  RemoteMachineInput,
-  RemoteMachineTestResult,
-  RemotePortForward,
   RenameProjectInput,
   RemoveProjectInput,
-  RemovePortForwardInput,
-  RemoveRemoteMachineInput,
   ScanProjectsResult,
   TaskViewModel,
   TerminalCloseInput,
@@ -101,9 +91,6 @@ const sharkBayApi = {
     addProject: (input: ProjectConfigInput) => invoke<AppConfig>(channels.addProject, input),
     removeProject: (input: RemoveProjectInput) => invoke<AppConfig>(channels.removeProject, input),
     renameProject: (input: RenameProjectInput) => invoke<AppConfig>(channels.renameProject, input),
-    addRemoteMachine: (input: RemoteMachineInput) => invoke<AppConfig>(channels.addRemoteMachine, input),
-    removeRemoteMachine: (input: RemoveRemoteMachineInput) => invoke<AppConfig>(channels.removeRemoteMachine, input),
-    testRemoteMachine: (input: { id: string } | RemoteMachineInput) => invoke<RemoteMachineTestResult>(channels.testRemoteMachine, input),
     pickProjectFolder: () => invoke<{ cancelled: boolean; paths: string[] }>(channels.pickProjectFolder),
     setAppearanceTheme: (input: AppearanceThemeInput) => invoke<AppConfig>(channels.setAppearanceTheme, input)
   },
@@ -203,17 +190,6 @@ const sharkBayApi = {
   knowledgeSite: {
     generate: (input: { repoPath: string }) => invoke<KnowledgeSiteResult>(channels.knowledgeSiteGenerate, input),
     getPath: (input: { repoPath: string }) => invoke<string>(channels.knowledgeSiteGetPath, input)
-  },
-  portForwards: {
-    list: (input?: ListPortForwardsInput) => invoke<RemotePortForward[]>(channels.listPortForwards, input),
-    detect: (input: DetectRemotePortsInput) => invoke<RemoteDetectedPort[]>(channels.detectRemotePorts, input),
-    create: (input: CreatePortForwardInput) => invoke<RemotePortForward>(channels.createPortForward, input),
-    remove: (input: RemovePortForwardInput) => invoke<{ ok: true }>(channels.removePortForward, input),
-    onUpdate: (callback: (event: PortForwardEvent) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, payload: PortForwardEvent) => callback(payload);
-      ipcRenderer.on(channels.portForwardUpdate, listener);
-      return () => ipcRenderer.removeListener(channels.portForwardUpdate, listener);
-    }
   },
   usage: {
     getSummary: (input?: { periodDays?: number }) => invoke<UsageSummary>(channels.usageGetSummary, input),

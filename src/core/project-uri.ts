@@ -3,7 +3,6 @@ import type { ExecutionTargetKind } from "../shared/types.js";
 
 export type ParsedProjectUri =
   | { kind: "local"; path: string; targetId: "local" }
-  | { kind: "ssh"; uri: string; machineId: string; path: string; targetId: string }
   | { kind: "container" | "wsl"; uri: string; targetId: string };
 
 export function parseProjectUri(projectUri: string): ParsedProjectUri {
@@ -13,16 +12,6 @@ export function parseProjectUri(projectUri: string): ParsedProjectUri {
       throw new Error("Local project URI must contain an absolute path");
     }
     return { kind: "local", path: localPath, targetId: "local" };
-  }
-  if (projectUri.startsWith("ssh://")) {
-    const withoutScheme = projectUri.slice("ssh://".length);
-    const slashIndex = withoutScheme.indexOf("/");
-    const machineId = slashIndex >= 0 ? decodeURIComponent(withoutScheme.slice(0, slashIndex)) : "";
-    const remotePath = slashIndex >= 0 ? decodeURI(withoutScheme.slice(slashIndex)) : "";
-    if (!machineId || !remotePath.startsWith("/")) {
-      throw new Error("SSH project URI must contain a machine id and absolute path");
-    }
-    return { kind: "ssh", uri: projectUri, machineId, path: remotePath, targetId: machineId };
   }
   if (projectUri.startsWith("container://")) {
     return parseOpaqueTargetUri(projectUri, "container");
@@ -41,22 +30,11 @@ export function executionTargetKindForTargetId(targetId: string): ExecutionTarge
   if (targetId === "local") return "local";
   if (targetId.startsWith("container:")) return "container";
   if (targetId.startsWith("wsl:")) return "wsl";
-  return "ssh";
+  return "local";
 }
 
 export function toLocalProjectUri(projectPath: string): string {
   return `local:${encodeURI(path.resolve(projectPath))}`;
-}
-
-export function toSshProjectUri(machineId: string, projectPath: string): string {
-  const normalizedPath = projectPath.trim();
-  if (!machineId.trim()) {
-    throw new Error("Remote machine id is required");
-  }
-  if (!normalizedPath.startsWith("/")) {
-    throw new Error("Remote project path must be absolute");
-  }
-  return `ssh://${encodeURIComponent(machineId.trim())}${encodeURI(normalizedPath)}`;
 }
 
 export function localPathFromProjectUri(projectUri: string): string {

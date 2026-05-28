@@ -4,8 +4,6 @@ export type AppConfig = {
   schemaVersion: 1;
   configuredRoots: string[];
   configuredProjects: string[];
-  configuredRemoteProjects: string[];
-  configuredRemoteMachines: RemoteMachine[];
   projectAliases: Record<string, string>;
   disabledPluginIds: string[];
   appearanceTheme: AppearanceTheme;
@@ -43,49 +41,7 @@ export type AppearanceThemeInput = {
   theme: AppearanceTheme;
 };
 
-export type RemoteMachineAuthMode = "system-ssh-config" | "ssh-agent" | "key-file" | "password";
-
-export type RemoteMachine = {
-  id: string;
-  label: string;
-  host: string;
-  port: number;
-  username?: string;
-  sshConfigHost?: string;
-  authMode: RemoteMachineAuthMode;
-  keyPath?: string;
-  passwordSecretId?: string;
-  hasPassword?: boolean;
-  defaultProjectPath?: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type RemoteMachineInput = {
-  label: string;
-  authMode: RemoteMachineAuthMode;
-  sshConfigHost?: string;
-  host?: string;
-  port?: number;
-  username?: string;
-  keyPath?: string;
-  password?: string;
-  defaultProjectPath?: string;
-};
-
-export type RemoveRemoteMachineInput = {
-  id: string;
-};
-
-export type TestRemoteMachineInput =
-  | { id: string }
-  | RemoteMachineInput;
-
-export type RemoteMachineTestResult =
-  | { ok: true; message: string }
-  | { ok: false; message: string };
-
-export type ExecutionTargetKind = "local" | "ssh" | "container" | "wsl";
+export type ExecutionTargetKind = "local" | "container" | "wsl";
 
 export type ExecutionTargetStatus = "available" | "unavailable" | "auth-required" | "unknown";
 
@@ -392,16 +348,6 @@ export type DiagnosticsDetectorAggregate = {
   failureCount: number;
 };
 
-export type DiagnosticsLatencyStats = {
-  count: number;
-  errors: number;
-  minMs: number | null;
-  maxMs: number | null;
-  avgMs: number | null;
-  p50Ms: number | null;
-  p95Ms: number | null;
-};
-
 export type DiagnosticsCounter = {
   total: number;
   sinceIso: string;
@@ -416,7 +362,6 @@ export type DiagnosticsSnapshot = {
     machine: { hits: number; misses: number };
     project: { hits: number; misses: number };
   };
-  ssh: DiagnosticsLatencyStats;
   terminalData: DiagnosticsCounter;
 };
 
@@ -514,7 +459,7 @@ export type ProjectCandidate = {
   uri: string;
   name: string;
   providerId: string;
-  providerKind: "local" | "ssh" | "container" | "wsl";
+  providerKind: "local" | "container" | "wsl";
   displayPath: string;
   rootUri: string;
   iconSources: ProjectIconSource[];
@@ -551,7 +496,7 @@ export type ProjectSummary = {
   uri: string;
   name: string;
   providerId: string;
-  providerKind: "local" | "ssh" | "container" | "wsl";
+  providerKind: "local" | "container" | "wsl";
   displayPath: string;
   iconSources: ProjectIconSource[];
   repoUrl: string | null;
@@ -639,58 +584,6 @@ export type AgentProjectStatusEvent = {
   sessionId: string | null;
   text: string;
   timestamp: string;
-};
-
-export type PortForwardStatus = "starting" | "running" | "stopped" | "error";
-
-export type RemotePortForward = {
-  id: string;
-  machineId: string;
-  remoteHost: string;
-  remotePort: number;
-  localPort: number;
-  status: PortForwardStatus;
-  error: string | null;
-  pid: number | null;
-  createdAt: string;
-};
-
-export type CreatePortForwardInput = {
-  machineId: string;
-  remotePort: number;
-  localPort?: number;
-  remoteHost?: string;
-};
-
-export type RemovePortForwardInput = {
-  id: string;
-};
-
-export type ListPortForwardsInput = {
-  machineId?: string;
-};
-
-export type DetectRemotePortsInput = {
-  machineId: string;
-};
-
-export type RemoteDetectedPort = {
-  machineId: string;
-  remoteHost: string;
-  remotePort: number;
-  processName: string | null;
-  pid: number | null;
-  source: "process";
-  label: string;
-  protocol: "http" | "https" | null;
-  forwarded: boolean;
-  forwardId?: string;
-  localPort?: number;
-  status?: PortForwardStatus;
-};
-
-export type PortForwardEvent = {
-  forward: RemotePortForward;
 };
 
 export type BrowserBounds = {
