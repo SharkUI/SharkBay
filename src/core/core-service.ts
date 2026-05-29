@@ -23,6 +23,7 @@ import type {
   ProjectFilesResult,
   ProjectProfile,
   ProjectScanInput,
+  ToolProfile,
   ReadFileInput,
   ReadFileResult,
   ScanProjectsResult,
@@ -40,8 +41,9 @@ import type {
 import type { ExecutionProvider } from "./execution-provider.js";
 import { parseProjectUri } from "./project-uri.js";
 import { ExecutionProviderRegistry } from "./provider-registry.js";
-import { PluginHost, type PluginSummary } from "../plugins/plugin-host.js";
+import { PluginHost, type MachineProfilePatch, type PluginRecord, type PluginSummary } from "../plugins/plugin-host.js";
 import { bundledPlugins } from "../plugins/bundled-plugins.js";
+import { AGENT_PLUGIN_ID, detectAgentTools } from "../plugins/bundled/agent-detector.js";
 import { ProfileOrchestrator } from "../profiles/profile-orchestrator.js";
 import { JobScheduler } from "./job-scheduler.js";
 import { ProfileCache } from "../storage/profile-cache.js";
@@ -104,16 +106,34 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
 
   async listAgentClis(runtime: IpcRuntimeLike, input?: { cwdUri?: string }): Promise<AgentCli[]> {
     const targetId = input?.cwdUri ? parseProjectUri(input.cwdUri).targetId : "local";
-    const profile = await this.readMachineProfile(runtime, targetId, targetId === "local" ? { refresh: true } : undefined);
-    return profile.agents
-      .filter((agent) => agent.available)
-      .map((agent) => ({
-        id: agent.id,
-        label: agentLabel(agent.id),
-        command: agent.command,
-        executablePath: agent.path ?? agent.command,
-        shortLabel: agentShortLabel(agent.id),
-      }));
+    const agentRecords = this.pluginHost.listPluginRecords().filter(isEnabledAgentDetectionPlugin);
+    if (!agentRecords.length) return [];
+
+    const provider = this.providers.providerForTargetId(targetId);
+    const ctx = await provider.createMachineProbeContext(runtime, targetId);
+    if (agentRecords.length === 1 && agentRecords[0]?.manifest.id === AGENT_PLUGIN_ID) {
+      return agentToolsToClis(await detectAgentTools(ctx, { includeVersions: false }));
+    }
+
+    const patches = await Promise.all(agentRecords.flatMap((record) =>
+      record.machineDetectors.map((detector) =>
+        this.scheduler.schedule<MachineProfilePatch>({
+          kind: "machine-profile",
+          targetId,
+          priority: "interactive",
+          timeoutMs: 5000,
+          dedupeKey: `agent-list:${targetId}:${detector.pluginId}:${detector.id}`,
+          run: async () => {
+            try {
+              return await detector.run(ctx);
+            } catch {
+              return {};
+            }
+          },
+        })
+      )
+    ));
+    return agentToolsToClis(patches.flatMap((patch) => patch.agents ?? []));
   }
 
   async installTool(runtime: IpcRuntimeLike, input: InstallToolInput): Promise<InstallToolResult> {
@@ -348,6 +368,22 @@ function agentShortLabel(agentId: string): string {
   if (agentId === "qwen") return "Q";
   if (agentId === "opencode") return "O";
   return agentId.slice(0, 2).toUpperCase();
+}
+
+function isEnabledAgentDetectionPlugin(record: PluginRecord): boolean {
+  return record.enabled && Boolean(record.manifest.capabilities?.some((capability) => capability.kind === "agent:detect"));
+}
+
+function agentToolsToClis(agents: ToolProfile[]): AgentCli[] {
+  return agents
+    .filter((agent) => agent.available)
+    .map((agent) => ({
+      id: agent.id,
+      label: agentLabel(agent.id),
+      command: agent.command,
+      executablePath: agent.path ?? agent.command,
+      shortLabel: agentShortLabel(agent.id),
+    }));
 }
 
 function shellQuote(value: string): string {

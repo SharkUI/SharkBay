@@ -2885,6 +2885,13 @@ button.project-file-toggle:focus-visible {
   line-height: 1.45;
 }
 
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px 16px;
+}
+
 .install-agent-dialog {
   width: min(780px, 100%);
   padding: 0;

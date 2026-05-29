@@ -28,6 +28,7 @@ interface ShellPathCache {
 }
 
 const shellPathCacheByHome = new Map<string, ShellPathCache>();
+const shellPathRequestByHome = new Map<string, Promise<string[]>>();
 const SHELL_PATH_CACHE_TTL_MS = 60_000;
 
 function detectShell(): { bin: string; name: "fish" | "posix" } {
@@ -48,7 +49,19 @@ function shellPathCommand(shellName: "fish" | "posix"): string {
 async function getShellPaths(homeDirectory: string): Promise<string[]> {
   const cached = shellPathCacheByHome.get(homeDirectory);
   if (cached && Date.now() - cached.at < SHELL_PATH_CACHE_TTL_MS) return cached.paths;
+  const inFlight = shellPathRequestByHome.get(homeDirectory);
+  if (inFlight) return inFlight;
 
+  const request = readShellPaths(homeDirectory);
+  shellPathRequestByHome.set(homeDirectory, request);
+  try {
+    return await request;
+  } finally {
+    shellPathRequestByHome.delete(homeDirectory);
+  }
+}
+
+async function readShellPaths(homeDirectory: string): Promise<string[]> {
   const shell = detectShell();
   try {
     const cmd = shellPathCommand(shell.name);

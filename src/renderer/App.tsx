@@ -142,7 +142,7 @@ const resizerColumnWidth = 12;
 const columnResizeStep = 40;
 const detailColumnStorageKey = "sharkbay.detailColumnWidth.v2";
 const projectColumnStorageKey = "sharkbay.projectColumnWidth.v2";
-const detailTabs: Array<{ id: DetailTab; label: string; remoteOnly?: boolean; localOnly?: boolean }> = [
+const detailTabs: Array<{ id: DetailTab; label: string; localOnly?: boolean }> = [
   { id: "tasks", label: "Tasks", localOnly: true },
   { id: "git", label: "Git" },
   { id: "files", label: "Files" },
@@ -243,16 +243,10 @@ async function addProject(path: string): Promise<void> {
   await handler({ path });
 }
 
-async function addProjectUri(uri: string): Promise<void> {
-  const handler = getBridge().config?.addProject;
-  if (!handler) throw new Error("Project add is not exposed by the preload API.");
-  await handler({ uri });
-}
-
 async function removeProject(pathOrUri: string): Promise<void> {
   const handler = getBridge().config?.removeProject;
   if (!handler) throw new Error("Project remove is not exposed by the preload API.");
-  await handler(pathOrUri.startsWith("ssh://") ? { uri: pathOrUri } : { path: pathOrUri });
+  await handler({ path: pathOrUri });
 }
 
 async function renameProjectAlias(uri: string, name: string): Promise<void> {
@@ -384,11 +378,7 @@ function explainEarlyTerminalExit(tab: TerminalShellTab, event: TerminalExitEven
   if (exitCode === null || exitCode === 0) return null;
   const createdAt = Date.parse(tab.session.createdAt);
   if (Number.isFinite(createdAt) && Date.now() - createdAt > 5000) return null;
-  const isRemote = tab.session.cwdUri.startsWith("ssh://");
-  if (exitCode === 255 && isRemote) return "SSH connection failed. Check the remote machine is reachable and your auth still works.";
-  if (exitCode === 2) return isRemote
-    ? "Shell exited immediately. The project path may not exist on the remote — re-add the project with the correct path."
-    : "Shell exited immediately (exit 2). Check the project directory exists and is readable.";
+  if (exitCode === 2) return "Shell exited immediately (exit 2). Check the project directory exists and is readable.";
   if (exitCode === 127) return "Command not found. Check the shell or the initial command.";
   if (exitCode === 126) return "Command not executable. Check file permissions.";
   if (exitCode === 1) return "Shell exited with an error right after starting. See the terminal output for details.";
@@ -1047,8 +1037,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
 
   async function openAgentProjectTab(agent: AgentCli) {
     if (!candidate?.uri) return;
-    const isRemote = false;
-    const baseCommand = isRemote ? agent.command : (agent.executablePath || agent.command);
+    const baseCommand = agent.executablePath || agent.command;
     const flags = getAgentLaunchFlags(agent.id);
     const base = agent.id === "kiro" ? `${shellQuote(baseCommand)} chat` : shellQuote(baseCommand);
     const launchCommand = flags.length ? `${base} ${flags.join(" ")}` : base;
@@ -1906,7 +1895,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
               </div>
               <button aria-label="Close" className="icon-button" disabled={removing} type="button" onClick={() => setConfirmRemove(null)}>x</button>
             </div>
-            <div className="remote-machine-form-actions" style={{ padding: "12px 16px 16px" }}>
+            <div className="modal-actions">
               <button className="button secondary" disabled={removing} type="button" onClick={() => setConfirmRemove(null)}>Cancel</button>
               <button className="button is-danger" disabled={removing} type="button" onClick={async () => {
                 const target = confirmRemove;
@@ -1949,7 +1938,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
                 <p className="form-note">Owner check unavailable.</p>
               ) : null}
             </div>
-            <div className="remote-machine-form-actions" style={{ padding: "12px 16px 16px" }}>
+            <div className="modal-actions">
               <button className="button secondary" disabled={uninstalling} type="button" onClick={() => setConfirmUninstall(null)}>Cancel</button>
               <button className="button is-danger" disabled={uninstalling || confirmUninstall.checkingOwner} type="button" onClick={async () => {
                 const target = confirmUninstall;
@@ -2103,9 +2092,8 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
   onOpenBrowserTab: (url: string) => Promise<void>;
   onRestoreAgentSession: (restore: AgentSessionRestoreCommand) => Promise<void>;
 }) {
-  const isRemote = false;
   const isLocal = candidate.providerKind === "local";
-  const availableTabs = detailTabs.filter((tab) => (!tab.remoteOnly || isRemote) && (!tab.localOnly || isLocal));
+  const availableTabs = detailTabs.filter((tab) => !tab.localOnly || isLocal);
   const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>("git");
   const [codeGraphStatus, setCodeGraphStatus] = useState<CodeGraphStatusView>({ loading: false, status: null, error: null });
   const lastCodeGraphDirtyCount = useRef<{ projectUri: string; count: number } | null>(null);

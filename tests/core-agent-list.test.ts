@@ -5,7 +5,7 @@ import { PluginHost } from "../src/plugins/plugin-host.js";
 import { makeTestRuntime } from "./helpers.js";
 
 describe("CoreService agent listing", () => {
-  it("builds UI agent buttons from MachineProfile agents", async () => {
+  it("builds UI agent buttons from agent detection plugins", async () => {
     const runtime = await makeTestRuntime("core-agent-list");
     const host = new PluginHost();
     host.registerPlugin({
@@ -15,6 +15,7 @@ describe("CoreService agent listing", () => {
         version: "0.0.0",
         publisher: "test",
         engines: { sharkbay: "^0.2.0" },
+        capabilities: [{ kind: "agent:detect" }],
       },
       register(api) {
         api.registerMachineDetector({
@@ -54,6 +55,7 @@ describe("CoreService agent listing", () => {
         version: "0.0.0",
         publisher: "test",
         engines: { sharkbay: "^0.2.0" },
+        capabilities: [{ kind: "agent:detect" }],
       },
       register(api) {
         api.registerMachineDetector({

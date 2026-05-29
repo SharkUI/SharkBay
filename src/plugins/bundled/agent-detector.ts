@@ -1,13 +1,14 @@
 import type { ToolProfile } from "../../shared/types.js";
 import type { InstallRecipe } from "../../shared/types.js";
+import type { MachineProbeContext } from "../../core/execution-provider.js";
 import type { BundledPlugin, MachineDetector } from "../plugin-host.js";
 
-const pluginId = "xyz.sharkbay.agents";
+export const AGENT_PLUGIN_ID = "xyz.sharkbay.agents";
 
 export function agentBundledPlugin(): BundledPlugin {
   return {
     manifest: {
-      id: pluginId,
+      id: AGENT_PLUGIN_ID,
       name: "Agent CLI Detection",
       version: "1.0.0",
       publisher: "SharkBay",
@@ -39,25 +40,33 @@ const agentDefinitions = [
   { id: "opencode", command: "opencode" },
 ];
 
+export async function detectAgentTools(
+  ctx: MachineProbeContext,
+  options: { includeVersions?: boolean } = {},
+): Promise<ToolProfile[]> {
+  const includeVersions = options.includeVersions ?? true;
+  return Promise.all(agentDefinitions.map(async (agent): Promise<ToolProfile> => {
+    const executablePath = await ctx.which(agent.command);
+    const version = includeVersions && executablePath ? await readVersion(ctx, executablePath) : null;
+    return {
+      id: agent.id,
+      command: agent.command,
+      available: Boolean(executablePath),
+      path: executablePath,
+      version,
+      sourcePluginId: AGENT_PLUGIN_ID,
+    };
+  }));
+}
+
 export function createAgentMachineDetector(): MachineDetector {
   return {
     id: "agents.machine",
-    pluginId,
+    pluginId: AGENT_PLUGIN_ID,
     label: "Agent CLI Detector",
     runOn: ["standard", "deep"],
     async run(ctx) {
-      const agents = await Promise.all(agentDefinitions.map(async (agent): Promise<ToolProfile> => {
-        const executablePath = await ctx.which(agent.command);
-        const version = executablePath ? await readVersion(ctx, executablePath) : null;
-        return {
-          id: agent.id,
-          command: agent.command,
-          available: Boolean(executablePath),
-          path: executablePath,
-          version,
-          sourcePluginId: pluginId,
-        };
-      }));
+      const agents = await detectAgentTools(ctx);
       return { agents };
     },
   };
