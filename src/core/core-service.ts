@@ -353,7 +353,7 @@ function agentLabel(agentId: string): string {
   if (agentId === "claude") return "Claude Code";
   if (agentId === "gemini") return "Gemini CLI";
   if (agentId === "kiro") return "Kiro CLI";
-  if (agentId === "deepseek") return "DeepSeek TUI";
+  if (agentId === "deepseek") return "CodeWhale";
   if (agentId === "qwen") return "Qwen Code";
   if (agentId === "opencode") return "OpenCode";
   return agentId;

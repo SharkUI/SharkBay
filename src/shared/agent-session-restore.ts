@@ -23,7 +23,7 @@ const restoreDefinitions: AgentSessionRestoreDefinition[] = [
   { id: "kiro", label: "Kiro CLI", shortLabel: "K", defaultCommand: "kiro-cli", match: /\bkiro\b/u },
   { id: "claude", label: "Claude Code", shortLabel: "Cl", defaultCommand: "claude", match: /\bclaude\b/u },
   { id: "gemini", label: "Gemini CLI", shortLabel: "G", defaultCommand: "gemini", match: /\bgemini\b/u },
-  { id: "deepseek", label: "DeepSeek TUI", shortLabel: "D", defaultCommand: "deepseek", match: /\bdeep\s*seek\b|\bdeepseek\b/u },
+  { id: "deepseek", label: "CodeWhale", shortLabel: "D", defaultCommand: "codewhale", match: /\bcodewhale\b|\bcode\s*whale\b/u },
   { id: "qwen", label: "Qwen Code", shortLabel: "Q", defaultCommand: "qwen", match: /\bqwen\b|\bqianwen\b/u },
   { id: "opencode", label: "OpenCode", shortLabel: "O", defaultCommand: "opencode", match: /\bopen\s*code\b|\bopencode\b/u },
 ];

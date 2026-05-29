@@ -76,9 +76,10 @@ import { setPluginEnabledConfig } from "../src/main/config.js";
 import type { PluginSummary } from "../src/plugins/plugin-host.js";
 import { HookBridge } from "../src/main/hooks/bridge.js";
 import { AgentHookStateManager } from "../src/main/hooks/state-manager.js";
-import { ClaudeConnector, CodexConnector, QwenConnector, DeepSeekConnector } from "../src/main/hooks/connectors/claude-family.js";
+import { ClaudeConnector, CodexConnector, QwenConnector } from "../src/main/hooks/connectors/claude-family.js";
 import { GeminiConnector } from "../src/main/hooks/connectors/gemini.js";
 import { KiroConnector } from "../src/main/hooks/connectors/kiro.js";
+import { CodeWhaleConnector } from "../src/main/hooks/connectors/codewhale.js";
 import type { AgentConnector } from "../src/main/hooks/types.js";
 
 export type IpcRuntime = {
@@ -101,7 +102,7 @@ const hookConnectors = new Map<string, AgentConnector>([
   ["claude", new ClaudeConnector()],
   ["codex", new CodexConnector()],
   ["qwen", new QwenConnector()],
-  ["deepseek", new DeepSeekConnector()],
+  ["deepseek", new CodeWhaleConnector()],
   ["gemini", new GeminiConnector()],
   ["kiro", new KiroConnector()],
 ]);

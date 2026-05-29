@@ -77,8 +77,10 @@ export class HookBridge extends EventEmitter<HookBridgeEvents> {
 
   private deployHookCli(appDataPath: string): void {
     const binDir = path.join(appDataPath, "bin");
-    const hookCliPath = path.join(binDir, "sharkbay-hook");
     fs.mkdirSync(binDir, { recursive: true });
+
+    // Main hook CLI (stdin-based, for Claude/Codex/Gemini/Kiro/Qwen)
+    const hookCliPath = path.join(binDir, "sharkbay-hook");
     const script = `#!/usr/bin/env node
 const fs = require("fs");
 const net = require("net");
@@ -104,6 +106,25 @@ process.stdin.on("end", () => {
 setTimeout(() => process.exit(0), 5000).unref();
 `;
     fs.writeFileSync(hookCliPath, script, { mode: 0o755 });
+
+    // CodeWhale hook script (env-var based)
+    const codewhaleHookPath = path.join(binDir, "sharkbay-hook-codewhale");
+    const codewhaleScript = `#!/bin/sh
+SOCKET_PATH_FILE="$HOME/Library/Application Support/SharkBay/hook-socket-path"
+[ -f "$SOCKET_PATH_FILE" ] || exit 0
+SOCKET_PATH="$(cat "$SOCKET_PATH_FILE")"
+[ -S "$SOCKET_PATH" ] || exit 0
+EVENT="$1"
+PAYLOAD="$(printf '{"source":"deepseek","payload":{"hook_event":"%s","tool_name":"%s","workspace":"%s","session_id":"%s","message":"%s"}}' \\
+  "$EVENT" \\
+  "\${DEEPSEEK_TOOL_NAME:-}" \\
+  "\${DEEPSEEK_WORKSPACE:-}" \\
+  "\${DEEPSEEK_SESSION_ID:-}" \\
+  "")"
+printf '%s\\n' "$PAYLOAD" | nc -U -w 2 "$SOCKET_PATH" 2>/dev/null
+exit 0
+`;
+    fs.writeFileSync(codewhaleHookPath, codewhaleScript, { mode: 0o755 });
   }
 
   private async cleanStaleSocket(): Promise<void> {

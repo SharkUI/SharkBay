@@ -7,7 +7,7 @@ describe("agent session restore commands", () => {
     expect(inferAgentSessionRestoreAgent("Claude Code Sonnet 4.5")).toBe("claude");
     expect(inferAgentSessionRestoreAgent("Gemini CLI 2.5 Pro")).toBe("gemini");
     expect(inferAgentSessionRestoreAgent("Kiro Claude 4.6")).toBe("kiro");
-    expect(inferAgentSessionRestoreAgent("DeepSeek TUI")).toBe("deepseek");
+    expect(inferAgentSessionRestoreAgent("CodeWhale")).toBe("deepseek");
     expect(inferAgentSessionRestoreAgent("Qwen Code")).toBe("qwen");
     expect(inferAgentSessionRestoreAgent("OpenCode")).toBe("opencode");
     expect(inferAgentSessionRestoreAgent("Unknown")).toBeNull();
@@ -20,7 +20,7 @@ describe("agent session restore commands", () => {
     expect(commandFor("Gemini CLI", sessionId)).toBe("SHARKBAY_RESTORED_SESSION_ID='11111111-1111-4111-8111-111111111111' 'gemini' --resume '11111111-1111-4111-8111-111111111111'");
     expect(commandFor("Qwen Code", sessionId)).toBe("SHARKBAY_RESTORED_SESSION_ID='11111111-1111-4111-8111-111111111111' 'qwen' --resume '11111111-1111-4111-8111-111111111111'");
     expect(commandFor("Kiro CLI", sessionId)).toBe("SHARKBAY_RESTORED_SESSION_ID='11111111-1111-4111-8111-111111111111' 'kiro-cli' chat --resume-id '11111111-1111-4111-8111-111111111111'");
-    expect(commandFor("DeepSeek TUI", sessionId)).toBe("SHARKBAY_RESTORED_SESSION_ID='11111111-1111-4111-8111-111111111111' 'deepseek' resume '11111111-1111-4111-8111-111111111111'");
+    expect(commandFor("CodeWhale", sessionId)).toBe("SHARKBAY_RESTORED_SESSION_ID='11111111-1111-4111-8111-111111111111' 'codewhale' resume '11111111-1111-4111-8111-111111111111'");
     expect(commandFor("OpenCode", "ses_abc")).toBe("SHARKBAY_RESTORED_SESSION_ID='ses_abc' 'opencode' --session 'ses_abc'");
   });
 

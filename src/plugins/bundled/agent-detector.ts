@@ -35,7 +35,7 @@ const agentDefinitions = [
   { id: "claude", command: "claude" },
   { id: "gemini", command: "gemini" },
   { id: "kiro", command: "kiro-cli" },
-  { id: "deepseek", command: "deepseek" },
+  { id: "deepseek", command: "codewhale" },
   { id: "qwen", command: "qwen" },
   { id: "opencode", command: "opencode" },
 ];
@@ -91,7 +91,7 @@ export function createAgentInstallRecipes(): InstallRecipe[] {
       }],
       verification: { command: "kiro-cli", args: ["--version"] },
     },
-    npmGlobalRecipe("deepseek", "Install DeepSeek TUI with npm", "npm install -g deepseek-tui"),
+    npmGlobalRecipe("deepseek", "Install CodeWhale with npm", "npm install -g codewhale"),
     npmGlobalRecipe("qwen", "Install Qwen Code with npm", "npm install -g @qwen-code/qwen-code"),
     npmGlobalRecipe("opencode", "Install OpenCode with npm", "npm install -g opencode-ai"),
   ];

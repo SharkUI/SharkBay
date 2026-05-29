@@ -27,7 +27,7 @@ const initialCommandQuietDelayMs = 150;
 const initialCommandMaxDelayMs = 900;
 const staleSubmittedCommandMs = 2000;
 const delayedBootstrapWriteMs = 2000;
-const interactiveForegroundProcesses = new Set(["btop", "claude", "codex", "deepseek", "htop", "top"]);
+const interactiveForegroundProcesses = new Set(["btop", "claude", "codex", "codewhale", "htop", "top"]);
 
 type CwdInspector = (pid: number) => Promise<string | null>;
 

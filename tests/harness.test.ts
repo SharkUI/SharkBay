@@ -82,20 +82,20 @@ describe("harness install", () => {
     expect(sessionHelper.mode & 0o111).not.toBe(0);
     const sessionHelperText = await fs.readFile(path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"), "utf8");
     expect(sessionHelperText).toContain("*kiro*)");
-    expect(sessionHelperText).toContain("*deepseek*)");
-    expect(sessionHelperText).toContain(".deepseek/audit.log");
+    expect(sessionHelperText).toContain("*deepseek*|*codewhale*)");
+    expect(sessionHelperText).toContain(".codewhale/audit.log");
     expect(sessionHelperText).toContain("*opencode*)");
     expect(sessionHelperText).toContain(".local\\/share\\/opencode\\/log");
     expect(sessionHelperText).toContain("SHARKBAY_RESTORED_SESSION_ID");
     expect(sessionHelperText).toContain("*claude*|*gemini*|*qwen*)");
-    expect(sessionHelperText).toContain("codex|claude|deepseek|gemini|kiro|opencode|qwen");
+    expect(sessionHelperText).toContain("codex|claude|codewhale|gemini|kiro|opencode|qwen");
     const exclude = await fs.readFile(path.join(repo, ".git", "info", "exclude"), "utf8");
     expect(exclude).toContain("/.sharkbay/");
     expect(exclude).not.toContain("/AGENTS.md");
     expect(exclude).not.toContain("/CLAUDE.md");
   });
 
-  it("resolves DeepSeek session id from the audit log", async () => {
+  it("resolves CodeWhale session id from the audit log", async () => {
     const root = await makeTempRoot("harness-deepseek-session");
     const repo = await createRealGitRepoFixture(root);
     const workspace = await fs.realpath(repo);
@@ -103,12 +103,12 @@ describe("harness install", () => {
 
     const home = path.join(root, "home");
     const sessionId = "5129eadb-161a-40de-8b6a-764d2176f724";
-    await writeText(path.join(home, ".deepseek", "audit.log"), [
+    await writeText(path.join(home, ".codewhale", "audit.log"), [
       '{"ts":"2026-05-21T14:34:59.403154+00:00","event":"tool.approval.auto_approve","details":{"tool_name":"exec_shell","session_id":"old-session","mode":"AGENT"}}',
       `{"ts":"2026-05-21T14:35:06.441658+00:00","event":"tool.approval.auto_approve","details":{"tool_name":"exec_shell","approval_key":"shell:bash","session_id":"${sessionId}","mode":"AGENT"}}`,
       "",
     ].join("\n"));
-    await writeJson(path.join(home, ".deepseek", "sessions", `${sessionId}.json`), {
+    await writeJson(path.join(home, ".codewhale", "sessions", `${sessionId}.json`), {
       metadata: {
         id: sessionId,
         workspace,
@@ -116,9 +116,9 @@ describe("harness install", () => {
       },
     });
 
-    const { stdout } = await execFileAsync("sh", [path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"), "deepseek"], {
+    const { stdout } = await execFileAsync("sh", [path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"), "codewhale"], {
       cwd: workspace,
-      env: { ...process.env, HOME: home },
+      env: { ...process.env, HOME: home, SHARKBAY_RESTORED_SESSION_ID: "" },
     });
 
     expect(stdout.trim()).toBe(sessionId);
@@ -196,7 +196,7 @@ describe("harness install", () => {
 
     const { stdout } = await execFileAsync("sh", [path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"), "opencode"], {
       cwd: workspace,
-      env: { ...process.env, HOME: home, PATH: `${bin}${path.delimiter}${process.env.PATH}` },
+      env: { ...process.env, HOME: home, PATH: `${bin}${path.delimiter}${process.env.PATH}`, SHARKBAY_RESTORED_SESSION_ID: "" },
     });
 
     expect(stdout.trim()).toBe(sessionId);
@@ -333,9 +333,9 @@ describe("harness install", () => {
       injected: true,
       initialCommand: expect.stringContaining("kiro-cli chat 'I'\\''m working in SharkBay Task Protocol mode"),
     });
-    await expect(prepareAgentLaunch(repo, "deepseek", "deepseek")).resolves.toMatchObject({
+    await expect(prepareAgentLaunch(repo, "deepseek", "codewhale")).resolves.toMatchObject({
       injected: true,
-      initialCommand: "deepseek",
+      initialCommand: "codewhale",
     });
     await expect(prepareAgentLaunch(repo, "opencode", "opencode")).resolves.toMatchObject({
       injected: true,

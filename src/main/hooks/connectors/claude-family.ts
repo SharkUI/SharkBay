@@ -191,12 +191,12 @@ export class QwenConnector extends ClaudeConnector {
 }
 
 // ---------------------------------------------------------------------------
-// DeepSeek connector (same protocol, different config path)
+// CodeWhale connector (same protocol, different config path)
 // ---------------------------------------------------------------------------
 
 export class DeepSeekConnector extends ClaudeConnector {
   constructor() {
-    super({ id: "deepseek", displayName: "DeepSeek", configPath: path.join(os.homedir(), ".deepseek", "settings.json"), commandName: "deepseek" });
+    super({ id: "deepseek", displayName: "CodeWhale", configPath: path.join(os.homedir(), ".codewhale", "settings.json"), commandName: "codewhale" });
   }
 }
 
