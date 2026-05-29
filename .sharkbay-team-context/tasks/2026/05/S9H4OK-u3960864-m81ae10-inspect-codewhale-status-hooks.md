@@ -12,7 +12,7 @@ agent: Codex GPT-5
 sessionId: 019e73c9-b1e1-7d41-ab7f-de3ec793be10
 branch: main
 createdAt: 2026-05-29T12:53:49Z
-updatedAt: 2026-05-29T13:11:51Z
+updatedAt: 2026-05-29T13:12:19Z
 completedAt: 2026-05-29T13:11:51Z
 ---
 
@@ -32,6 +32,7 @@ Fixed the CodeWhale status hook forwarding path so generated hooks use the activ
 - Added targeted tests for CodeWhale normalization, state-manager application, and generated script content.
 
 ## Verification
+- `codegraph affected src/main/hooks/bridge.ts src/main/hooks/connectors/codewhale.ts tests/codewhale-hooks.test.ts` reports `tests/codewhale-hooks.test.ts`.
 - `npm test -- tests/codewhale-hooks.test.ts` passes.
 - `npm run typecheck` passes.
 - `npm test` passes: 37 files, 138 tests.
