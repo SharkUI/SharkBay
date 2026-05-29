@@ -12,8 +12,8 @@ agent: Kiro Claude 4.6
 sessionId: d21541d6-ff51-47d0-8815-424161e58910
 branch: main
 createdAt: 2026-05-29T03:53:34Z
-updatedAt: 2026-05-29T04:20:36Z
-completedAt: 2026-05-29T04:20:36Z
+updatedAt: 2026-05-29T04:30:36Z
+completedAt: 2026-05-29T04:30:36Z
 ---
 
 ## Summary
@@ -39,9 +39,14 @@ Plan for hook-based agent status system to replace unreliable terminal output pa
 - src/main/hooks/connectors/claude-family.ts
 - src/main/hooks/connectors/gemini.ts
 - src/main/hooks/connectors/kiro.ts
+- src/shared/ipc-channels.ts
+- src/renderer/types.ts
 - src/renderer/App.tsx
 - src/renderer/workflow.ts
 - src/styles/app.css
+- electron/ipc.ts
+- electron/preload.mts
+- tests/ipc-channels.test.ts
 
 ## Work
 
@@ -52,8 +57,10 @@ Plan for hook-based agent status system to replace unreliable terminal output pa
 - Defined three-state UI (working/idle/attention) with per-agent opt-in
 - Reviewed spec by DeepSeek TUI: found 12 issues (1 blocking), identified testing gaps, approved with condition
 - Resolved all review issues in spec updates
-- Implemented all 10 tasks: types, HookBridge, CLI, connectors (Claude/Codex/Qwen/DeepSeek/Gemini/Kiro), StateManager, UI three-state pill, dock badge, settings checkbox
-- Typecheck passes, all 135 tests pass
+- Implemented core modules: types, HookBridge, CLI, connectors (Claude/Codex/Qwen/DeepSeek/Gemini/Kiro), StateManager
+- Updated UI: three-state pill (green/yellow/red), terminal tab indicator, dock badge (attention-only)
+- Added "Enable status hooks" checkbox in Agent CLI settings
+- Wired up full integration: IPC channel, preload, HookBridge start on app launch, StateManager→agentStatus relay
 
 ## Verification
 
@@ -61,7 +68,6 @@ Plan for hook-based agent status system to replace unreliable terminal output pa
 - `npm test` passes (36 files, 135 tests, 0 failures)
 - No regressions in existing functionality
 - OpenCode connector deferred to follow-up (uses terminal output fallback)
-- IPC handler for setHooksEnabled to be wired in follow-up integration PR
 
 ## Notes
 
@@ -70,6 +76,4 @@ Plan for hook-based agent status system to replace unreliable terminal output pa
 - Gemini and Kiro need thin event-name mapping layers
 - PreToolUse hook returns immediately (exit 0) to avoid blocking agent
 - Fallback to terminal output detection when hooks not enabled
-- Follow-up needed: wire setHooksEnabled IPC handler in electron/ipc.ts to call connector.install/uninstall
-- Follow-up needed: start HookBridge on app launch and connect StateManager events to IPC relay
-- Follow-up needed: integration tests (hook CLI → socket → bridge → state manager → IPC)
+- To test: run `npm run dev`, open Settings → Agent CLI, enable hooks for Claude, then run Claude Code in a project terminal — pill should turn green and subtitle should show tool names
