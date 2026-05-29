@@ -346,6 +346,7 @@ describe("harness install", () => {
   it("skips bootstrap injection when protocol is not installed or the agent is unsupported", async () => {
     const root = await makeTempRoot("harness-bootstrap-skip");
     const repo = await createRealGitRepoFixture(root);
+    await fs.mkdir(path.join(repo, ".sharkbay"), { recursive: true });
 
     await expect(prepareAgentLaunch(repo, "codex", "codex")).resolves.toMatchObject({
       injected: false,

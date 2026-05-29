@@ -537,7 +537,7 @@ export async function prepareAgentLaunch(
   if (!bootstrapArgs) {
     return { initialCommand, injected: false, skippedReason: "unsupported-agent" };
   }
-  if (!await hasSharkbayHarnessDir(repoPath)) {
+  if (!await isHarnessInstalled(repoPath)) {
     return { initialCommand, injected: false, skippedReason: "not-installed" };
   }
 
