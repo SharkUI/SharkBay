@@ -39,16 +39,13 @@ import type {
 } from "./types";
 import {
   firstHttpUrl,
-  projectTerminalActivityStates,
   resolveSelectedCandidate,
   shouldEnsureCodeGraphForSelection,
   shouldKeepCurrentServiceUrl,
-  shouldResetTerminalObservationForInput,
-  terminalActivityAfterQuiet,
-  terminalActivityForCandidate,
+  projectActivityForCandidate,
   validTerminalResizeDimensions,
 } from "./workflow";
-import type { WorkflowProjectTerminalActivityState } from "./workflow";
+import type { WorkflowProjectActivityState } from "./workflow";
 
 type View = "dashboard" | "settings";
 type DetailTab = "tasks" | "git" | "files";
@@ -74,8 +71,7 @@ type Disposable = {
   dispose: () => void;
 };
 
-type TerminalActivityState = "idle" | "working" | "done";
-type ProjectTerminalActivityState = WorkflowProjectTerminalActivityState;
+type ProjectActivityState = WorkflowProjectActivityState;
 
 type TerminalShellTab = {
   kind: "terminal";
@@ -83,8 +79,6 @@ type TerminalShellTab = {
   terminal: XTerm;
   fitAddon: FitAddon;
   disposables: Disposable[];
-  activityState: TerminalActivityState;
-  outputBurstStartedAt: number | null;
 };
 
 type BrowserTab = {
@@ -132,8 +126,6 @@ type AgentStatusByProjectPath = Record<string, string>;
 const minProjectColumnWidth = 216;
 const minDetailColumnWidth = 340;
 const minTerminalColumnWidth = 420;
-const terminalWorkingThresholdMs = 5000;
-const terminalQuietDoneMs = 5000;
 const maxPendingTerminalOutputChars = 1024 * 1024;
 const codeGraphSyncDebounceMs = 10000;
 const defaultProjectColumnWidth = minProjectColumnWidth;
@@ -673,13 +665,9 @@ function DashboardView({
   const gridRef = useRef<HTMLDivElement | null>(null);
   const terminalPaneRef = useRef<TerminalPaneHandle | null>(null);
   const [runningServiceProjectIds, setRunningServiceProjectIds] = useState<Set<string>>(() => new Set());
-  const [terminalActivityByProjectId, setTerminalActivityByProjectId] = useState<Record<string, ProjectTerminalActivityState>>({});
-  const [hookActivityByProjectId, setHookActivityByProjectId] = useState<Record<string, ProjectTerminalActivityState>>({});
-  const mergedActivityByProjectId = useMemo<Record<string, ProjectTerminalActivityState>>(() => {
-    return { ...terminalActivityByProjectId, ...hookActivityByProjectId };
-  }, [terminalActivityByProjectId, hookActivityByProjectId]);
+  const [hookActivityByProjectId, setHookActivityByProjectId] = useState<Record<string, ProjectActivityState>>({});
 
-  // Clear hook idle state when user selects a project (human takes over)
+  // Clear finished hook activity when user returns to the project.
   useEffect(() => {
     if (!selectedCandidate || !document.hasFocus()) return;
     const id = selectedCandidate.id;
@@ -691,7 +679,7 @@ function DashboardView({
         return next;
       });
     }
-  }, [selectedCandidate?.id]);
+  }, [hookActivityByProjectId, selectedCandidate?.id]);
   const [agentClis, setAgentClis] = useState<AgentCli[]>([]);
   const [agentListVersion, setAgentListVersion] = useState(0);
   const [agentStatusByProjectPath, setAgentStatusByProjectPath] = useState<AgentStatusByProjectPath>({});
@@ -787,9 +775,15 @@ function DashboardView({
   useEffect(() => {
     if (!bridgeAvailable) return;
     const unsubscribe = getBridge().agents?.onStatus?.((event: AgentProjectStatusEvent) => {
-      setAgentStatusByProjectPath((current) =>
-        current[event.projectPath] === event.text ? current : { ...current, [event.projectPath]: event.text }
-      );
+      setAgentStatusByProjectPath((current) => {
+        if (!event.text) {
+          if (!(event.projectPath in current)) return current;
+          const next = { ...current };
+          delete next[event.projectPath];
+          return next;
+        }
+        return current[event.projectPath] === event.text ? current : { ...current, [event.projectPath]: event.text };
+      });
       if (event.hookState) {
         setHookActivityByProjectId((current) => {
           const matchedId = filteredCandidates.find((c) => c.displayPath === event.projectPath)?.id;
@@ -805,7 +799,7 @@ function DashboardView({
   useEffect(() => {
     const updateBadge = getBridge().dock?.updateBadge;
     if (!updateBadge) return;
-    const count = Object.values(mergedActivityByProjectId).filter((s) => s === "idle" || s === "attention").length;
+    const count = Object.values(hookActivityByProjectId).filter((s) => s === "idle" || s === "attention").length;
     const changed = count !== prevBadgeCountRef.current;
     prevBadgeCountRef.current = count;
     const send = () => { if (!document.hasFocus()) updateBadge(count); };
@@ -816,7 +810,7 @@ function DashboardView({
     window.addEventListener("blur", onBlur);
     window.addEventListener("focus", onFocus);
     return () => { window.removeEventListener("blur", onBlur); window.removeEventListener("focus", onFocus); };
-  }, [mergedActivityByProjectId]);
+  }, [hookActivityByProjectId]);
 
   const gridStyle = {
     gridTemplateColumns: detailPanelHidden
@@ -846,7 +840,7 @@ function DashboardView({
               candidates={filteredCandidates}
               projectAliases={projectAliases}
               runningServiceProjectIds={runningServiceProjectIds}
-              terminalActivityByProjectId={mergedActivityByProjectId}
+              projectActivityByProjectId={hookActivityByProjectId}
               selectedId={selectedCandidate?.id ?? null}
               onSelect={setSelectedId}
               onRemoveProject={onRemoveProject}
@@ -883,9 +877,6 @@ function DashboardView({
           onOpenAgentCliSettings={onOpenAgentCliSettings}
           onRunningServiceProjectIdsChange={(nextIds) =>
             setRunningServiceProjectIds((currentIds) => sameStringSet(currentIds, nextIds) ? currentIds : nextIds)
-          }
-          onTerminalActivityProjectStatesChange={(nextStates) =>
-            setTerminalActivityByProjectId((currentStates) => sameProjectTerminalActivityStates(currentStates, nextStates) ? currentStates : nextStates)
           }
         />
       </section>
@@ -937,13 +928,11 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   onAgentListRefreshRequested: () => void;
   onOpenAgentCliSettings: () => void;
   onRunningServiceProjectIdsChange: (projectIds: Set<string>) => void;
-  onTerminalActivityProjectStatesChange: (states: Record<string, ProjectTerminalActivityState>) => void;
-}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, projectAliases, isVisible, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onOpenAgentCliSettings, onRunningServiceProjectIdsChange, onTerminalActivityProjectStatesChange }, ref) {
+}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, projectAliases, isVisible, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onOpenAgentCliSettings, onRunningServiceProjectIdsChange }, ref) {
   const [spaces, setSpaces] = useState<Record<string, TerminalSpace>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const spacesRef = useRef<Record<string, TerminalSpace>>({});
   const creatingProjects = useRef(new Set<string>());
-  const quietTimers = useRef(new Map<string, ReturnType<typeof window.setTimeout>>());
   const pendingTerminalOutput = useRef(new Map<string, string>());
   const focusRequestNonce = useRef(0);
   const [tabFocusRequest, setTabFocusRequest] = useState<{ projectId: string; nonce: number } | null>(null);
@@ -961,7 +950,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       writeTerminalOutputToTab(sessionId, tab, data);
     }
   }, [spaces]);
-  useEffect(() => () => { for (const timer of quietTimers.current.values()) window.clearTimeout(timer); quietTimers.current.clear(); pendingTerminalOutput.current.clear(); }, []);
+  useEffect(() => () => { pendingTerminalOutput.current.clear(); }, []);
 
   useEffect(() => {
     const hasDirtyEditor = Object.values(spaces).some((space) =>
@@ -983,7 +972,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     onRunningServiceProjectIdsChange(runningProjectIds);
   }, [onRunningServiceProjectIdsChange, spaces]);
 
-  useEffect(() => { onTerminalActivityProjectStatesChange(projectTerminalActivityStates(terminalActivitySpaces(Object.values(spaces)))); }, [onTerminalActivityProjectStatesChange, spaces]);
   useEffect(() => { onActiveTabKindChange(activeTabKindForProject(spaces, activeProjectId)); }, [activeProjectId, onActiveTabKindChange, spaces]);
 
   useEffect(() => {
@@ -1019,10 +1007,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     });
     if (isVisible) requestProjectTabFocus(candidate.id);
     const existing = spacesRef.current[candidate.id];
-    if (existing?.activeId) {
-      const activeTab = existing.tabs.find((tab) => tab.kind === "terminal" && tab.session.id === existing.activeId);
-      if (activeTab && activeTab.kind === "terminal" && activeTab.activityState === "done") clearTerminalDoneState(activeTab.session.id);
-    }
     if (!isVisible) return;
     if (existing?.tabs.length) return;
     if (creatingProjects.current.has(candidate.id)) return;
@@ -1155,8 +1139,8 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   async function openProjectTab(projectId: string, cwdUri: string, projectName: string, displayPath: string, quiet = false, options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "initialCommandTitle" | "service"> = {}) {
     try {
       const session = await createTerminal(cwdUri, projectName, options);
-      const terminal = createXTerm(session.id, appearanceTheme, setToast, recordTerminalInputActivity);
-      const tab: TerminalTab = { kind: "terminal", session, terminal: terminal.instance, fitAddon: terminal.fitAddon, disposables: terminal.disposables, activityState: "idle", outputBurstStartedAt: null };
+      const terminal = createXTerm(session.id, appearanceTheme, setToast);
+      const tab: TerminalTab = { kind: "terminal", session, terminal: terminal.instance, fitAddon: terminal.fitAddon, disposables: terminal.disposables };
       onActiveTabKindChange("terminal");
       setSpaces((current) => {
         const existing = current[projectId] ?? { projectId, projectName, uri: cwdUri, displayPath, tabs: [], activeId: null, serviceUrl: null };
@@ -1200,7 +1184,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   function writeTerminalOutputToTab(sessionId: string, tab: TerminalShellTab, data: string) {
     tab.terminal.write(data);
     if (isRunningServiceTab(tab)) recordServiceUrl(sessionId, data);
-    recordTerminalOutputActivity(sessionId);
   }
 
   function bufferPendingTerminalOutput(event: TerminalDataEvent) {
@@ -1212,59 +1195,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     );
   }
 
-  function recordTerminalOutputActivity(sessionId: string) {
-    const tab = findTerminalTab(spacesRef.current, sessionId);
-    if (!tab || tab.session.status !== "running") return;
-    const now = Date.now();
-    setSpaces((current) => mapTerminalTab(current, sessionId, (currentTab) => {
-      if (currentTab.session.status !== "running") return currentTab;
-      const burstStartedAt = currentTab.outputBurstStartedAt ?? now;
-      const sustained = now - burstStartedAt >= terminalWorkingThresholdMs;
-      const activityState = sustained ? "working" : currentTab.activityState === "done" ? "idle" : currentTab.activityState;
-      if (currentTab.activityState === activityState && currentTab.outputBurstStartedAt === burstStartedAt) return currentTab;
-      return { ...currentTab, activityState, outputBurstStartedAt: burstStartedAt };
-    }));
-    scheduleTerminalQuietTimer(sessionId);
-  }
-
-  function recordTerminalInputActivity(sessionId: string) {
-    clearTerminalQuietTimer(sessionId);
-    setSpaces((current) => mapTerminalTab(current, sessionId, (currentTab) => {
-      const activityState = currentTab.activityState === "done" ? "done" : "idle";
-      if (currentTab.activityState === activityState && currentTab.outputBurstStartedAt === null) return currentTab;
-      return { ...currentTab, activityState, outputBurstStartedAt: null };
-    }));
-  }
-
-  function scheduleTerminalQuietTimer(sessionId: string) {
-    const existingTimer = quietTimers.current.get(sessionId);
-    if (existingTimer) window.clearTimeout(existingTimer);
-    const timer = window.setTimeout(() => {
-      quietTimers.current.delete(sessionId);
-      setSpaces((current) => mapTerminalTab(current, sessionId, (currentTab) => {
-        const activityState = terminalActivityAfterQuiet(currentTab.activityState);
-        if (currentTab.activityState === activityState && currentTab.outputBurstStartedAt === null) return currentTab;
-        return { ...currentTab, activityState, outputBurstStartedAt: null };
-      }));
-    }, terminalQuietDoneMs);
-    quietTimers.current.set(sessionId, timer);
-  }
-
-  function clearTerminalQuietTimer(sessionId: string) {
-    const timer = quietTimers.current.get(sessionId);
-    if (!timer) return;
-    window.clearTimeout(timer);
-    quietTimers.current.delete(sessionId);
-  }
-
-  function clearTerminalDoneState(sessionId: string) {
-    const tab = findTerminalTab(spacesRef.current, sessionId);
-    if (tab?.activityState !== "done") return;
-    setSpaces((current) => mapTerminalTab(current, sessionId, (currentTab) => ({ ...currentTab, activityState: "idle" })));
-  }
-
   function markTerminalExit(event: TerminalExitEvent) {
-    clearTerminalQuietTimer(event.sessionId);
     const message = `\r\n[process exited${event.exitCode === null ? "" : ` with code ${event.exitCode}`}${event.signal ? `, signal ${event.signal}` : ""}]\r\n`;
     const match = findTerminalTabWithSpace(spacesRef.current, event.sessionId);
     const pending = pendingTerminalOutput.current.get(event.sessionId);
@@ -1279,7 +1210,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       const hint = explainEarlyTerminalExit(match.tab, event);
       if (hint) setToast({ tone: "error", message: hint });
     }
-    setSpaces((current) => mapTerminalTab(current, event.sessionId, (currentTab) => ({ ...currentTab, activityState: "idle", outputBurstStartedAt: null, session: { ...currentTab.session, status: "exited" } })));
+    setSpaces((current) => mapTerminalTab(current, event.sessionId, (currentTab) => ({ ...currentTab, session: { ...currentTab.session, status: "exited" } })));
   }
 
   function updateTerminalSession(event: TerminalUpdateEvent) {
@@ -1333,7 +1264,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
 
   function removeTab(tabId: string, match: ReturnType<typeof findTabWithSpace>) {
     if (match?.tab.kind === "terminal") {
-      clearTerminalQuietTimer(tabId);
       match.tab.disposables.forEach((d) => d.dispose());
       match.tab.terminal.dispose();
     }
@@ -1400,9 +1330,9 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                     const tabTitle = titleForTab(tab);
                     return (
                       <div className={cx("terminal-tab", isActiveTab && "is-active")} key={tabId} role="tab" aria-selected={isActiveTab}>
-                        <button className="terminal-tab-main" type="button" onClick={() => { setActiveTab(space.projectId, tabId); if (tab.kind === "terminal") clearTerminalDoneState(tab.session.id); }}>
+                        <button className="terminal-tab-main" type="button" onClick={() => { setActiveTab(space.projectId, tabId); }}>
                           {tab.kind === "terminal" ? (
-                            <span className={cx("terminal-state", tab.session.service && tab.session.status === "running" && "is-service-running", tab.activityState === "working" && "is-working", !isActiveTab && tab.activityState === "done" && "is-done", tab.session.status === "exited" && "is-exited")} />
+                            <span className={cx("terminal-state", tab.session.service && tab.session.status === "running" && "is-service-running", tab.session.status === "exited" && "is-exited")} />
                           ) : tab.kind === "browser" ? (
                             <BrowserTabIcon browser={tab.browser} />
                           ) : (
@@ -1592,12 +1522,12 @@ function isUserEditingElsewhere(): boolean {
   return node.isContentEditable === true;
 }
 
-function createXTerm(sessionId: string, appearanceTheme: AppearanceTheme, setToast: (toast: Toast) => void, onInput: (sessionId: string) => void) {
+function createXTerm(sessionId: string, appearanceTheme: AppearanceTheme, setToast: (toast: Toast) => void) {
   const instance = new XTerm({ allowTransparency: false, cursorBlink: true, fontFamily: 'ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace', fontSize: 12, scrollback: 5000, theme: terminalThemes[appearanceTheme] });
   const fitAddon = new FitAddon();
   instance.loadAddon(fitAddon);
   instance.loadAddon(new WebLinksAddon());
-  const inputDisposable = instance.onData((data) => { if (shouldResetTerminalObservationForInput(data)) onInput(sessionId); const fire = getBridge().terminal?.inputFire; if (fire) { fire({ sessionId, data }); } else { void sendTerminalInput(sessionId, data).catch((error) => setToast({ tone: "error", message: asMessage(error) })); } });
+  const inputDisposable = instance.onData((data) => { const fire = getBridge().terminal?.inputFire; if (fire) { fire({ sessionId, data }); } else { void sendTerminalInput(sessionId, data).catch((error) => setToast({ tone: "error", message: asMessage(error) })); } });
   return { instance, fitAddon, disposables: [inputDisposable] };
 }
 
@@ -1649,15 +1579,6 @@ function mapTabById(spaces: Record<string, TerminalSpace>, tabId: string, mapTab
   return changed ? nextSpaces : spaces;
 }
 
-function terminalActivitySpaces(spaces: TerminalSpace[]) {
-  return spaces.map((space) => ({
-    projectId: space.projectId,
-    tabs: space.tabs
-      .filter((tab): tab is TerminalShellTab => tab.kind === "terminal")
-      .map((tab) => ({ activityState: tab.activityState, session: tab.session })),
-  }));
-}
-
 function isRunningServiceTab(tab: TerminalTab): boolean {
   return tab.kind === "terminal" && Boolean(tab.session.service) && tab.session.status === "running";
 }
@@ -1705,12 +1626,6 @@ function sameStringSet(left: Set<string>, right: Set<string>): boolean {
   return true;
 }
 
-function sameProjectTerminalActivityStates(left: Record<string, ProjectTerminalActivityState>, right: Record<string, ProjectTerminalActivityState>): boolean {
-  const leftKeys = Object.keys(left);
-  if (leftKeys.length !== Object.keys(right).length) return false;
-  return leftKeys.every((key) => left[key] === right[key]);
-}
-
 type ConfirmUninstallState = {
   repoPath: string;
   name: string;
@@ -1727,12 +1642,12 @@ type ProjectMenuState = {
   canUninstallProtocol: boolean;
 };
 
-function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, runningServiceProjectIds, terminalActivityByProjectId, selectedId, onSelect, onRemoveProject, onRenameProject, onUninstallProtocol }: {
+function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, runningServiceProjectIds, projectActivityByProjectId, selectedId, onSelect, onRemoveProject, onRenameProject, onUninstallProtocol }: {
   agentStatusByProjectPath: AgentStatusByProjectPath;
   candidates: ProjectCandidate[];
   projectAliases: Record<string, string>;
   runningServiceProjectIds: Set<string>;
-  terminalActivityByProjectId: Record<string, ProjectTerminalActivityState>;
+  projectActivityByProjectId: Record<string, ProjectActivityState>;
   selectedId: string | null;
   onSelect: (id: string) => void;
   onRemoveProject: (uri: string) => Promise<void>;
@@ -1831,9 +1746,10 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
       <div className="project-list" aria-label="Projects">
         {candidates.map((candidate) => {
           const hasRunningService = runningServiceProjectIds.has(candidate.id);
-          const terminalActivity = terminalActivityForCandidate(candidate, terminalActivityByProjectId);
-          const hasProjectStatus = Boolean(terminalActivity);
-          const subtitle = agentStatusByProjectPath[candidate.displayPath] ?? candidate.displayPath;
+          const projectActivity = projectActivityForCandidate(candidate, projectActivityByProjectId);
+          const hasProjectStatus = Boolean(projectActivity);
+          const agentStatus = agentStatusByProjectPath[candidate.displayPath];
+          const subtitle = projectActivity === "idle" ? candidate.displayPath : agentStatus ?? candidate.displayPath;
           const displayName = projectAliases[candidate.uri] || candidate.name;
           const isRenaming = renamingId === candidate.id;
           return (
@@ -1877,8 +1793,8 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
                 <span className="cell-subtitle truncate" title={subtitle}>{subtitle}</span>
               </span>
               <span className="project-row-status">
-                {hasProjectStatus && terminalActivity ? (
-                  <span className={cx("terminal-activity-pill", terminalActivity === "working" ? "is-working" : terminalActivity === "attention" ? "is-attention" : "is-idle")}>{terminalActivity === "working" ? "working" : terminalActivity === "attention" ? "attention" : "idle"}</span>
+                {hasProjectStatus && projectActivity ? (
+                  <span className={cx("terminal-activity-pill", projectActivity === "working" ? "is-working" : projectActivity === "attention" ? "is-attention" : "is-idle")}>{projectActivity === "working" ? "working" : projectActivity === "attention" ? "attention" : "idle"}</span>
                 ) : null}
               </span>
             </button>

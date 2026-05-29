@@ -101,6 +101,7 @@ export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
   private eventToState(event: UnifiedHookEvent["event"]): AgentHookState {
     switch (event) {
       case "session_start":
+        return "idle";
       case "prompt":
       case "tool_start":
       case "tool_end":
@@ -120,14 +121,13 @@ export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
       case "tool_end":
         return event.tool ? `${capitalize(event.agent)}: ${event.tool.name} done` : "";
       case "attention":
-        return "Awaiting permission";
+        return event.prompt ? `${capitalize(event.agent)}: ${oneLine(event.prompt)}` : "Awaiting attention";
       case "prompt":
         return `${capitalize(event.agent)}: processing`;
       case "turn_end":
       case "session_end":
-        return "";
       case "session_start":
-        return `${capitalize(event.agent)}: starting`;
+        return "";
     }
   }
 
@@ -156,4 +156,8 @@ export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function oneLine(s: string): string {
+  return s.replace(/\s+/g, " ").trim().slice(0, 180);
 }

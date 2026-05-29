@@ -20,9 +20,10 @@ const EVENT_MAP: Record<string, HookEventKind> = {
   message_submit: "prompt",
   tool_call_before: "tool_start",
   tool_call_after: "tool_end",
+  on_error: "attention",
 };
 
-const HOOK_EVENTS = ["session_start", "session_end", "message_submit", "tool_call_before", "tool_call_after"];
+const HOOK_EVENTS = ["session_start", "session_end", "message_submit", "tool_call_before", "tool_call_after", "on_error"];
 const MANAGED_NAME = "sharkbay-status";
 
 function shellQuote(s: string): string {
@@ -105,83 +106,93 @@ export class CodeWhaleConnector implements AgentConnector {
     const r = raw as Record<string, unknown>;
 
     // CodeWhale sends events in two formats:
-    // 1. Direct hook dispatch: { type: "tool_lifecycle", tool_name, phase, ... }
+    // 1. Direct hook dispatch: { hook_event: "tool_call_before", tool_name, workspace, ... }
     // 2. Wrapped: { at: "...", event: { type: "...", ... } }
     const event = (typeof r.event === "object" && r.event !== null) ? r.event as Record<string, unknown> : r;
-    const type = typeof event.type === "string" ? event.type : null;
+    const type = readString(event, "type") ?? readString(event, "hook_event") ?? readString(r, "hook_event");
     if (!type) return null;
+    const cwd = readString(event, "cwd") ?? readString(event, "workspace") ?? readString(r, "cwd") ?? readString(r, "workspace") ?? undefined;
+    const timestamp = readString(r, "at") ?? readString(event, "timestamp") ?? new Date().toISOString();
+    const sessionId =
+      readString(event, "response_id") ??
+      readString(event, "job_id") ??
+      readString(event, "session_id") ??
+      readString(r, "session_id") ??
+      "";
+    const toolName = readString(event, "tool_name") ?? readString(event, "tool") ?? "";
+    const error = readString(event, "error") ?? "";
 
     // Map approval_lifecycle → attention
     if (type === "approval_lifecycle") {
-      const phase = typeof event.phase === "string" ? event.phase : "";
+      const phase = readString(event, "phase") ?? "";
       if (phase === "requested" || phase === "pending") {
         return {
           agent: this.id,
-          sessionId: "",
+          sessionId,
           event: "attention",
-          timestamp: typeof r.at === "string" ? r.at : new Date().toISOString(),
-          cwd: typeof event.cwd === "string" ? event.cwd : undefined,
+          timestamp,
+          cwd,
         };
       }
       // approved/denied → back to working
       return {
         agent: this.id,
-        sessionId: "",
+        sessionId,
         event: "tool_start",
-        timestamp: typeof r.at === "string" ? r.at : new Date().toISOString(),
-        cwd: typeof event.cwd === "string" ? event.cwd : undefined,
+        timestamp,
+        cwd,
       };
     }
 
     // Map tool_lifecycle
     if (type === "tool_lifecycle") {
-      const phase = typeof event.phase === "string" ? event.phase : "";
-      const toolName = typeof event.tool_name === "string" ? event.tool_name : "";
+      const phase = readString(event, "phase") ?? "";
       const mapped: HookEventKind = phase === "end" ? "tool_end" : "tool_start";
       return {
         agent: this.id,
-        sessionId: typeof event.response_id === "string" ? event.response_id : "",
+        sessionId,
         event: mapped,
-        timestamp: typeof r.at === "string" ? r.at : new Date().toISOString(),
+        timestamp,
         tool: { name: toolName },
-        cwd: typeof event.cwd === "string" ? event.cwd : undefined,
+        cwd,
       };
     }
 
     // Map job_lifecycle (response start/end → working/idle)
     if (type === "job_lifecycle" || type === "response_start") {
+      const phase = readString(event, "phase") ?? "";
       return {
         agent: this.id,
-        sessionId: typeof event.job_id === "string" ? event.job_id : typeof event.response_id === "string" ? event.response_id : "",
-        event: "prompt",
-        timestamp: typeof r.at === "string" ? r.at : new Date().toISOString(),
-        cwd: typeof event.cwd === "string" ? event.cwd : undefined,
+        sessionId,
+        event: phase === "end" || phase === "done" || phase === "completed" ? "turn_end" : "prompt",
+        timestamp,
+        cwd,
       };
     }
 
     if (type === "response_end") {
       return {
         agent: this.id,
-        sessionId: typeof event.response_id === "string" ? event.response_id : "",
+        sessionId,
         event: "turn_end",
-        timestamp: typeof r.at === "string" ? r.at : new Date().toISOString(),
-        cwd: typeof event.cwd === "string" ? event.cwd : undefined,
+        timestamp,
+        cwd,
       };
     }
 
     // Fallback: try direct event name mapping (from the hook dispatch context)
     // The hook is triggered with a context JSON that includes hook_event
-    const hookEvent = typeof event.hook_event === "string" ? event.hook_event : type;
+    const hookEvent = readString(event, "hook_event") ?? type;
     const mapped = EVENT_MAP[hookEvent];
     if (mapped) {
       return {
         agent: this.id,
-        sessionId: "",
+        sessionId,
         event: mapped,
-        timestamp: typeof r.at === "string" ? r.at : new Date().toISOString(),
-        tool: typeof event.tool_name === "string" ? { name: event.tool_name } : undefined,
-        prompt: typeof event.prompt === "string" ? event.prompt : undefined,
-        cwd: typeof event.cwd === "string" ? event.cwd : undefined,
+        timestamp,
+        tool: toolName ? { name: toolName } : undefined,
+        prompt: error || readString(event, "prompt") || readString(event, "message") || undefined,
+        cwd,
       };
     }
 
@@ -199,4 +210,9 @@ export class CodeWhaleConnector implements AgentConnector {
     fs.writeFileSync(tmp, content, "utf8");
     fs.renameSync(tmp, this.configPath);
   }
+}
+
+function readString(value: Record<string, unknown>, key: string): string | null {
+  const next = value[key];
+  return typeof next === "string" ? next : null;
 }

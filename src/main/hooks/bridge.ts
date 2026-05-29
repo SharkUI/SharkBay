@@ -78,15 +78,14 @@ export class HookBridge extends EventEmitter<HookBridgeEvents> {
   private deployHookCli(appDataPath: string): void {
     const binDir = path.join(appDataPath, "bin");
     fs.mkdirSync(binDir, { recursive: true });
+    const socketPathFileLiteral = JSON.stringify(this.socketPathFile);
 
     // Main hook CLI (stdin-based, for Claude/Codex/Gemini/Kiro/Qwen)
     const hookCliPath = path.join(binDir, "sharkbay-hook");
     const script = `#!/usr/bin/env node
 const fs = require("fs");
 const net = require("net");
-const path = require("path");
-const os = require("os");
-const SOCKET_PATH_FILE = path.join(os.homedir(), "Library", "Application Support", "SharkBay", "hook-socket-path");
+const SOCKET_PATH_FILE = ${socketPathFileLiteral};
 const idx = process.argv.indexOf("--source");
 const source = idx >= 0 && process.argv[idx + 1] ? process.argv[idx + 1] : "unknown";
 let data = "";
@@ -109,20 +108,59 @@ setTimeout(() => process.exit(0), 5000).unref();
 
     // CodeWhale hook script (env-var based)
     const codewhaleHookPath = path.join(binDir, "sharkbay-hook-codewhale");
-    const codewhaleScript = `#!/bin/sh
-SOCKET_PATH_FILE="$HOME/Library/Application Support/SharkBay/hook-socket-path"
-[ -f "$SOCKET_PATH_FILE" ] || exit 0
-SOCKET_PATH="$(cat "$SOCKET_PATH_FILE")"
-[ -S "$SOCKET_PATH" ] || exit 0
-EVENT="$1"
-PAYLOAD="$(printf '{"source":"deepseek","payload":{"hook_event":"%s","tool_name":"%s","workspace":"%s","session_id":"%s","message":"%s"}}' \\
-  "$EVENT" \\
-  "\${DEEPSEEK_TOOL_NAME:-}" \\
-  "\${DEEPSEEK_WORKSPACE:-}" \\
-  "\${DEEPSEEK_SESSION_ID:-}" \\
-  "")"
-printf '%s\\n' "$PAYLOAD" | nc -U -w 2 "$SOCKET_PATH" 2>/dev/null
-exit 0
+    const codewhaleScript = `#!/usr/bin/env node
+const fs = require("fs");
+const net = require("net");
+const SOCKET_PATH_FILE = ${socketPathFileLiteral};
+const eventName = process.argv[2] || process.env.DEEPSEEK_HOOK_EVENT || "";
+let data = "";
+
+function env(name) {
+  const value = process.env[name];
+  return value && value.length > 0 ? value : undefined;
+}
+
+function assignIfPresent(target, key, value) {
+  if (value !== undefined && target[key] === undefined) target[key] = value;
+}
+
+function buildPayload(raw) {
+  const payload = raw && typeof raw === "object" && !Array.isArray(raw) ? { ...raw } : {};
+  assignIfPresent(payload, "hook_event", eventName);
+  assignIfPresent(payload, "type", payload.hook_event);
+  assignIfPresent(payload, "tool_name", env("DEEPSEEK_TOOL_NAME"));
+  assignIfPresent(payload, "tool_args", env("DEEPSEEK_TOOL_ARGS"));
+  assignIfPresent(payload, "tool_result", env("DEEPSEEK_TOOL_RESULT"));
+  assignIfPresent(payload, "tool_exit_code", env("DEEPSEEK_TOOL_EXIT_CODE"));
+  assignIfPresent(payload, "tool_success", env("DEEPSEEK_TOOL_SUCCESS"));
+  assignIfPresent(payload, "mode", env("DEEPSEEK_MODE"));
+  assignIfPresent(payload, "previous_mode", env("DEEPSEEK_PREVIOUS_MODE"));
+  assignIfPresent(payload, "session_id", env("DEEPSEEK_SESSION_ID"));
+  assignIfPresent(payload, "message", env("DEEPSEEK_MESSAGE"));
+  assignIfPresent(payload, "error", env("DEEPSEEK_ERROR"));
+  assignIfPresent(payload, "workspace", env("DEEPSEEK_WORKSPACE"));
+  assignIfPresent(payload, "cwd", payload.workspace);
+  assignIfPresent(payload, "model", env("DEEPSEEK_MODEL"));
+  assignIfPresent(payload, "total_tokens", env("DEEPSEEK_TOTAL_TOKENS"));
+  assignIfPresent(payload, "session_cost", env("DEEPSEEK_SESSION_COST"));
+  return payload;
+}
+
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (c) => { data += c; });
+process.stdin.on("end", () => {
+  let socketPath;
+  try { socketPath = fs.readFileSync(SOCKET_PATH_FILE, "utf8").trim(); } catch { process.exit(0); }
+  let raw = {};
+  if (data.trim()) {
+    try { raw = JSON.parse(data); } catch {}
+  }
+  const msg = JSON.stringify({ source: "deepseek", payload: buildPayload(raw) }) + "\\n";
+  const conn = net.createConnection(socketPath, () => { conn.end(msg, () => process.exit(0)); });
+  conn.on("error", () => process.exit(0));
+  conn.setTimeout(3000, () => { conn.destroy(); process.exit(0); });
+});
+setTimeout(() => process.exit(0), 5000).unref();
 `;
     fs.writeFileSync(codewhaleHookPath, codewhaleScript, { mode: 0o755 });
   }

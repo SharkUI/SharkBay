@@ -11,19 +11,8 @@ export type WorkflowProjectCandidate = {
   dirtyWorktree?: boolean | null;
 };
 
-export type WorkflowProjectTerminalActivityState = "working" | "idle" | "attention";
-export type WorkflowTerminalActivityState = "idle" | "working" | "done";
+export type WorkflowProjectActivityState = "working" | "idle" | "attention";
 export type WorkflowCodeGraphStatusState = "disabled" | "unsupported" | "not-installed" | "uninitialized" | "stale" | "indexed" | "error";
-
-export type WorkflowTerminalActivityTab = {
-  activityState: WorkflowTerminalActivityState;
-  session: { service?: unknown };
-};
-
-export type WorkflowTerminalActivitySpace = {
-  projectId: string;
-  tabs: WorkflowTerminalActivityTab[];
-};
 
 export function validTerminalResizeDimensions(cols: number | null | undefined, rows: number | null | undefined): boolean {
   return typeof cols === "number"
@@ -41,34 +30,11 @@ export function resolveSelectedCandidate(
   return candidates.find((item) => item.id === selectedId) ?? candidates[0] ?? null;
 }
 
-export function shouldResetTerminalObservationForInput(data: string): boolean {
-  return data.replace(/\u001b\[(?:I|O|\?1004[hl])/g, "").length > 0;
-}
-
-export function projectTerminalActivityStates(
-  spaces: Iterable<WorkflowTerminalActivitySpace>,
-): Record<string, WorkflowProjectTerminalActivityState> {
-  const nextStates: Record<string, WorkflowProjectTerminalActivityState> = {};
-  for (const space of spaces) {
-    const activityTabs = space.tabs.filter((tab) => !tab.session.service);
-    if (activityTabs.some((tab) => tab.activityState === "working")) {
-      nextStates[space.projectId] = "working";
-    } else if (activityTabs.some((tab) => tab.activityState === "done")) {
-      nextStates[space.projectId] = "idle";
-    }
-  }
-  return nextStates;
-}
-
-export function terminalActivityForCandidate(
+export function projectActivityForCandidate(
   candidate: Pick<WorkflowProjectCandidate, "id" | "uri">,
-  statesByProjectId: Record<string, WorkflowProjectTerminalActivityState>,
-): WorkflowProjectTerminalActivityState | null {
+  statesByProjectId: Record<string, WorkflowProjectActivityState>,
+): WorkflowProjectActivityState | null {
   return statesByProjectId[candidate.id] ?? statesByProjectId[candidate.uri] ?? null;
-}
-
-export function terminalActivityAfterQuiet(activityState: WorkflowTerminalActivityState): WorkflowTerminalActivityState {
-  return activityState === "working" ? "done" : "idle";
 }
 
 export function shouldEnsureCodeGraphForSelection(input: {

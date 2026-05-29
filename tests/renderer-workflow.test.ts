@@ -2,13 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   firstHttpUrl,
   observeServiceUrl,
-  projectTerminalActivityStates,
   resolveSelectedCandidate,
   shouldEnsureCodeGraphForSelection,
   shouldKeepCurrentServiceUrl,
-  shouldResetTerminalObservationForInput,
-  terminalActivityAfterQuiet,
-  terminalActivityForCandidate,
+  projectActivityForCandidate,
   validTerminalResizeDimensions,
 } from "../src/renderer/workflow.js";
 
@@ -32,43 +29,10 @@ describe("renderer workflow contracts", () => {
     expect(resolveSelectedCandidate([], null)).toBeNull();
   });
 
-  it("does not treat terminal focus control sequences as user input", () => {
-    expect(shouldResetTerminalObservationForInput("\u001b[I")).toBe(false);
-    expect(shouldResetTerminalObservationForInput("\u001b[O")).toBe(false);
-    expect(shouldResetTerminalObservationForInput("\u001b[O\u001b[I")).toBe(false);
-    expect(shouldResetTerminalObservationForInput("\u001b[O\u001b[O")).toBe(false);
-    expect(shouldResetTerminalObservationForInput("\u001b[?1004h")).toBe(false);
-    expect(shouldResetTerminalObservationForInput("\u001b[?1004l")).toBe(false);
-    expect(shouldResetTerminalObservationForInput("a")).toBe(true);
-    expect(shouldResetTerminalObservationForInput("\r")).toBe(true);
-    expect(shouldResetTerminalObservationForInput("\u001b[Oa")).toBe(true);
-  });
-
-  it("resolves project row terminal activity from candidate or path keys", () => {
+  it("resolves project row hook activity from candidate or path keys", () => {
     const candidate = { id: "local:/workspace/App", uri: "local:/workspace/App" };
-    expect(terminalActivityForCandidate(candidate, { "local:/workspace/App": "working" })).toBe("working");
-    expect(terminalActivityForCandidate(candidate, {})).toBeNull();
-  });
-
-  it("downgrades working activity to attention after terminal output goes quiet", () => {
-    expect(terminalActivityAfterQuiet("working")).toBe("done");
-    expect(terminalActivityAfterQuiet("done")).toBe("idle");
-    expect(terminalActivityAfterQuiet("idle")).toBe("idle");
-  });
-
-  it("excludes service tabs from project terminal activity labels", () => {
-    expect(
-      projectTerminalActivityStates([
-        { projectId: "project-a", tabs: [{ activityState: "working", session: { service: { id: "dev" } } }] },
-      ]),
-    ).toEqual({});
-
-    expect(
-      projectTerminalActivityStates([
-        { projectId: "project-a", tabs: [{ activityState: "working", session: {} }] },
-        { projectId: "project-b", tabs: [{ activityState: "done", session: {} }] },
-      ]),
-    ).toEqual({ "project-a": "working", "project-b": "idle" });
+    expect(projectActivityForCandidate(candidate, { "local:/workspace/App": "working" })).toBe("working");
+    expect(projectActivityForCandidate(candidate, {})).toBeNull();
   });
 
   it("prefers local service URLs and keeps them over later documentation links", () => {

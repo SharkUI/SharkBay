@@ -3459,21 +3459,6 @@ button.project-file-toggle:focus-visible {
   border-radius: 999px;
 }
 
-.terminal-state.is-working {
-  background: #4c845d;
-  box-shadow: 0 0 0 3px rgba(76, 132, 93, 0.14);
-}
-
-.terminal-state.is-done {
-  background: #c9962f;
-  box-shadow: 0 0 0 3px rgba(201, 150, 47, 0.14);
-}
-
-.terminal-state.is-attention {
-  background: #c0392b;
-  box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.14);
-}
-
 .terminal-state.is-exited {
   background: #8b9693;
   box-shadow: none;
@@ -4254,16 +4239,6 @@ body.is-resizing-columns .app-shell[data-theme="night"] .column-resizer::before 
   background: #526360;
 }
 
-.app-shell[data-theme="night"] .terminal-state.is-working {
-  background: #93d7a4;
-  box-shadow: 0 0 0 3px rgba(147, 215, 164, 0.14);
-}
-
-.app-shell[data-theme="night"] .terminal-state.is-done {
-  background: #e2b253;
-  box-shadow: 0 0 0 3px rgba(226, 178, 83, 0.14);
-}
-
 .app-shell[data-theme="night"] .terminal-state.is-exited {
   background: #7d8986;
   box-shadow: none;
@@ -4426,16 +4401,6 @@ body.is-resizing-columns .app-shell[data-theme="morning"] .column-resizer::befor
 
 .app-shell[data-theme="morning"] .terminal-state {
   background: #586865;
-}
-
-.app-shell[data-theme="morning"] .terminal-state.is-working {
-  background: #6fd28c;
-  box-shadow: 0 0 0 3px rgba(111, 210, 140, 0.14);
-}
-
-.app-shell[data-theme="morning"] .terminal-state.is-done {
-  background: #e2b253;
-  box-shadow: 0 0 0 3px rgba(226, 178, 83, 0.14);
 }
 
 .app-shell[data-theme="morning"] .terminal-state.is-exited {
