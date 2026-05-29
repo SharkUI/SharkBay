@@ -2957,7 +2957,7 @@ const agentLaunchOptions: Record<string, AgentLaunchOption[]> = {
     { flag: "--trust-all-tools", label: "Trust all tools", description: "Allows the model to use any tool to run commands without asking for confirmation", type: "toggle" },
   ],
   deepseek: [
-    { flag: "--approval-policy full-auto", label: "Full auto", description: "Run all commands without approval", type: "toggle" },
+    { flag: "--approval-policy auto", label: "Full auto", description: "Run all commands without approval", type: "toggle" },
   ],
   qwen: [],
   opencode: [],
