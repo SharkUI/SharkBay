@@ -11,7 +11,7 @@ export type WorkflowProjectCandidate = {
   dirtyWorktree?: boolean | null;
 };
 
-export type WorkflowProjectTerminalActivityState = "working" | "idle";
+export type WorkflowProjectTerminalActivityState = "working" | "idle" | "attention";
 export type WorkflowTerminalActivityState = "idle" | "working" | "done";
 export type WorkflowCodeGraphStatusState = "disabled" | "unsupported" | "not-installed" | "uninitialized" | "stale" | "indexed" | "error";
 

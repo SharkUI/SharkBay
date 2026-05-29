@@ -684,6 +684,24 @@ function DashboardView({
   const terminalPaneRef = useRef<TerminalPaneHandle | null>(null);
   const [runningServiceProjectIds, setRunningServiceProjectIds] = useState<Set<string>>(() => new Set());
   const [terminalActivityByProjectId, setTerminalActivityByProjectId] = useState<Record<string, ProjectTerminalActivityState>>({});
+  const [hookActivityByProjectId, setHookActivityByProjectId] = useState<Record<string, ProjectTerminalActivityState>>({});
+  const mergedActivityByProjectId = useMemo<Record<string, ProjectTerminalActivityState>>(() => {
+    return { ...terminalActivityByProjectId, ...hookActivityByProjectId };
+  }, [terminalActivityByProjectId, hookActivityByProjectId]);
+
+  // Clear hook idle state when user selects a project (human takes over)
+  useEffect(() => {
+    if (!selectedCandidate || !document.hasFocus()) return;
+    const id = selectedCandidate.id;
+    if (hookActivityByProjectId[id] === "idle") {
+      setHookActivityByProjectId((current) => {
+        if (!current[id]) return current;
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+    }
+  }, [selectedCandidate?.id]);
   const [agentClis, setAgentClis] = useState<AgentCli[]>([]);
   const [agentListVersion, setAgentListVersion] = useState(0);
   const [agentStatusByProjectPath, setAgentStatusByProjectPath] = useState<AgentStatusByProjectPath>({});
@@ -782,22 +800,33 @@ function DashboardView({
       setAgentStatusByProjectPath((current) =>
         current[event.projectPath] === event.text ? current : { ...current, [event.projectPath]: event.text }
       );
+      if (event.hookState) {
+        setHookActivityByProjectId((current) => {
+          const matchedId = filteredCandidates.find((c) => c.displayPath === event.projectPath)?.id;
+          if (!matchedId) return current;
+          return current[matchedId] === event.hookState ? current : { ...current, [matchedId]: event.hookState! };
+        });
+      }
     });
     return () => unsubscribe?.();
-  }, [bridgeAvailable]);
+  }, [bridgeAvailable, filteredCandidates]);
 
+  const prevBadgeCountRef = useRef(0);
   useEffect(() => {
     const updateBadge = getBridge().dock?.updateBadge;
     if (!updateBadge) return;
-    const attentionCount = Object.values(terminalActivityByProjectId).filter((s) => s === "idle").length;
-    const send = () => { if (!document.hasFocus()) updateBadge(attentionCount); };
-    send();
-    const onBlur = () => updateBadge(attentionCount);
+    const count = Object.values(mergedActivityByProjectId).filter((s) => s === "idle" || s === "attention").length;
+    const changed = count !== prevBadgeCountRef.current;
+    prevBadgeCountRef.current = count;
+    const send = () => { if (!document.hasFocus()) updateBadge(count); };
+    if (changed && count > 0 && !document.hasFocus()) updateBadge(count);
+    else send();
+    const onBlur = () => updateBadge(count);
     const onFocus = () => updateBadge(0);
     window.addEventListener("blur", onBlur);
     window.addEventListener("focus", onFocus);
     return () => { window.removeEventListener("blur", onBlur); window.removeEventListener("focus", onFocus); };
-  }, [terminalActivityByProjectId]);
+  }, [mergedActivityByProjectId]);
 
   const gridStyle = {
     gridTemplateColumns: detailPanelHidden
@@ -827,7 +856,7 @@ function DashboardView({
               candidates={filteredCandidates}
               projectAliases={projectAliases}
               runningServiceProjectIds={runningServiceProjectIds}
-              terminalActivityByProjectId={terminalActivityByProjectId}
+              terminalActivityByProjectId={mergedActivityByProjectId}
               selectedId={selectedCandidate?.id ?? null}
               onSelect={setSelectedId}
               onRemoveProject={onRemoveProject}
@@ -1860,7 +1889,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
               </span>
               <span className="project-row-status">
                 {hasProjectStatus && terminalActivity ? (
-                  <span className={cx("terminal-activity-pill", terminalActivity === "working" ? "is-working" : "is-attention")}>{terminalActivity === "working" ? "working" : "attention"}</span>
+                  <span className={cx("terminal-activity-pill", terminalActivity === "working" ? "is-working" : terminalActivity === "attention" ? "is-attention" : "is-idle")}>{terminalActivity === "working" ? "working" : terminalActivity === "attention" ? "attention" : "idle"}</span>
                 ) : null}
               </span>
             </button>
@@ -3012,10 +3041,20 @@ function setAgentLaunchFlags(agentId: string, flags: string[]) {
   localStorage.setItem(`sharkbay:agent-launch-flags:${agentId}`, JSON.stringify(flags));
 }
 
+function getAgentHooksEnabled(agentId: string): boolean {
+  return localStorage.getItem(`sharkbay:agent-hooks-enabled:${agentId}`) === "true";
+}
+
+function setAgentHooksEnabled(agentId: string, enabled: boolean) {
+  localStorage.setItem(`sharkbay:agent-hooks-enabled:${agentId}`, String(enabled));
+  window.sharkBay?.agents?.setHooksEnabled?.({ agentId, enabled });
+}
+
 function AgentCliDetailInstalled({ agent, options }: { agent: AgentCli; options: AgentLaunchOption[] }) {
   const [enabledFlags, setEnabledFlags] = useState<string[]>(() => getAgentLaunchFlags(agent.id));
+  const [hooksEnabled, setHooksEnabled] = useState<boolean>(() => getAgentHooksEnabled(agent.id));
 
-  useEffect(() => { setEnabledFlags(getAgentLaunchFlags(agent.id)); }, [agent.id]);
+  useEffect(() => { setEnabledFlags(getAgentLaunchFlags(agent.id)); setHooksEnabled(getAgentHooksEnabled(agent.id)); }, [agent.id]);
 
   function toggleFlag(flag: string) {
     setEnabledFlags((current) => {
@@ -3023,6 +3062,12 @@ function AgentCliDetailInstalled({ agent, options }: { agent: AgentCli; options:
       setAgentLaunchFlags(agent.id, next);
       return next;
     });
+  }
+
+  function toggleHooks() {
+    const next = !hooksEnabled;
+    setHooksEnabled(next);
+    setAgentHooksEnabled(agent.id, next);
   }
 
   return (
@@ -3051,6 +3096,16 @@ function AgentCliDetailInstalled({ agent, options }: { agent: AgentCli; options:
       ) : (
         <div className="form-note">No configurable launch options for this agent.</div>
       )}
+      <div className="agent-clis-options">
+        <div className="agent-clis-options-title">Status hooks</div>
+        <label className="agent-clis-option-row">
+          <input type="checkbox" checked={hooksEnabled} onChange={toggleHooks} />
+          <div className="agent-clis-option-info">
+            <span className="agent-clis-option-label">Enable status hooks</span>
+            <small>More accurate and timely status updates via agent hook integration</small>
+          </div>
+        </label>
+      </div>
       <AgentCliUsageSection agentId={agent.id} />
     </>
   );

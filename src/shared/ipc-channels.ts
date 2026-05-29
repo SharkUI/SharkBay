@@ -51,4 +51,5 @@ export const ipcChannels = {
   usageGetReport: "usage:getReport",
   dockBadgeUpdate: "dock:badgeUpdate",
   contentReady: "app:contentReady",
+  setHooksEnabled: "agents:setHooksEnabled",
 } as const;

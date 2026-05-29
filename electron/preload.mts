@@ -142,6 +142,7 @@ const sharkBayApi = {
     listClis: (input?: { cwdUri?: string }) => invoke<AgentCli[]>(channels.listAgentClis, input),
     listInstallRecipes: (input: ListInstallRecipesInput) => invoke<InstallRecipe[]>(channels.listInstallRecipes, input),
     installTool: (input: InstallToolInput) => invoke<InstallToolResult>(channels.installTool, input),
+    setHooksEnabled: (input: { agentId: string; enabled: boolean }) => invoke<void>(channels.setHooksEnabled, input),
     onStatus: (callback: (event: AgentProjectStatusEvent) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: AgentProjectStatusEvent) => callback(payload);
       ipcRenderer.on(channels.agentStatus, listener);

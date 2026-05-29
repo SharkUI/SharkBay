@@ -318,6 +318,7 @@ export type AgentProjectStatusEvent = {
   sessionId: string | null;
   text: string;
   timestamp: string;
+  hookState?: "working" | "idle" | "attention";
 };
 
 export type BrowserBounds = {
@@ -497,6 +498,7 @@ export type SharkBayBridge = {
     listClis?: (input?: { cwdUri?: string }) => Promise<AgentCli[]>;
     listInstallRecipes?: (input: ListInstallRecipesInput) => Promise<InstallRecipe[]>;
     installTool?: (input: InstallToolInput) => Promise<InstallToolResult>;
+    setHooksEnabled?: (input: { agentId: string; enabled: boolean }) => Promise<void>;
     onStatus?: (callback: (event: AgentProjectStatusEvent) => void) => () => void;
     onInstallLog?: (callback: (event: InstallLogEvent) => void) => () => void;
   };

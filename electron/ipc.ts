@@ -74,6 +74,12 @@ import { generateKnowledgeSite, getKnowledgeSitePath } from "../src/main/knowled
 import { spawnCoreClient, type CoreClient } from "./core-client.js";
 import { setPluginEnabledConfig } from "../src/main/config.js";
 import type { PluginSummary } from "../src/plugins/plugin-host.js";
+import { HookBridge } from "../src/main/hooks/bridge.js";
+import { AgentHookStateManager } from "../src/main/hooks/state-manager.js";
+import { ClaudeConnector, CodexConnector, QwenConnector, DeepSeekConnector } from "../src/main/hooks/connectors/claude-family.js";
+import { GeminiConnector } from "../src/main/hooks/connectors/gemini.js";
+import { KiroConnector } from "../src/main/hooks/connectors/kiro.js";
+import type { AgentConnector } from "../src/main/hooks/types.js";
 
 export type IpcRuntime = {
   userDataPath: string;
@@ -88,6 +94,20 @@ let core: CoreClient | null = null;
 let tokenUsageDb: TokenUsageDb | null = null;
 const agentSessionWatcher = new AgentSessionWatcher();
 const browserManager = new BrowserManager();
+
+const hookBridge = new HookBridge();
+const hookStateManager = new AgentHookStateManager();
+const hookConnectors = new Map<string, AgentConnector>([
+  ["claude", new ClaudeConnector()],
+  ["codex", new CodexConnector()],
+  ["qwen", new QwenConnector()],
+  ["deepseek", new DeepSeekConnector()],
+  ["gemini", new GeminiConnector()],
+  ["kiro", new KiroConnector()],
+]);
+for (const connector of hookConnectors.values()) {
+  hookStateManager.registerConnector(connector);
+}
 const syncInstances = new Map<string, TeamworkSync>();
 const taskWatcherCleanups = new Map<string, () => void>();
 
@@ -262,6 +282,25 @@ export async function registerIpcHandlers(
   }
 
   agentSessionWatcher.start();
+
+  // Hook-based agent status system
+  hookBridge.on("event", (msg) => hookStateManager.handleMessage(msg));
+  hookStateManager.removeAllListeners("stateChange");
+  hookStateManager.on("stateChange", (event) => {
+    const statusEvent: AgentProjectStatusEvent = {
+      agentId: event.agent,
+      projectPath: event.projectPath,
+      sessionId: null,
+      text: event.action,
+      timestamp: event.timestamp,
+      hookState: event.state,
+    };
+    BrowserWindow.getAllWindows().forEach((window) => {
+      window.webContents.send(channels.agentStatus, statusEvent);
+    });
+  });
+  hookBridge.start(runtime.userDataPath).catch(() => {});
+
   browserManager.on("update", (event: BrowserUpdateEvent) => {
     BrowserWindow.getAllWindows().forEach((window) => {
       window.webContents.send(channels.browserUpdate, event);
@@ -319,6 +358,17 @@ export async function registerIpcHandlers(
   handle<InstallToolInput, InstallToolResult>(channels.installTool, (payload) =>
     requireCore().call("installTool", [runtime, payload])
   );
+  handle<{ agentId: string; enabled: boolean }, void>(channels.setHooksEnabled, async (payload) => {
+    const connector = hookConnectors.get(payload.agentId);
+    if (!connector) return;
+    if (payload.enabled) {
+      const { join } = await import("node:path");
+      const hookCliPath = join(runtime.userDataPath, "bin", "sharkbay-hook");
+      await connector.install(hookCliPath, hookBridge.path);
+    } else {
+      await connector.uninstall();
+    }
+  });
   handle<PathExistsInput, PathExistsResult>(channels.pathExistsOnTarget, (payload) =>
     requireCore().call("pathExistsOnTarget", [runtime, payload])
   );

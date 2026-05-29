@@ -918,9 +918,15 @@ body.is-resizing-columns * {
   border: 0;
 }
 
-.terminal-activity-pill.is-attention {
+.terminal-activity-pill.is-idle {
   color: #ffffff;
   background: #c9962f;
+  border: 0;
+}
+
+.terminal-activity-pill.is-attention {
+  color: #ffffff;
+  background: #c0392b;
   border: 0;
 }
 
@@ -3454,6 +3460,11 @@ button.project-file-toggle:focus-visible {
 .terminal-state.is-done {
   background: #c9962f;
   box-shadow: 0 0 0 3px rgba(201, 150, 47, 0.14);
+}
+
+.terminal-state.is-attention {
+  background: #c0392b;
+  box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.14);
 }
 
 .terminal-state.is-exited {

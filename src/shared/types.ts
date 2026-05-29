@@ -584,6 +584,7 @@ export type AgentProjectStatusEvent = {
   sessionId: string | null;
   text: string;
   timestamp: string;
+  hookState?: "working" | "idle" | "attention";
 };
 
 export type BrowserBounds = {
