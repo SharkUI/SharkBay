@@ -12,15 +12,16 @@ agent: Codex GPT-5
 sessionId: 019e73e3-adb3-7f00-b847-49a082641e5d
 branch: main
 createdAt: 2026-05-29T14:00:19Z
-updatedAt: 2026-05-29T14:03:22Z
-completedAt: 2026-05-29T14:03:22Z
+updatedAt: 2026-05-29T14:17:31Z
+completedAt: 2026-05-29T14:17:31Z
 ---
 
 ## Summary
-Fixed the remaining stale CodeWhale `working` state by treating hook `tool_end` as idle and clearing hook status when an agent terminal exits or is closed.
+Fixed the remaining stale CodeWhale `working` state by treating hook `tool_end` as idle, clearing hook status when an agent terminal exits or is closed, and marking CodeWhale shell approval prompts as attention.
 
 ## Files
 - src/main/hooks/state-manager.ts
+- src/main/hooks/connectors/codewhale.ts
 - src/main/terminal.ts
 - src/renderer/App.tsx
 - src/renderer/types.ts
@@ -32,14 +33,17 @@ Fixed the remaining stale CodeWhale `working` state by treating hook `tool_end` 
 - User observed the project card still showing `working` with `Deepseek: fetch_url done`, and still showing `working` after closing the CodeWhale tab.
 - Changed hook state mapping so `tool_end` clears to idle with no action text instead of remaining `working`.
 - Exposed terminal `agentId` to the renderer and clear the matching project hook status when an agent terminal exits or is closed.
+- Mapped CodeWhale `task_shell_start` approval prompts to attention instead of working.
+- Expanded CodeWhale destructive approval handling to include file-write tools such as `write_file`.
 - Added regression coverage for CodeWhale `tool_call_after` clearing working state.
 
 ## Verification
 - `npm run typecheck` passes.
-- `npm test -- tests/codewhale-hooks.test.ts tests/terminal.test.ts tests/renderer-workflow.test.ts` passes: 3 files, 23 tests.
-- `npm test` passes: 37 files, 138 tests.
+- `npm test -- tests/codewhale-hooks.test.ts tests/terminal.test.ts tests/renderer-workflow.test.ts` passes: 3 files, 25 tests.
+- `npm test` passes: 37 files, 140 tests.
 - `npm run pack` passes and produces `release/mac-arm64/SharkBay.app`.
 
 ## Notes
 - The screenshot indicates the remaining source is hook state, not terminal-output fallback.
+- CodeWhale presents `task_shell_start` and `write_file` as destructive approval prompts, so they should surface as `attention`.
 - No commits were produced for this task yet.
