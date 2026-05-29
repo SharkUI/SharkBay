@@ -25,6 +25,7 @@ const EVENT_MAP: Record<string, HookEventKind> = {
 
 const HOOK_EVENTS = ["session_start", "session_end", "message_submit", "tool_call_before", "tool_call_after", "on_error"];
 const MANAGED_NAME = "sharkbay-status";
+const ATTENTION_TOOL_NAMES = new Set(["delete_file", "edit_file", "task_shell_start", "write_file"]);
 
 function shellQuote(s: string): string {
   if (!s) return "''";
@@ -34,7 +35,7 @@ function shellQuote(s: string): string {
 export class CodeWhaleConnector implements AgentConnector {
   readonly id = "deepseek";
   readonly displayName = "CodeWhale";
-  readonly supportedEvents: readonly HookEventKind[] = ["session_start", "session_end", "prompt", "tool_start", "tool_end"];
+  readonly supportedEvents: readonly HookEventKind[] = ["session_start", "session_end", "prompt", "tool_start", "tool_end", "attention"];
 
   private readonly configPath = path.join(os.homedir(), ".codewhale", "config.toml");
 
@@ -147,13 +148,14 @@ export class CodeWhaleConnector implements AgentConnector {
     // Map tool_lifecycle
     if (type === "tool_lifecycle") {
       const phase = readString(event, "phase") ?? "";
-      const mapped: HookEventKind = phase === "end" ? "tool_end" : "tool_start";
+      const mapped: HookEventKind = phase === "end" ? "tool_end" : isAttentionTool(toolName) ? "attention" : "tool_start";
       return {
         agent: this.id,
         sessionId,
         event: mapped,
         timestamp,
         tool: { name: toolName },
+        prompt: mapped === "attention" ? toolName : undefined,
         cwd,
       };
     }
@@ -185,13 +187,16 @@ export class CodeWhaleConnector implements AgentConnector {
     const hookEvent = readString(event, "hook_event") ?? type;
     const mapped = EVENT_MAP[hookEvent];
     if (mapped) {
+      const normalizedEvent = hookEvent === "tool_call_before" && isAttentionTool(toolName) ? "attention" : mapped;
       return {
         agent: this.id,
         sessionId,
-        event: mapped,
+        event: normalizedEvent,
         timestamp,
         tool: toolName ? { name: toolName } : undefined,
-        prompt: error || readString(event, "prompt") || readString(event, "message") || undefined,
+        prompt: normalizedEvent === "attention"
+          ? error || readString(event, "prompt") || readString(event, "message") || toolName || undefined
+          : error || readString(event, "prompt") || readString(event, "message") || undefined,
         cwd,
       };
     }
@@ -215,4 +220,9 @@ export class CodeWhaleConnector implements AgentConnector {
 function readString(value: Record<string, unknown>, key: string): string | null {
   const next = value[key];
   return typeof next === "string" ? next : null;
+}
+
+function isAttentionTool(toolName: string): boolean {
+  const normalized = toolName.trim().toLowerCase();
+  return ATTENTION_TOOL_NAMES.has(normalized);
 }

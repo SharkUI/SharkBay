@@ -37,8 +37,10 @@ function normalizeClaudePayload(agentId: string, raw: unknown): UnifiedHookEvent
   let event = EVENT_MAP[hookName];
   if (!event && hookName === "Notification") {
     const ntype = typeof r.notification_type === "string" ? r.notification_type : "";
-    if (ntype === "permission_prompt" || ntype === "idle_prompt") {
+    if (ntype === "permission_prompt") {
       event = "attention";
+    } else if (ntype === "idle_prompt") {
+      event = "turn_end";
     }
   }
   if (!event) return null;

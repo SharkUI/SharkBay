@@ -270,6 +270,7 @@ export type TerminalSession = {
   pid: number | null;
   status: TerminalSessionStatus;
   createdAt: string;
+  agentId?: string;
   service?: { id: string; label: string; command: string };
 };
 

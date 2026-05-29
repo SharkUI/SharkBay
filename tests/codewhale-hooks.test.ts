@@ -50,6 +50,104 @@ describe("CodeWhale status hooks", () => {
     manager.dispose();
   });
 
+  it("keeps working state when a tool finishes (still within turn)", () => {
+    const manager = new AgentHookStateManager();
+    const events: Array<{ projectPath: string; state: string; action: string; agent: string }> = [];
+    manager.registerConnector(new CodeWhaleConnector());
+    manager.on("stateChange", (event) => events.push(event));
+
+    manager.handleMessage({
+      source: "deepseek",
+      payload: {
+        hook_event: "tool_call_before",
+        tool_name: "fetch_url",
+        workspace: "/tmp/sharkbay-project",
+        session_id: "sess_123",
+      },
+    });
+    manager.handleMessage({
+      source: "deepseek",
+      payload: {
+        hook_event: "tool_call_after",
+        tool_name: "fetch_url",
+        workspace: "/tmp/sharkbay-project",
+        session_id: "sess_123",
+      },
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      projectPath: "/tmp/sharkbay-project",
+      state: "working",
+      agent: "deepseek",
+    });
+    manager.dispose();
+  });
+
+  it.each(["task_shell_start", "write_file"])("maps CodeWhale approval tool %s to attention", (toolName) => {
+    const manager = new AgentHookStateManager();
+    const events: Array<{ projectPath: string; state: string; action: string; agent: string }> = [];
+    manager.registerConnector(new CodeWhaleConnector());
+    manager.on("stateChange", (event) => events.push(event));
+
+    manager.handleMessage({
+      source: "deepseek",
+      payload: {
+        hook_event: "tool_call_before",
+        tool_name: toolName,
+        workspace: "/tmp/sharkbay-project",
+        session_id: "sess_123",
+      },
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      projectPath: "/tmp/sharkbay-project",
+      state: "attention",
+      action: `Deepseek: ${toolName}`,
+      agent: "deepseek",
+    });
+    manager.dispose();
+  });
+
+  it("writes hook diagnostics to the workspace sharkbay log", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "sharkbay-hook-log-"));
+    const manager = new AgentHookStateManager();
+    manager.registerConnector(new CodeWhaleConnector());
+
+    try {
+      manager.handleMessage({
+        source: "deepseek",
+        payload: {
+          hook_event: "tool_call_before",
+          tool_name: "write_file",
+          workspace: root,
+          session_id: "sess_123",
+          tool_args: "x".repeat(2100),
+        },
+      });
+
+      const logPath = path.join(root, ".sharkbay", "logs", "hooks.log");
+      const lines = (await fs.readFile(logPath, "utf8")).trim().split("\n");
+      const record = JSON.parse(lines[0]!) as Record<string, any>;
+      expect(record).toMatchObject({
+        source: "deepseek",
+        state: "attention",
+        action: "Deepseek: write_file",
+        normalized: {
+          agent: "deepseek",
+          sessionId: "sess_123",
+          event: "attention",
+          cwd: root,
+        },
+      });
+      expect(record.payload.tool_args).toContain("[truncated 100 chars]");
+    } finally {
+      manager.dispose();
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("does not mark a project working just because CodeWhale started", () => {
     const manager = new AgentHookStateManager();
     const events: Array<{ projectPath: string; state: string; action: string; agent: string }> = [];

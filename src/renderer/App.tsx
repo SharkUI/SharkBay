@@ -795,6 +795,24 @@ function DashboardView({
     return () => unsubscribe?.();
   }, [bridgeAvailable, filteredCandidates]);
 
+  function clearProjectHookStatus(projectId: string) {
+    const projectPath = filteredCandidates.find((item) => item.id === projectId)?.displayPath;
+    setHookActivityByProjectId((current) => {
+      if (!(projectId in current)) return current;
+      const next = { ...current };
+      delete next[projectId];
+      return next;
+    });
+    if (projectPath) {
+      setAgentStatusByProjectPath((current) => {
+        if (!(projectPath in current)) return current;
+        const next = { ...current };
+        delete next[projectPath];
+        return next;
+      });
+    }
+  }
+
   const prevBadgeCountRef = useRef(0);
   useEffect(() => {
     const updateBadge = getBridge().dock?.updateBadge;
@@ -878,6 +896,7 @@ function DashboardView({
           onRunningServiceProjectIdsChange={(nextIds) =>
             setRunningServiceProjectIds((currentIds) => sameStringSet(currentIds, nextIds) ? currentIds : nextIds)
           }
+          onProjectHookStatusClear={clearProjectHookStatus}
         />
       </section>
 
@@ -927,8 +946,9 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   onActiveTabKindChange: (kind: ActiveTerminalTabKind) => void;
   onAgentListRefreshRequested: () => void;
   onOpenAgentCliSettings: () => void;
+  onProjectHookStatusClear: (projectId: string) => void;
   onRunningServiceProjectIdsChange: (projectIds: Set<string>) => void;
-}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, projectAliases, isVisible, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onOpenAgentCliSettings, onRunningServiceProjectIdsChange }, ref) {
+}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, projectAliases, isVisible, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onOpenAgentCliSettings, onProjectHookStatusClear, onRunningServiceProjectIdsChange }, ref) {
   const [spaces, setSpaces] = useState<Record<string, TerminalSpace>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const spacesRef = useRef<Record<string, TerminalSpace>>({});
@@ -1209,6 +1229,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     if (match?.tab) {
       const hint = explainEarlyTerminalExit(match.tab, event);
       if (hint) setToast({ tone: "error", message: hint });
+      if (match.tab.session.agentId) onProjectHookStatusClear(match.space.projectId);
     }
     setSpaces((current) => mapTerminalTab(current, event.sessionId, (currentTab) => ({ ...currentTab, session: { ...currentTab.session, status: "exited" } })));
   }
@@ -1266,6 +1287,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     if (match?.tab.kind === "terminal") {
       match.tab.disposables.forEach((d) => d.dispose());
       match.tab.terminal.dispose();
+      if (match.tab.session.agentId) onProjectHookStatusClear(match.space.projectId);
     }
     setSpaces((current) => {
       if (!match) return current;

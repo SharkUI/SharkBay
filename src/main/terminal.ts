@@ -134,6 +134,7 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
       pid: ptyProcess.pid ?? null,
       status: "running",
       createdAt: new Date().toISOString(),
+      agentId: input.service ? undefined : input.agentId,
       service: input.service,
       pty: ptyProcess,
       cwd: spec.cwd,
@@ -632,6 +633,7 @@ function publicSession(session: TerminalRecord | TerminalSession): TerminalSessi
     pid: session.pid,
     status: session.status,
     createdAt: session.createdAt,
+    agentId: session.agentId,
     service: session.service,
   };
 }
