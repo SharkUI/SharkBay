@@ -1,12 +1,11 @@
 /**
  * HookBridge — Unix socket server that receives hook events from the sharkbay-hook CLI.
  *
- * Socket path: /tmp/sharkbay-hooks-<uid>-<instanceToken>.sock
+ * Socket path: /tmp/sharkbay-hooks-<uid>.sock
  * Protocol: newline-delimited JSON, short-connection (one message per connect).
  * Wire format: { "source": "<agent-id>", "payload": <raw-agent-json> }
  */
 
-import { randomBytes } from "node:crypto";
 import { EventEmitter } from "node:events";
 import * as fs from "node:fs";
 import * as net from "node:net";
@@ -34,13 +33,11 @@ export class HookBridge extends EventEmitter<HookBridgeEvents> {
   private socketPathFile: string;
   private readonly socketDir: string;
   private readonly uid: number;
-  private readonly instanceToken: string;
 
   constructor(options: HookBridgeOptions = {}) {
     super();
     this.socketDir = options.socketDir ?? "/tmp";
     this.uid = options.uid ?? process.getuid?.() ?? 0;
-    this.instanceToken = randomBytes(4).toString("hex");
     this.socketPathFile = options.socketPathFile ?? "";
   }
 
@@ -51,7 +48,7 @@ export class HookBridge extends EventEmitter<HookBridgeEvents> {
   async start(appDataPath: string): Promise<void> {
     if (this.server) return;
 
-    this.socketPath = path.join(this.socketDir, `sharkbay-hooks-${this.uid}-${this.instanceToken}.sock`);
+    this.socketPath = path.join(this.socketDir, `sharkbay-hooks-${this.uid}.sock`);
     if (!this.socketPathFile) {
       this.socketPathFile = path.join(appDataPath, "hook-socket-path");
     }
@@ -172,19 +169,9 @@ setTimeout(() => process.exit(0), 5000).unref();
     try {
       fs.statSync(this.socketPath);
     } catch {
-      return; // no existing socket
+      return;
     }
-    // Attempt connect to check liveness
-    const alive = await new Promise<boolean>((resolve) => {
-      const client = net.createConnection(this.socketPath, () => {
-        client.destroy();
-        resolve(true);
-      });
-      client.once("error", () => resolve(false));
-    });
-    if (!alive) {
-      try { fs.unlinkSync(this.socketPath); } catch {}
-    }
+    try { fs.unlinkSync(this.socketPath); } catch {}
   }
 
   private handleConnection(conn: net.Socket): void {
