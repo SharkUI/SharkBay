@@ -3,9 +3,9 @@ kind: sharkbay_task
 taskId: R3W7K5-u3960864-m81ae10
 taskTag: R3W7K5
 mode: task
-title: Fix Kiro hooks to use kiro_default.json override instead of separate agent
+title: Fix Kiro sharkbay agent config to include default tools list
 status: completed
-completedAt: 2026-05-30T03:20:02Z
+completedAt: 2026-05-30T03:47:08Z
 actor: SharkUI
 githubUserId: 3960864
 machine: 81ae10
@@ -13,33 +13,33 @@ agent: Claude Code Opus 4.6
 sessionId: b391fb24-23f2-451c-a2b9-2c77593f9e98
 branch: main
 createdAt: 2026-05-30T03:06:05Z
-updatedAt: 2026-05-30T03:20:02Z
+updatedAt: 2026-05-30T03:47:08Z
 ---
 
 ## Summary
-KiroConnector now installs hooks into ~/.kiro/agents/kiro_default.json (overriding the built-in default agent) instead of a separate sharkbay agent. Removed --agent sharkbay injection from App.tsx since hooks now fire without any flag.
+Fixed KiroConnector install() to include the full default tools list in sharkbay.json, so --agent sharkbay behaves identically to kiro_default (tools + hooks). Retains --agent sharkbay injection in App.tsx.
 
 ## Files
 - src/main/hooks/connectors/kiro.ts
 - src/renderer/App.tsx
 
 ## Work
-- Changed KiroConnector target from ~/.kiro/agents/sharkbay.json to ~/.kiro/agents/kiro_default.json
-- Removed name/description for sharkbay agent; set name to "kiro_default" instead
-- Added uninstall cleanup: deletes kiro_default.json entirely when only the name field remains (restores built-in)
-- Removed --agent sharkbay injection from openAgentProjectTab, SessionsDetailTab, and taskRestoreCommand in App.tsx
-- Verified Kiro does NOT read hooks from settings.json (tested with echo hook — not fired)
-- Verified Kiro DOES read hooks from agents/kiro_default.json (tested with echo hook — fired)
+- Added DEFAULT_TOOLS constant with Kiro's standard tool set (read, write, shell, aws, etc.)
+- install() now sets config.tools = DEFAULT_TOOLS if not already present
+- Investigated alternative approaches:
+  - settings.json hooks: confirmed Kiro does NOT read hooks from settings.json (manual echo test)
+  - kiro_default.json override: hooks fire but Kiro loses default tools when no tools field is present
+- Settled on sharkbay.json + --agent sharkbay + full tools list (same as K96RNZ approach but with tools)
+- App.tsx --agent sharkbay injection restored in all 3 locations
 
 ## Verification
 - `npm run typecheck` passes
 - `npm test` — 143 tests pass (38 files)
-- Manual test: echo hook in kiro_default.json fires on Kiro session start
+- Manual test: kiro_default.json override does fire hooks (echo test confirmed)
+- Pending: rebuild and verify Kiro can use tools with --agent sharkbay + tools list
 
 ## Notes
-- Kiro CLI does not read hooks from ~/.kiro/settings.json (confirmed by test)
-- Kiro CLI reads hooks from agent config files under ~/.kiro/agents/
-- Creating kiro_default.json overrides the built-in kiro_default agent — only the hooks field is set, so other behavior (tools, prompt, model) stays default
-- Prior task V7M3K8 correctly identified that settings.json doesn't work for hooks
-- Prior task K96RNZ's --agent sharkbay workaround caused all tool usage to route through the sharkbay agent profile — this fix eliminates that side effect
-- On uninstall, if no non-managed hooks remain, the file is deleted to restore the pure built-in default
+- Kiro CLI does not read hooks from ~/.kiro/settings.json
+- Kiro CLI does not inherit built-in tools when an agent config omits the tools field — must be explicit
+- The sharkbay agent config must include the full default tools list to avoid breaking tool usage
+- If Kiro adds/removes built-in tools in future, DEFAULT_TOOLS may need updating
