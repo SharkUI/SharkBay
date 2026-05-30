@@ -120,7 +120,7 @@ type TerminalPaneHandle = {
   openFileInEditor: (projectUri: string, projectName: string, relativePath: string) => Promise<void>;
   openGitDiff: (projectUri: string, projectName: string, relativePath: string) => Promise<void>;
   openBrowserTab: (projectUri: string, projectName: string, initialUrl: string) => Promise<void>;
-  openAgentSession: (projectUri: string, projectName: string, command: string, title: string) => Promise<void>;
+  openAgentSession: (projectUri: string, projectName: string, command: string, title: string, agentId?: string) => Promise<void>;
 };
 
 type AgentStatusByProjectPath = Record<string, string>;
@@ -924,7 +924,7 @@ function DashboardView({
               terminalPaneRef.current?.openBrowserTab(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, url) ?? Promise.resolve()
             }
             onRestoreAgentSession={(restore) =>
-              terminalPaneRef.current?.openAgentSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, restore.command, restore.title) ?? Promise.resolve()
+              terminalPaneRef.current?.openAgentSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, restore.command, restore.title, restore.agentId) ?? Promise.resolve()
             }
           />
         ) : (
@@ -1067,8 +1067,8 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     openBrowserTab: async (projectUri, projectName, initialUrl) => {
       await openBrowserTab(projectUri, projectUri, projectName, selectedSpace?.displayPath ?? projectUri, initialUrl);
     },
-    openAgentSession: async (projectUri, projectName, command, title) => {
-      await openProjectTab(projectUri, projectUri, projectName, selectedSpace?.displayPath ?? projectUri, false, { initialCommand: command, initialCommandTitle: title });
+    openAgentSession: async (projectUri, projectName, command, title, agentId) => {
+      await openProjectTab(projectUri, projectUri, projectName, selectedSpace?.displayPath ?? projectUri, false, { agentId, initialCommand: command, initialCommandTitle: title });
     },
   }));
 
@@ -1357,7 +1357,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                       <div className={cx("terminal-tab", isActiveTab && "is-active")} key={tabId} role="tab" aria-selected={isActiveTab}>
                         <button className="terminal-tab-main" type="button" onClick={() => { setActiveTab(space.projectId, tabId); }}>
                           {tab.kind === "terminal" ? (
-                            <span className={cx("terminal-state", tab.session.service && tab.session.status === "running" && "is-service-running", tab.session.agentId && hookActivityByProjectId[space.projectId] === "working" && "is-working", tab.session.agentId && hookActivityByProjectId[space.projectId] === "attention" && "is-attention", tab.session.status === "exited" && "is-exited")} />
+                            <span className={cx("terminal-state", tab.session.service && tab.session.status === "running" && "is-service-running", tab.session.agentId && hookActivityByProjectId[space.projectId] === "working" && "is-working", tab.session.agentId && hookActivityByProjectId[space.projectId] === "idle" && "is-idle", tab.session.agentId && hookActivityByProjectId[space.projectId] === "attention" && "is-attention", tab.session.status === "exited" && "is-exited")} />
                           ) : tab.kind === "browser" ? (
                             <BrowserTabIcon browser={tab.browser} />
                           ) : (
