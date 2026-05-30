@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 
 export type HookSession = {
@@ -88,9 +89,23 @@ export function parseHookSessions(repoPath: string): HookSession[] {
 
   const result: HookSession[] = [];
   for (const [sessionId, data] of sessions) {
+    if (data.agentId === "kiro" && data.model === null) {
+      data.model = readKiroModel(sessionId);
+    }
     result.push({ sessionId, ...data });
   }
 
   result.sort((a, b) => b.lastEventAt.localeCompare(a.lastEventAt));
   return result;
+}
+
+function readKiroModel(sessionId: string): string | null {
+  try {
+    const file = path.join(os.homedir(), ".kiro", "sessions", "cli", `${sessionId}.json`);
+    const data = JSON.parse(fs.readFileSync(file, "utf8"));
+    const model = data?.session_state?.rts_model_state?.model_info?.model_id;
+    return typeof model === "string" && model ? model : null;
+  } catch {
+    return null;
+  }
 }
