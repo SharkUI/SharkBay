@@ -295,7 +295,7 @@ export async function registerIpcHandlers(
     const statusEvent: AgentProjectStatusEvent = {
       agentId: event.agent,
       projectPath: event.projectPath,
-      sessionId: null,
+      sessionId: event.sessionId,
       text: event.action,
       timestamp: event.timestamp,
       hookState: event.state,

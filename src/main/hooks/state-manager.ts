@@ -13,6 +13,7 @@ import type { AgentConnector, AgentHookState, AgentHookStatus, HookBridgeMessage
 
 export type HookStateEvent = {
   projectPath: string;
+  sessionId: string;
   state: AgentHookState;
   action: string;
   agent: string;
@@ -30,7 +31,7 @@ const MAX_LOG_ARRAY_ITEMS = 25;
 const MAX_LOG_OBJECT_KEYS = 50;
 
 export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
-  private states = new Map<string, AgentHookStatus & { agent: string; pendingAction: string | null; debounceTimer: ReturnType<typeof setTimeout> | null }>();
+  private states = new Map<string, AgentHookStatus & { agent: string; sessionId: string; projectPath: string; pendingAction: string | null; debounceTimer: ReturnType<typeof setTimeout> | null }>();
   private connectors = new Map<string, AgentConnector>();
   private timeoutTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -88,9 +89,12 @@ export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
   }
 
   getStatus(projectPath: string): HookStateEvent | null {
-    const entry = this.states.get(projectPath);
-    if (!entry) return null;
-    return { projectPath, state: entry.state, action: entry.action, agent: entry.agent, timestamp: new Date(entry.lastUpdate).toISOString() };
+    for (const entry of this.states.values()) {
+      if (entry.projectPath === projectPath) {
+        return { projectPath, sessionId: entry.sessionId, state: entry.state, action: entry.action, agent: entry.agent, timestamp: new Date(entry.lastUpdate).toISOString() };
+      }
+    }
+    return null;
   }
 
   dispose(): void {
@@ -104,15 +108,17 @@ export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
 
   private applyEvent(event: UnifiedHookEvent): void {
     const projectPath = event.cwd!;
+    const sessionId = event.sessionId;
+    const stateKey = `${projectPath}\0${sessionId}`;
     const now = Date.now();
     const newState = this.eventToState(event.event);
     const newAction = this.eventToAction(event);
 
-    const existing = this.states.get(projectPath);
+    const existing = this.states.get(stateKey);
     const stateChanged = !existing || existing.state !== newState;
 
     if (!existing) {
-      this.states.set(projectPath, { state: newState, action: newAction, lastUpdate: now, agent: event.agent, pendingAction: null, debounceTimer: null });
+      this.states.set(stateKey, { state: newState, action: newAction, lastUpdate: now, agent: event.agent, sessionId, projectPath, pendingAction: null, debounceTimer: null });
     } else {
       existing.state = newState;
       existing.lastUpdate = now;
@@ -128,18 +134,18 @@ export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
             if (existing.pendingAction !== null) {
               existing.action = existing.pendingAction;
               existing.pendingAction = null;
-              this.emitState(projectPath);
+              this.emitState(stateKey);
             }
           }, ACTION_DEBOUNCE_MS);
           existing.debounceTimer.unref?.();
         }
-        this.resetTimeout(projectPath);
+        this.resetTimeout(stateKey);
         return;
       }
     }
 
-    this.emitState(projectPath);
-    this.resetTimeout(projectPath);
+    this.emitState(stateKey);
+    this.resetTimeout(stateKey);
   }
 
   private eventToState(event: UnifiedHookEvent["event"]): AgentHookState {
@@ -176,26 +182,26 @@ export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
     }
   }
 
-  private emitState(projectPath: string): void {
-    const entry = this.states.get(projectPath);
+  private emitState(stateKey: string): void {
+    const entry = this.states.get(stateKey);
     if (!entry) return;
-    this.emit("stateChange", { projectPath, state: entry.state, action: entry.action, agent: entry.agent, timestamp: new Date(entry.lastUpdate).toISOString() });
+    this.emit("stateChange", { projectPath: entry.projectPath, sessionId: entry.sessionId, state: entry.state, action: entry.action, agent: entry.agent, timestamp: new Date(entry.lastUpdate).toISOString() });
   }
 
-  private resetTimeout(projectPath: string): void {
-    const existing = this.timeoutTimers.get(projectPath);
+  private resetTimeout(stateKey: string): void {
+    const existing = this.timeoutTimers.get(stateKey);
     if (existing) clearTimeout(existing);
     const timer = setTimeout(() => {
-      const entry = this.states.get(projectPath);
+      const entry = this.states.get(stateKey);
       if (entry && entry.state !== "idle") {
         entry.state = "idle";
         entry.action = "";
         entry.lastUpdate = Date.now();
-        this.emitState(projectPath);
+        this.emitState(stateKey);
       }
     }, TIMEOUT_MS);
     timer.unref?.();
-    this.timeoutTimers.set(projectPath, timer);
+    this.timeoutTimers.set(stateKey, timer);
   }
 }
 

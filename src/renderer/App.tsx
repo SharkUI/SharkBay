@@ -666,6 +666,7 @@ function DashboardView({
   const terminalPaneRef = useRef<TerminalPaneHandle | null>(null);
   const [runningServiceProjectIds, setRunningServiceProjectIds] = useState<Set<string>>(() => new Set());
   const [hookActivityByProjectId, setHookActivityByProjectId] = useState<Record<string, ProjectActivityState>>({});
+  const [hookStateBySessionId, setHookStateBySessionId] = useState<Record<string, { state: ProjectActivityState; projectId: string }>>({});
 
   // Clear finished hook activity when user returns to the project.
   useEffect(() => {
@@ -677,6 +678,14 @@ function DashboardView({
         const next = { ...current };
         delete next[id];
         return next;
+      });
+      setHookStateBySessionId((current) => {
+        let changed = false;
+        const next = { ...current };
+        for (const [sid, entry] of Object.entries(next)) {
+          if (entry.state === "idle" && entry.projectId === id) { delete next[sid]; changed = true; }
+        }
+        return changed ? next : current;
       });
     }
   }, [hookActivityByProjectId, selectedCandidate?.id]);
@@ -785,11 +794,19 @@ function DashboardView({
         return current[event.projectPath] === event.text ? current : { ...current, [event.projectPath]: event.text };
       });
       if (event.hookState) {
-        setHookActivityByProjectId((current) => {
-          const matchedId = filteredCandidates.find((c) => c.displayPath === event.projectPath)?.id;
-          if (!matchedId) return current;
-          return current[matchedId] === event.hookState ? current : { ...current, [matchedId]: event.hookState! };
-        });
+        const matchedProjectId = filteredCandidates.find((c) => c.displayPath === event.projectPath)?.id;
+        if (matchedProjectId) {
+          setHookActivityByProjectId((current) =>
+            current[matchedProjectId] === event.hookState ? current : { ...current, [matchedProjectId]: event.hookState! }
+          );
+        }
+        if (event.sessionId && matchedProjectId) {
+          setHookStateBySessionId((current) => {
+            const existing = current[event.sessionId!];
+            if (existing && existing.state === event.hookState && existing.projectId === matchedProjectId) return current;
+            return { ...current, [event.sessionId!]: { state: event.hookState!, projectId: matchedProjectId } };
+          });
+        }
       }
     });
     return () => unsubscribe?.();
@@ -886,7 +903,7 @@ function DashboardView({
           appearanceTheme={appearanceTheme}
           agentClis={agentClis}
           candidate={selectedCandidate}
-          hookActivityByProjectId={hookActivityByProjectId}
+          hookStateBySessionId={hookStateBySessionId}
           projectAliases={projectAliases}
           bridgeAvailable={bridgeAvailable}
           isVisible={isVisible}
@@ -940,7 +957,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   agentClis: AgentCli[];
   bridgeAvailable: boolean;
   candidate: ProjectCandidate | null;
-  hookActivityByProjectId: Record<string, ProjectActivityState>;
+  hookStateBySessionId: Record<string, { state: ProjectActivityState; projectId: string }>;
   projectAliases: Record<string, string>;
   isVisible: boolean;
   setToast: (toast: Toast) => void;
@@ -948,7 +965,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   onAgentListRefreshRequested: () => void;
   onProjectHookStatusClear: (projectId: string) => void;
   onRunningServiceProjectIdsChange: (projectIds: Set<string>) => void;
-}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, hookActivityByProjectId, projectAliases, isVisible, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onProjectHookStatusClear, onRunningServiceProjectIdsChange }, ref) {
+}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, hookStateBySessionId, projectAliases, isVisible, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onProjectHookStatusClear, onRunningServiceProjectIdsChange }, ref) {
   const [spaces, setSpaces] = useState<Record<string, TerminalSpace>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const spacesRef = useRef<Record<string, TerminalSpace>>({});
@@ -956,6 +973,29 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const pendingTerminalOutput = useRef(new Map<string, string>());
   const focusRequestNonce = useRef(0);
   const [tabFocusRequest, setTabFocusRequest] = useState<{ projectId: string; nonce: number } | null>(null);
+  const agentSessionToTerminalRef = useRef<Record<string, string>>({});
+  const hookStateByTerminalId = useMemo(() => {
+    const map = agentSessionToTerminalRef.current;
+    const assignedTerminals = new Set(Object.values(map));
+    for (const [sid, entry] of Object.entries(hookStateBySessionId)) {
+      if (map[sid]) continue;
+      const space = spaces[entry.projectId];
+      if (!space) continue;
+      const candidates = space.tabs
+        .filter((t): t is TerminalShellTab => t.kind === "terminal" && Boolean(t.session.agentId) && !t.session.service && !assignedTerminals.has(t.session.id))
+        .sort((a, b) => b.session.createdAt.localeCompare(a.session.createdAt));
+      if (candidates.length > 0) {
+        map[sid] = candidates[0]!.session.id;
+        assignedTerminals.add(candidates[0]!.session.id);
+      }
+    }
+    const result: Record<string, ProjectActivityState> = {};
+    for (const [sid, entry] of Object.entries(hookStateBySessionId)) {
+      const termId = map[sid];
+      if (termId) result[termId] = entry.state;
+    }
+    return result;
+  }, [hookStateBySessionId, spaces]);
   const selectedSpace = candidate?.id ? spaces[candidate.id] ?? null : null;
   const canCreate = bridgeAvailable && Boolean(candidate?.uri) && (candidate?.providerKind === "local");
   const services = candidate?.services ?? [];
@@ -1357,7 +1397,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                       <div className={cx("terminal-tab", isActiveTab && "is-active")} key={tabId} role="tab" aria-selected={isActiveTab}>
                         <button className="terminal-tab-main" type="button" onClick={() => { setActiveTab(space.projectId, tabId); }}>
                           {tab.kind === "terminal" ? (
-                            <span className={cx("terminal-state", tab.session.service && tab.session.status === "running" && "is-service-running", tab.session.agentId && hookActivityByProjectId[space.projectId] === "working" && "is-working", tab.session.agentId && hookActivityByProjectId[space.projectId] === "idle" && "is-idle", tab.session.agentId && hookActivityByProjectId[space.projectId] === "attention" && "is-attention", tab.session.status === "exited" && "is-exited")} />
+                            <span className={cx("terminal-state", tab.session.service && tab.session.status === "running" && "is-service-running", tab.session.agentId && hookStateByTerminalId[tab.session.id] === "working" && "is-working", tab.session.agentId && hookStateByTerminalId[tab.session.id] === "idle" && "is-idle", tab.session.agentId && hookStateByTerminalId[tab.session.id] === "attention" && "is-attention", tab.session.status === "exited" && "is-exited")} />
                           ) : tab.kind === "browser" ? (
                             <BrowserTabIcon browser={tab.browser} />
                           ) : (
