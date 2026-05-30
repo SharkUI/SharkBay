@@ -12,12 +12,12 @@ agent: Codex GPT-5
 sessionId: 019e77e2-2898-7d90-b1c8-26e21b0f9bbe
 branch: main
 createdAt: 2026-05-30T08:01:10Z
-updatedAt: 2026-05-30T08:14:18Z
-completedAt: 2026-05-30T08:14:18Z
+updatedAt: 2026-05-30T08:16:55Z
+completedAt: 2026-05-30T08:16:55Z
 ---
 
 ## Summary
-Sessions tab cards now use unframed colored inline agent logos, with an unclipped colored Codex cloud logo and no turns text. Task restore cards below tasks keep their existing monochrome icon treatment.
+Sessions tab cards now use unframed colored inline agent logos, with a bounded unclipped colored Codex cloud logo and no turns text. Task restore cards below tasks keep their existing monochrome icon treatment.
 
 ## Files
 - src/renderer/App.tsx
@@ -31,6 +31,8 @@ Sessions tab cards now use unframed colored inline agent logos, with an unclippe
 - Replaced the session avatar frame with an unboxed logo slot and removed `turnCount` from the session card subtitle.
 - Reopened to fix the Codex colored SVG clipping in the session icon slot.
 - Replaced the Codex colored SVG with a 24x24 bounded version so the cloud and terminal strokes fit within the icon slot.
+- Reopened again after the Codex cloud still clipped; next fix uses a simpler bounded logo path plus explicit SVG overflow.
+- Replaced the Codex cloud with a simpler bounded path and set `.agent-logo-icon` overflow visible.
 - Relevant prior context: V6N2J8 added session rows with agent icons; V2M9Q4 tuned restore session card icon styling.
 
 ## Verification
