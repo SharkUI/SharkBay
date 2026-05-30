@@ -91,10 +91,13 @@ export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
     this.applyEvent(event);
   }
 
-  getStatus(projectPath: string): HookStateEvent | null {
+  getStatus(projectPath: string | null, sessionId?: string): HookStateEvent | null {
     for (const entry of this.states.values()) {
-      if (entry.projectPath === projectPath) {
-        return { projectPath, sessionId: entry.sessionId, state: entry.state, action: entry.action, agent: entry.agent, timestamp: new Date(entry.lastUpdate).toISOString() };
+      if (sessionId && entry.sessionId === sessionId) {
+        return { projectPath: entry.projectPath, sessionId: entry.sessionId, state: entry.state, action: entry.action, agent: entry.agent, timestamp: new Date(entry.lastUpdate).toISOString(), pid: entry.pid };
+      }
+      if (projectPath && entry.projectPath === projectPath) {
+        return { projectPath, sessionId: entry.sessionId, state: entry.state, action: entry.action, agent: entry.agent, timestamp: new Date(entry.lastUpdate).toISOString(), pid: entry.pid };
       }
     }
     return null;

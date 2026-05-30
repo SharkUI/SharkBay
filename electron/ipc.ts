@@ -120,6 +120,8 @@ const taskWatcherCleanups = new Map<string, () => void>();
 const terminalPidToId = new Map<number, string>();
 // Agent hook sessionId → resolved terminal session ID
 const hookSessionToTerminal = new Map<string, string>();
+// Hook sessions pending PID resolution (pid → hookSessionId)
+const pendingHookResolutions = new Map<string, number>();
 
 function resolveTerminalForPid(agentPid: number): Promise<string | null> {
   return new Promise((resolve) => {
@@ -286,6 +288,30 @@ export async function registerIpcHandlers(
   core.on("terminalUpdate", (event: TerminalUpdateEvent) => {
     if (event.session.pid != null && event.session.agentId) {
       terminalPidToId.set(event.session.pid, event.session.id);
+      // Retry pending hook resolutions now that a new terminal PID is registered
+      for (const [sessionId, pid] of pendingHookResolutions) {
+        resolveTerminalForPid(pid).then((terminalId) => {
+          if (!terminalId) return;
+          hookSessionToTerminal.set(sessionId, terminalId);
+          pendingHookResolutions.delete(sessionId);
+          const state = hookStateManager.getStatus(null, sessionId);
+          if (state) {
+            const statusEvent: AgentProjectStatusEvent = {
+              agentId: state.agent,
+              projectPath: state.projectPath,
+              sessionId: state.sessionId,
+              text: state.action,
+              timestamp: state.timestamp,
+              hookState: state.state,
+              pid: state.pid,
+              terminalSessionId: terminalId,
+            };
+            BrowserWindow.getAllWindows().forEach((window) => {
+              window.webContents.send(channels.agentStatus, statusEvent);
+            });
+          }
+        });
+      }
     }
     BrowserWindow.getAllWindows().forEach((window) => {
       window.webContents.send(channels.terminalUpdate, event);
@@ -348,7 +374,12 @@ export async function registerIpcHandlers(
       sendStatus(cached);
     } else if (event.pid != null) {
       resolveTerminalForPid(event.pid).then((terminalId) => {
-        if (terminalId) hookSessionToTerminal.set(event.sessionId, terminalId);
+        if (terminalId) {
+          hookSessionToTerminal.set(event.sessionId, terminalId);
+          pendingHookResolutions.delete(event.sessionId);
+        } else {
+          pendingHookResolutions.set(event.sessionId, event.pid!);
+        }
         sendStatus(terminalId ?? undefined);
       });
     } else {

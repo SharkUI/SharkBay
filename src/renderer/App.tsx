@@ -959,24 +959,9 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const agentSessionToTerminalRef = useRef<Record<string, string>>({});
   const hookStateByTerminalId = useMemo(() => {
     const map = agentSessionToTerminalRef.current;
-    // Apply server-resolved mappings first (overwriting stale heuristic entries)
     for (const [sid, entry] of Object.entries(hookStateBySessionId)) {
       if (entry.terminalSessionId) {
         map[sid] = entry.terminalSessionId;
-      }
-    }
-    const assignedTerminals = new Set(Object.values(map));
-    // Fallback heuristic for sessions without server-resolved mapping
-    for (const [sid, entry] of Object.entries(hookStateBySessionId)) {
-      if (map[sid]) continue;
-      const space = spaces[entry.projectId];
-      if (!space) continue;
-      const candidates = space.tabs
-        .filter((t): t is TerminalShellTab => t.kind === "terminal" && Boolean(t.session.agentId) && !t.session.service && !assignedTerminals.has(t.session.id))
-        .sort((a, b) => b.session.createdAt.localeCompare(a.session.createdAt));
-      if (candidates.length > 0) {
-        map[sid] = candidates[0]!.session.id;
-        assignedTerminals.add(candidates[0]!.session.id);
       }
     }
     const result: Record<string, ProjectActivityState> = {};
