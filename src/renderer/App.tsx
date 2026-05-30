@@ -570,7 +570,6 @@ export function App() {
               setToast={setToast}
               onRefresh={refreshWorkspace}
               onOpenSettings={() => setView("settings")}
-              onOpenAgentCliSettings={() => { setSettingsSection("agent-clis"); setView("settings"); }}
               onAddProject={async (pathOrUri) => { await addProject(pathOrUri); await refreshProjects({ showToast: true }); }}
               onPickProject={async () => {
                 const paths = await pickAndAddProjects();
@@ -636,7 +635,6 @@ function DashboardView({
   setToast,
   onRefresh,
   onOpenSettings,
-  onOpenAgentCliSettings,
   onAddProject,
   onPickProject,
   onRemoveProject,
@@ -657,7 +655,6 @@ function DashboardView({
   setToast: (toast: Toast) => void;
   onRefresh: () => Promise<void>;
   onOpenSettings: () => void;
-  onOpenAgentCliSettings: () => void;
   onAddProject: (pathOrUri: string) => Promise<void>;
   onPickProject: () => Promise<void>;
   onRemoveProject: (uri: string) => Promise<void>;
@@ -894,7 +891,6 @@ function DashboardView({
           setToast={setToast}
           onActiveTabKindChange={setActiveTerminalTabKind}
           onAgentListRefreshRequested={() => setAgentListVersion((current) => current + 1)}
-          onOpenAgentCliSettings={onOpenAgentCliSettings}
           onRunningServiceProjectIdsChange={(nextIds) =>
             setRunningServiceProjectIds((currentIds) => sameStringSet(currentIds, nextIds) ? currentIds : nextIds)
           }
@@ -947,10 +943,9 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   setToast: (toast: Toast) => void;
   onActiveTabKindChange: (kind: ActiveTerminalTabKind) => void;
   onAgentListRefreshRequested: () => void;
-  onOpenAgentCliSettings: () => void;
   onProjectHookStatusClear: (projectId: string) => void;
   onRunningServiceProjectIdsChange: (projectIds: Set<string>) => void;
-}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, projectAliases, isVisible, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onOpenAgentCliSettings, onProjectHookStatusClear, onRunningServiceProjectIdsChange }, ref) {
+}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, projectAliases, isVisible, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onProjectHookStatusClear, onRunningServiceProjectIdsChange }, ref) {
   const [spaces, setSpaces] = useState<Record<string, TerminalSpace>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const spacesRef = useRef<Record<string, TerminalSpace>>({});
@@ -1377,9 +1372,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                   <AgentCliIcon agent={agent} />
                 </button>
               ))}
-              <button aria-label="Agent CLIs" className="icon-button terminal-tab-add terminal-agent-install-button" title="Agent CLIs" type="button" onClick={onOpenAgentCliSettings}>
-                <DownloadIcon />
-              </button>
             </div>
             <div className="xterm-surface-stack">
               {space.tabs.map((tab) => {
@@ -1415,9 +1407,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                   <AgentCliIcon agent={agent} />
                 </button>
               ))}
-              <button aria-label="Agent CLIs" className="icon-button terminal-tab-add terminal-agent-install-button" title="Agent CLIs" type="button" onClick={onOpenAgentCliSettings}>
-                <DownloadIcon />
-              </button>
             </div>
             <div className="xterm-surface-stack"></div>
           </div>
@@ -3629,10 +3618,6 @@ function ServerIcon() {
 
 function TerminalIcon() {
   return <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18"><polyline points="4 17 10 11 4 5" /><line x1="12" x2="20" y1="19" y2="19" /></svg>;
-}
-
-function DownloadIcon() {
-  return <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16"><path d="M12 3v12" /><path d="m6 11 6 6 6-6" /><path d="M5 21h14" /></svg>;
 }
 
 function InstallAgentDialog({ targetId, targetLabel, installedAgentIds, onClose, onInstalled, setToast }: {
