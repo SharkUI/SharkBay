@@ -270,6 +270,7 @@ describe("harness install", () => {
       "If a later request involves editing project files, generating persisted project artifacts, running a multi-step implementation or verification workflow, or preparing a commit, create or update the required task under `.sharkbay/tasks/` before making project changes.",
       "Keep Files and Work updated while working; finish by filling Summary and Verification; record the commit hash if a commit is produced.",
       "Treat `.sharkbay/team-context/` as read-only.",
+      "If `AGENTS.md` exists at the project root, also read it and follow its instructions.",
     ].join(" "));
     expect(BOOTSTRAP_PROMPT).not.toContain("CodeGraph is installed and configured");
     await expect(fs.stat(path.join(repo, "AGENTS.md")).catch(() => null)).resolves.toBeNull();
