@@ -2251,6 +2251,7 @@ function SessionAgentIcon({ agentId }: { agentId: string }) {
   if (agentId === "kiro") return <KiroIcon />;
   if (agentId === "codewhale") return <CodeWhaleIcon />;
   if (agentId === "qwen") return <QwenIcon />;
+  if (agentId === "opencode") return <OpenCodeIcon />;
   return <span aria-hidden="true" className="agent-cli-monogram">{agentId.slice(0, 2).toUpperCase()}</span>;
 }
 
@@ -2968,7 +2969,7 @@ const allAgentCliDefinitions: AgentCliDefinition[] = [
   { id: "opencode", label: "OpenCode", shortLabel: "O" },
 ];
 
-const hookSupportedAgents = new Set(["claude", "codex", "gemini", "kiro", "qwen", "codewhale"]);
+const hookSupportedAgents = new Set(["claude", "codex", "gemini", "kiro", "qwen", "codewhale", "opencode"]);
 
 type AgentLaunchOption = { flag: string; label: string; description: string; type: "toggle" };
 

@@ -80,6 +80,7 @@ import { ClaudeConnector, CodexConnector, QwenConnector } from "../src/main/hook
 import { GeminiConnector } from "../src/main/hooks/connectors/gemini.js";
 import { KiroConnector } from "../src/main/hooks/connectors/kiro.js";
 import { CodeWhaleConnector } from "../src/main/hooks/connectors/codewhale.js";
+import { OpenCodeConnector } from "../src/main/hooks/connectors/opencode.js";
 import type { AgentConnector } from "../src/main/hooks/types.js";
 import { parseHookSessions } from "../src/main/hooks/sessions.js";
 
@@ -106,6 +107,7 @@ const hookConnectors = new Map<string, AgentConnector>([
   ["codewhale", new CodeWhaleConnector()],
   ["gemini", new GeminiConnector()],
   ["kiro", new KiroConnector()],
+  ["opencode", new OpenCodeConnector()],
 ]);
 for (const connector of hookConnectors.values()) {
   hookStateManager.registerConnector(connector);
