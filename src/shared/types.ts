@@ -586,6 +586,8 @@ export type AgentProjectStatusEvent = {
   text: string;
   timestamp: string;
   hookState?: "working" | "idle" | "attention";
+  pid?: number;
+  terminalSessionId?: string;
 };
 
 export type HookSessionViewModel = {

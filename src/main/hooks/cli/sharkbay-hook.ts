@@ -71,7 +71,7 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  const message = JSON.stringify({ source, payload: parsed });
+  const message = JSON.stringify({ source, payload: parsed, pid: process.ppid });
   await send(socketPath, message);
 }
 

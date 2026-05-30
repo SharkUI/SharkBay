@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import { BrowserWindow, dialog, ipcMain } from "electron";
 import {
   addConfiguredProject,
@@ -114,6 +115,31 @@ for (const connector of hookConnectors.values()) {
 }
 const syncInstances = new Map<string, TeamworkSync>();
 const taskWatcherCleanups = new Map<string, () => void>();
+
+// Terminal PID → terminal session ID cache (for hook→tab matching)
+const terminalPidToId = new Map<number, string>();
+// Agent hook sessionId → resolved terminal session ID
+const hookSessionToTerminal = new Map<string, string>();
+
+function resolveTerminalForPid(agentPid: number): Promise<string | null> {
+  return new Promise((resolve) => {
+    let currentPid = agentPid;
+    let steps = 0;
+    const walk = () => {
+      if (steps++ > 5 || currentPid <= 1) { resolve(null); return; }
+      execFile("ps", ["-o", "ppid=", "-p", String(currentPid)], { timeout: 2000 }, (err, stdout) => {
+        if (err) { resolve(null); return; }
+        const ppid = parseInt(stdout.trim(), 10);
+        if (isNaN(ppid) || ppid <= 1) { resolve(null); return; }
+        const terminalId = terminalPidToId.get(ppid);
+        if (terminalId) { resolve(terminalId); return; }
+        currentPid = ppid;
+        walk();
+      });
+    };
+    walk();
+  });
+}
 
 function requireCore(): CoreClient {
   if (!core) throw new Error("Core client is not initialized; registerIpcHandlers must complete first");
@@ -258,11 +284,20 @@ export async function registerIpcHandlers(
     });
   });
   core.on("terminalUpdate", (event: TerminalUpdateEvent) => {
+    if (event.session.pid != null && event.session.agentId) {
+      terminalPidToId.set(event.session.pid, event.session.id);
+    }
     BrowserWindow.getAllWindows().forEach((window) => {
       window.webContents.send(channels.terminalUpdate, event);
     });
   });
   core.on("terminalExit", (event) => {
+    for (const [pid, id] of terminalPidToId) {
+      if (id === event.sessionId) { terminalPidToId.delete(pid); break; }
+    }
+    for (const [sid, tid] of hookSessionToTerminal) {
+      if (tid === event.sessionId) { hookSessionToTerminal.delete(sid); break; }
+    }
     BrowserWindow.getAllWindows().forEach((window) => {
       window.webContents.send(channels.terminalExit, event);
     });
@@ -292,17 +327,33 @@ export async function registerIpcHandlers(
   hookBridge.on("event", (msg) => hookStateManager.handleMessage(msg));
   hookStateManager.removeAllListeners("stateChange");
   hookStateManager.on("stateChange", (event) => {
-    const statusEvent: AgentProjectStatusEvent = {
-      agentId: event.agent,
-      projectPath: event.projectPath,
-      sessionId: event.sessionId,
-      text: event.action,
-      timestamp: event.timestamp,
-      hookState: event.state,
+    const cached = hookSessionToTerminal.get(event.sessionId);
+    const sendStatus = (terminalSessionId?: string) => {
+      const statusEvent: AgentProjectStatusEvent = {
+        agentId: event.agent,
+        projectPath: event.projectPath,
+        sessionId: event.sessionId,
+        text: event.action,
+        timestamp: event.timestamp,
+        hookState: event.state,
+        pid: event.pid,
+        terminalSessionId,
+      };
+      BrowserWindow.getAllWindows().forEach((window) => {
+        window.webContents.send(channels.agentStatus, statusEvent);
+      });
     };
-    BrowserWindow.getAllWindows().forEach((window) => {
-      window.webContents.send(channels.agentStatus, statusEvent);
-    });
+
+    if (cached) {
+      sendStatus(cached);
+    } else if (event.pid != null) {
+      resolveTerminalForPid(event.pid).then((terminalId) => {
+        if (terminalId) hookSessionToTerminal.set(event.sessionId, terminalId);
+        sendStatus(terminalId ?? undefined);
+      });
+    } else {
+      sendStatus(undefined);
+    }
   });
   hookBridge.start(runtime.userDataPath).catch(() => {});
 
@@ -421,9 +472,13 @@ export async function registerIpcHandlers(
   handle<BrowserActionInput, BrowserSession>(channels.browserReload, (payload) =>
     Promise.resolve(browserManager.reload(payload))
   );
-  handle<TerminalCreateInput, TerminalSession>(channels.createTerminal, (payload) =>
-    requireCore().call("createTerminal", [runtime, payload])
-  );
+  handle<TerminalCreateInput, TerminalSession>(channels.createTerminal, async (payload) => {
+    const session = await requireCore().call("createTerminal", [runtime, payload]);
+    if (session.pid != null && session.agentId) {
+      terminalPidToId.set(session.pid, session.id);
+    }
+    return session;
+  });
   handle<TerminalInput, TerminalSession | null>(channels.terminalInput, (payload) =>
     requireCore().call("inputTerminal", [payload])
   );

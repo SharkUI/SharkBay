@@ -672,7 +672,7 @@ function DashboardView({
   const terminalPaneRef = useRef<TerminalPaneHandle | null>(null);
   const [runningServiceProjectIds, setRunningServiceProjectIds] = useState<Set<string>>(() => new Set());
   const [hookActivityByProjectId, setHookActivityByProjectId] = useState<Record<string, ProjectActivityState>>({});
-  const [hookStateBySessionId, setHookStateBySessionId] = useState<Record<string, { state: ProjectActivityState; projectId: string }>>({});
+  const [hookStateBySessionId, setHookStateBySessionId] = useState<Record<string, { state: ProjectActivityState; projectId: string; terminalSessionId?: string }>>({});
 
   // Derive project-level activity: highest priority state across all sessions in the project.
   useEffect(() => {
@@ -794,8 +794,8 @@ function DashboardView({
         if (event.sessionId && matchedProjectId) {
           setHookStateBySessionId((current) => {
             const existing = current[event.sessionId!];
-            if (existing && existing.state === event.hookState && existing.projectId === matchedProjectId) return current;
-            return { ...current, [event.sessionId!]: { state: event.hookState!, projectId: matchedProjectId } };
+            if (existing && existing.state === event.hookState && existing.projectId === matchedProjectId && existing.terminalSessionId === event.terminalSessionId) return current;
+            return { ...current, [event.sessionId!]: { state: event.hookState!, projectId: matchedProjectId, terminalSessionId: event.terminalSessionId } };
           });
         }
       }
@@ -939,7 +939,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   agentClis: AgentCli[];
   bridgeAvailable: boolean;
   candidate: ProjectCandidate | null;
-  hookStateBySessionId: Record<string, { state: ProjectActivityState; projectId: string }>;
+  hookStateBySessionId: Record<string, { state: ProjectActivityState; projectId: string; terminalSessionId?: string }>;
   projectAliases: Record<string, string>;
   isVisible: boolean;
   setToast: (toast: Toast) => void;
@@ -958,7 +958,14 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const agentSessionToTerminalRef = useRef<Record<string, string>>({});
   const hookStateByTerminalId = useMemo(() => {
     const map = agentSessionToTerminalRef.current;
+    // Apply server-resolved mappings first (overwriting stale heuristic entries)
+    for (const [sid, entry] of Object.entries(hookStateBySessionId)) {
+      if (entry.terminalSessionId) {
+        map[sid] = entry.terminalSessionId;
+      }
+    }
     const assignedTerminals = new Set(Object.values(map));
+    // Fallback heuristic for sessions without server-resolved mapping
     for (const [sid, entry] of Object.entries(hookStateBySessionId)) {
       if (map[sid]) continue;
       const space = spaces[entry.projectId];

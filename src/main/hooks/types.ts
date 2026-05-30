@@ -25,6 +25,7 @@ export type UnifiedHookEvent = {
   tool?: { name: string; input?: unknown; response?: unknown };
   prompt?: string;
   cwd?: string;
+  pid?: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -64,4 +65,5 @@ export interface AgentConnector {
 export type HookBridgeMessage = {
   source: string;
   payload: unknown;
+  pid?: number;
 };

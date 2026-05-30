@@ -199,7 +199,7 @@ function send(payload) {
   let socketPath;
   try { socketPath = readFileSync(SOCKET_PATH_FILE, "utf8").trim(); } catch { return; }
   if (!socketPath) return;
-  const msg = JSON.stringify({ source: "opencode", payload }) + "\\n";
+  const msg = JSON.stringify({ source: "opencode", payload, pid: process.pid }) + "\\n";
   const conn = createConnection(socketPath, () => { conn.end(msg); });
   conn.on("error", () => {});
   conn.setTimeout(3000, () => conn.destroy());

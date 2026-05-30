@@ -97,7 +97,7 @@ process.stdin.on("end", () => {
   try { socketPath = fs.readFileSync(SOCKET_PATH_FILE, "utf8").trim(); } catch { process.exit(0); }
   let parsed;
   try { parsed = JSON.parse(data); } catch { process.exit(0); }
-  const msg = JSON.stringify({ source, payload: parsed }) + "\\n";
+  const msg = JSON.stringify({ source, payload: parsed, pid: process.ppid }) + "\\n";
   const conn = net.createConnection(socketPath, () => { conn.end(msg, () => process.exit(0)); });
   conn.on("error", () => process.exit(0));
   conn.setTimeout(3000, () => { conn.destroy(); process.exit(0); });
@@ -155,7 +155,7 @@ process.stdin.on("end", () => {
   if (data.trim()) {
     try { raw = JSON.parse(data); } catch {}
   }
-  const msg = JSON.stringify({ source: "codewhale", payload: buildPayload(raw) }) + "\\n";
+  const msg = JSON.stringify({ source: "codewhale", payload: buildPayload(raw), pid: process.ppid }) + "\\n";
   const conn = net.createConnection(socketPath, () => { conn.end(msg, () => process.exit(0)); });
   conn.on("error", () => process.exit(0));
   conn.setTimeout(3000, () => { conn.destroy(); process.exit(0); });

@@ -18,6 +18,7 @@ export type HookStateEvent = {
   action: string;
   agent: string;
   timestamp: string;
+  pid?: number;
 };
 
 export type StateManagerEvents = {
@@ -31,7 +32,7 @@ const MAX_LOG_ARRAY_ITEMS = 25;
 const MAX_LOG_OBJECT_KEYS = 50;
 
 export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
-  private states = new Map<string, AgentHookStatus & { agent: string; sessionId: string; projectPath: string; pendingAction: string | null; debounceTimer: ReturnType<typeof setTimeout> | null }>();
+  private states = new Map<string, AgentHookStatus & { agent: string; sessionId: string; projectPath: string; pid?: number; pendingAction: string | null; debounceTimer: ReturnType<typeof setTimeout> | null }>();
   private connectors = new Map<string, AgentConnector>();
   private timeoutTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -73,6 +74,8 @@ export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
       });
       return;
     }
+
+    if (msg.pid != null) event.pid = msg.pid;
 
     const state = this.eventToState(event.event);
     const action = this.eventToAction(event);
@@ -118,11 +121,12 @@ export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
     const stateChanged = !existing || existing.state !== newState;
 
     if (!existing) {
-      this.states.set(stateKey, { state: newState, action: newAction, lastUpdate: now, agent: event.agent, sessionId, projectPath, pendingAction: null, debounceTimer: null });
+      this.states.set(stateKey, { state: newState, action: newAction, lastUpdate: now, agent: event.agent, sessionId, projectPath, pid: event.pid, pendingAction: null, debounceTimer: null });
     } else {
       existing.state = newState;
       existing.lastUpdate = now;
       existing.agent = event.agent;
+      if (event.pid != null) existing.pid = event.pid;
       if (stateChanged) {
         existing.action = newAction;
       } else {
@@ -189,7 +193,7 @@ export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
   private emitState(stateKey: string): void {
     const entry = this.states.get(stateKey);
     if (!entry) return;
-    this.emit("stateChange", { projectPath: entry.projectPath, sessionId: entry.sessionId, state: entry.state, action: entry.action, agent: entry.agent, timestamp: new Date(entry.lastUpdate).toISOString() });
+    this.emit("stateChange", { projectPath: entry.projectPath, sessionId: entry.sessionId, state: entry.state, action: entry.action, agent: entry.agent, timestamp: new Date(entry.lastUpdate).toISOString(), pid: entry.pid });
   }
 
   private resetTimeout(stateKey: string): void {
