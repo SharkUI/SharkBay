@@ -1398,7 +1398,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                       <div className={cx("terminal-tab", isActiveTab && "is-active")} key={tabId} role="tab" aria-selected={isActiveTab}>
                         <button className="terminal-tab-main" type="button" onClick={() => { setActiveTab(space.projectId, tabId); }}>
                           {tab.kind === "terminal" ? (
-                            <span className={cx("terminal-state", tab.session.service && tab.session.status === "running" && "is-service-running", tab.session.agentId && hookStateByTerminalId[tab.session.id] === "working" && "is-working", tab.session.agentId && hookStateByTerminalId[tab.session.id] === "idle" && "is-idle", tab.session.agentId && hookStateByTerminalId[tab.session.id] === "attention" && "is-attention", tab.session.status === "exited" && "is-exited")} />
+                            <span className={cx("terminal-state", tab.session.service && tab.session.status === "running" && "is-service-running", tab.session.agentId && hookStateByTerminalId[tab.session.id] === "working" && "is-working", tab.session.agentId && !isActiveTab && hookStateByTerminalId[tab.session.id] === "idle" && "is-idle", tab.session.agentId && hookStateByTerminalId[tab.session.id] === "attention" && "is-attention", tab.session.status === "exited" && "is-exited")} />
                           ) : tab.kind === "browser" ? (
                             <BrowserTabIcon browser={tab.browser} />
                           ) : (

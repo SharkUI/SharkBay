@@ -126,6 +126,10 @@ export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
       if (stateChanged) {
         existing.action = newAction;
       } else {
+        if (newState === "idle") {
+          this.resetTimeout(stateKey);
+          return;
+        }
         // Same state, debounce action text updates
         existing.pendingAction = newAction;
         if (!existing.debounceTimer) {
