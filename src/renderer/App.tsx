@@ -1041,6 +1041,9 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     if (!candidate?.uri) return;
     const baseCommand = agent.executablePath || agent.command;
     const flags = getAgentLaunchFlags(agent.id);
+    if (agent.id === "kiro" && getAgentHooksEnabled("kiro") && !flags.includes("--agent sharkbay")) {
+      flags.push("--agent sharkbay");
+    }
     const base = agent.id === "kiro" ? `${shellQuote(baseCommand)} chat` : shellQuote(baseCommand);
     const launchCommand = flags.length ? `${base} ${flags.join(" ")}` : base;
     await openProjectTab(candidate.id, candidate.uri, displayProjectName ?? candidate.name, candidate.displayPath, false, { agentId: agent.id, initialCommand: launchCommand, initialCommandTitle: agent.label });
@@ -2206,7 +2209,12 @@ function SessionsDetailTab({ active, agentClis, candidate, setToast, onRestoreAg
   return (
     <div className="queue-list task-list-direct">
       {sessions.map((session) => {
-        const restore = buildAgentSessionRestoreCommand({ agentName: session.agentId, sessionId: session.sessionId, availableAgents: agentClis });
+        const restoreAgentId = inferAgentSessionRestoreAgent(session.agentId);
+        const restoreFlags = restoreAgentId ? getAgentLaunchFlags(restoreAgentId) : [];
+        if (restoreAgentId === "kiro" && getAgentHooksEnabled("kiro") && !restoreFlags.includes("--agent sharkbay")) {
+          restoreFlags.push("--agent sharkbay");
+        }
+        const restore = buildAgentSessionRestoreCommand({ agentName: session.agentId, sessionId: session.sessionId, availableAgents: agentClis, launchFlags: restoreFlags });
         const modelShort = session.model ? formatSessionModelName(session.model) : null;
         const subtitle = [modelShort, `${session.turnCount} turns`].filter(Boolean).join(" · ");
         return (
@@ -2482,11 +2490,15 @@ function taskRestoreCommand(task: TaskViewModel, status: ProtocolStatus | null, 
   if (task.owner.githubUserId !== status.githubUserId) return null;
   if (task.machine !== status.machineId) return null;
   const agentId = inferAgentSessionRestoreAgent(task.agent);
+  const launchFlags = agentId ? getAgentLaunchFlags(agentId) : [];
+  if (agentId === "kiro" && getAgentHooksEnabled("kiro") && !launchFlags.includes("--agent sharkbay")) {
+    launchFlags.push("--agent sharkbay");
+  }
   return buildAgentSessionRestoreCommand({
     agentName: task.agent,
     sessionId: task.sessionId,
     availableAgents: agentClis,
-    launchFlags: agentId ? getAgentLaunchFlags(agentId) : [],
+    launchFlags,
   });
 }
 

@@ -3,7 +3,7 @@
  *
  * Kiro uses: agentSpawn, userPromptSubmit, preToolUse, postToolUse, stop.
  * Note: Kiro does not emit a session_end event; relies on 5-min timeout fallback.
- * Config: Kiro agent configuration file (~/.kiro/agents/sharkbay.json).
+ * Config: ~/.kiro/agents/sharkbay.json (launched via --agent sharkbay).
  */
 
 import * as fs from "node:fs";
@@ -22,6 +22,7 @@ const EVENT_MAP: Record<string, HookEventKind> = {
 
 const HOOK_EVENTS = ["agentSpawn", "userPromptSubmit", "preToolUse", "postToolUse", "stop"];
 const MANAGED_MARKER = "sharkbay-managed";
+const DEFAULT_TOOLS = ["*"];
 
 export class KiroConnector implements AgentConnector {
   readonly id = "kiro";
@@ -38,7 +39,7 @@ export class KiroConnector implements AgentConnector {
   async install(hookCliPath: string): Promise<void> {
     const config = this.readConfig();
     config.name = "sharkbay";
-    config.description = "SharkBay status hooks agent — use with --agent sharkbay or set as default";
+    if (!config.tools) config.tools = DEFAULT_TOOLS;
     const hooks = (config.hooks as Record<string, unknown[]>) ?? {};
     for (const event of HOOK_EVENTS) {
       const entry = { command: `"${hookCliPath}" --source kiro`, timeout_ms: 5000, _managedBy: MANAGED_MARKER };
