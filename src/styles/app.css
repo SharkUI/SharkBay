@@ -1495,6 +1495,16 @@ button.project-file-toggle:focus-visible {
 .task-title { min-width: 0; overflow: hidden; color: var(--ink); font-size: 12px; font-weight: 680; text-overflow: ellipsis; white-space: nowrap; }
 .task-avatar { display: grid; place-items: center; width: 28px; height: 28px; overflow: hidden; color: #ffffff; background: #325768; border: 1px solid var(--line); border-radius: 50%; font-size: 10px; font-weight: 800; box-shadow: 0 1px 2px rgba(20, 32, 34, 0.14); }
 .task-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.task-agent-avatar {
+  width: 24px;
+  height: 24px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+}
 .task-row-main { display: grid; gap: 3px; min-width: 0; }
 .task-row-main small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .protocol-facts-card { padding: 11px 12px 12px; }
@@ -3366,6 +3376,22 @@ button.project-file-toggle:focus-visible {
   letter-spacing: 0;
 }
 
+.agent-logo-icon {
+  display: block;
+  flex: none;
+  overflow: visible;
+}
+
+.agent-logo-monogram {
+  display: inline-grid;
+  place-items: center;
+  color: #325768;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
 .terminal-tab {
   position: relative;
   display: grid;
@@ -3729,6 +3755,11 @@ body.is-resizing-columns .app-shell[data-theme="night"] .column-resizer::before 
 
 .app-shell[data-theme="night"] .task-session-agent-icon {
   color: #7f9995;
+}
+
+.app-shell[data-theme="night"] .task-agent-avatar {
+  background: transparent;
+  border-color: transparent;
 }
 
 .app-shell[data-theme="night"] .task-session-restore-link {
