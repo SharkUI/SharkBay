@@ -72,6 +72,21 @@ export function shouldKeepCurrentServiceUrl(currentUrl: string | null, nextUrl: 
   return Boolean(currentUrl && isLocalBrowserUrl(currentUrl) && !isLocalBrowserUrl(nextUrl));
 }
 
+export function formatSessionModelName(model: string): string {
+  const normalized = model.trim();
+  if (!normalized) return model;
+
+  const lower = normalized.toLowerCase();
+  if (lower.includes("opus")) return "Opus";
+  if (lower.includes("sonnet")) return "Sonnet";
+  if (lower.includes("haiku")) return "Haiku";
+  if (lower.includes("gemini")) return normalized.split("/").pop()?.replace(/^models-/, "") ?? normalized;
+  if (/^(?:gpt|o\d|codex)(?:[-.][\w.]+)*$/iu.test(normalized)) return normalized;
+
+  const last = normalized.split("/").pop() ?? normalized;
+  return last.length > 16 ? last.slice(0, 16) : last;
+}
+
 export function isLocalBrowserUrl(value: string): boolean {
   try {
     const hostname = new URL(value).hostname.toLowerCase();

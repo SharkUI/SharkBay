@@ -40,6 +40,7 @@ import type {
 } from "./types";
 import {
   firstHttpUrl,
+  formatSessionModelName,
   resolveSelectedCandidate,
   shouldEnsureCodeGraphForSelection,
   shouldKeepCurrentServiceUrl,
@@ -2206,7 +2207,7 @@ function SessionsDetailTab({ active, agentClis, candidate, setToast, onRestoreAg
     <div className="queue-list task-list-direct">
       {sessions.map((session) => {
         const restore = buildAgentSessionRestoreCommand({ agentName: session.agentId, sessionId: session.sessionId, availableAgents: agentClis });
-        const modelShort = session.model ? shortModelName(session.model) : null;
+        const modelShort = session.model ? formatSessionModelName(session.model) : null;
         const subtitle = [modelShort, `${session.turnCount} turns`].filter(Boolean).join(" · ");
         return (
           <button
@@ -2241,15 +2242,6 @@ function SessionAgentIcon({ agentId }: { agentId: string }) {
   if (agentId === "deepseek") return <CodeWhaleIcon />;
   if (agentId === "qwen") return <QwenIcon />;
   return <span aria-hidden="true" className="agent-cli-monogram">{agentId.slice(0, 2).toUpperCase()}</span>;
-}
-
-function shortModelName(model: string): string {
-  if (model.includes("opus")) return "Opus";
-  if (model.includes("sonnet")) return "Sonnet";
-  if (model.includes("haiku")) return "Haiku";
-  if (model.includes("gemini")) return model.split("/").pop()?.replace(/^models-/, "") ?? model;
-  const last = model.split(/[./]/).pop() ?? model;
-  return last.length > 16 ? last.slice(0, 16) : last;
 }
 
 function taskPill(task: TaskViewModel): { label: string; cls: string } {

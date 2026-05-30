@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   firstHttpUrl,
+  formatSessionModelName,
   observeServiceUrl,
   resolveSelectedCandidate,
   shouldEnsureCodeGraphForSelection,
@@ -76,6 +77,13 @@ describe("renderer workflow contracts", () => {
 
     observation = observeServiceUrl(observation.output, ":7777/\r\n  ➜  Network: use --host to expose");
     expect(observation.url).toBe("http://localhost:7777/");
+  });
+
+  it("formats session model names without collapsing Codex model versions", () => {
+    expect(formatSessionModelName("gpt-5.5")).toBe("gpt-5.5");
+    expect(formatSessionModelName("openai/gpt-5.5")).toBe("gpt-5.5");
+    expect(formatSessionModelName("us.anthropic.claude-opus-4-6-v1")).toBe("Opus");
+    expect(formatSessionModelName("models/gemini-2.5-pro")).toBe("gemini-2.5-pro");
   });
 
   it("keeps URLs intact when ANSI styling splits host and port", () => {
