@@ -193,11 +193,10 @@ export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
     if (existing) clearTimeout(existing);
     const timer = setTimeout(() => {
       const entry = this.states.get(stateKey);
-      if (entry && entry.state !== "idle") {
-        entry.state = "idle";
-        entry.action = "";
-        entry.lastUpdate = Date.now();
-        this.emitState(stateKey);
+      if (entry) {
+        if (entry.debounceTimer) clearTimeout(entry.debounceTimer);
+        this.states.delete(stateKey);
+        this.timeoutTimers.delete(stateKey);
       }
     }, TIMEOUT_MS);
     timer.unref?.();
