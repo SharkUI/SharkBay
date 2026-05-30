@@ -42,3 +42,23 @@ describe("parseHookSessions Kiro model backfill", () => {
     expect(parseHookSessions(repo)[0]!.model).toBeNull();
   });
 });
+
+describe("parseHookSessions Gemini model backfill", () => {
+  it("backfills model from transcript_path (last model in transcript)", () => {
+    const repo = fs.mkdtempSync(path.join(tmp, "repo-"));
+    const transcript = path.join(fs.mkdtempSync(path.join(tmp, "gem-")), "session.jsonl");
+    fs.writeFileSync(transcript, [
+      JSON.stringify({ sessionId: "g1", kind: "main" }),
+      JSON.stringify({ type: "gemini", model: "gemini-3-flash-preview" }),
+      JSON.stringify({ type: "gemini", model: "gemini-3.1-pro-preview" }),
+    ].join("\n"));
+
+    const logPath = path.join(repo, ".sharkbay", "logs", "hooks.log");
+    fs.mkdirSync(path.dirname(logPath), { recursive: true });
+    fs.writeFileSync(logPath, JSON.stringify({ timestamp: "2026-01-01T00:00:00Z", source: "gemini", payload: { session_id: "g1", transcript_path: transcript }, normalized: { agent: "gemini", sessionId: "g1", event: "prompt" } }));
+
+    const [session] = parseHookSessions(repo);
+    expect(session!.model).toBe("gemini-3.1-pro-preview");
+    expect(session as Record<string, unknown>).not.toHaveProperty("transcriptPath");
+  });
+});

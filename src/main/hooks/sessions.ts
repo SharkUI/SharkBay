@@ -40,6 +40,7 @@ export function parseHookSessions(repoPath: string): HookSession[] {
   const sessions = new Map<string, {
     agentId: string;
     model: string | null;
+    transcriptPath: string | null;
     startedAt: string;
     lastEventAt: string;
     promptCount: number;
@@ -66,6 +67,7 @@ export function parseHookSessions(repoPath: string): HookSession[] {
       session = {
         agentId: normalized?.agent ?? entry.source ?? "unknown",
         model: null,
+        transcriptPath: null,
         startedAt: entry.timestamp,
         lastEventAt: entry.timestamp,
         promptCount: 0,
@@ -80,6 +82,9 @@ export function parseHookSessions(repoPath: string): HookSession[] {
     if (payload?.model && typeof payload.model === "string") {
       session.model = payload.model;
     }
+    if (typeof payload?.transcript_path === "string") {
+      session.transcriptPath = payload.transcript_path;
+    }
 
     const event = normalized?.event;
     if (event === "prompt") session.promptCount++;
@@ -88,15 +93,30 @@ export function parseHookSessions(repoPath: string): HookSession[] {
   }
 
   const result: HookSession[] = [];
-  for (const [sessionId, data] of sessions) {
-    if (data.agentId === "kiro" && data.model === null) {
-      data.model = readKiroModel(sessionId);
+  for (const [sessionId, { transcriptPath, ...data }] of sessions) {
+    if (data.model === null) {
+      if (data.agentId === "kiro") data.model = readKiroModel(sessionId);
+      else if (data.agentId === "gemini" && transcriptPath) data.model = readGeminiModel(transcriptPath);
     }
     result.push({ sessionId, ...data });
   }
 
   result.sort((a, b) => b.lastEventAt.localeCompare(a.lastEventAt));
   return result;
+}
+
+function readGeminiModel(transcriptPath: string): string | null {
+  try {
+    let model: string | null = null;
+    for (const line of fs.readFileSync(transcriptPath, "utf8").split("\n")) {
+      if (!line) continue;
+      const m = JSON.parse(line)?.model;
+      if (typeof m === "string" && m) model = m;
+    }
+    return model;
+  } catch {
+    return null;
+  }
 }
 
 function readKiroModel(sessionId: string): string | null {
