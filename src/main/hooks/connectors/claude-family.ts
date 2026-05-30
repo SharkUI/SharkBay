@@ -1,5 +1,5 @@
 /**
- * Claude-family connector — covers Claude Code, Codex, Qwen, DeepSeek.
+ * Claude-family connector — covers Claude Code, Codex, Qwen, CodeWhale.
  *
  * These agents share the same hook protocol (stdin JSON with hook_event_name field).
  * Subclasses only differ in config file path and format.
@@ -100,7 +100,7 @@ function buildHookEntries(hookCliPath: string, source: string): Record<string, u
 }
 
 // ---------------------------------------------------------------------------
-// JSON config connector (Claude, Qwen, DeepSeek)
+// JSON config connector (Claude, Qwen, CodeWhale)
 // ---------------------------------------------------------------------------
 
 export class ClaudeConnector implements AgentConnector {
@@ -200,9 +200,9 @@ export class QwenConnector extends ClaudeConnector {
 // CodeWhale connector (same protocol, different config path)
 // ---------------------------------------------------------------------------
 
-export class DeepSeekConnector extends ClaudeConnector {
+export class CodeWhaleJsonConnector extends ClaudeConnector {
   constructor() {
-    super({ id: "deepseek", displayName: "CodeWhale", configPath: path.join(os.homedir(), ".codewhale", "settings.json"), commandName: "codewhale" });
+    super({ id: "codewhale", displayName: "CodeWhale", configPath: path.join(os.homedir(), ".codewhale", "settings.json"), commandName: "codewhale" });
   }
 }
 

@@ -2247,7 +2247,7 @@ function SessionAgentIcon({ agentId }: { agentId: string }) {
   if (agentId === "claude") return <ClaudeCodeIcon />;
   if (agentId === "gemini") return <GeminiCliIcon />;
   if (agentId === "kiro") return <KiroIcon />;
-  if (agentId === "deepseek") return <CodeWhaleIcon />;
+  if (agentId === "codewhale") return <CodeWhaleIcon />;
   if (agentId === "qwen") return <QwenIcon />;
   return <span aria-hidden="true" className="agent-cli-monogram">{agentId.slice(0, 2).toUpperCase()}</span>;
 }
@@ -2961,12 +2961,12 @@ const allAgentCliDefinitions: AgentCliDefinition[] = [
   { id: "codex", label: "Codex CLI", shortLabel: "Cx" },
   { id: "gemini", label: "Gemini CLI", shortLabel: "G" },
   { id: "kiro", label: "Kiro CLI", shortLabel: "K" },
-  { id: "deepseek", label: "CodeWhale", shortLabel: "D" },
+  { id: "codewhale", label: "CodeWhale", shortLabel: "D" },
   { id: "qwen", label: "Qwen Code", shortLabel: "Q" },
   { id: "opencode", label: "OpenCode", shortLabel: "O" },
 ];
 
-const hookSupportedAgents = new Set(["claude", "codex", "gemini", "kiro", "qwen", "deepseek"]);
+const hookSupportedAgents = new Set(["claude", "codex", "gemini", "kiro", "qwen", "codewhale"]);
 
 type AgentLaunchOption = { flag: string; label: string; description: string; type: "toggle" };
 
@@ -2983,7 +2983,7 @@ const agentLaunchOptions: Record<string, AgentLaunchOption[]> = {
   kiro: [
     { flag: "--trust-all-tools", label: "Trust all tools", description: "Allows the model to use any tool to run commands without asking for confirmation", type: "toggle" },
   ],
-  deepseek: [
+  codewhale: [
     { flag: "--approval-policy auto", label: "Full auto", description: "Run all commands without approval", type: "toggle" },
   ],
   qwen: [],
@@ -3795,7 +3795,7 @@ function AgentCliIcon({ agent }: { agent: AgentCli }) {
   if (agent.id === "claude") return <ClaudeCodeIcon />;
   if (agent.id === "gemini") return <GeminiCliIcon />;
   if (agent.id === "kiro") return <KiroIcon />;
-  if (agent.id === "deepseek") return <CodeWhaleIcon />;
+  if (agent.id === "codewhale") return <CodeWhaleIcon />;
   if (agent.id === "qwen") return <QwenIcon />;
   if (agent.id === "opencode") return <OpenCodeIcon />;
   return <span aria-hidden="true" className="agent-cli-monogram">{agent.shortLabel}</span>;

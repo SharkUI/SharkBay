@@ -50,7 +50,7 @@ const agentCliDefinitions: AgentCliDefinition[] = [
   { id: "claude", label: "Claude Code", commands: ["claude"], shortLabel: "Cl" },
   { id: "gemini", label: "Gemini CLI", commands: ["gemini"], shortLabel: "G" },
   { id: "kiro", label: "Kiro CLI", commands: ["kiro-cli"], shortLabel: "K" },
-  { id: "deepseek", label: "CodeWhale", commands: ["codewhale"], shortLabel: "D" },
+  { id: "codewhale", label: "CodeWhale", commands: ["codewhale"], shortLabel: "D" },
   { id: "qwen", label: "Qwen Code", commands: ["qwen", "qwen-code", "qianwen"], shortLabel: "Q" },
   { id: "opencode", label: "OpenCode", commands: ["opencode"], shortLabel: "O" },
 ];

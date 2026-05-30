@@ -103,7 +103,7 @@ const hookConnectors = new Map<string, AgentConnector>([
   ["claude", new ClaudeConnector()],
   ["codex", new CodexConnector()],
   ["qwen", new QwenConnector()],
-  ["deepseek", new CodeWhaleConnector()],
+  ["codewhale", new CodeWhaleConnector()],
   ["gemini", new GeminiConnector()],
   ["kiro", new KiroConnector()],
 ]);

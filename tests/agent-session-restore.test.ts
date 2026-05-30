@@ -7,7 +7,7 @@ describe("agent session restore commands", () => {
     expect(inferAgentSessionRestoreAgent("Claude Code Sonnet 4.5")).toBe("claude");
     expect(inferAgentSessionRestoreAgent("Gemini CLI 2.5 Pro")).toBe("gemini");
     expect(inferAgentSessionRestoreAgent("Kiro Claude 4.6")).toBe("kiro");
-    expect(inferAgentSessionRestoreAgent("CodeWhale")).toBe("deepseek");
+    expect(inferAgentSessionRestoreAgent("CodeWhale")).toBe("codewhale");
     expect(inferAgentSessionRestoreAgent("Qwen Code")).toBe("qwen");
     expect(inferAgentSessionRestoreAgent("OpenCode")).toBe("opencode");
     expect(inferAgentSessionRestoreAgent("Unknown")).toBeNull();

@@ -57,7 +57,7 @@ describe("CoreService installTool", () => {
       "claude",
       "gemini",
       "kiro",
-      "deepseek",
+      "codewhale",
       "qwen",
       "opencode",
     ]);
@@ -118,7 +118,7 @@ describe("CoreService installTool", () => {
       "claude",
       "gemini",
       "kiro",
-      "deepseek",
+      "codewhale",
       "qwen",
       "opencode",
     ]);

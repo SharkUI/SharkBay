@@ -155,7 +155,7 @@ process.stdin.on("end", () => {
   if (data.trim()) {
     try { raw = JSON.parse(data); } catch {}
   }
-  const msg = JSON.stringify({ source: "deepseek", payload: buildPayload(raw) }) + "\\n";
+  const msg = JSON.stringify({ source: "codewhale", payload: buildPayload(raw) }) + "\\n";
   const conn = net.createConnection(socketPath, () => { conn.end(msg, () => process.exit(0)); });
   conn.on("error", () => process.exit(0));
   conn.setTimeout(3000, () => { conn.destroy(); process.exit(0); });

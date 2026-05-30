@@ -97,7 +97,7 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
       const launch = await prepareAgentLaunch(spec.projectRoot, input.agentId, initialCommand, {
         codeGraphEnabled: input.protocolBootstrap?.codeGraphEnabled ?? false,
       });
-      if (launch.injected && (input.agentId === "deepseek" || input.agentId === "opencode") && launch.initialCommand === initialCommand) {
+      if (launch.injected && (input.agentId === "codewhale" || input.agentId === "opencode") && launch.initialCommand === initialCommand) {
         delayedBootstrapPrompt = launch.bootstrapPrompt ?? null;
       }
       initialCommand = launch.initialCommand;

@@ -56,7 +56,7 @@ const AGENT_SESSION_ID_SCRIPT = [
   "    echo \"kiro session id not found\" >&2",
   "    exit 1",
   "    ;;",
-  "  *deepseek*|*codewhale*)",
+  "  *codewhale*|*deepseek*)",
   "    audit=\"$HOME/.codewhale/audit.log\"",
   "    if [ ! -f \"$audit\" ]; then",
   "      echo \"codewhale audit log not found\" >&2",
@@ -556,7 +556,7 @@ async function hasSharkbayHarnessDir(repoPath: string): Promise<boolean> {
 function agentBootstrapArgs(agentId: string, prompt: string): string[] | null {
   const normalized = agentId.trim().toLowerCase();
   if (normalized === "codex" || normalized === "claude") return [prompt];
-  if (normalized === "deepseek") return [];
+  if (normalized === "codewhale") return [];
   if (normalized === "gemini" || normalized === "qwen") return ["-i", prompt];
   if (normalized === "kiro") return [prompt];
   if (normalized === "opencode") return [];

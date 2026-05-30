@@ -33,7 +33,7 @@ function shellQuote(s: string): string {
 }
 
 export class CodeWhaleConnector implements AgentConnector {
-  readonly id = "deepseek";
+  readonly id = "codewhale";
   readonly displayName = "CodeWhale";
   readonly supportedEvents: readonly HookEventKind[] = ["session_start", "session_end", "prompt", "tool_start", "tool_end", "attention"];
 

@@ -16,7 +16,7 @@ describe("CodeWhale status hooks", () => {
       workspace: "/tmp/sharkbay-project",
       session_id: "sess_123",
     })).toMatchObject({
-      agent: "deepseek",
+      agent: "codewhale",
       sessionId: "sess_123",
       event: "tool_start",
       tool: { name: "exec_shell" },
@@ -31,7 +31,7 @@ describe("CodeWhale status hooks", () => {
     manager.on("stateChange", (event) => events.push(event));
 
     manager.handleMessage({
-      source: "deepseek",
+      source: "codewhale",
       payload: {
         hook_event: "tool_call_before",
         tool_name: "exec_shell",
@@ -44,8 +44,8 @@ describe("CodeWhale status hooks", () => {
     expect(events[0]).toMatchObject({
       projectPath: "/tmp/sharkbay-project",
       state: "working",
-      action: "Deepseek: exec_shell",
-      agent: "deepseek",
+      action: "Codewhale: exec_shell",
+      agent: "codewhale",
     });
     manager.dispose();
   });
@@ -57,7 +57,7 @@ describe("CodeWhale status hooks", () => {
     manager.on("stateChange", (event) => events.push(event));
 
     manager.handleMessage({
-      source: "deepseek",
+      source: "codewhale",
       payload: {
         hook_event: "tool_call_before",
         tool_name: "fetch_url",
@@ -66,7 +66,7 @@ describe("CodeWhale status hooks", () => {
       },
     });
     manager.handleMessage({
-      source: "deepseek",
+      source: "codewhale",
       payload: {
         hook_event: "tool_call_after",
         tool_name: "fetch_url",
@@ -79,7 +79,7 @@ describe("CodeWhale status hooks", () => {
     expect(events[0]).toMatchObject({
       projectPath: "/tmp/sharkbay-project",
       state: "working",
-      agent: "deepseek",
+      agent: "codewhale",
     });
     manager.dispose();
   });
@@ -91,7 +91,7 @@ describe("CodeWhale status hooks", () => {
     manager.on("stateChange", (event) => events.push(event));
 
     manager.handleMessage({
-      source: "deepseek",
+      source: "codewhale",
       payload: {
         hook_event: "tool_call_before",
         tool_name: toolName,
@@ -104,8 +104,8 @@ describe("CodeWhale status hooks", () => {
     expect(events[0]).toMatchObject({
       projectPath: "/tmp/sharkbay-project",
       state: "attention",
-      action: `Deepseek: ${toolName}`,
-      agent: "deepseek",
+      action: `Codewhale: ${toolName}`,
+      agent: "codewhale",
     });
     manager.dispose();
   });
@@ -117,7 +117,7 @@ describe("CodeWhale status hooks", () => {
 
     try {
       manager.handleMessage({
-        source: "deepseek",
+        source: "codewhale",
         payload: {
           hook_event: "tool_call_before",
           tool_name: "write_file",
@@ -131,11 +131,11 @@ describe("CodeWhale status hooks", () => {
       const lines = (await fs.readFile(logPath, "utf8")).trim().split("\n");
       const record = JSON.parse(lines[0]!) as Record<string, any>;
       expect(record).toMatchObject({
-        source: "deepseek",
+        source: "codewhale",
         state: "attention",
-        action: "Deepseek: write_file",
+        action: "Codewhale: write_file",
         normalized: {
-          agent: "deepseek",
+          agent: "codewhale",
           sessionId: "sess_123",
           event: "attention",
           cwd: root,
@@ -155,7 +155,7 @@ describe("CodeWhale status hooks", () => {
     manager.on("stateChange", (event) => events.push(event));
 
     manager.handleMessage({
-      source: "deepseek",
+      source: "codewhale",
       payload: {
         hook_event: "session_start",
         workspace: "/tmp/sharkbay-project",
@@ -167,7 +167,7 @@ describe("CodeWhale status hooks", () => {
       projectPath: "/tmp/sharkbay-project",
       state: "idle",
       action: "",
-      agent: "deepseek",
+      agent: "codewhale",
     });
     manager.dispose();
   });
@@ -179,7 +179,7 @@ describe("CodeWhale status hooks", () => {
     manager.on("stateChange", (event) => events.push(event));
 
     manager.handleMessage({
-      source: "deepseek",
+      source: "codewhale",
       payload: {
         hook_event: "on_error",
         error: "Invalid approval_policy 'full-auto'",
@@ -191,8 +191,8 @@ describe("CodeWhale status hooks", () => {
     expect(events[0]).toMatchObject({
       projectPath: "/tmp/sharkbay-project",
       state: "attention",
-      action: "Deepseek: Invalid approval_policy 'full-auto'",
-      agent: "deepseek",
+      action: "Codewhale: Invalid approval_policy 'full-auto'",
+      agent: "codewhale",
     });
     manager.dispose();
   });

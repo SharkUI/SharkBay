@@ -82,7 +82,7 @@ describe("harness install", () => {
     expect(sessionHelper.mode & 0o111).not.toBe(0);
     const sessionHelperText = await fs.readFile(path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"), "utf8");
     expect(sessionHelperText).toContain("*kiro*)");
-    expect(sessionHelperText).toContain("*deepseek*|*codewhale*)");
+    expect(sessionHelperText).toContain("*codewhale*|*deepseek*)");
     expect(sessionHelperText).toContain(".codewhale/audit.log");
     expect(sessionHelperText).toContain("*opencode*)");
     expect(sessionHelperText).toContain(".local\\/share\\/opencode\\/log");
@@ -333,7 +333,7 @@ describe("harness install", () => {
       injected: true,
       initialCommand: expect.stringContaining("kiro-cli chat 'I'\\''m working in SharkBay Task Protocol mode"),
     });
-    await expect(prepareAgentLaunch(repo, "deepseek", "codewhale")).resolves.toMatchObject({
+    await expect(prepareAgentLaunch(repo, "codewhale", "codewhale")).resolves.toMatchObject({
       injected: true,
       initialCommand: "codewhale",
     });
