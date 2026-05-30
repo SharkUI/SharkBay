@@ -12,20 +12,21 @@ agent: Kiro Claude 4.8
 sessionId: a61b2a4f-3854-4f93-aa58-32201471f529
 branch: main
 createdAt: 2026-05-30T14:07:53Z
-updatedAt: 2026-05-30T14:09:12Z
+updatedAt: 2026-05-30T14:12:39Z
 completedAt: 2026-05-30T14:09:12Z
 ---
 
 ## Summary
-Appended a directive to the bootstrap prompt so every supported agent is told to also read `AGENTS.md` (if present), giving team-owned conventions unified multi-agent reach without SharkBay writing to that file.
+Appended a directive to the bootstrap prompt so every supported agent is told to also read `AGENTS.md` (if present), giving the team-owned entry file unified multi-agent reach without SharkBay writing to that file.
 
 ## Files
 - src/main/harness.ts
 - tests/harness.test.ts
 
 ## Work
-- Bootstrap is SharkBay's only channel that reaches all agents uniformly; native entry files (CLAUDE.md/GEMINI.md/QWEN.md/.kiro) are fragmented, so team conventions placed only in AGENTS.md don't reliably reach Gemini/Qwen/Kiro.
-- Added the directive as the final element of `BOOTSTRAP_TASK_PROMPT` in harness.ts: "If `AGENTS.md` exists at the project root, also read it and follow its team conventions." SharkBay still never creates or modifies AGENTS.md.
+- Bootstrap is SharkBay's only channel that reaches all agents uniformly; native entry files (CLAUDE.md/GEMINI.md/QWEN.md/.kiro) are fragmented, so anything placed only in AGENTS.md doesn't reliably reach Gemini/Qwen/Kiro.
+- Added the directive as the final element of `BOOTSTRAP_TASK_PROMPT` in harness.ts: "If `AGENTS.md` exists at the project root, also read it and follow its instructions." SharkBay still never creates or modifies AGENTS.md.
+- Wording is "follow its instructions" (not "team conventions") since AGENTS.md may hold any guidance — build commands, project context, rules — all of which should be followed.
 - Updated the `bootstrapPrompt({ codeGraphEnabled: true })` expectation in tests/harness.test.ts to match.
 
 ## Verification
