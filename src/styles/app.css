@@ -3229,7 +3229,7 @@ button.project-file-toggle:focus-visible {
 
 .terminal-layout {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 0;
   height: 100%;
   min-height: 0;
@@ -3579,6 +3579,68 @@ button.project-file-toggle:focus-visible {
 
 .xterm-surface.is-active {
   display: block;
+}
+
+.prompt-input-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 6px 10px;
+  border-top: 1px solid #d8d1c4;
+  background: #f0eadc;
+}
+
+.prompt-input-bar.is-disabled {
+  opacity: 0.5;
+}
+
+.prompt-input-textarea {
+  flex: 1;
+  min-height: 28px;
+  max-height: 120px;
+  padding: 4px 8px;
+  border: 1px solid #c8c1b4;
+  border-radius: 6px;
+  background: #fff;
+  color: #263235;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  resize: none;
+  overflow-y: auto;
+}
+
+.prompt-input-textarea:focus {
+  outline: none;
+  border-color: #2d5860;
+  box-shadow: 0 0 0 1px #2d586040;
+}
+
+.prompt-input-textarea::placeholder {
+  color: #8a8578;
+}
+
+.prompt-input-send {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: #2d5860;
+  color: #fff;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.prompt-input-send:hover:not(:disabled) {
+  background: #1e3f45;
+}
+
+.prompt-input-send:disabled {
+  background: #b8b2a4;
+  cursor: default;
 }
 
 .browser-surface {
@@ -4221,6 +4283,38 @@ body.is-resizing-columns .app-shell[data-theme="night"] .column-resizer::before 
   color: #d9e5df;
 }
 
+.app-shell[data-theme="night"] .prompt-input-bar {
+  border-top-color: #2c3c3f;
+  background: #0d1213;
+}
+
+.app-shell[data-theme="night"] .prompt-input-textarea {
+  border-color: #2c3c3f;
+  background: #1a2325;
+  color: #d9e5df;
+}
+
+.app-shell[data-theme="night"] .prompt-input-textarea:focus {
+  border-color: #93d7a4;
+  box-shadow: 0 0 0 1px #93d7a440;
+}
+
+.app-shell[data-theme="night"] .prompt-input-textarea::placeholder {
+  color: #6b7f78;
+}
+
+.app-shell[data-theme="night"] .prompt-input-send {
+  background: #2d6a56;
+}
+
+.app-shell[data-theme="night"] .prompt-input-send:hover:not(:disabled) {
+  background: #3a8a6e;
+}
+
+.app-shell[data-theme="night"] .prompt-input-send:disabled {
+  background: #2c3c3f;
+}
+
 .app-shell[data-theme="night"] .terminal-header h3 {
   color: #f4faf6;
 }
@@ -4387,6 +4481,38 @@ body.is-resizing-columns .app-shell[data-theme="morning"] .column-resizer::befor
 
 .app-shell[data-theme="morning"] .terminal-layout {
   color: #d9e5df;
+}
+
+.app-shell[data-theme="morning"] .prompt-input-bar {
+  border-top-color: #2b3f42;
+  background: #0d1213;
+}
+
+.app-shell[data-theme="morning"] .prompt-input-textarea {
+  border-color: #2b3f42;
+  background: #1a2325;
+  color: #d9e5df;
+}
+
+.app-shell[data-theme="morning"] .prompt-input-textarea:focus {
+  border-color: #93d7a4;
+  box-shadow: 0 0 0 1px #93d7a440;
+}
+
+.app-shell[data-theme="morning"] .prompt-input-textarea::placeholder {
+  color: #6b7f78;
+}
+
+.app-shell[data-theme="morning"] .prompt-input-send {
+  background: #2d6a56;
+}
+
+.app-shell[data-theme="morning"] .prompt-input-send:hover:not(:disabled) {
+  background: #3a8a6e;
+}
+
+.app-shell[data-theme="morning"] .prompt-input-send:disabled {
+  background: #2c3c3f;
 }
 
 .app-shell[data-theme="morning"] .terminal-header h3 {

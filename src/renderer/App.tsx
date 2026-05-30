@@ -1418,6 +1418,10 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
           </div>
         ) : null}
       </div>
+      <PromptInputBar
+        sessionId={selectedSpace?.activeId && selectedSpace.tabs.find((tab) => tab.kind === "terminal" && tab.session.id === selectedSpace.activeId && tab.session.status === "running") ? selectedSpace.activeId : null}
+        disabled={!selectedSpace?.activeId || !selectedSpace.tabs.some((tab) => tab.kind === "terminal" && tab.session.id === selectedSpace.activeId && tab.session.status === "running")}
+      />
     </div>
   );
 });
@@ -3961,6 +3965,59 @@ function CachedAvatar({ url }: { url: string }) {
     img.src = url;
   }, [url, cacheKey]);
   return <img alt="" src={src} />;
+}
+
+function PromptInputBar({ sessionId, disabled }: { sessionId: string | null; disabled: boolean }) {
+  const [value, setValue] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  function submit() {
+    const text = value;
+    if (!text || !sessionId) return;
+    const id = sessionId;
+    const fire = getBridge().terminal?.inputFire;
+    const send = (data: string) => {
+      if (fire) fire({ sessionId: id, data });
+      else void sendTerminalInput(id, data);
+    };
+    send(text);
+    setTimeout(() => send("\r"), 30);
+    setValue("");
+    if (textareaRef.current) textareaRef.current.style.height = "";
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      submit();
+    }
+  }
+
+  function handleInput(event: FormEvent<HTMLTextAreaElement>) {
+    const target = event.currentTarget;
+    setValue(target.value);
+    target.style.height = "";
+    target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
+  }
+
+  return (
+    <div className={cx("prompt-input-bar", disabled && "is-disabled")}>
+      <textarea
+        ref={textareaRef}
+        className="prompt-input-textarea"
+        disabled={disabled}
+        placeholder={disabled ? "No active terminal" : "Type here… Enter to send, Shift+Enter for newline"}
+        rows={1}
+        value={value}
+        onInput={handleInput}
+        onKeyDown={handleKeyDown}
+        onChange={(e) => setValue(e.target.value)}
+      />
+      <button className="prompt-input-send" disabled={disabled || !value} title="Send (Enter)" type="button" onClick={submit}>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </button>
+    </div>
+  );
 }
 
 function EmptyState({ title, body }: { title: string; body: string }) {
