@@ -38,9 +38,10 @@ export class GeminiConnector implements AgentConnector {
     const config = this.readConfig();
     const hooks = (config.hooks as Record<string, unknown[]>) ?? {};
     for (const event of HOOK_EVENTS) {
-      const entry = { type: "command", command: `"${hookCliPath}" --source gemini`, timeout: 5000, _managedBy: MANAGED_MARKER };
+      const hookEntry = { type: "command", command: `"${hookCliPath}" --source gemini` };
+      const matcherEntry = { matcher: "*", hooks: [hookEntry], _managedBy: MANAGED_MARKER };
       const existing = Array.isArray(hooks[event]) ? hooks[event].filter((e: any) => e?._managedBy !== MANAGED_MARKER) : [];
-      hooks[event] = [...existing, entry];
+      hooks[event] = [...existing, matcherEntry];
     }
     config.hooks = hooks;
     this.writeConfig(config);
