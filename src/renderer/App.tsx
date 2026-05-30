@@ -393,7 +393,8 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function priorityOf(state: ProjectActivityState): number {
-  if (state === "attention") return 2;
+  if (state === "attention") return 3;
+  if (state === "idle") return 2;
   if (state === "working") return 1;
   return 0;
 }
@@ -985,6 +986,17 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     }
     return result;
   }, [hookStateBySessionId, spaces]);
+
+  // Auto-clear idle on the active tab so project pill never shows idle for it
+  useEffect(() => {
+    if (!activeProjectId) return;
+    const space = spaces[activeProjectId];
+    const activeTabId = space?.activeId;
+    if (!activeTabId || hookStateByTerminalId[activeTabId] !== "idle") return;
+    const agentSid = Object.entries(agentSessionToTerminalRef.current).find(([, tid]) => tid === activeTabId)?.[0];
+    if (agentSid) onAgentSessionClear(agentSid);
+  }, [hookStateByTerminalId, activeProjectId, spaces, onAgentSessionClear]);
+
   const selectedSpace = candidate?.id ? spaces[candidate.id] ?? null : null;
   const canCreate = bridgeAvailable && Boolean(candidate?.uri) && (candidate?.providerKind === "local");
   const services = candidate?.services ?? [];
