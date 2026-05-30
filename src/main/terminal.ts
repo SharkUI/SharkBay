@@ -93,7 +93,8 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
     let initialCommand = normalizeTerminalCommandLine(input.initialCommand);
     const initialCommandTitle = initialCommand ? normalizeTerminalCommandLine(input.initialCommandTitle) : null;
     let delayedBootstrapPrompt: string | null = null;
-    if (input.agentId && initialCommand && !input.service) {
+    const isSessionRestore = initialCommand ? /--resume\b|--continue\b|\bresume\b/u.test(initialCommand) : false;
+    if (input.agentId && initialCommand && !input.service && !isSessionRestore) {
       const launch = await prepareAgentLaunch(spec.projectRoot, input.agentId, initialCommand, {
         codeGraphEnabled: input.protocolBootstrap?.codeGraphEnabled ?? false,
       });

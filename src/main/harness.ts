@@ -566,6 +566,7 @@ function agentBootstrapArgs(agentId: string, prompt: string): string[] | null {
 function withLaunchSessionId(agentId: string, command: string): string {
   const normalized = agentId.trim().toLowerCase();
   if (normalized !== "claude" && normalized !== "gemini" && normalized !== "qwen") return command;
+  if (/--resume\b|--continue\b/u.test(command)) return command;
   const sessionId = randomUUID();
   return `SHARKBAY_SESSION_ID=${shellQuote(sessionId)} ${appendShellArgs(command, ["--session-id", sessionId])}`;
 }
