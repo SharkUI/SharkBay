@@ -77,14 +77,31 @@ export function formatSessionModelName(model: string): string {
   if (!normalized) return model;
 
   const lower = normalized.toLowerCase();
-  if (lower.includes("opus")) return "Opus";
-  if (lower.includes("sonnet")) return "Sonnet";
-  if (lower.includes("haiku")) return "Haiku";
+  const claudeLabel = formatClaudeModelName(lower);
+  if (claudeLabel) return claudeLabel;
   if (lower.includes("gemini")) return normalized.split("/").pop()?.replace(/^models-/, "") ?? normalized;
   if (/^(?:gpt|o\d|codex)(?:[-.][\w.]+)*$/iu.test(normalized)) return normalized;
 
   const last = normalized.split("/").pop() ?? normalized;
   return last.length > 16 ? last.slice(0, 16) : last;
+}
+
+function formatClaudeModelName(lowerModel: string): string | null {
+  const family: [string, string] | null = lowerModel.includes("opus")
+    ? ["opus", "Opus"]
+    : lowerModel.includes("sonnet")
+      ? ["sonnet", "Sonnet"]
+      : lowerModel.includes("haiku")
+        ? ["haiku", "Haiku"]
+        : null;
+  if (!family) return null;
+
+  const [token, label] = family;
+  const afterFamily = lowerModel.match(new RegExp(`${token}[-.](\\d+)(?:[-.](\\d+))?`, "u"));
+  const beforeFamily = lowerModel.match(new RegExp(`claude[-.](\\d+)(?:[-.](\\d+))?[-.]${token}`, "u"));
+  const versionMatch = beforeFamily ?? afterFamily;
+  const version = versionMatch ? [versionMatch[1], versionMatch[2]].filter(Boolean).join(".") : "";
+  return version ? `${label} ${version}` : label;
 }
 
 export function isLocalBrowserUrl(value: string): boolean {

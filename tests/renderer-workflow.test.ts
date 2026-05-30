@@ -82,7 +82,8 @@ describe("renderer workflow contracts", () => {
   it("formats session model names without collapsing Codex model versions", () => {
     expect(formatSessionModelName("gpt-5.5")).toBe("gpt-5.5");
     expect(formatSessionModelName("openai/gpt-5.5")).toBe("gpt-5.5");
-    expect(formatSessionModelName("us.anthropic.claude-opus-4-6-v1")).toBe("Opus");
+    expect(formatSessionModelName("us.anthropic.claude-opus-4-6-v1")).toBe("Opus 4.6");
+    expect(formatSessionModelName("claude-3-5-sonnet-20241022")).toBe("Sonnet 3.5");
     expect(formatSessionModelName("models/gemini-2.5-pro")).toBe("gemini-2.5-pro");
   });
 
