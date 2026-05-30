@@ -5,9 +5,10 @@ taskTag: R3W7K5
 mode: task
 title: Fix Kiro sharkbay agent config to include default tools list
 status: completed
-completedAt: 2026-05-30T03:56:50Z
+completedAt: 2026-05-30T04:19:04Z
 commits:
   - 489a89b9
+  - 4615ec14
 actor: SharkUI
 githubUserId: 3960864
 machine: 81ae10
@@ -15,7 +16,7 @@ agent: Claude Code Opus 4.6
 sessionId: b391fb24-23f2-451c-a2b9-2c77593f9e98
 branch: main
 createdAt: 2026-05-30T03:06:05Z
-updatedAt: 2026-05-30T04:19:04Z
+updatedAt: 2026-05-30T04:25:14Z
 ---
 
 ## Summary
@@ -24,6 +25,7 @@ Fixed KiroConnector install() to write `tools: ["*"]` in sharkbay.json, ensuring
 ## Files
 - src/main/hooks/connectors/kiro.ts
 - src/main/hooks/connectors/gemini.ts
+- src/shared/agent-session-restore.ts
 - src/renderer/App.tsx
 
 ## Work
@@ -35,6 +37,7 @@ Fixed KiroConnector install() to write `tools: ["*"]` in sharkbay.json, ensuring
 - App.tsx --agent sharkbay injection restored in all 3 locations
 - Fixed GeminiConnector install(): Gemini requires nested `{matcher, hooks: [...]}` format, not flat entries
 - Prior flat format (`{type, command, timeout}` directly in event array) was silently ignored by Gemini CLI
+- Fixed CodeWhale session cards greyed out: restoreDefinitions match regex didn't include "deepseek" (the connector id used as agentId in hook sessions)
 
 ## Verification
 - `npm run typecheck` passes
