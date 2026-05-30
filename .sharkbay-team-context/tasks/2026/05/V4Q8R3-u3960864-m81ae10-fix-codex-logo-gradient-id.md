@@ -3,7 +3,7 @@ kind: sharkbay_task
 taskId: V4Q8R3-u3960864-m81ae10
 taskTag: V4Q8R3
 mode: quick
-title: Fix Codex session card icon showing incomplete
+title: Fix Codex session card icon clipped
 status: completed
 actor: SharkUI
 githubUserId: 3960864
@@ -12,22 +12,26 @@ agent: Claude Code Opus 4.6
 sessionId: e77624a0-d97f-4a9a-a0a0-1261d5064d35
 branch: main
 createdAt: 2026-05-30T09:16:57Z
-updatedAt: 2026-05-30T09:17:48Z
-completedAt: 2026-05-30T09:17:48Z
+updatedAt: 2026-05-30T09:30:33Z
+completedAt: 2026-05-30T09:30:33Z
+commits:
+  - b2a4ec1e
 ---
 
 ## Summary
-Fix CodexLogoColorIcon using a hardcoded SVG gradient ID causing duplicate-ID conflicts when multiple Codex session cards render — the cloud fill disappears.
+Replaced the simplified cloud SVG path in CodexLogoColorIcon with the full LobeHub Codex mark (hexagonal outline + terminal symbol) to fix left-side clipping in session cards.
 
 ## Files
 - src/renderer/App.tsx
 
 ## Work
-- Identified that `CodexLogoColorIcon` uses `id="codex-logo-gradient"` for its linearGradient; when multiple instances render, only the first resolves correctly.
-- Fix: use React `useId()` to generate a unique gradient ID per instance.
+- The simplified cloud path introduced in 46c8fda4 had geometry that extended beyond the effective render area, causing visible clipping on the left edge.
+- Replaced with the same path used in the monochrome CodexIcon (the canonical LobeHub Codex mark), applied with the gradient fill instead.
+- The full path fits cleanly within 0-24 viewBox with no overflow issues.
 
 ## Verification
-- Visual: multiple Codex session cards should each show the full gradient cloud icon.
+- Visual confirmation: Codex session card icons now display fully without clipping.
+- `npm run typecheck` passes.
 
 ## Notes
-- Related to commit 46c8fda4 which introduced the colored agent logo variants.
+- Related to task L9B4QX which introduced colored agent logos and attempted multiple fixes for this clipping issue.
