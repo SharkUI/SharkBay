@@ -588,6 +588,17 @@ export type AgentProjectStatusEvent = {
   hookState?: "working" | "idle" | "attention";
 };
 
+export type HookSessionViewModel = {
+  sessionId: string;
+  agentId: string;
+  model: string | null;
+  startedAt: string;
+  lastEventAt: string;
+  promptCount: number;
+  turnCount: number;
+  toolCount: number;
+};
+
 export type BrowserBounds = {
   x: number;
   y: number;

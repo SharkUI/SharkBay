@@ -34,6 +34,7 @@ import type {
   TerminalCreateInput,
   TerminalSession,
   TerminalUpdateEvent,
+  HookSessionViewModel,
   UsageGroupRowView,
   UsageReportResultView,
 } from "./types";
@@ -48,7 +49,7 @@ import {
 import type { WorkflowProjectActivityState } from "./workflow";
 
 type View = "dashboard" | "settings";
-type DetailTab = "tasks" | "git" | "files";
+type DetailTab = "sessions" | "tasks" | "git" | "files";
 type SettingsSection = "agent-clis" | "appearance" | "extensions" | "diagnostics";
 
 type Toast = {
@@ -135,6 +136,7 @@ const columnResizeStep = 40;
 const detailColumnStorageKey = "sharkbay.detailColumnWidth.v2";
 const projectColumnStorageKey = "sharkbay.projectColumnWidth.v2";
 const detailTabs: Array<{ id: DetailTab; label: string; localOnly?: boolean }> = [
+  { id: "sessions", label: "Sessions", localOnly: true },
   { id: "tasks", label: "Tasks", localOnly: true },
   { id: "git", label: "Git" },
   { id: "files", label: "Files" },
@@ -2134,6 +2136,17 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
         <GitDetailTab detail={detail} candidate={candidate} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} />
       </div>
       {isLocal ? (
+        <div aria-labelledby="project-detail-tab-sessions" className="detail-tab-panel" hidden={visibleDetailTab !== "sessions"} id="project-detail-tabpanel-sessions" role="tabpanel">
+          <SessionsDetailTab
+            active={visibleDetailTab === "sessions"}
+            agentClis={agentClis}
+            candidate={candidate}
+            setToast={setToast}
+            onRestoreAgentSession={onRestoreAgentSession}
+          />
+        </div>
+      ) : null}
+      {isLocal ? (
         <div aria-labelledby="project-detail-tab-tasks" className="detail-tab-panel" hidden={visibleDetailTab !== "tasks"} id="project-detail-tabpanel-tasks" role="tabpanel">
           <TasksDetailTab
             active={visibleDetailTab === "tasks"}
@@ -2165,6 +2178,89 @@ function GitDetailTab({ detail, candidate, setToast, onOpenFileInEditor, onOpenG
       )}
     </>
   );
+}
+
+function SessionsDetailTab({ active, agentClis, candidate, setToast, onRestoreAgentSession }: {
+  active: boolean;
+  agentClis: AgentCli[];
+  candidate: ProjectCandidate;
+  setToast: (toast: Toast) => void;
+  onRestoreAgentSession: (restore: AgentSessionRestoreCommand) => Promise<void>;
+}) {
+  const repoPath = localPathFromCandidate(candidate);
+  const [sessions, setSessions] = useState<HookSessionViewModel[]>([]);
+
+  useEffect(() => {
+    if (!active || !repoPath) return;
+    let cancelled = false;
+    const getSessions = getBridge().hooks?.getSessions;
+    if (!getSessions) return;
+
+    async function refresh() {
+      try {
+        const result = await getSessions!({ repoPath: repoPath! });
+        if (!cancelled) setSessions(result);
+      } catch {
+        // silent
+      }
+    }
+
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 5000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [active, repoPath]);
+
+  if (!repoPath) return <EmptyState title="Sessions unavailable" body="Sessions are available for local projects with hooks installed." />;
+  if (!sessions.length) return <EmptyState title="No sessions" body="Agent sessions will appear here once hooks capture activity." />;
+
+  return (
+    <div className="queue-list task-list-direct">
+      {sessions.map((session) => {
+        const restore = buildAgentSessionRestoreCommand({ agentName: session.agentId, sessionId: session.sessionId, availableAgents: agentClis });
+        const modelShort = session.model ? shortModelName(session.model) : null;
+        const subtitle = [modelShort, `${session.turnCount} turns`].filter(Boolean).join(" · ");
+        return (
+          <button
+            className="queue-item"
+            key={session.sessionId}
+            type="button"
+            onClick={() => {
+              if (restore) void onRestoreAgentSession(restore);
+            }}
+            disabled={!restore}
+          >
+            <span className="task-avatar">
+              <SessionAgentIcon agentId={session.agentId} />
+            </span>
+            <span className="task-row-main">
+              <span className="task-title">{session.sessionId.slice(0, 8)}</span>
+              <small>{subtitle}{session.lastEventAt ? ` · ${formatRelativeTime(session.lastEventAt)}` : ""}</small>
+            </span>
+            <span className="phase-pill phase-done">{session.promptCount} prompts</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SessionAgentIcon({ agentId }: { agentId: string }) {
+  if (agentId === "codex") return <CodexIcon />;
+  if (agentId === "claude") return <ClaudeCodeIcon />;
+  if (agentId === "gemini") return <GeminiCliIcon />;
+  if (agentId === "kiro") return <KiroIcon />;
+  if (agentId === "deepseek") return <CodeWhaleIcon />;
+  if (agentId === "qwen") return <QwenIcon />;
+  return <span aria-hidden="true" className="agent-cli-monogram">{agentId.slice(0, 2).toUpperCase()}</span>;
+}
+
+function shortModelName(model: string): string {
+  if (model.includes("opus")) return "Opus";
+  if (model.includes("sonnet")) return "Sonnet";
+  if (model.includes("haiku")) return "Haiku";
+  if (model.includes("gemini")) return model.split("/").pop()?.replace(/^models-/, "") ?? model;
+  const last = model.split(/[./]/).pop() ?? model;
+  return last.length > 16 ? last.slice(0, 16) : last;
 }
 
 function taskPill(task: TaskViewModel): { label: string; cls: string } {

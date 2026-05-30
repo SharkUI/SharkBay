@@ -82,6 +82,10 @@ function shellQuote(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`;
 }
 
+function tomlString(s: string): string {
+  return JSON.stringify(s);
+}
+
 function buildHookEntries(hookCliPath: string, source: string): Record<string, unknown[]> {
   const command = `${shellQuote(hookCliPath)} --source ${source}`;
   const entries: Record<string, unknown[]> = {};
@@ -221,9 +225,14 @@ export class CodexConnector extends ClaudeConnector {
     await this.uninstall(); // remove old managed section first
     const content = this.readRawConfig();
     const command = `${shellQuote(hookCliPath)} --source codex`;
-    const hookLines = HOOK_EVENT_SPECS.map((spec) => {
-      const key = spec.name.replace(/([A-Z])/g, "_$1").toLowerCase().replace(/^_/, "");
-      return `[hooks.${key}]\ncommand = "${command}"`;
+    const hookLines = HOOK_EVENT_SPECS.flatMap((spec) => {
+      const lines = [`[[hooks.${spec.name}]]`];
+      if (spec.matcher != null) lines.push(`matcher = ${tomlString(spec.matcher)}`);
+      lines.push(`[[hooks.${spec.name}.hooks]]`);
+      lines.push('type = "command"');
+      lines.push(`command = ${tomlString(command)}`);
+      if (spec.timeout != null) lines.push(`timeout = ${spec.timeout}`);
+      return lines;
     });
     const section = [this.sectionStart, ...hookLines, this.sectionEnd].join("\n");
     this.writeRawConfig(content.trimEnd() + "\n\n" + section + "\n");

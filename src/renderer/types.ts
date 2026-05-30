@@ -322,6 +322,17 @@ export type AgentProjectStatusEvent = {
   hookState?: "working" | "idle" | "attention";
 };
 
+export type HookSessionViewModel = {
+  sessionId: string;
+  agentId: string;
+  model: string | null;
+  startedAt: string;
+  lastEventAt: string;
+  promptCount: number;
+  turnCount: number;
+  toolCount: number;
+};
+
 export type BrowserBounds = {
   x: number;
   y: number;
@@ -523,6 +534,9 @@ export type SharkBayBridge = {
     syncNow?: (input: { repoPath: string }) => Promise<void>;
     updateHarness?: (input: { repoPath: string }) => Promise<ProtocolStatus>;
     onTasksChanged?: (callback: (event: TasksChangedEvent) => void) => () => void;
+  };
+  hooks?: {
+    getSessions?: (input: { repoPath: string }) => Promise<HookSessionViewModel[]>;
   };
   knowledgeSite?: {
     generate?: (input: { repoPath: string }) => Promise<{ generated: boolean; sitePath: string; reason?: string }>;

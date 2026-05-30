@@ -54,7 +54,8 @@ import type {
   GitHubIdentity,
   UsageReportFilter,
   UsageReportResult,
-  UsageSummary
+  UsageSummary,
+  HookSessionViewModel
 } from "../src/shared/types.js";
 
 const openSettingsListeners = new Set<() => void>();
@@ -178,6 +179,9 @@ const sharkBayApi = {
       ipcRenderer.on(channels.protocolTasksChanged, listener);
       return () => ipcRenderer.removeListener(channels.protocolTasksChanged, listener);
     }
+  },
+  hooks: {
+    getSessions: (input: { repoPath: string }) => invoke<HookSessionViewModel[]>(channels.hookGetSessions, input),
   },
   knowledgeSite: {
     generate: (input: { repoPath: string }) => invoke<KnowledgeSiteResult>(channels.knowledgeSiteGenerate, input),

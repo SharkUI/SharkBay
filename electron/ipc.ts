@@ -81,6 +81,7 @@ import { GeminiConnector } from "../src/main/hooks/connectors/gemini.js";
 import { KiroConnector } from "../src/main/hooks/connectors/kiro.js";
 import { CodeWhaleConnector } from "../src/main/hooks/connectors/codewhale.js";
 import type { AgentConnector } from "../src/main/hooks/types.js";
+import { parseHookSessions } from "../src/main/hooks/sessions.js";
 
 export type IpcRuntime = {
   userDataPath: string;
@@ -369,6 +370,9 @@ export async function registerIpcHandlers(
     } else {
       await connector.uninstall();
     }
+  });
+  handle<{ repoPath: string }, import("../src/shared/types.js").HookSessionViewModel[]>(channels.hookGetSessions, async (payload) => {
+    return parseHookSessions(payload.repoPath);
   });
   handle<PathExistsInput, PathExistsResult>(channels.pathExistsOnTarget, (payload) =>
     requireCore().call("pathExistsOnTarget", [runtime, payload])

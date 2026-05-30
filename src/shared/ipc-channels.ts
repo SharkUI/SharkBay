@@ -52,4 +52,5 @@ export const ipcChannels = {
   dockBadgeUpdate: "dock:badgeUpdate",
   contentReady: "app:contentReady",
   setHooksEnabled: "agents:setHooksEnabled",
+  hookGetSessions: "hooks:getSessions",
 } as const;

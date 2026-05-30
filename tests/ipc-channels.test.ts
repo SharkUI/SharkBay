@@ -57,6 +57,7 @@ describe("IPC channels", () => {
       dockBadgeUpdate: "dock:badgeUpdate",
       contentReady: "app:contentReady",
       setHooksEnabled: "agents:setHooksEnabled",
+      hookGetSessions: "hooks:getSessions",
     });
     expect(Object.values(ipcChannels).some((channel) => channel.startsWith("harness:"))).toBe(false);
   });
