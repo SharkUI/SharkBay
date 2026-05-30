@@ -1358,6 +1358,10 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
 
   const displayProjectName = candidate ? (projectAliases[candidate.uri] || candidate.name) : null;
   const terminalHeading = displayProjectName ?? "Terminal";
+  const selectedActiveTerminal = selectedSpace?.tabs.find(
+    (tab): tab is TerminalShellTab => tab.kind === "terminal" && tab.session.id === selectedSpace.activeId && tab.session.status === "running",
+  ) ?? null;
+  const promptFocusRequest = selectedSpace && tabFocusRequest?.projectId === selectedSpace.projectId ? tabFocusRequest.nonce : 0;
 
   return (
     <div className="terminal-layout">
@@ -1456,8 +1460,9 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
         ) : null}
       </div>
       <PromptInputBar
-        sessionId={selectedSpace?.activeId && selectedSpace.tabs.find((tab) => tab.kind === "terminal" && tab.session.id === selectedSpace.activeId && tab.session.status === "running") ? selectedSpace.activeId : null}
-        disabled={!selectedSpace?.activeId || !selectedSpace.tabs.some((tab) => tab.kind === "terminal" && tab.session.id === selectedSpace.activeId && tab.session.status === "running")}
+        sessionId={selectedActiveTerminal?.session.id ?? null}
+        disabled={!selectedActiveTerminal}
+        focusRequest={promptFocusRequest}
       />
     </div>
   );
@@ -4004,9 +4009,28 @@ function CachedAvatar({ url }: { url: string }) {
   return <img alt="" src={src} />;
 }
 
-function PromptInputBar({ sessionId, disabled }: { sessionId: string | null; disabled: boolean }) {
+function PromptInputBar({ sessionId, disabled, focusRequest }: { sessionId: string | null; disabled: boolean; focusRequest: number }) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    if (disabled || !sessionId) return;
+    let firstFrame = 0;
+    let secondFrame = 0;
+    firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        const textarea = textareaRef.current;
+        if (!textarea || textarea.disabled) return;
+        textarea.focus({ preventScroll: true });
+        const cursor = textarea.value.length;
+        textarea.setSelectionRange(cursor, cursor);
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      window.cancelAnimationFrame(secondFrame);
+    };
+  }, [disabled, focusRequest, sessionId]);
 
   function submit() {
     const text = value;
