@@ -392,6 +392,12 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max));
 }
 
+function priorityOf(state: ProjectActivityState): number {
+  if (state === "attention") return 2;
+  if (state === "working") return 1;
+  return 0;
+}
+
 function storedColumnWidth(key: string, fallback: number, min: number): number {
   if (typeof window === "undefined") return fallback;
   const saved = Number(window.localStorage.getItem(key));
@@ -668,27 +674,17 @@ function DashboardView({
   const [hookActivityByProjectId, setHookActivityByProjectId] = useState<Record<string, ProjectActivityState>>({});
   const [hookStateBySessionId, setHookStateBySessionId] = useState<Record<string, { state: ProjectActivityState; projectId: string }>>({});
 
-  // Clear finished hook activity when user returns to the project.
+  // Derive project-level activity: highest priority state across all sessions in the project.
   useEffect(() => {
-    if (!selectedCandidate || !document.hasFocus()) return;
-    const id = selectedCandidate.id;
-    if (hookActivityByProjectId[id] === "idle") {
-      setHookActivityByProjectId((current) => {
-        if (!current[id]) return current;
-        const next = { ...current };
-        delete next[id];
-        return next;
-      });
-      setHookStateBySessionId((current) => {
-        let changed = false;
-        const next = { ...current };
-        for (const [sid, entry] of Object.entries(next)) {
-          if (entry.state === "idle" && entry.projectId === id) { delete next[sid]; changed = true; }
-        }
-        return changed ? next : current;
-      });
+    const byProject: Record<string, ProjectActivityState> = {};
+    for (const entry of Object.values(hookStateBySessionId)) {
+      const current = byProject[entry.projectId];
+      if (!current || priorityOf(entry.state) > priorityOf(current)) {
+        byProject[entry.projectId] = entry.state;
+      }
     }
-  }, [hookActivityByProjectId, selectedCandidate?.id]);
+    setHookActivityByProjectId(byProject);
+  }, [hookStateBySessionId]);
   const [agentClis, setAgentClis] = useState<AgentCli[]>([]);
   const [agentListVersion, setAgentListVersion] = useState(0);
   const [agentStatusByProjectPath, setAgentStatusByProjectPath] = useState<AgentStatusByProjectPath>({});
@@ -795,11 +791,6 @@ function DashboardView({
       });
       if (event.hookState) {
         const matchedProjectId = filteredCandidates.find((c) => c.displayPath === event.projectPath)?.id;
-        if (matchedProjectId) {
-          setHookActivityByProjectId((current) =>
-            current[matchedProjectId] === event.hookState ? current : { ...current, [matchedProjectId]: event.hookState! }
-          );
-        }
         if (event.sessionId && matchedProjectId) {
           setHookStateBySessionId((current) => {
             const existing = current[event.sessionId!];
@@ -812,22 +803,13 @@ function DashboardView({
     return () => unsubscribe?.();
   }, [bridgeAvailable, filteredCandidates]);
 
-  function clearProjectHookStatus(projectId: string) {
-    const projectPath = filteredCandidates.find((item) => item.id === projectId)?.displayPath;
-    setHookActivityByProjectId((current) => {
-      if (!(projectId in current)) return current;
+  function clearAgentSession(agentSessionId: string) {
+    setHookStateBySessionId((current) => {
+      if (!(agentSessionId in current)) return current;
       const next = { ...current };
-      delete next[projectId];
+      delete next[agentSessionId];
       return next;
     });
-    if (projectPath) {
-      setAgentStatusByProjectPath((current) => {
-        if (!(projectPath in current)) return current;
-        const next = { ...current };
-        delete next[projectPath];
-        return next;
-      });
-    }
   }
 
   const prevBadgeCountRef = useRef(0);
@@ -913,7 +895,7 @@ function DashboardView({
           onRunningServiceProjectIdsChange={(nextIds) =>
             setRunningServiceProjectIds((currentIds) => sameStringSet(currentIds, nextIds) ? currentIds : nextIds)
           }
-          onProjectHookStatusClear={clearProjectHookStatus}
+          onAgentSessionClear={clearAgentSession}
         />
       </section>
 
@@ -963,9 +945,9 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   setToast: (toast: Toast) => void;
   onActiveTabKindChange: (kind: ActiveTerminalTabKind) => void;
   onAgentListRefreshRequested: () => void;
-  onProjectHookStatusClear: (projectId: string) => void;
+  onAgentSessionClear: (agentSessionId: string) => void;
   onRunningServiceProjectIdsChange: (projectIds: Set<string>) => void;
-}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, hookStateBySessionId, projectAliases, isVisible, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onProjectHookStatusClear, onRunningServiceProjectIdsChange }, ref) {
+}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, hookStateBySessionId, projectAliases, isVisible, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onAgentSessionClear, onRunningServiceProjectIdsChange }, ref) {
   const [spaces, setSpaces] = useState<Record<string, TerminalSpace>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const spacesRef = useRef<Record<string, TerminalSpace>>({});
@@ -1272,7 +1254,10 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     if (match?.tab) {
       const hint = explainEarlyTerminalExit(match.tab, event);
       if (hint) setToast({ tone: "error", message: hint });
-      if (match.tab.session.agentId) onProjectHookStatusClear(match.space.projectId);
+      if (match.tab.session.agentId) {
+        const agentSid = Object.entries(agentSessionToTerminalRef.current).find(([, tid]) => tid === match.tab.session.id)?.[0];
+        if (agentSid) onAgentSessionClear(agentSid);
+      }
     }
     setSpaces((current) => mapTerminalTab(current, event.sessionId, (currentTab) => ({ ...currentTab, session: { ...currentTab.session, status: "exited" } })));
   }
@@ -1328,9 +1313,16 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
 
   function removeTab(tabId: string, match: ReturnType<typeof findTabWithSpace>) {
     if (match?.tab.kind === "terminal") {
-      match.tab.disposables.forEach((d) => d.dispose());
-      match.tab.terminal.dispose();
-      if (match.tab.session.agentId) onProjectHookStatusClear(match.space.projectId);
+      const termTab = match.tab as TerminalShellTab;
+      termTab.disposables.forEach((d) => d.dispose());
+      termTab.terminal.dispose();
+      if (termTab.session.agentId) {
+        const agentSid = Object.entries(agentSessionToTerminalRef.current).find(([, tid]) => tid === termTab.session.id)?.[0];
+        if (agentSid) {
+          delete agentSessionToTerminalRef.current[agentSid];
+          onAgentSessionClear(agentSid);
+        }
+      }
     }
     setSpaces((current) => {
       if (!match) return current;
@@ -1343,14 +1335,19 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     });
   }
 
-  function setActiveTab(projectId: string, sessionId: string) {
-    const nextKind = tabKindForId(spacesRef.current[projectId], sessionId);
+  function setActiveTab(projectId: string, tabId: string) {
+    const nextKind = tabKindForId(spacesRef.current[projectId], tabId);
     onActiveTabKindChange(nextKind);
     requestProjectTabFocus(projectId);
+    // Clear idle state when user focuses an agent tab
+    if (hookStateByTerminalId[tabId] === "idle") {
+      const agentSid = Object.entries(agentSessionToTerminalRef.current).find(([, tid]) => tid === tabId)?.[0];
+      if (agentSid) onAgentSessionClear(agentSid);
+    }
     setSpaces((current) => {
       const space = current[projectId];
       if (!space) return current;
-      return { ...current, [projectId]: { ...space, activeId: sessionId } };
+      return { ...current, [projectId]: { ...space, activeId: tabId } };
     });
   }
 
