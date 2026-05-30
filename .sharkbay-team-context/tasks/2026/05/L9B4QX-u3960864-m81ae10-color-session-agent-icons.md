@@ -12,12 +12,12 @@ agent: Codex GPT-5
 sessionId: 019e77e2-2898-7d90-b1c8-26e21b0f9bbe
 branch: main
 createdAt: 2026-05-30T08:01:10Z
-updatedAt: 2026-05-30T08:05:42Z
-completedAt: 2026-05-30T08:05:42Z
+updatedAt: 2026-05-30T08:11:34Z
+completedAt: 2026-05-30T08:11:34Z
 ---
 
 ## Summary
-Sessions tab cards now use colored inline agent logos while task restore cards below tasks keep their existing monochrome icon treatment.
+Sessions tab cards now use unframed colored inline agent logos, with a colored Codex cloud logo and no turns text. Task restore cards below tasks keep their existing monochrome icon treatment.
 
 ## Files
 - src/renderer/App.tsx
@@ -27,6 +27,8 @@ Sessions tab cards now use colored inline agent logos while task restore cards b
 - Started from user-provided LobeHub Icons source and existing inline agent icon components.
 - Scoped the colored logo change to Sessions tab cards only; task restore cards below tasks keep their existing monochrome icon treatment.
 - Added a session-only avatar class and colored logo renderer for Codex, Claude, Gemini, Kiro, CodeWhale/DeepSeek, Qwen, and OpenCode.
+- Reopened to remove the Sessions tab avatar circle, correct the Codex colored logo, and drop turns text from session cards.
+- Replaced the session avatar frame with an unboxed logo slot and removed `turnCount` from the session card subtitle.
 - Relevant prior context: V6N2J8 added session rows with agent icons; V2M9Q4 tuned restore session card icon styling.
 
 ## Verification
