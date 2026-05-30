@@ -3,7 +3,7 @@
  *
  * Kiro uses: agentSpawn, userPromptSubmit, preToolUse, postToolUse, stop.
  * Note: Kiro does not emit a session_end event; relies on 5-min timeout fallback.
- * Config: Kiro agent configuration file (hooks field in agent YAML/JSON).
+ * Config: Kiro agent configuration file (~/.kiro/agents/sharkbay.json).
  */
 
 import * as fs from "node:fs";
@@ -28,18 +28,20 @@ export class KiroConnector implements AgentConnector {
   readonly displayName = "Kiro CLI";
   readonly supportedEvents: readonly HookEventKind[] = ["session_start", "prompt", "tool_start", "tool_end", "turn_end"];
 
-  // Kiro stores hooks in ~/.kiro/hooks/ or agent config; we use the global settings
-  private readonly configPath = path.join(os.homedir(), ".kiro", "settings.json");
+  private readonly agentsDir = path.join(os.homedir(), ".kiro", "agents");
+  private readonly configPath = path.join(os.homedir(), ".kiro", "agents", "sharkbay.json");
 
   async detect(): Promise<boolean> {
-    try { fs.accessSync(path.dirname(this.configPath)); return true; } catch { return false; }
+    try { fs.accessSync(this.agentsDir); return true; } catch { return false; }
   }
 
   async install(hookCliPath: string): Promise<void> {
     const config = this.readConfig();
+    config.name = "sharkbay";
+    config.description = "SharkBay status hooks agent — use with --agent sharkbay or set as default";
     const hooks = (config.hooks as Record<string, unknown[]>) ?? {};
     for (const event of HOOK_EVENTS) {
-      const entry = { type: "command", command: `"${hookCliPath}" --source kiro`, timeout: 5000, _managedBy: MANAGED_MARKER };
+      const entry = { command: `"${hookCliPath}" --source kiro`, timeout_ms: 5000, _managedBy: MANAGED_MARKER };
       const existing = Array.isArray(hooks[event]) ? hooks[event].filter((e: any) => e?._managedBy !== MANAGED_MARKER) : [];
       hooks[event] = [...existing, entry];
     }
@@ -95,8 +97,7 @@ export class KiroConnector implements AgentConnector {
   }
 
   private writeConfig(config: Record<string, unknown>): void {
-    const dir = path.dirname(this.configPath);
-    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(this.agentsDir, { recursive: true });
     const tmp = this.configPath + ".tmp";
     fs.writeFileSync(tmp, JSON.stringify(config, null, 2) + "\n", "utf8");
     fs.renameSync(tmp, this.configPath);
