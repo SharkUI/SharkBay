@@ -6,6 +6,7 @@ export type HookSession = {
   sessionId: string;
   agentId: string;
   model: string | null;
+  title: string | null;
   startedAt: string;
   lastEventAt: string;
   promptCount: number;
@@ -40,6 +41,7 @@ export function parseHookSessions(repoPath: string): HookSession[] {
   const sessions = new Map<string, {
     agentId: string;
     model: string | null;
+    title: string | null;
     transcriptPath: string | null;
     startedAt: string;
     lastEventAt: string;
@@ -67,6 +69,7 @@ export function parseHookSessions(repoPath: string): HookSession[] {
       session = {
         agentId: normalized?.agent ?? entry.source ?? "unknown",
         model: null,
+        title: null,
         transcriptPath: null,
         startedAt: entry.timestamp,
         lastEventAt: entry.timestamp,
@@ -87,7 +90,13 @@ export function parseHookSessions(repoPath: string): HookSession[] {
     }
 
     const event = normalized?.event;
-    if (event === "prompt") session.promptCount++;
+    if (event === "prompt") {
+      session.promptCount++;
+      if (session.title === null && typeof normalized?.prompt === "string") {
+        const title = sessionTitleFromPrompt(normalized.prompt);
+        if (title) session.title = title;
+      }
+    }
     if (event === "turn_end") session.turnCount++;
     if (event === "tool_start") session.toolCount++;
   }
@@ -97,6 +106,9 @@ export function parseHookSessions(repoPath: string): HookSession[] {
     if (data.model === null) {
       if (data.agentId === "kiro") data.model = readKiroModel(sessionId);
       else if (data.agentId === "gemini" && transcriptPath) data.model = readGeminiModel(transcriptPath);
+    }
+    if (data.title === null && transcriptPath) {
+      data.title = readTranscriptTitle(transcriptPath);
     }
     result.push({ sessionId, ...data });
   }
@@ -125,6 +137,49 @@ function readKiroModel(sessionId: string): string | null {
     const data = JSON.parse(fs.readFileSync(file, "utf8"));
     const model = data?.session_state?.rts_model_state?.model_info?.model_id;
     return typeof model === "string" && model ? model : null;
+  } catch {
+    return null;
+  }
+}
+
+const BOILERPLATE_PREFIXES = [
+  "I'm working in SharkBay Task Protocol",
+  "# Overview\n",
+  "# Applications mentioned",
+];
+
+function sessionTitleFromPrompt(prompt: string): string | null {
+  const trimmed = prompt.trim();
+  if (!trimmed) return null;
+  for (const prefix of BOILERPLATE_PREFIXES) {
+    if (trimmed.startsWith(prefix)) return null;
+  }
+  const firstLine = trimmed.split("\n")[0] ?? "";
+  if (firstLine.length <= 50) return firstLine;
+  const cut = firstLine.lastIndexOf(" ", 50);
+  return firstLine.slice(0, cut > 20 ? cut : 50) + "…";
+}
+
+function readTranscriptTitle(transcriptPath: string): string | null {
+  try {
+    const fd = fs.openSync(transcriptPath, "r");
+    const buf = Buffer.alloc(4096);
+    const bytesRead = fs.readSync(fd, buf, 0, 4096, 0);
+    fs.closeSync(fd);
+    const chunk = buf.toString("utf8", 0, bytesRead);
+    for (const line of chunk.split("\n")) {
+      if (!line) continue;
+      let entry: { type?: string; message?: { role?: string; content?: unknown } };
+      try { entry = JSON.parse(line); } catch { continue; }
+      if (entry.type !== "human" && entry.message?.role !== "user") continue;
+      const content = entry.message?.content;
+      const text = typeof content === "string" ? content
+        : Array.isArray(content) ? (content.find((b: { type?: string }) => b.type === "text") as { text?: string } | undefined)?.text ?? ""
+        : "";
+      const title = sessionTitleFromPrompt(text);
+      if (title) return title;
+    }
+    return null;
   } catch {
     return null;
   }

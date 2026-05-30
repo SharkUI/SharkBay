@@ -2233,7 +2233,7 @@ function SessionsDetailTab({ active, agentClis, candidate, setToast, onRestoreAg
               <SessionAgentIcon agentId={session.agentId} />
             </span>
             <span className="task-row-main">
-              <span className="task-title">{session.sessionId.slice(0, 8)}</span>
+              <span className="task-title">{session.title || restore?.label || session.agentId}</span>
               <small>{subtitle}{session.lastEventAt ? ` · ${formatRelativeTime(session.lastEventAt)}` : ""}</small>
             </span>
             <span className="phase-pill phase-done">{session.promptCount} prompts</span>

@@ -326,6 +326,7 @@ export type HookSessionViewModel = {
   sessionId: string;
   agentId: string;
   model: string | null;
+  title: string | null;
   startedAt: string;
   lastEventAt: string;
   promptCount: number;

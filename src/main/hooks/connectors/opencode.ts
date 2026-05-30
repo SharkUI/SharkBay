@@ -219,7 +219,8 @@ export default async function(input) {
       } else if (type === "session.status") {
         const status = event.properties?.status;
         if (status?.type === "busy") {
-          send({ event_type: "session.status.busy", session_id: event.properties?.sessionID || "", cwd, timestamp: new Date().toISOString() });
+          const prompt = event.properties?.input || status?.content || "";
+          send({ event_type: "session.status.busy", session_id: event.properties?.sessionID || "", cwd, prompt: typeof prompt === "string" ? prompt : "", timestamp: new Date().toISOString() });
         }
       } else if (type === "session.idle") {
         send({ event_type: "session.idle", session_id: event.properties?.sessionID || "", cwd, timestamp: new Date().toISOString() });

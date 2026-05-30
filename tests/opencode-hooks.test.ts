@@ -31,10 +31,12 @@ describe("OpenCode hook connector", () => {
         event_type: "session.status.busy",
         session_id: "ses_abc123",
         cwd: "/tmp/project",
+        prompt: "fix the build error",
         timestamp: "2026-05-30T00:00:01Z",
       });
       expect(result?.event).toBe("prompt");
       expect(result?.agent).toBe("opencode");
+      expect(result?.prompt).toBe("fix the build error");
     });
 
     it("maps session.idle to turn_end", () => {
