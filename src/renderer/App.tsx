@@ -886,6 +886,7 @@ function DashboardView({
           appearanceTheme={appearanceTheme}
           agentClis={agentClis}
           candidate={selectedCandidate}
+          hookActivityByProjectId={hookActivityByProjectId}
           projectAliases={projectAliases}
           bridgeAvailable={bridgeAvailable}
           isVisible={isVisible}
@@ -939,6 +940,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   agentClis: AgentCli[];
   bridgeAvailable: boolean;
   candidate: ProjectCandidate | null;
+  hookActivityByProjectId: Record<string, ProjectActivityState>;
   projectAliases: Record<string, string>;
   isVisible: boolean;
   setToast: (toast: Toast) => void;
@@ -946,7 +948,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   onAgentListRefreshRequested: () => void;
   onProjectHookStatusClear: (projectId: string) => void;
   onRunningServiceProjectIdsChange: (projectIds: Set<string>) => void;
-}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, projectAliases, isVisible, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onProjectHookStatusClear, onRunningServiceProjectIdsChange }, ref) {
+}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, hookActivityByProjectId, projectAliases, isVisible, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onProjectHookStatusClear, onRunningServiceProjectIdsChange }, ref) {
   const [spaces, setSpaces] = useState<Record<string, TerminalSpace>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const spacesRef = useRef<Record<string, TerminalSpace>>({});
@@ -1355,7 +1357,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                       <div className={cx("terminal-tab", isActiveTab && "is-active")} key={tabId} role="tab" aria-selected={isActiveTab}>
                         <button className="terminal-tab-main" type="button" onClick={() => { setActiveTab(space.projectId, tabId); }}>
                           {tab.kind === "terminal" ? (
-                            <span className={cx("terminal-state", tab.session.service && tab.session.status === "running" && "is-service-running", tab.session.status === "exited" && "is-exited")} />
+                            <span className={cx("terminal-state", tab.session.service && tab.session.status === "running" && "is-service-running", tab.session.agentId && hookActivityByProjectId[space.projectId] === "working" && "is-working", tab.session.agentId && hookActivityByProjectId[space.projectId] === "attention" && "is-attention", tab.session.status === "exited" && "is-exited")} />
                           ) : tab.kind === "browser" ? (
                             <BrowserTabIcon browser={tab.browser} />
                           ) : (
