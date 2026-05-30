@@ -288,6 +288,7 @@ export async function registerIpcHandlers(
   agentSessionWatcher.start();
 
   // Hook-based agent status system
+  hookBridge.removeAllListeners("event");
   hookBridge.on("event", (msg) => hookStateManager.handleMessage(msg));
   hookStateManager.removeAllListeners("stateChange");
   hookStateManager.on("stateChange", (event) => {

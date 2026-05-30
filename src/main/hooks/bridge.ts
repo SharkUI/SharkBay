@@ -49,6 +49,8 @@ export class HookBridge extends EventEmitter<HookBridgeEvents> {
   }
 
   async start(appDataPath: string): Promise<void> {
+    if (this.server) return;
+
     this.socketPath = path.join(this.socketDir, `sharkbay-hooks-${this.uid}-${this.instanceToken}.sock`);
     if (!this.socketPathFile) {
       this.socketPathFile = path.join(appDataPath, "hook-socket-path");
@@ -57,11 +59,12 @@ export class HookBridge extends EventEmitter<HookBridgeEvents> {
     this.deployHookCli(appDataPath);
     await this.cleanStaleSocket();
 
-    this.server = net.createServer((conn) => this.handleConnection(conn));
+    const server = net.createServer((conn) => this.handleConnection(conn));
     await new Promise<void>((resolve, reject) => {
-      this.server!.listen(this.socketPath, () => resolve());
-      this.server!.once("error", reject);
+      server.listen(this.socketPath, () => resolve());
+      server.once("error", reject);
     });
+    this.server = server;
 
     fs.writeFileSync(this.socketPathFile, this.socketPath, "utf8");
   }
