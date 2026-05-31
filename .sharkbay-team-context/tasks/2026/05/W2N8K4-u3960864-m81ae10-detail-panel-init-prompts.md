@@ -13,7 +13,7 @@ agent: Claude Code Opus 4.6
 sessionId: e60cc129-c0f7-4b0c-8c0d-3f861ed7116f
 branch: main
 createdAt: 2026-05-31T09:32:44Z
-updatedAt: 2026-05-31T09:42:28Z
+updatedAt: 2026-05-31T09:45:43Z
 ---
 
 ## Summary
@@ -21,6 +21,7 @@ Add initialization prompts to Sessions, Git, and Files detail panels when their 
 
 ## Files
 - src/renderer/App.tsx
+- src/styles/app.css
 
 ## Work
 - Sessions panel: show "Enable Hooks" prompt when all detected agents have hooks disabled; clicking enables hooks for all hookSupportedAgents that are installed.
