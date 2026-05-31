@@ -923,6 +923,9 @@ function DashboardView({
             onOpenBrowserTab={(url) =>
               terminalPaneRef.current?.openBrowserTab(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, url) ?? Promise.resolve()
             }
+            onOpenTerminal={(options) =>
+              terminalPaneRef.current?.openAgentSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, options.initialCommand ?? "", options.title ?? "Shell") ?? Promise.resolve()
+            }
             onRestoreAgentSession={(restore) =>
               terminalPaneRef.current?.openAgentSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, restore.command, restore.title, restore.agentId) ?? Promise.resolve()
             }
@@ -2066,7 +2069,7 @@ function EditorSurface({ active, appearanceTheme, tab, onChange, onSave }: {
   );
 }
 
-function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, onOpenFileInEditor, onOpenGitDiff, onOpenBrowserTab, onRestoreAgentSession }: {
+function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, onOpenFileInEditor, onOpenGitDiff, onOpenBrowserTab, onOpenTerminal, onRestoreAgentSession }: {
   agentClis: AgentCli[];
   detail: ProjectDetail | null;
   candidate: ProjectCandidate;
@@ -2075,6 +2078,7 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
   onOpenFileInEditor: (relativePath: string) => Promise<void>;
   onOpenGitDiff: (relativePath: string) => Promise<void>;
   onOpenBrowserTab: (url: string) => Promise<void>;
+  onOpenTerminal: (options: { title?: string; initialCommand?: string }) => Promise<void>;
   onRestoreAgentSession: (restore: AgentSessionRestoreCommand) => Promise<void>;
 }) {
   const isLocal = candidate.providerKind === "local";
@@ -2178,7 +2182,7 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
         ))}
       </div>
       <div aria-labelledby="project-detail-tab-git" className="detail-tab-panel" hidden={visibleDetailTab !== "git"} id="project-detail-tabpanel-git" role="tabpanel">
-        <GitDetailTab detail={detail} candidate={candidate} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} />
+        <GitDetailTab detail={detail} candidate={candidate} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} onOpenTerminal={onOpenTerminal} />
       </div>
       {isLocal ? (
         <div aria-labelledby="project-detail-tab-sessions" className="detail-tab-panel" hidden={visibleDetailTab !== "sessions"} id="project-detail-tabpanel-sessions" role="tabpanel">
@@ -2205,13 +2209,65 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
         </div>
       ) : null}
       <div aria-labelledby="project-detail-tab-files" className="detail-tab-panel" hidden={visibleDetailTab !== "files"} id="project-detail-tabpanel-files" role="tabpanel">
-        <FilesDetailTab active={visibleDetailTab === "files"} candidate={candidate} codeGraphStatus={codeGraphStatus} detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} />
+        <FilesDetailTab active={visibleDetailTab === "files"} candidate={candidate} codeGraphStatus={codeGraphStatus} detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} onOpenTerminal={onOpenTerminal} />
       </div>
     </div>
   );
 }
 
-function GitDetailTab({ detail, candidate, setToast, onOpenFileInEditor, onOpenGitDiff }: { detail: ProjectDetail | null; candidate: ProjectCandidate; setToast: (toast: Toast) => void; onOpenFileInEditor: (relativePath: string) => Promise<void>; onOpenGitDiff: (relativePath: string) => Promise<void> }) {
+function GitDetailTab({ detail, candidate, setToast, onOpenFileInEditor, onOpenGitDiff, onOpenTerminal }: { detail: ProjectDetail | null; candidate: ProjectCandidate; setToast: (toast: Toast) => void; onOpenFileInEditor: (relativePath: string) => Promise<void>; onOpenGitDiff: (relativePath: string) => Promise<void>; onOpenTerminal: (options: { title?: string; initialCommand?: string }) => Promise<void> }) {
+  const isGitManaged = detail ? detail.dirtyWorktree !== null : null;
+  const [showCloneInput, setShowCloneInput] = useState(false);
+  const [cloneUrl, setCloneUrl] = useState("");
+
+  if (isGitManaged === false) {
+    return (
+      <>
+        <ProjectFactsCard detail={detail} candidate={candidate} />
+        <section className="subpanel confirm-panel protocol-action-card">
+          <div>
+            <h4>Initialize Repository</h4>
+            <p className="summary-text">This project is not under version control. Initialize a local Git repository or clone an existing remote.</p>
+          </div>
+          {showCloneInput ? (
+            <div className="git-clone-row">
+              <input
+                className="git-clone-input"
+                type="text"
+                placeholder="https://github.com/user/repo.git"
+                value={cloneUrl}
+                autoFocus
+                onChange={(e) => setCloneUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && cloneUrl.trim()) {
+                    void onOpenTerminal({ title: "git clone", initialCommand: `git clone ${cloneUrl.trim()} .` });
+                    setShowCloneInput(false);
+                    setCloneUrl("");
+                  } else if (e.key === "Escape") {
+                    setShowCloneInput(false);
+                    setCloneUrl("");
+                  }
+                }}
+              />
+              <button className="button compact" type="button" disabled={!cloneUrl.trim()} onClick={() => {
+                void onOpenTerminal({ title: "git clone", initialCommand: `git clone ${cloneUrl.trim()} .` });
+                setShowCloneInput(false);
+                setCloneUrl("");
+              }}>Clone</button>
+            </div>
+          ) : (
+            <div className="button-row">
+              <button className="button compact" type="button" onClick={() => {
+                void onOpenTerminal({ title: "git init", initialCommand: "git init" });
+              }}>git init</button>
+              <button className="button compact" type="button" onClick={() => setShowCloneInput(true)}>Clone Remote</button>
+            </div>
+          )}
+        </section>
+      </>
+    );
+  }
+
   return (
     <>
       <ProjectFactsCard detail={detail} candidate={candidate} />
@@ -2256,6 +2312,28 @@ function SessionsDetailTab({ active, agentClis, candidate, setToast, onRestoreAg
   }, [active, repoPath]);
 
   if (!repoPath) return <EmptyState title="Sessions unavailable" body="Sessions are available for local projects with hooks installed." />;
+
+  const allHooksDisabled = agentClis.length > 0 && agentClis.filter((a) => hookSupportedAgents.has(a.id)).every((a) => !getAgentHooksEnabled(a.id));
+
+  if (allHooksDisabled) {
+    return (
+      <section className="subpanel confirm-panel protocol-action-card">
+        <div>
+          <h4>Enable Hooks</h4>
+          <p className="summary-text">Session tracking requires hooks. Enable status hooks for your installed agents to capture session activity.</p>
+        </div>
+        <div className="button-row">
+          <button className="button compact" type="button" onClick={() => {
+            for (const agent of agentClis) {
+              if (hookSupportedAgents.has(agent.id)) setAgentHooksEnabled(agent.id, true);
+            }
+            setToast({ tone: "success", message: "Hooks enabled for all agents." });
+          }}>Enable Hooks</button>
+        </div>
+      </section>
+    );
+  }
+
   if (!sessions.length) return <EmptyState title="No sessions" body="Agent sessions will appear here once hooks capture activity." />;
 
   return (
@@ -2652,7 +2730,7 @@ function GitHistoryItems({ events }: { events: NonNullable<ProjectDetail["gitHis
 }
 
 
-function FilesDetailTab({ active, candidate, codeGraphStatus, detail, setToast, onOpenFileInEditor, onOpenGitDiff }: {
+function FilesDetailTab({ active, candidate, codeGraphStatus, detail, setToast, onOpenFileInEditor, onOpenGitDiff, onOpenTerminal }: {
   active: boolean;
   candidate: ProjectCandidate;
   codeGraphStatus: CodeGraphStatusView;
@@ -2660,6 +2738,7 @@ function FilesDetailTab({ active, candidate, codeGraphStatus, detail, setToast, 
   setToast: (toast: Toast) => void;
   onOpenFileInEditor: (relativePath: string) => Promise<void>;
   onOpenGitDiff: (relativePath: string) => Promise<void>;
+  onOpenTerminal: (options: { title?: string; initialCommand?: string }) => Promise<void>;
 }) {
   const [state, setState] = useState<{ loading: boolean; error: string | null; files: ProjectFileTreeItem[] }>({ loading: false, error: null, files: [] });
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(() => new Set());
@@ -2804,13 +2883,29 @@ function FilesDetailTab({ active, candidate, codeGraphStatus, detail, setToast, 
 
   return (
     <>
-      <CodeGraphStatusSummary codeGraphStatus={codeGraphStatus} />
+      <CodeGraphStatusSummary codeGraphStatus={codeGraphStatus} onOpenTerminal={onOpenTerminal} />
       {fileContent}
     </>
   );
 }
 
-function CodeGraphStatusSummary({ codeGraphStatus }: { codeGraphStatus: CodeGraphStatusView }) {
+function CodeGraphStatusSummary({ codeGraphStatus, onOpenTerminal }: { codeGraphStatus: CodeGraphStatusView; onOpenTerminal: (options: { title?: string; initialCommand?: string }) => Promise<void> }) {
+  if (!codeGraphStatus.loading && codeGraphStatus.status?.state === "not-installed") {
+    return (
+      <section className="subpanel confirm-panel protocol-action-card codegraph-status-card" aria-label="CodeGraph status summary">
+        <div>
+          <h4>Install CodeGraph</h4>
+          <p className="summary-text">CodeGraph provides code intelligence (symbol search, call graphs, impact analysis). Install it to enable the Files index.</p>
+        </div>
+        <div className="button-row">
+          <button className="button compact" type="button" onClick={() => {
+            void onOpenTerminal({ title: "Install CodeGraph", initialCommand: "npm i -g @colbymchenry/codegraph" });
+          }}>Install CodeGraph</button>
+        </div>
+      </section>
+    );
+  }
+
   const line = codeGraphStatus.loading
     ? "Checking CodeGraph index."
     : codeGraphStatus.error

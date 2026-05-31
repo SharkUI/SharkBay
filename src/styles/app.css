@@ -1512,6 +1512,9 @@ button.project-file-toggle:focus-visible {
 .protocol-action-card { padding: 11px 12px 12px; }
 .protocol-action-card .summary-text { margin-top: 3px; }
 .protocol-action-card .button-row { justify-content: flex-end; }
+.git-clone-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.git-clone-input { flex: 1; min-width: 0; padding: 5px 8px; border: 1px solid rgba(0, 0, 0, 0.15); border-radius: 4px; font-size: 12px; font-family: inherit; background: #fff; }
+.git-clone-input:focus { outline: none; border-color: rgba(0, 0, 0, 0.35); }
 .protocol-harness-card { border-color: rgba(186, 115, 25, 0.42); background: rgba(255, 248, 235, 0.78); }
 .protocol-harness-files { color: #7a5a28; overflow-wrap: anywhere; }
 .task-list-direct .queue-item { grid-template-columns: 34px minmax(0, 1fr) auto; min-height: 46px; padding: 9px 10px; }
