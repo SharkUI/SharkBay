@@ -5,13 +5,15 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { getConfiguredRoots } from "../../main/config.js";
-import { readLocalProjectFile, writeLocalProjectFile } from "../../main/file-content.js";
+import { readLocalProjectFile, writeLocalProjectFile, deleteLocalProjectFile, renameLocalProjectFile } from "../../main/file-content.js";
 import { readGitDirtyFiles, readGitHistory, readGitMetadata } from "../../main/git.js";
 import { listProjectFiles } from "../../main/project-files.js";
 import { scanProjects } from "../../main/scanner.js";
 import { TerminalManager } from "../../main/terminal.js";
 import { prependPathDirectories, resolveCommandPath, resolveCommandSearchPaths } from "../../main/command-path.js";
 import type {
+  DeleteFileInput,
+  DeleteFileResult,
   ExecutionTarget,
   GitDirtyFile,
   GitEvent,
@@ -28,6 +30,8 @@ import type {
   ProjectScanInput,
   ReadFileInput,
   ReadFileResult,
+  RenameFileInput,
+  RenameFileResult,
   ScanProjectsResult,
   TerminalCloseInput,
   TerminalCreateInput,
@@ -99,6 +103,14 @@ export class LocalProvider extends EventEmitter implements ExecutionProvider {
 
   writeProjectFile(runtime: IpcRuntimeLike, input: WriteFileInput): Promise<WriteFileResult> {
     return writeLocalProjectFile(runtime, input);
+  }
+
+  deleteProjectFile(runtime: IpcRuntimeLike, input: DeleteFileInput): Promise<DeleteFileResult> {
+    return deleteLocalProjectFile(runtime, input);
+  }
+
+  renameProjectFile(runtime: IpcRuntimeLike, input: RenameFileInput): Promise<RenameFileResult> {
+    return renameLocalProjectFile(runtime, input);
   }
 
   readGitMetadata(_runtime: IpcRuntimeLike, projectUri: string): Promise<GitMetadata> {

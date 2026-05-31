@@ -2205,7 +2205,7 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
         </div>
       ) : null}
       <div aria-labelledby="project-detail-tab-files" className="detail-tab-panel" hidden={visibleDetailTab !== "files"} id="project-detail-tabpanel-files" role="tabpanel">
-        <FilesDetailTab active={visibleDetailTab === "files"} candidate={candidate} codeGraphStatus={codeGraphStatus} detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} />
+        <FilesDetailTab active={visibleDetailTab === "files"} candidate={candidate} codeGraphStatus={codeGraphStatus} detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} />
       </div>
     </div>
   );
@@ -2652,17 +2652,22 @@ function GitHistoryItems({ events }: { events: NonNullable<ProjectDetail["gitHis
 }
 
 
-function FilesDetailTab({ active, candidate, codeGraphStatus, detail, setToast, onOpenFileInEditor }: {
+function FilesDetailTab({ active, candidate, codeGraphStatus, detail, setToast, onOpenFileInEditor, onOpenGitDiff }: {
   active: boolean;
   candidate: ProjectCandidate;
   codeGraphStatus: CodeGraphStatusView;
   detail: ProjectDetail | null;
   setToast: (toast: Toast) => void;
   onOpenFileInEditor: (relativePath: string) => Promise<void>;
+  onOpenGitDiff: (relativePath: string) => Promise<void>;
 }) {
   const [state, setState] = useState<{ loading: boolean; error: string | null; files: ProjectFileTreeItem[] }>({ loading: false, error: null, files: [] });
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(() => new Set());
   const [loadingDirectories, setLoadingDirectories] = useState<Set<string>>(() => new Set());
+  const [fileMenu, setFileMenu] = useState<{ item: ProjectFileTreeItem; x: number; y: number } | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [creating, setCreating] = useState<{ parentPath: string; kind: "file" | "directory" } | null>(null);
+  const fileMenuRef = useRef<HTMLDivElement>(null);
   const activeFilesProjectUri = useRef(candidate.uri);
 
   useEffect(() => {
@@ -2712,17 +2717,87 @@ function FilesDetailTab({ active, candidate, codeGraphStatus, detail, setToast, 
     setExpandedDirectories((current) => new Set(current).add(item.path));
   }
 
+  useEffect(() => {
+    if (!fileMenu) return;
+    const onMouseDown = (event: MouseEvent) => { if (fileMenuRef.current && !fileMenuRef.current.contains(event.target as Node)) setFileMenu(null); };
+    const onKeyDown = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") setFileMenu(null); };
+    document.addEventListener("pointerdown", onMouseDown, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => { document.removeEventListener("pointerdown", onMouseDown, true); document.removeEventListener("keydown", onKeyDown, true); };
+  }, [fileMenu]);
+
+  function refreshFiles() {
+    setState({ loading: true, error: null, files: [] });
+    void listProjectFiles(candidate).then((result) => {
+      if (activeFilesProjectUri.current !== candidate.uri) return;
+      if (!result.ok) { setState({ loading: false, error: result.message, files: [] }); return; }
+      setState({ loading: false, error: null, files: result.files });
+    }).catch((error) => setState({ loading: false, error: asMessage(error), files: [] }));
+  }
+
+  async function handleDelete(item: ProjectFileTreeItem) {
+    const handler = getBridge().projects?.deleteFile;
+    if (!handler) { setToast({ tone: "error", message: "Delete is not available." }); return; }
+    const result = await handler({ projectUri: candidate.uri, relativePath: item.path });
+    if (!result.ok) { setToast({ tone: "error", message: result.message }); return; }
+    refreshFiles();
+  }
+
+  async function handleRename(item: ProjectFileTreeItem, newName: string) {
+    if (!newName || newName === item.name) { setRenaming(null); return; }
+    const handler = getBridge().projects?.renameFile;
+    if (!handler) { setToast({ tone: "error", message: "Rename is not available." }); return; }
+    const result = await handler({ projectUri: candidate.uri, relativePath: item.path, newName });
+    setRenaming(null);
+    if (!result.ok) { setToast({ tone: "error", message: result.message }); return; }
+    refreshFiles();
+  }
+
+  async function handleCreate(parentPath: string, kind: "file" | "directory", name: string) {
+    setCreating(null);
+    if (!name) return;
+    const relativePath = parentPath ? `${parentPath}/${name}` : name;
+    if (kind === "file") {
+      const handler = getBridge().projects?.writeFile;
+      if (!handler) { setToast({ tone: "error", message: "Create file is not available." }); return; }
+      const result = await handler({ projectUri: candidate.uri, relativePath, content: "" });
+      if (!result.ok) { setToast({ tone: "error", message: result.message }); return; }
+    } else {
+      // Create directory by writing a placeholder then deleting it, or use writeFile with trailing slash
+      // Simplest: write a .gitkeep inside the directory
+      const handler = getBridge().projects?.writeFile;
+      if (!handler) { setToast({ tone: "error", message: "Create folder is not available." }); return; }
+      const result = await handler({ projectUri: candidate.uri, relativePath: `${relativePath}/.gitkeep`, content: "" });
+      if (!result.ok) { setToast({ tone: "error", message: result.message }); return; }
+    }
+    refreshFiles();
+  }
+
+  function openFileMenu(item: ProjectFileTreeItem, x: number, y: number) {
+    setFileMenu({ item, x, y });
+  }
+
   const fileContent = (() => {
     if (state.loading && !state.files.length) return <EmptyState title="Loading files" body="Reading project files." />;
     if (state.error) return <EmptyState title="Files unavailable" body={state.error} />;
     if (!state.files.length) return <EmptyState title="No files" body="This project has no visible files." />;
+    const rootItem: ProjectFileTreeItem = { name: candidate.name, path: "", kind: "directory", editable: false, children: state.files };
     return (
       <section className="subpanel files-card">
         <div className="project-file-tree" role="tree" aria-label="Project files">
-          {state.files.map((item) => (
-            <ProjectFileTreeItemRow key={item.path} item={item} level={1} expandedDirectories={expandedDirectories} loadingDirectories={loadingDirectories} onToggleDirectory={toggleDirectory} onOpenFile={openFile} />
-          ))}
+          <ProjectFileTreeItemRow key="__root__" item={rootItem} level={0} expandedDirectories={expandedDirectories} loadingDirectories={loadingDirectories} onToggleDirectory={toggleDirectory} onOpenFile={openFile} onContextMenu={openFileMenu} renaming={renaming} onRename={handleRename} creating={creating} onCreateCommit={handleCreate} defaultExpanded />
         </div>
+        {fileMenu ? (
+          <div ref={fileMenuRef} className="project-context-menu" style={{ top: fileMenu.y, left: fileMenu.x }}>
+            {fileMenu.item.kind === "directory" ? <button className="project-context-menu-item" type="button" onClick={() => { setFileMenu(null); setCreating({ parentPath: fileMenu.item.path, kind: "file" }); }}>New File</button> : null}
+            {fileMenu.item.kind === "directory" ? <button className="project-context-menu-item" type="button" onClick={() => { setFileMenu(null); setCreating({ parentPath: fileMenu.item.path, kind: "directory" }); }}>New Folder</button> : null}
+            {fileMenu.item.kind === "file" ? <button className="project-context-menu-item" type="button" onClick={() => { const p = fileMenu.item.path; setFileMenu(null); void onOpenFileInEditor(p); }}>Edit</button> : null}
+            {fileMenu.item.path ? <button className="project-context-menu-item" type="button" onClick={() => { const p = fileMenu.item.path; setFileMenu(null); setRenaming(p); }}>Rename</button> : null}
+            <button className="project-context-menu-item" type="button" onClick={() => { const localPath = localPathFromCandidate(candidate); const abs = localPath ? (fileMenu.item.path ? `${localPath}/${fileMenu.item.path}` : localPath) : fileMenu.item.path; void navigator.clipboard.writeText(abs); setFileMenu(null); setToast({ tone: "info", message: "Path copied." }); }}>Copy Path</button>
+            {fileMenu.item.kind === "file" ? <button className="project-context-menu-item" type="button" onClick={() => { const p = fileMenu.item.path; setFileMenu(null); void onOpenGitDiff(p); }}>Diff</button> : null}
+            {fileMenu.item.path ? <button className="project-context-menu-item is-danger" type="button" onClick={() => { const item = fileMenu.item; setFileMenu(null); void handleDelete(item); }}>Delete</button> : null}
+          </div>
+        ) : null}
       </section>
     );
   })();
@@ -2749,14 +2824,20 @@ function CodeGraphStatusSummary({ codeGraphStatus }: { codeGraphStatus: CodeGrap
   );
 }
 
-function ProjectFileTreeItemRow({ item, level, expandedDirectories, loadingDirectories, onToggleDirectory, onOpenFile }: {
+function ProjectFileTreeItemRow({ item, level, expandedDirectories, loadingDirectories, onToggleDirectory, onOpenFile, onContextMenu, renaming, onRename, creating, onCreateCommit, defaultExpanded }: {
   item: ProjectFileTreeItem; level: number; expandedDirectories: Set<string>; loadingDirectories: Set<string>;
   onToggleDirectory: (item: ProjectFileTreeItem) => Promise<void>; onOpenFile: (item: ProjectFileTreeItem) => Promise<void>;
+  onContextMenu: (item: ProjectFileTreeItem, x: number, y: number) => void;
+  renaming: string | null; onRename: (item: ProjectFileTreeItem, newName: string) => void;
+  creating: { parentPath: string; kind: "file" | "directory" } | null; onCreateCommit: (parentPath: string, kind: "file" | "directory", name: string) => void;
+  defaultExpanded?: boolean;
 }) {
   const expandable = item.kind === "directory" && (item.children === undefined || item.children.length > 0);
-  const expanded = expandable && expandedDirectories.has(item.path);
+  const expanded = expandable && (defaultExpanded || expandedDirectories.has(item.path));
   const loading = loadingDirectories.has(item.path);
   const disabled = false;
+  const isRenaming = renaming === item.path;
+  const showCreateInput = creating && creating.parentPath === item.path && item.kind === "directory";
 
   return (
     <>
@@ -2767,6 +2848,7 @@ function ProjectFileTreeItemRow({ item, level, expandedDirectories, loadingDirec
         role="treeitem"
         style={{ "--file-tree-level": level } as CSSProperties}
         title={item.path}
+        onContextMenu={(event) => { event.preventDefault(); onContextMenu(item, event.clientX, event.clientY); }}
       >
         {item.kind === "directory" ? (
           <button
@@ -2781,27 +2863,49 @@ function ProjectFileTreeItemRow({ item, level, expandedDirectories, loadingDirec
         ) : (
           <span className="project-file-toggle" aria-hidden="true" />
         )}
-        <button
-          className="project-file-action"
-          disabled={disabled}
-          type="button"
-          onDoubleClick={() => void onOpenFile(item)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              if (item.kind === "directory" && expandable) {
-                void onToggleDirectory(item);
-                return;
+        {isRenaming ? (
+          <input
+            autoFocus
+            className="project-file-rename-input"
+            defaultValue={item.name}
+            onBlur={(event) => onRename(item, event.currentTarget.value)}
+            onKeyDown={(event) => { if (event.key === "Enter") onRename(item, event.currentTarget.value); if (event.key === "Escape") onRename(item, item.name); }}
+          />
+        ) : (
+          <button
+            className="project-file-action"
+            disabled={disabled}
+            type="button"
+            onDoubleClick={() => void onOpenFile(item)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                if (item.kind === "directory" && expandable) {
+                  void onToggleDirectory(item);
+                  return;
+                }
+                void onOpenFile(item);
               }
-              void onOpenFile(item);
-            }
-          }}
-        >
-          <ProjectFileIcon item={item} expanded={expanded} />
-          <span className="project-file-name">{item.name}</span>
-        </button>
+            }}
+          >
+            <ProjectFileIcon item={item} expanded={expanded} />
+            <span className="project-file-name">{item.name}</span>
+          </button>
+        )}
       </div>
+      {showCreateInput ? (
+        <div className="project-file-row" style={{ "--file-tree-level": level + 1 } as CSSProperties}>
+          <span className="project-file-toggle" aria-hidden="true" />
+          <input
+            autoFocus
+            className="project-file-rename-input"
+            placeholder={creating!.kind === "file" ? "filename" : "folder name"}
+            onBlur={(event) => onCreateCommit(creating!.parentPath, creating!.kind, event.currentTarget.value)}
+            onKeyDown={(event) => { if (event.key === "Enter") onCreateCommit(creating!.parentPath, creating!.kind, event.currentTarget.value); if (event.key === "Escape") onCreateCommit(creating!.parentPath, creating!.kind, ""); }}
+          />
+        </div>
+      ) : null}
       {expanded ? item.children?.map((child) => (
-        <ProjectFileTreeItemRow key={child.path} item={child} level={level + 1} expandedDirectories={expandedDirectories} loadingDirectories={loadingDirectories} onToggleDirectory={onToggleDirectory} onOpenFile={onOpenFile} />
+        <ProjectFileTreeItemRow key={child.path} item={child} level={level + 1} expandedDirectories={expandedDirectories} loadingDirectories={loadingDirectories} onToggleDirectory={onToggleDirectory} onOpenFile={onOpenFile} onContextMenu={onContextMenu} renaming={renaming} onRename={onRename} creating={creating} onCreateCommit={onCreateCommit} />
       )) : null}
     </>
   );

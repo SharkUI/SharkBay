@@ -1,6 +1,8 @@
 import type {
   AgentCli,
   CodeGraphProjectStatus,
+  DeleteFileInput,
+  DeleteFileResult,
   DiagnosticsSnapshot,
   InstallLogEvent,
   InstallRecipe,
@@ -16,6 +18,8 @@ import type {
   ProjectScanInput,
   ReadFileInput,
   ReadFileResult,
+  RenameFileInput,
+  RenameFileResult,
   ScanProjectsResult,
   TerminalCloseInput,
   TerminalCreateInput,
@@ -39,6 +43,8 @@ export type CoreMethodMap = {
   listProjectFiles: { args: [IpcRuntimeLike, ProjectFilesInput]; result: ProjectFilesResult };
   readProjectFile: { args: [IpcRuntimeLike, ReadFileInput]; result: ReadFileResult };
   writeProjectFile: { args: [IpcRuntimeLike, WriteFileInput]; result: WriteFileResult };
+  deleteProjectFile: { args: [IpcRuntimeLike, DeleteFileInput]; result: DeleteFileResult };
+  renameProjectFile: { args: [IpcRuntimeLike, RenameFileInput]; result: RenameFileResult };
   readCodeGraphStatus: { args: [IpcRuntimeLike, { projectUri: string }]; result: CodeGraphProjectStatus };
   ensureCodeGraphStatus: { args: [IpcRuntimeLike, { projectUri: string }]; result: CodeGraphProjectStatus };
   removeCodeGraphIndexes: { args: [IpcRuntimeLike, { projectUris: string[] }]; result: void };

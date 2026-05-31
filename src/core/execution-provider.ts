@@ -1,4 +1,6 @@
 import type {
+  DeleteFileInput,
+  DeleteFileResult,
   ExecutionTarget,
   ExecutionTargetKind,
   GitDirtyFile,
@@ -16,6 +18,8 @@ import type {
   ProjectScanInput,
   ReadFileInput,
   ReadFileResult,
+  RenameFileInput,
+  RenameFileResult,
   ScanProjectsResult,
   TerminalCloseInput,
   TerminalCreateInput,
@@ -103,6 +107,8 @@ export interface ExecutionProvider {
   listProjectFiles(runtime: IpcRuntimeLike, input: ProjectFilesInput): Promise<ProjectFilesResult>;
   readProjectFile(runtime: IpcRuntimeLike, input: ReadFileInput): Promise<ReadFileResult>;
   writeProjectFile(runtime: IpcRuntimeLike, input: WriteFileInput): Promise<WriteFileResult>;
+  deleteProjectFile(runtime: IpcRuntimeLike, input: DeleteFileInput): Promise<DeleteFileResult>;
+  renameProjectFile(runtime: IpcRuntimeLike, input: RenameFileInput): Promise<RenameFileResult>;
 
   readGitMetadata(runtime: IpcRuntimeLike, projectUri: string): Promise<GitMetadata>;
   readGitHistory(runtime: IpcRuntimeLike, projectUri: string): Promise<GitEvent[]>;

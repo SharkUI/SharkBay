@@ -210,6 +210,25 @@ export type WriteFileResult =
   | { ok: true; size: number; relativePath: string }
   | { ok: false; reason: WriteFileFailureReason; message: string };
 
+export type DeleteFileInput = {
+  projectUri: string;
+  relativePath: string;
+};
+
+export type DeleteFileResult =
+  | { ok: true; relativePath: string }
+  | { ok: false; reason: "not-found" | "permission" | "unsafe-path" | "io-error"; message: string };
+
+export type RenameFileInput = {
+  projectUri: string;
+  relativePath: string;
+  newName: string;
+};
+
+export type RenameFileResult =
+  | { ok: true; relativePath: string; newRelativePath: string }
+  | { ok: false; reason: "not-found" | "permission" | "unsafe-path" | "already-exists" | "io-error"; message: string };
+
 export type GitEvent = {
   hash: string;
   selector: string;
@@ -484,6 +503,8 @@ export type SharkBayBridge = {
     listFiles?: (input: ProjectFilesInput) => Promise<ProjectFilesResult>;
     readFile?: (input: ReadFileInput) => Promise<ReadFileResult>;
     writeFile?: (input: WriteFileInput) => Promise<WriteFileResult>;
+    deleteFile?: (input: DeleteFileInput) => Promise<DeleteFileResult>;
+    renameFile?: (input: RenameFileInput) => Promise<RenameFileResult>;
   };
   codeGraph?: {
     getStatus?: (input: { projectUri: string }) => Promise<CodeGraphProjectStatus>;

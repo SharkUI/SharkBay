@@ -7,6 +7,8 @@ import type {
   IpcRuntimeLike,
   AgentCli,
   CodeGraphProjectStatus,
+  DeleteFileInput,
+  DeleteFileResult,
   DiagnosticsSnapshot,
   InstallLogEvent,
   InstallLogStream,
@@ -26,6 +28,8 @@ import type {
   ToolProfile,
   ReadFileInput,
   ReadFileResult,
+  RenameFileInput,
+  RenameFileResult,
   ScanProjectsResult,
   TerminalCloseInput,
   TerminalCreateInput,
@@ -259,6 +263,14 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
 
   writeProjectFile(runtime: IpcRuntimeLike, input: WriteFileInput): Promise<WriteFileResult> {
     return this.providers.providerForUri(input.projectUri).writeProjectFile(runtime, input);
+  }
+
+  deleteProjectFile(runtime: IpcRuntimeLike, input: DeleteFileInput): Promise<DeleteFileResult> {
+    return this.providers.providerForUri(input.projectUri).deleteProjectFile(runtime, input);
+  }
+
+  renameProjectFile(runtime: IpcRuntimeLike, input: RenameFileInput): Promise<RenameFileResult> {
+    return this.providers.providerForUri(input.projectUri).renameProjectFile(runtime, input);
   }
 
   async readCodeGraphStatus(runtime: IpcRuntimeLike, input: { projectUri: string }): Promise<CodeGraphProjectStatus> {

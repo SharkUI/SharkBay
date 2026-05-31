@@ -4,9 +4,13 @@ import { getConfiguredRoots } from "./config.js";
 import { localPathFromProjectUri } from "../core/project-uri.js";
 import { resolveReadableRepoFile, resolveRepoPath } from "./path-safety.js";
 import type {
+  DeleteFileInput,
+  DeleteFileResult,
   IpcRuntimeLike,
   ReadFileInput,
   ReadFileResult,
+  RenameFileInput,
+  RenameFileResult,
   WriteFileInput,
   WriteFileResult,
 } from "../shared/types.js";
@@ -46,10 +50,54 @@ export async function writeLocalProjectFile(runtime: IpcRuntimeLike, input: Writ
     const config = await getConfiguredRoots(runtime);
     const safeRepo = await resolveRepoPath(repoPath, config.configuredRoots, config.configuredProjects);
     const filePath = await resolveReadableRepoFile(safeRepo.repoPath, config.configuredRoots, input.relativePath, config.configuredProjects);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, input.content, "utf8");
     return { ok: true, size: byteSize, relativePath: input.relativePath };
   } catch (error) {
     return classifyFileError(error);
+  }
+}
+
+export async function deleteLocalProjectFile(runtime: IpcRuntimeLike, input: DeleteFileInput): Promise<DeleteFileResult> {
+  try {
+    const repoPath = localPathFromProjectUri(input.projectUri);
+    const config = await getConfiguredRoots(runtime);
+    const safeRepo = await resolveRepoPath(repoPath, config.configuredRoots, config.configuredProjects);
+    const filePath = await resolveReadableRepoFile(safeRepo.repoPath, config.configuredRoots, input.relativePath, config.configuredProjects);
+    await fs.rm(filePath, { recursive: true });
+    return { ok: true, relativePath: input.relativePath };
+  } catch (error) {
+    return classifyFileError(error);
+  }
+}
+
+export async function renameLocalProjectFile(runtime: IpcRuntimeLike, input: RenameFileInput): Promise<RenameFileResult> {
+  try {
+    const repoPath = localPathFromProjectUri(input.projectUri);
+    const config = await getConfiguredRoots(runtime);
+    const safeRepo = await resolveRepoPath(repoPath, config.configuredRoots, config.configuredProjects);
+    const filePath = await resolveReadableRepoFile(safeRepo.repoPath, config.configuredRoots, input.relativePath, config.configuredProjects);
+    const dir = path.dirname(filePath);
+    const newPath = path.join(dir, input.newName);
+    const newRelativePath = path.relative(safeRepo.repoPath, newPath).split(path.sep).join("/");
+    // Verify new path is still inside repo
+    await resolveReadableRepoFile(safeRepo.repoPath, config.configuredRoots, newRelativePath, config.configuredProjects).catch(() => {
+      // resolveReadableRepoFile throws if file doesn't exist; we just need the path check
+    });
+    const realNew = path.resolve(dir, input.newName);
+    if (!realNew.startsWith(safeRepo.repoPath)) {
+      return { ok: false, reason: "unsafe-path", message: "New name resolves outside project" };
+    }
+    try { await fs.stat(newPath); return { ok: false, reason: "already-exists", message: "A file with that name already exists" }; } catch {}
+    await fs.rename(filePath, newPath);
+    return { ok: true, relativePath: input.relativePath, newRelativePath };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const code = (error as { code?: string } | null)?.code;
+    if (code === "ENOENT") return { ok: false, reason: "not-found", message };
+    if (code === "EACCES" || code === "EPERM") return { ok: false, reason: "permission", message };
+    if (message.toLowerCase().includes("unsafe") || message.toLowerCase().includes("outside")) return { ok: false, reason: "unsafe-path", message };
+    return { ok: false, reason: "io-error", message };
   }
 }
 

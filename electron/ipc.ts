@@ -29,6 +29,10 @@ import type {
   InstallRecipe,
   KnowledgeSiteResult,
   ListInstallRecipesInput,
+  DeleteFileInput,
+  DeleteFileResult,
+  RenameFileInput,
+  RenameFileResult,
   DiagnosticsSnapshot,
   PathExistsInput,
   PathExistsResult,
@@ -429,6 +433,12 @@ export async function registerIpcHandlers(
   );
   handle<WriteFileInput, WriteFileResult>(channels.writeProjectFile, (payload) =>
     requireCore().call("writeProjectFile", [runtime, payload])
+  );
+  handle<DeleteFileInput, DeleteFileResult>(channels.deleteProjectFile, (payload) =>
+    requireCore().call("deleteProjectFile", [runtime, payload])
+  );
+  handle<RenameFileInput, RenameFileResult>(channels.renameProjectFile, (payload) =>
+    requireCore().call("renameProjectFile", [runtime, payload])
   );
   handle<{ projectUri: string }, CodeGraphProjectStatus>(channels.codeGraphGetStatus, (payload) =>
     requireCore().call("readCodeGraphStatus", [runtime, payload])

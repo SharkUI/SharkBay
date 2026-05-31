@@ -10,6 +10,8 @@ export const ipcChannels = {
   listProjectFiles: "projects:listFiles",
   readProjectFile: "files:read",
   writeProjectFile: "files:write",
+  deleteProjectFile: "files:delete",
+  renameProjectFile: "files:rename",
   codeGraphGetStatus: "codegraph:getStatus",
   codeGraphEnsureStatus: "codegraph:ensureStatus",
   createTerminal: "terminal:create",

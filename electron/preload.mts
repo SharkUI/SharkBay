@@ -15,6 +15,8 @@ import type {
   BrowserSession,
   BrowserUpdateEvent,
   CodeGraphProjectStatus,
+  DeleteFileInput,
+  DeleteFileResult,
   InstallToolInput,
   InstallToolResult,
   InstallRecipe,
@@ -31,6 +33,8 @@ import type {
   ProjectFilesResult,
   ReadFileInput,
   ReadFileResult,
+  RenameFileInput,
+  RenameFileResult,
   WriteFileInput,
   WriteFileResult,
   RenameProjectInput,
@@ -97,7 +101,9 @@ const sharkBayApi = {
     getDetail: (input: { projectUri: string }) => invoke<ProjectDetail>(channels.getProjectDetail, input),
     listFiles: (input: ProjectFilesInput) => invoke<ProjectFilesResult>(channels.listProjectFiles, input),
     readFile: (input: ReadFileInput) => invoke<ReadFileResult>(channels.readProjectFile, input),
-    writeFile: (input: WriteFileInput) => invoke<WriteFileResult>(channels.writeProjectFile, input)
+    writeFile: (input: WriteFileInput) => invoke<WriteFileResult>(channels.writeProjectFile, input),
+    deleteFile: (input: DeleteFileInput) => invoke<DeleteFileResult>(channels.deleteProjectFile, input),
+    renameFile: (input: RenameFileInput) => invoke<RenameFileResult>(channels.renameProjectFile, input)
   },
   codeGraph: {
     getStatus: (input: { projectUri: string }) => invoke<CodeGraphProjectStatus>(channels.codeGraphGetStatus, input),
