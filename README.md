@@ -18,11 +18,15 @@
 
 Launch and manage multiple AI coding agents from one workspace.
 
-Supported agents: **Claude Code** · **Codex** · **Gemini** · **Kiro** · **DeepSeek** · **Qwen** · **OpenCode**
+Supported agents: **Claude Code** · **Codex** · **Gemini** · **Kiro** · **CodeWhale** · **Qwen** · **OpenCode**
 
 ### Agent Status
 
-Real-time status indicators from agent transcripts — see what each agent is working on without switching terminals.
+Real-time hook-based status indicators (working/idle/attention) — see what each agent is doing without switching terminals.
+
+### Bottom Prompt Input
+
+Dedicated input bar at the bottom of agent terminals for composing prompts with comfortable editing before sending.
 
 ### Multi-Project Workspace
 
@@ -32,9 +36,13 @@ Manage local projects in a unified sidebar. Add, remove, and switch between repo
 
 Project-local `.sharkbay` harness with Markdown task records, synced through a GitHub remote branch. Works with any agent that reads files.
 
-### Team Context Sharing & Session Restore
+### Sessions
 
-Task records provide shared context across agents and team members. Restore previous agent sessions from completed tasks with one click.
+Browse all agent sessions per project — see model versions, auto-generated titles, and restore any previous session with one click.
+
+### Team Context Sharing
+
+Task records provide shared context across agents and team members, synced through a GitHub remote branch.
 
 ### Integrated Browser
 

@@ -1,5 +1,45 @@
 # Changelog
 
+## [0.2.1] — 2026-05-31
+
+### Added
+- Sessions detail panel for browsing and restoring agent sessions per project
+- Hook-based agent status system (working/idle/attention indicators)
+- Bottom prompt input bar for agent CLI terminals
+- OpenCode hook connector via JS plugin
+- Auto-derive session title from first meaningful user prompt
+- Session model version display for Claude, Kiro, and Gemini
+- Right-click context menu in file tree panel
+- Init action prompts in Sessions, Git, and Files detail panels
+- Protocol install without git; team sync gated on GitHub remote
+- AGENTS.md bootstrap support for directing agents to project conventions
+- GitHub avatar caching in localStorage
+
+### Changed
+- Rename DeepSeek to CodeWhale
+- Require protocol file for bootstrap injection
+- Remove agent CLI download shortcut
+- Remove terminal status fallback
+
+### Fixed
+- Hook PID-based session→tab resolution replacing heuristic tab mapping
+- Stable socket path to survive app restarts
+- Stale session silent expiry instead of emitting idle
+- Idle dot suppression on active tab
+- Active tab idle excluded from project pill aggregation
+- Tab focus clears idle dot correctly
+- Per-session status dot on agent tabs
+- Session-id injection skipped when command has --resume
+- Terminal input bar growth no longer triggers terminal redraw
+- Bottom input focus maintained on tab switch
+- Codex hook config schema
+- Kiro hooks installed into agent config instead of settings.json
+- Kiro tools wildcard included in sharkbay agent config
+- Gemini nested hook format and CodeWhale session restore match
+- Session model label formatting
+- Local-only install identity resolution preventing harness drift
+- .sharkbay exclude entry added when git appears after protocol install
+
 ## [0.2.0] — 2026-05-28
 
 ### Added
