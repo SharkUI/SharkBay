@@ -12,17 +12,19 @@ agent: Codex GPT-5
 sessionId: 019e7e56-d699-7e43-a7d3-a6ae2a7628bc
 branch: main
 createdAt: 2026-05-31T14:01:52Z
-updatedAt: 2026-05-31T14:03:26Z
-completedAt: 2026-05-31T14:03:26Z
+updatedAt: 2026-05-31T14:07:14Z
+completedAt: 2026-05-31T14:07:14Z
 commits:
   - 3c241ffc
+  - f892f9da
 ---
 
 ## Summary
-Add `.deepseek` to the root `.gitignore` so local DeepSeek project artifacts do not appear as untracked files.
+Add `.deepseek` to the root `.gitignore` and remove already-tracked DeepSeek files from the repository while preserving local files.
 
 ## Files
 - .gitignore
+- .deepseek/instructions.md
 - .sharkbay/tasks/D9K4V2-u3960864-m81ae10-add-deepseek-gitignore.md
 
 ## Work
@@ -31,11 +33,17 @@ Add `.deepseek` to the root `.gitignore` so local DeepSeek project artifacts do 
 - Added `.deepseek/` to the root `.gitignore`.
 - Reopened task to prepare a commit for the requested change.
 - Committed the ignore update as `3c241ffc`.
+- Reopened task to remove the already-tracked `.deepseek` contents from the repository.
+- Removed `.deepseek/instructions.md` from Git tracking while keeping the local `.deepseek/` directory ignored.
+- Committed and pushed the tracked-file removal as `f892f9da`.
 
 ## Verification
 - `git diff --check` passed.
 - `git diff --cached --check` passed before commit.
-- `git status --short` is clean after commit.
+- `git ls-files .deepseek` returns no tracked files.
+- `git status --short --ignored .deepseek` reports `.deepseek/` as ignored.
+- `git push` updated `origin/main` from `3c241ffc` to `f892f9da`.
+- `git status --short` is clean after push.
 
 ## Notes
 - Related team context: W3K7R9-u3960864-m81ae10 moved `.codegraph` ignores to `.git/info/exclude`; R2K6V8-u3960864-m81ae10 previously added `.codegraph` to `.gitignore`.
