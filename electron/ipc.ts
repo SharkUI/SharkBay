@@ -72,7 +72,7 @@ import { TokenUsageCollector } from "../src/main/token-usage-collector.js";
 import { BrowserManager } from "../src/main/browser-tabs.js";
 import { readGitMetadata } from "../src/main/git.js";
 import { resolveRepoPath } from "../src/main/path-safety.js";
-import { checkRepoPermission, generateMachineId, getHarnessUpdateStatus, getLocalHarnessIdentity, getMachineId, installHarness, isHarnessInstalled, resolveGitHubIdentity, uninstallHarness, updateHarnessFiles } from "../src/main/harness.js";
+import { checkRepoPermission, ensureLocalExclude, generateMachineId, getHarnessUpdateStatus, getLocalHarnessIdentity, getMachineId, installHarness, isGitWorktree, isHarnessInstalled, resolveGitHubIdentity, uninstallHarness, updateHarnessFiles } from "../src/main/harness.js";
 import { deleteTeamContextBranch, hasLocalContextBranch, TeamworkSync } from "../src/main/teamwork-sync.js";
 import { scanTasks, watchTasks } from "../src/main/tasks.js";
 import { generateKnowledgeSite, getKnowledgeSitePath } from "../src/main/knowledge-site.js";
@@ -181,6 +181,9 @@ async function syncForStatus(repoPath: string, installed: boolean): Promise<Team
 async function getProtocolStatus(repoPath: string): Promise<ProtocolStatus> {
   const harnessInstalled = await isHarnessInstalled(repoPath);
   const installed = harnessInstalled;
+  if (harnessInstalled && await isGitWorktree(repoPath)) {
+    await ensureLocalExclude(repoPath).catch(() => {});
+  }
   const identity = harnessInstalled ? await getLocalHarnessIdentity(repoPath) : {};
   const contextAvailable = harnessInstalled ? await hasLocalContextBranch(repoPath).catch(() => false) : false;
   const sync = await syncForStatus(repoPath, contextAvailable);
