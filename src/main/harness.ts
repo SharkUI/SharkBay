@@ -287,10 +287,11 @@ export async function getHarnessUpdateStatus(repoPath: string): Promise<HarnessU
 }
 
 export async function updateHarnessFiles(repoPath: string): Promise<HarnessUpdateStatus> {
-  await assertHarnessInstallable(repoPath);
   const options = await resolveProtocolOptions(repoPath, "", { resolveIdentity: true, generateMachineId: true });
   await writeManagedHarnessFiles(repoPath, options);
-  await ensureLocalExclude(repoPath);
+  if (await isGitWorktree(repoPath)) {
+    await ensureLocalExclude(repoPath);
+  }
   return compareManagedHarnessFiles(repoPath, options);
 }
 
@@ -298,24 +299,28 @@ export async function installHarness(
   repoPath: string,
   options: ProtocolOptions,
 ): Promise<void> {
-  await assertHarnessInstallable(repoPath);
-
   await writeManagedHarnessFiles(repoPath, options);
-  await backupLocalExclude(repoPath, join(repoPath, ".sharkbay", "harness"));
-  await ensureLocalExclude(repoPath);
+  if (await isGitWorktree(repoPath)) {
+    await backupLocalExclude(repoPath, join(repoPath, ".sharkbay", "harness"));
+    await ensureLocalExclude(repoPath);
+  }
 }
 
 export async function assertHarnessInstallable(repoPath: string): Promise<void> {
-  await assertGitWorktree(repoPath);
+  await assertIsGitWorktree(repoPath);
 }
 
-async function assertGitWorktree(repoPath: string): Promise<void> {
+export async function isGitWorktree(repoPath: string): Promise<boolean> {
   try {
     const { stdout } = await execFileAsync("git", ["-C", repoPath, "rev-parse", "--is-inside-work-tree"], { timeout: 3_000 });
-    if (stdout.trim() === "true") return;
+    return stdout.trim() === "true";
   } catch {
-    // Re-throw a SharkBay-facing message below.
+    return false;
   }
+}
+
+async function assertIsGitWorktree(repoPath: string): Promise<void> {
+  if (await isGitWorktree(repoPath)) return;
   throw new Error("Protocol harness requires a Git repository. Run git init in this folder before installing.");
 }
 

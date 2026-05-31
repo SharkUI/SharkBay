@@ -214,14 +214,15 @@ describe("harness install", () => {
     await expect(isHarnessInstalled(repo)).resolves.toBe(true);
   });
 
-  it("refuses to install into a directory that is not a git worktree", async () => {
+  it("installs into a directory that is not a git worktree", async () => {
     const root = await makeTempRoot("harness-harness-no-git");
     const repo = path.join(root, "plain-folder");
     await fs.mkdir(repo, { recursive: true });
 
-    await expect(installHarness(repo, harnessOptions)).rejects.toThrow(/requires a Git repository/);
+    await installHarness(repo, harnessOptions);
+    await expect(isHarnessInstalled(repo)).resolves.toBe(true);
+    // No .git/info/exclude should be created for non-git projects
     await expect(fs.stat(path.join(repo, ".git")).catch(() => null)).resolves.toBeNull();
-    await expect(isHarnessInstalled(repo)).resolves.toBe(false);
   });
 
   it("reports harness drift and updates managed files only when requested", async () => {

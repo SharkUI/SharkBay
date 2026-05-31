@@ -72,7 +72,7 @@ import { TokenUsageCollector } from "../src/main/token-usage-collector.js";
 import { BrowserManager } from "../src/main/browser-tabs.js";
 import { readGitMetadata } from "../src/main/git.js";
 import { resolveRepoPath } from "../src/main/path-safety.js";
-import { assertHarnessInstallable, checkRepoPermission, generateMachineId, getHarnessUpdateStatus, getLocalHarnessIdentity, getMachineId, installHarness, isHarnessInstalled, resolveGitHubIdentity, uninstallHarness, updateHarnessFiles } from "../src/main/harness.js";
+import { checkRepoPermission, generateMachineId, getHarnessUpdateStatus, getLocalHarnessIdentity, getMachineId, installHarness, isHarnessInstalled, resolveGitHubIdentity, uninstallHarness, updateHarnessFiles } from "../src/main/harness.js";
 import { deleteTeamContextBranch, hasLocalContextBranch, TeamworkSync } from "../src/main/teamwork-sync.js";
 import { scanTasks, watchTasks } from "../src/main/tasks.js";
 import { generateKnowledgeSite, getKnowledgeSitePath } from "../src/main/knowledge-site.js";
@@ -180,10 +180,10 @@ async function syncForStatus(repoPath: string, installed: boolean): Promise<Team
 
 async function getProtocolStatus(repoPath: string): Promise<ProtocolStatus> {
   const harnessInstalled = await isHarnessInstalled(repoPath);
-  const contextAvailable = await hasLocalContextBranch(repoPath);
-  const installed = harnessInstalled && contextAvailable;
+  const installed = harnessInstalled;
   const identity = harnessInstalled ? await getLocalHarnessIdentity(repoPath) : {};
-  const sync = await syncForStatus(repoPath, installed);
+  const contextAvailable = harnessInstalled ? await hasLocalContextBranch(repoPath).catch(() => false) : false;
+  const sync = await syncForStatus(repoPath, contextAvailable);
   const syncStatus = sync?.getStatus();
   const harnessUpdate = harnessInstalled ? await getHarnessUpdateStatus(repoPath) : { required: false, files: [] };
   return {
@@ -201,48 +201,67 @@ async function getProtocolStatus(repoPath: string): Promise<ProtocolStatus> {
 }
 
 async function installProtocol(repoPath: string): Promise<ProtocolStatus> {
-  await assertHarnessInstallable(repoPath);
-  const identity = await resolveGitHubIdentity();
   const gitMeta = await readGitMetadata(repoPath);
-  const repo = githubRepoFromRemote(gitMeta.remoteOrigin);
-  if (!repo) {
-    throw new Error("Protocol requires a GitHub origin remote. Configure remote.origin.url before installing.");
-  }
-
-  const permission = await checkRepoPermission(repo, identity.login);
-  if (permission !== "admin" && permission !== "write") {
-    throw new Error(`Insufficient permission: ${permission}. Need at least write.`);
-  }
-
-  const sync = syncInstances.get(repoPath) ?? new TeamworkSync(repoPath);
-  await sync.ensureContextBranch(repo, identity.login);
-
   const machineId = await getMachineId(repoPath) ?? generateMachineId();
+
+  // If git + GitHub remote available, do full install with team sync
+  const repo = gitMeta.isGitRepository ? githubRepoFromRemote(gitMeta.remoteOrigin) : null;
+  if (repo) {
+    const identity = await resolveGitHubIdentity();
+    const permission = await checkRepoPermission(repo, identity.login);
+    if (permission !== "admin" && permission !== "write") {
+      throw new Error(`Insufficient permission: ${permission}. Need at least write.`);
+    }
+
+    const sync = syncInstances.get(repoPath) ?? new TeamworkSync(repoPath);
+    await sync.ensureContextBranch(repo, identity.login);
+
+    await installHarness(repoPath, {
+      githubLogin: identity.login,
+      githubUserId: identity.id,
+      machineId,
+      agent: "",
+      repo,
+    });
+
+    sync.start();
+    syncInstances.set(repoPath, sync);
+    const syncStatus = sync.getStatus();
+    return {
+      installed: true,
+      harnessInstalled: true,
+      harnessUpdate: { required: false, files: [] },
+      syncEnabled: syncStatus.enabled,
+      lastSyncAt: syncStatus.lastSyncAt,
+      pendingCount: syncStatus.pendingCount,
+      lastError: syncStatus.lastError,
+      githubLogin: identity.login,
+      githubUserId: identity.id,
+      machineId,
+      repo,
+      branch: gitMeta.currentBranch ?? undefined,
+      permission,
+    };
+  }
+
+  // Local-only install: no git or no GitHub remote — tasks work but sync is unavailable
   await installHarness(repoPath, {
-    githubLogin: identity.login,
-    githubUserId: identity.id,
+    githubLogin: "",
+    githubUserId: 0,
     machineId,
     agent: "",
-    repo,
   });
 
-  sync.start();
-  syncInstances.set(repoPath, sync);
-  const syncStatus = sync.getStatus();
   return {
     installed: true,
     harnessInstalled: true,
     harnessUpdate: { required: false, files: [] },
-    syncEnabled: syncStatus.enabled,
-    lastSyncAt: syncStatus.lastSyncAt,
-    pendingCount: syncStatus.pendingCount,
-    lastError: syncStatus.lastError,
-    githubLogin: identity.login,
-    githubUserId: identity.id,
+    syncEnabled: false,
+    lastSyncAt: null,
+    pendingCount: 0,
+    lastError: null,
     machineId,
-    repo,
     branch: gitMeta.currentBranch ?? undefined,
-    permission,
   };
 }
 

@@ -2508,7 +2508,7 @@ function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserT
     }
   }
 
-  if (!repoPath) return <EmptyState title="Task Protocol unavailable" body="Task Protocol is available for local Git projects." />;
+  if (!repoPath) return <EmptyState title="Task Protocol unavailable" body="Task Protocol is available for local projects." />;
 
   if (selected) {
     const pill = taskPill(selected);
@@ -2540,7 +2540,7 @@ function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserT
         <section className="subpanel confirm-panel protocol-action-card">
           <div>
             <h4>Install Protocol</h4>
-            <p className="summary-text">Requires a GitHub origin and write access. Installation creates the local harness and enables team sync.</p>
+            <p className="summary-text">Creates the local task harness for this project. Team sync is enabled automatically when a GitHub remote is configured.</p>
           </div>
           <div className="button-row">
             <button className="button compact" disabled={busyAction !== null} type="button" onClick={() => void installProtocolHarness()}>
