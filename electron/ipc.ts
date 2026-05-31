@@ -245,9 +245,11 @@ async function installProtocol(repoPath: string): Promise<ProtocolStatus> {
   }
 
   // Local-only install: no git or no GitHub remote — tasks work but sync is unavailable
+  let identity: { login: string; id: number } | null = null;
+  try { identity = await resolveGitHubIdentity(); } catch { /* gh CLI may not be available */ }
   await installHarness(repoPath, {
-    githubLogin: "",
-    githubUserId: 0,
+    githubLogin: identity?.login ?? "unknown",
+    githubUserId: identity?.id ?? 0,
     machineId,
     agent: "",
   });
