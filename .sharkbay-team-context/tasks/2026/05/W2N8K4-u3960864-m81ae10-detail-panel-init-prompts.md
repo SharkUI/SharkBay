@@ -13,7 +13,7 @@ agent: Claude Code Opus 4.6
 sessionId: e60cc129-c0f7-4b0c-8c0d-3f861ed7116f
 branch: main
 createdAt: 2026-05-31T09:32:44Z
-updatedAt: 2026-05-31T09:35:17Z
+updatedAt: 2026-05-31T09:42:28Z
 ---
 
 ## Summary
@@ -24,8 +24,9 @@ Add initialization prompts to Sessions, Git, and Files detail panels when their 
 
 ## Work
 - Sessions panel: show "Enable Hooks" prompt when all detected agents have hooks disabled; clicking enables hooks for all hookSupportedAgents that are installed.
-- Git panel: show "Initialize Repository" prompt when project has no git; offer "git init" (local) and "Clone Repository" (connect to GitHub remote) as two actions, both open terminal with prefilled command.
-- Files panel: show "Install CodeGraph" prompt when codeGraphStatus.status?.state === "not-installed"; clicking opens terminal with `npm i -g @colbymchenry/codegraph` prefilled.
+- Git panel: show "Initialize Repository" prompt when project has no git; offer "git init" (local) and "Clone Remote" as two actions, both open a new terminal tab with prefilled command.
+- Files panel: show "Install CodeGraph" prompt when codeGraphStatus.status?.state === "not-installed"; clicking opens terminal tab with `npm i -g @colbymchenry/codegraph` prefilled.
+- Added `onOpenTerminal` callback prop threaded from ProjectDetailPane through to Git and Files tabs, wired to `openAgentSession` on the terminal pane ref (properly creates a visible terminal tab).
 
 ## Verification
 - TypeScript: `npx tsc --noEmit -p tsconfig.renderer.json` — clean
