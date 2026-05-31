@@ -1470,6 +1470,8 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
         sessionId={selectedActiveTerminal?.session.id ?? null}
         disabled={!selectedActiveTerminal}
         focusRequest={promptFocusRequest}
+        isAgentSession={Boolean(selectedActiveTerminal?.session.agentId)}
+        onTerminalFocusRequest={() => selectedActiveTerminal?.terminal.focus()}
       />
     </div>
   );
@@ -4212,7 +4214,19 @@ function CachedAvatar({ url }: { url: string }) {
   return <img alt="" src={src} />;
 }
 
-function PromptInputBar({ sessionId, disabled, focusRequest }: { sessionId: string | null; disabled: boolean; focusRequest: number }) {
+function PromptInputBar({
+  sessionId,
+  disabled,
+  focusRequest,
+  isAgentSession,
+  onTerminalFocusRequest,
+}: {
+  sessionId: string | null;
+  disabled: boolean;
+  focusRequest: number;
+  isAgentSession: boolean;
+  onTerminalFocusRequest: () => void;
+}) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -4235,15 +4249,17 @@ function PromptInputBar({ sessionId, disabled, focusRequest }: { sessionId: stri
     };
   }, [disabled, focusRequest, sessionId]);
 
+  function send(data: string) {
+    if (!sessionId) return;
+    const id = sessionId;
+    const fire = getBridge().terminal?.inputFire;
+    if (fire) fire({ sessionId: id, data });
+    else void sendTerminalInput(id, data);
+  }
+
   function submit() {
     const text = value;
     if (!text || !sessionId) return;
-    const id = sessionId;
-    const fire = getBridge().terminal?.inputFire;
-    const send = (data: string) => {
-      if (fire) fire({ sessionId: id, data });
-      else void sendTerminalInput(id, data);
-    };
     send(text);
     setTimeout(() => send("\r"), 30);
     setValue("");
@@ -4259,7 +4275,16 @@ function PromptInputBar({ sessionId, disabled, focusRequest }: { sessionId: stri
 
   function handleInput(event: FormEvent<HTMLTextAreaElement>) {
     const target = event.currentTarget;
-    setValue(target.value);
+    const nextValue = target.value;
+    if (!disabled && sessionId && isAgentSession && !value && nextValue.startsWith("/")) {
+      send(nextValue);
+      setValue("");
+      target.value = "";
+      target.style.height = "";
+      window.requestAnimationFrame(onTerminalFocusRequest);
+      return;
+    }
+    setValue(nextValue);
     target.style.height = "";
     target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
   }
