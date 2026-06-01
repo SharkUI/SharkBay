@@ -12,8 +12,8 @@ agent: Kiro Claude
 sessionId: 127e17de-945b-4e07-8e56-30239b52a879
 branch: main
 createdAt: 2026-06-01T13:30:22Z
-updatedAt: 2026-06-01T14:01:32Z
-completedAt: 2026-06-01T13:31:31Z
+updatedAt: 2026-06-01T14:16:28Z
+completedAt: 2026-06-01T14:16:28Z
 commits:
   - 18cb8eaa
 ---
@@ -34,10 +34,16 @@ Committed .gitignore update and researched open-vibe-island (Open Island) archit
 - Identified key features applicable to SharkBay
 - Compared agent support lists and hook mechanisms in detail
 - Created Phase 1 spec: `.sharkbay/specs/hooks-bidirectional-upgrade/`
+- Reviewed spec against SharkBay code; fixed 4 design/code-reality gaps
 
 ## Verification
 - Clone successful, project structure confirmed
-- Research documented below
+- Spec validated against current SharkBay implementation (bridge.ts, state-manager.ts, terminal.ts, types.ts, connectors). 4 gaps found and corrected in spec:
+  - Response path: EventEmitter has no return channel → redesigned as injectable async `HookRequestHandler`
+  - Terminal metadata flow: `HookBridgeMessage`/`summarizeUnifiedEvent` lacked terminal → added full Message→Event→log flow-through
+  - ID source: no separate tab id exists → `SHARKBAY_SESSION_ID` = `TerminalSession.id`, dropped `SHARKBAY_TAB_ID` for Phase 1
+  - Sender scope: OpenCode plugin + CodeWhale script are separate senders → all three senders now in scope
+- Spec is plan-only; no SharkBay source modified. Implementation deferred pending user review.
 
 ## Notes
 
