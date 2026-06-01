@@ -4228,6 +4228,7 @@ function PromptInputBar({
   onTerminalFocusRequest: () => void;
 }) {
   const [value, setValue] = useState("");
+  const [isComposing, setIsComposing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
@@ -4267,10 +4268,11 @@ function PromptInputBar({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      submit();
-    }
+    if (event.key !== "Enter" || event.shiftKey) return;
+    const nativeEvent = event.nativeEvent as { isComposing?: boolean; keyCode?: number };
+    if (isComposing || nativeEvent.isComposing || event.keyCode === 229 || nativeEvent.keyCode === 229) return;
+    event.preventDefault();
+    submit();
   }
 
   function handleInput(event: FormEvent<HTMLTextAreaElement>) {
@@ -4298,6 +4300,8 @@ function PromptInputBar({
         placeholder={disabled ? "No active terminal" : "Type here… Enter to send, Shift+Enter for newline"}
         rows={1}
         value={value}
+        onCompositionStart={() => setIsComposing(true)}
+        onCompositionEnd={() => setIsComposing(false)}
         onInput={handleInput}
         onKeyDown={handleKeyDown}
         onChange={(e) => setValue(e.target.value)}
