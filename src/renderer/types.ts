@@ -495,6 +495,7 @@ export type SharkBayBridge = {
     removeProject?: (input: { path?: string; uri?: string }) => Promise<AppConfig | void>;
     renameProject?: (input: { uri: string; name: string }) => Promise<AppConfig | void>;
     pickProjectFolder?: () => Promise<{ cancelled: boolean; paths: string[] }>;
+    createWorktree?: (input: { sourceProjectPath: string; branchName: string }) => Promise<{ targetPath: string; branchName: string }>;
     setAppearanceTheme?: (input: { theme: AppearanceTheme }) => Promise<AppConfig>;
   };
   projects?: {

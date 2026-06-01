@@ -864,6 +864,7 @@ function DashboardView({
               onRemoveProject={onRemoveProject}
               onRenameProject={onRenameProject}
               onUninstallProtocol={onUninstallProtocol}
+              onRefresh={onRefresh}
             />
           ) : (
             <div className="empty-state compact-title-row" style={{ padding: "24px 16px" }}>
@@ -1716,7 +1717,7 @@ type ProjectMenuState = {
   canUninstallProtocol: boolean;
 };
 
-function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, runningServiceProjectIds, projectActivityByProjectId, selectedId, onSelect, onRemoveProject, onRenameProject, onUninstallProtocol }: {
+function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, runningServiceProjectIds, projectActivityByProjectId, selectedId, onSelect, onRemoveProject, onRenameProject, onUninstallProtocol, onRefresh }: {
   agentStatusByProjectPath: AgentStatusByProjectPath;
   candidates: ProjectCandidate[];
   projectAliases: Record<string, string>;
@@ -1727,12 +1728,16 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
   onRemoveProject: (uri: string) => Promise<void>;
   onRenameProject: (uri: string, name: string) => Promise<void>;
   onUninstallProtocol: (repoPath: string, cleanTeamContext?: boolean) => Promise<void>;
+  onRefresh: () => Promise<void>;
 }) {
   const [menuOpen, setMenuOpen] = useState<ProjectMenuState | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [confirmRemove, setConfirmRemove] = useState<{ uri: string; name: string } | null>(null);
   const [confirmUninstall, setConfirmUninstall] = useState<ConfirmUninstallState | null>(null);
+  const [worktreeModal, setWorktreeModal] = useState<{ sourceProjectPath: string; name: string } | null>(null);
+  const [worktreeBranch, setWorktreeBranch] = useState("");
+  const [worktreeCreating, setWorktreeCreating] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [uninstalling, setUninstalling] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -1780,6 +1785,22 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
         );
       })
       .catch(() => undefined);
+  }
+
+  async function doCreateWorktree() {
+    if (!worktreeModal || !worktreeBranch.trim()) return;
+    setWorktreeCreating(true);
+    try {
+      const handler = getBridge().config?.createWorktree;
+      if (!handler) throw new Error("createWorktree is not exposed by the preload API.");
+      await handler({ sourceProjectPath: worktreeModal.sourceProjectPath, branchName: worktreeBranch.trim() });
+      setWorktreeModal(null);
+      await onRefresh();
+    } catch (error) {
+      alert(asMessage(error));
+    } finally {
+      setWorktreeCreating(false);
+    }
   }
 
   async function openUninstallDialog(candidate: ProjectCandidate, repoPath: string) {
@@ -1973,6 +1994,24 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
               </button>
             );
           })()}
+          {(() => {
+            const candidate = candidates.find((c) => c.id === menuOpen.id);
+            const repoPath = candidate ? localPathFromCandidate(candidate) : null;
+            if (!candidate || !repoPath || candidate.dirtyWorktree === null) return null;
+            return (
+              <button
+                className="project-context-menu-item"
+                type="button"
+                onClick={() => {
+                  setMenuOpen(null);
+                  setWorktreeBranch("");
+                  setWorktreeModal({ sourceProjectPath: repoPath, name: candidate.name });
+                }}
+              >
+                New Worktree
+              </button>
+            );
+          })()}
           <button
             className="project-context-menu-item is-danger"
             type="button"
@@ -1984,6 +2023,37 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
           >
             Remove Project
           </button>
+        </div>
+      ) : null}
+      {worktreeModal ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !worktreeCreating) setWorktreeModal(null); }}>
+          <section aria-modal="true" className="modal-panel" role="dialog" aria-labelledby="new-worktree-title" style={{ maxWidth: "440px" }}>
+            <div className="modal-header">
+              <div>
+                <h3 id="new-worktree-title">New Worktree</h3>
+                <p>Create a new Git worktree from <strong>{worktreeModal.name}</strong>.</p>
+              </div>
+              <button aria-label="Close" className="icon-button" disabled={worktreeCreating} type="button" onClick={() => setWorktreeModal(null)}>x</button>
+            </div>
+            <div className="modal-body" style={{ padding: "0 16px 16px" }}>
+              <label className="form-label" htmlFor="worktree-branch-input">Branch name</label>
+              <input
+                id="worktree-branch-input"
+                className="text-input"
+                type="text"
+                placeholder="feature/my-branch"
+                value={worktreeBranch}
+                autoFocus
+                disabled={worktreeCreating}
+                onChange={(e) => setWorktreeBranch(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && worktreeBranch.trim()) void doCreateWorktree(); }}
+              />
+            </div>
+            <div className="modal-actions">
+              <button className="button secondary" disabled={worktreeCreating} type="button" onClick={() => setWorktreeModal(null)}>Cancel</button>
+              <button className="button primary" disabled={worktreeCreating || !worktreeBranch.trim()} type="button" onClick={() => void doCreateWorktree()}>{worktreeCreating ? "Creating…" : "Create"}</button>
+            </div>
+          </section>
         </div>
       ) : null}
     </section>

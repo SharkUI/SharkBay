@@ -39,6 +39,8 @@ import type {
   WriteFileResult,
   RenameProjectInput,
   RemoveProjectInput,
+  CreateWorktreeInput,
+  CreateWorktreeResult,
   ScanProjectsResult,
   TaskViewModel,
   TerminalCloseInput,
@@ -94,6 +96,7 @@ const sharkBayApi = {
     removeProject: (input: RemoveProjectInput) => invoke<AppConfig>(channels.removeProject, input),
     renameProject: (input: RenameProjectInput) => invoke<AppConfig>(channels.renameProject, input),
     pickProjectFolder: () => invoke<{ cancelled: boolean; paths: string[] }>(channels.pickProjectFolder),
+    createWorktree: (input: CreateWorktreeInput) => invoke<CreateWorktreeResult>(channels.createWorktree, input),
     setAppearanceTheme: (input: AppearanceThemeInput) => invoke<AppConfig>(channels.setAppearanceTheme, input)
   },
   projects: {

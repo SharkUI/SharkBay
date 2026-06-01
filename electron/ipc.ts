@@ -7,6 +7,7 @@ import {
   renameProject,
   setAppearanceTheme,
 } from "../src/main/config.js";
+import { createWorktree } from "../src/main/worktree.js";
 import type {
   AgentCli,
   AgentProjectStatusEvent,
@@ -47,6 +48,8 @@ import type {
   WriteFileResult,
   RenameProjectInput,
   RemoveProjectInput,
+  CreateWorktreeInput,
+  CreateWorktreeResult,
   ScanProjectsResult,
   GitHubIdentity,
   TaskViewModel,
@@ -426,6 +429,7 @@ export async function registerIpcHandlers(
   handle<ProjectConfigInput, AppConfig>(channels.addProject, (payload) => addConfiguredProject(runtime, payload));
   handle<RemoveProjectInput, AppConfig>(channels.removeProject, (payload) => removeConfiguredProject(runtime, payload));
   handle<RenameProjectInput, AppConfig>(channels.renameProject, (payload) => renameProject(runtime, payload));
+  handle<CreateWorktreeInput, CreateWorktreeResult>(channels.createWorktree, (payload) => createWorktree(runtime, payload));
   ipcMain.removeHandler(channels.pickProjectFolder);
   ipcMain.handle(channels.pickProjectFolder, async (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);

@@ -60,6 +60,7 @@ describe("IPC channels", () => {
       contentReady: "app:contentReady",
       setHooksEnabled: "agents:setHooksEnabled",
       hookGetSessions: "hooks:getSessions",
+      createWorktree: "git:createWorktree",
     });
     expect(Object.values(ipcChannels).some((channel) => channel.startsWith("harness:"))).toBe(false);
   });

@@ -37,6 +37,16 @@ export type RenameProjectInput = {
   name: string;
 };
 
+export type CreateWorktreeInput = {
+  sourceProjectPath: string;
+  branchName: string;
+};
+
+export type CreateWorktreeResult = {
+  targetPath: string;
+  branchName: string;
+};
+
 export type AppearanceThemeInput = {
   theme: AppearanceTheme;
 };

@@ -55,4 +55,5 @@ export const ipcChannels = {
   contentReady: "app:contentReady",
   setHooksEnabled: "agents:setHooksEnabled",
   hookGetSessions: "hooks:getSessions",
+  createWorktree: "git:createWorktree",
 } as const;
