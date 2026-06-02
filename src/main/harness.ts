@@ -6,10 +6,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { resolveCommandPath } from "./command-path.js";
 
 const execFileAsync = promisify(execFile);
-const ROOT_ADAPTER_FILES = ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "QWEN.md"] as const;
-const KIRO_STEERING_FILE = ".kiro/steering/sharkbay-protocol.md";
-const HARNESS_ENTRY_START = "<!-- sharkbay-harness:start -->";
-const HARNESS_ENTRY_END = "<!-- sharkbay-harness:end -->";
+
 const EXCLUDE_ENTRIES = ["/.sharkbay/"];
 const LEGACY_EXCLUDE_ENTRIES = [] as string[];
 const EXCLUDE_REMOVAL_ENTRIES = new Set([...EXCLUDE_ENTRIES, ...LEGACY_EXCLUDE_ENTRIES]);
@@ -360,12 +357,6 @@ export async function uninstallHarness(repoPath: string): Promise<ProtocolUninst
   const removedPaths: string[] = [];
   const skippedPaths: string[] = [];
 
-  for (const name of [...ROOT_ADAPTER_FILES, KIRO_STEERING_FILE]) {
-    const removed = await removeManagedEntryBlock(repoPath, name);
-    if (removed === "removed") removedPaths.push(name);
-    else if (removed === "skipped") skippedPaths.push(name);
-  }
-
   const excludeRemovedLines = await restoreLocalExclude(repoPath);
   const sharkbayDir = join(repoPath, ".sharkbay");
   try {
@@ -379,23 +370,7 @@ export async function uninstallHarness(repoPath: string): Promise<ProtocolUninst
   return { removedPaths: removedPaths.sort(), skippedPaths: skippedPaths.sort(), excludeRemovedLines };
 }
 
-async function removeManagedEntryBlock(repoPath: string, name: string): Promise<"removed" | "skipped" | "missing"> {
-  const filePath = join(repoPath, name);
-  let existing: string;
-  try {
-    existing = await readFile(filePath, "utf-8");
-  } catch {
-    return "missing";
-  }
-  const stripped = removeHarnessEntryBlock(existing);
-  if (stripped === existing) return "skipped";
-  if (stripped.trim().length === 0) {
-    await rm(filePath, { force: true });
-  } else {
-    await writeFile(filePath, stripped, "utf-8");
-  }
-  return "removed";
-}
+
 
 async function backupLocalExclude(repoPath: string, harnessDir: string): Promise<void> {
   const backupPath = join(harnessDir, EXCLUDE_BACKUP_FILE);
@@ -649,23 +624,7 @@ function githubRepoFromRemote(remoteOrigin: string | null): string | null {
   return match?.[1] ?? null;
 }
 
-function removeHarnessEntryBlock(existing: string): string {
-  const start = existing.indexOf(HARNESS_ENTRY_START);
-  const end = existing.indexOf(HARNESS_ENTRY_END);
-  if (start < 0 && end < 0) return existing;
-  if (start >= 0) {
-    const before = existing.slice(0, start).trimEnd();
-    const after = end > start ? existing.slice(end + HARNESS_ENTRY_END.length).replace(/^\r?\n/, "") : "";
-    return joinEntryParts(before, "", after);
-  }
-  const after = existing.slice(end + HARNESS_ENTRY_END.length).replace(/^\r?\n/, "");
-  return after;
-}
 
-function joinEntryParts(before: string, block: string, after: string): string {
-  const parts = [before.trimEnd(), block.trim(), after.trim()].filter((part) => part.length > 0);
-  return parts.length ? `${parts.join("\n\n")}\n` : "";
-}
 
 function generateProtocol(opts: { githubLogin: string; githubUserId: number; machineId: string; agent: string; repo?: string }): string {
   return `# SharkBay Harness Protocol

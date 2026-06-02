@@ -409,26 +409,6 @@ describe("harness install", () => {
     await expect(fs.readFile(path.join(repo, ".git", "info", "exclude"), "utf8")).resolves.toBe("node_modules/\n/AGENTS.md\n");
   });
 
-  it("removes only the harness block from user-owned entry files during uninstall", async () => {
-    const root = await makeTempRoot("harness-harness-uninstall-user-file");
-    const repo = await createRealGitRepoFixture(root);
-    await installHarness(repo, harnessOptions);
-    await writeText(path.join(repo, "AGENTS.md"), [
-      "# User agent rules",
-      "",
-      "<!-- sharkbay-harness:start -->",
-      "legacy managed block",
-      "<!-- sharkbay-harness:end -->",
-      "",
-    ].join("\n"));
-
-    const result = await uninstallHarness(repo);
-
-    expect(result.removedPaths).toContain("AGENTS.md");
-    await expect(fs.readFile(path.join(repo, "AGENTS.md"), "utf8")).resolves.toBe("# User agent rules\n");
-    await expect(fs.stat(path.join(repo, ".sharkbay")).catch(() => null)).resolves.toBeNull();
-  });
-
   it("cleans local exclude content without touching unrelated lines", () => {
     const cleaned = cleanLocalExcludeContent(["# local", "/.sharkbay/", "/AGENTS.md", "/CLAUDE.md", "/GEMINI.md", "/QWEN.md", "/.kiro/steering/sharkbay-protocol.md", ".env", ""].join("\n"));
 
