@@ -89,6 +89,7 @@ import { GeminiConnector } from "../src/main/hooks/connectors/gemini.js";
 import { KiroConnector } from "../src/main/hooks/connectors/kiro.js";
 import { CodeWhaleConnector } from "../src/main/hooks/connectors/codewhale.js";
 import { OpenCodeConnector } from "../src/main/hooks/connectors/opencode.js";
+import { CursorConnector } from "../src/main/hooks/connectors/cursor.js";
 import type { AgentConnector } from "../src/main/hooks/types.js";
 import { parseHookSessions } from "../src/main/hooks/sessions.js";
 
@@ -116,6 +117,7 @@ const hookConnectors = new Map<string, AgentConnector>([
   ["gemini", new GeminiConnector()],
   ["kiro", new KiroConnector()],
   ["opencode", new OpenCodeConnector()],
+  ["cursor", new CursorConnector()],
 ]);
 for (const connector of hookConnectors.values()) {
   hookStateManager.registerConnector(connector);

@@ -1,6 +1,6 @@
 import type { AgentCli } from "./types.js";
 
-export type AgentSessionRestoreAgentId = "codex" | "claude" | "gemini" | "kiro" | "codewhale" | "qwen" | "opencode";
+export type AgentSessionRestoreAgentId = "codex" | "claude" | "gemini" | "kiro" | "codewhale" | "qwen" | "opencode" | "cursor";
 
 export type AgentSessionRestoreCommand = {
   agentId: AgentSessionRestoreAgentId;
@@ -26,6 +26,7 @@ const restoreDefinitions: AgentSessionRestoreDefinition[] = [
   { id: "codewhale", label: "CodeWhale", shortLabel: "D", defaultCommand: "codewhale", match: /\bcodewhale\b|\bcode\s*whale\b|\bdeepseek\b/u },
   { id: "qwen", label: "Qwen Code", shortLabel: "Q", defaultCommand: "qwen", match: /\bqwen\b|\bqianwen\b/u },
   { id: "opencode", label: "OpenCode", shortLabel: "O", defaultCommand: "opencode", match: /\bopen\s*code\b|\bopencode\b/u },
+  { id: "cursor", label: "Cursor CLI", shortLabel: "Cu", defaultCommand: "cursor-agent", match: /\bcursor\b/u },
 ];
 
 export function inferAgentSessionRestoreAgent(agentName: string | null | undefined): AgentSessionRestoreAgentId | null {
@@ -69,6 +70,7 @@ function restoreCommand(agentId: AgentSessionRestoreAgentId, executable: string,
   if (agentId === "gemini" || agentId === "qwen") return `${restoredSessionEnv} ${commandWithFlags} --resume ${id}`;
   if (agentId === "kiro") return `${restoredSessionEnv} ${command} chat ${flags ? `${flags} ` : ""}--resume-id ${id}`;
   if (agentId === "codewhale") return `${restoredSessionEnv} ${commandWithFlags} resume ${id}`;
+  if (agentId === "cursor") return `${restoredSessionEnv} ${commandWithFlags} --resume ${id}`;
   return `${restoredSessionEnv} ${commandWithFlags} --session ${id}`;
 }
 

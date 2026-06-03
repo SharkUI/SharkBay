@@ -541,6 +541,7 @@ function agentBootstrapArgs(agentId: string, prompt: string): string[] | null {
   if (normalized === "gemini" || normalized === "qwen") return ["-i", prompt];
   if (normalized === "kiro") return [prompt];
   if (normalized === "opencode") return [];
+  if (normalized === "cursor") return [prompt];
   return null;
 }
 

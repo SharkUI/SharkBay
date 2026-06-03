@@ -4115,6 +4115,7 @@ function AgentCliIcon({ agent }: { agent: AgentCli }) {
   if (agent.id === "codewhale") return <CodeWhaleIcon />;
   if (agent.id === "qwen") return <QwenIcon />;
   if (agent.id === "opencode") return <OpenCodeIcon />;
+  if (agent.id === "cursor") return <CursorIcon />;
   return <span aria-hidden="true" className="agent-cli-monogram">{agent.shortLabel}</span>;
 }
 
@@ -4129,6 +4130,7 @@ function AgentLogoIcon({ agentId, fallback, size = 16 }: { agentId: string; fall
   if (normalized === "codewhale" || normalized === "deepseek") return <CodeWhaleLogoColorIcon size={size} />;
   if (normalized === "qwen") return <QwenLogoColorIcon size={size} />;
   if (normalized === "opencode") return <OpenCodeLogoColorIcon size={size} />;
+  if (normalized === "cursor") return <CursorLogoColorIcon size={size} />;
   return (
     <span aria-hidden="true" className="agent-logo-monogram" style={{ width: size, height: size }}>
       {(fallback || agentId).slice(0, 2).toUpperCase()}
@@ -4203,6 +4205,14 @@ function OpenCodeLogoColorIcon({ size }: { size: number }) {
   );
 }
 
+function CursorLogoColorIcon({ size }: { size: number }) {
+  return (
+    <svg aria-hidden="true" className="agent-logo-icon" fillRule="evenodd" height={size} viewBox="0 0 24 24" width={size}>
+      <path d="M22.106 5.68L12.5.135a.998.998 0 00-.998 0L1.893 5.68a.84.84 0 00-.419.726v11.186c0 .3.16.577.42.727l9.607 5.547a.999.999 0 00.998 0l9.608-5.547a.84.84 0 00.42-.727V6.407a.84.84 0 00-.42-.726zm-.603 1.176L12.228 22.92c-.063.108-.228.064-.228-.061V12.34a.59.59 0 00-.295-.51l-9.11-5.26c-.107-.062-.063-.228.062-.228h18.55c.264 0 .428.286.296.514z" fill="currentColor" />
+    </svg>
+  );
+}
+
 function CodexIcon() {
   return (
     <svg aria-hidden="true" fill="currentColor" fillRule="evenodd" height="16" viewBox="0 0 24 24" width="16">
@@ -4258,6 +4268,14 @@ function OpenCodeIcon() {
   return (
     <svg aria-hidden="true" fill="currentColor" fillRule="evenodd" height="16" viewBox="0 0 24 24" width="16">
       <path d="M16 6H8v12h8V6zm4 16H4V2h16v20z" />
+    </svg>
+  );
+}
+
+function CursorIcon() {
+  return (
+    <svg aria-hidden="true" fill="currentColor" fillRule="evenodd" height="16" viewBox="0 0 24 24" width="16">
+      <path d="M22.106 5.68L12.5.135a.998.998 0 00-.998 0L1.893 5.68a.84.84 0 00-.419.726v11.186c0 .3.16.577.42.727l9.607 5.547a.999.999 0 00.998 0l9.608-5.547a.84.84 0 00.42-.727V6.407a.84.84 0 00-.42-.726zm-.603 1.176L12.228 22.92c-.063.108-.228.064-.228-.061V12.34a.59.59 0 00-.295-.51l-9.11-5.26c-.107-.062-.063-.228.062-.228h18.55c.264 0 .428.286.296.514z" />
     </svg>
   );
 }

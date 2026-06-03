@@ -38,6 +38,7 @@ const agentDefinitions = [
   { id: "codewhale", command: "codewhale" },
   { id: "qwen", command: "qwen" },
   { id: "opencode", command: "opencode" },
+  { id: "cursor", command: "cursor-agent" },
 ];
 
 export async function detectAgentTools(
@@ -94,6 +95,20 @@ export function createAgentInstallRecipes(): InstallRecipe[] {
     npmGlobalRecipe("codewhale", "Install CodeWhale with npm", "npm install -g codewhale"),
     npmGlobalRecipe("qwen", "Install Qwen Code with npm", "npm install -g @qwen-code/qwen-code"),
     npmGlobalRecipe("opencode", "Install OpenCode with npm", "npm install -g opencode-ai"),
+    {
+      id: "cursor.official.script",
+      toolId: "cursor",
+      label: "Install Cursor CLI with official script",
+      targetKinds: ["local"],
+      platforms: ["darwin", "linux"],
+      preconditions: [{ tool: "curl", available: true }],
+      steps: [{
+        kind: "command",
+        command: "curl -fsSL https://cursor.com/install | bash",
+        description: "Install Cursor CLI with official script",
+      }],
+      verification: { command: "cursor-agent", args: ["--version"] },
+    },
   ];
 }
 
