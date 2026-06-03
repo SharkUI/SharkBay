@@ -16,13 +16,15 @@ const EVENT_MAP: Record<string, HookEventKind> = {
   sessionStart: "session_start",
   sessionEnd: "session_end",
   beforeSubmitPrompt: "prompt",
-  beforeShellExecution: "tool_start",
+  beforeShellExecution: "attention",
+  beforeReadFile: "attention",
+  beforeMCPExecution: "attention",
   afterShellExecution: "tool_end",
   afterFileEdit: "tool_end",
   stop: "turn_end",
 };
 
-const HOOK_EVENTS = ["sessionStart", "sessionEnd", "beforeSubmitPrompt", "beforeShellExecution", "afterShellExecution", "afterFileEdit", "stop"];
+const HOOK_EVENTS = ["sessionStart", "sessionEnd", "beforeSubmitPrompt", "beforeShellExecution", "afterShellExecution", "beforeReadFile", "beforeMCPExecution", "afterFileEdit", "stop"];
 const MANAGED_MARKER = "sharkbay-managed";
 
 function shellQuote(s: string): string {
@@ -33,7 +35,7 @@ function shellQuote(s: string): string {
 export class CursorConnector implements AgentConnector {
   readonly id = "cursor";
   readonly displayName = "Cursor CLI";
-  readonly supportedEvents: readonly HookEventKind[] = ["session_start", "session_end", "prompt", "tool_start", "tool_end", "turn_end"];
+  readonly supportedEvents: readonly HookEventKind[] = ["session_start", "session_end", "prompt", "tool_end", "turn_end", "attention"];
 
   private readonly configPath = path.join(os.homedir(), ".cursor", "hooks.json");
 
