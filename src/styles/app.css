@@ -386,7 +386,7 @@ body.is-resizing-columns * {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding-top: 34px;
+  padding-top: 30px;
 }
 
 .detail-panel {
@@ -748,7 +748,7 @@ body.is-resizing-columns * {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px 4px;
+  padding: 4px 0 0;
 }
 
 .project-panel-title {
