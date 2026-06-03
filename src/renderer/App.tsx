@@ -3276,6 +3276,7 @@ type AgentCliDefinition = { id: string; label: string; shortLabel: string };
 const allAgentCliDefinitions: AgentCliDefinition[] = [
   { id: "claude", label: "Claude Code", shortLabel: "Cl" },
   { id: "codex", label: "Codex CLI", shortLabel: "Cx" },
+  { id: "cursor", label: "Cursor CLI", shortLabel: "Cu" },
   { id: "gemini", label: "Gemini CLI", shortLabel: "G" },
   { id: "kiro", label: "Kiro CLI", shortLabel: "K" },
   { id: "codewhale", label: "CodeWhale", shortLabel: "D" },
@@ -3283,7 +3284,7 @@ const allAgentCliDefinitions: AgentCliDefinition[] = [
   { id: "opencode", label: "OpenCode", shortLabel: "O" },
 ];
 
-const hookSupportedAgents = new Set(["claude", "codex", "gemini", "kiro", "qwen", "codewhale", "opencode"]);
+const hookSupportedAgents = new Set(["claude", "codex", "cursor", "gemini", "kiro", "qwen", "codewhale", "opencode"]);
 
 type AgentLaunchOption = { flag: string; label: string; description: string; type: "toggle" };
 
@@ -3293,6 +3294,9 @@ const agentLaunchOptions: Record<string, AgentLaunchOption[]> = {
   ],
   codex: [
     { flag: "--ask-for-approval never", label: "Skip approval", description: "Never ask for human approval", type: "toggle" },
+  ],
+  cursor: [
+    { flag: "--force", label: "Force allow", description: "Allow commands unless explicitly denied", type: "toggle" },
   ],
   gemini: [
     { flag: "--yolo", label: "YOLO mode", description: "Auto-approve all tool actions", type: "toggle" },
