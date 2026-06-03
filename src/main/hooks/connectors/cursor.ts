@@ -16,9 +16,9 @@ const EVENT_MAP: Record<string, HookEventKind> = {
   sessionStart: "session_start",
   sessionEnd: "session_end",
   beforeSubmitPrompt: "prompt",
-  beforeShellExecution: "attention",
-  beforeReadFile: "attention",
-  beforeMCPExecution: "attention",
+  beforeShellExecution: "tool_start",
+  beforeReadFile: "tool_start",
+  beforeMCPExecution: "tool_start",
   afterShellExecution: "tool_end",
   afterFileEdit: "tool_end",
   stop: "turn_end",
@@ -35,7 +35,7 @@ function shellQuote(s: string): string {
 export class CursorConnector implements AgentConnector {
   readonly id = "cursor";
   readonly displayName = "Cursor CLI";
-  readonly supportedEvents: readonly HookEventKind[] = ["session_start", "session_end", "prompt", "tool_end", "turn_end", "attention"];
+  readonly supportedEvents: readonly HookEventKind[] = ["session_start", "session_end", "prompt", "tool_start", "tool_end", "turn_end"];
 
   private readonly configPath = path.join(os.homedir(), ".cursor", "hooks.json");
 
