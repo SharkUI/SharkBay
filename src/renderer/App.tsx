@@ -1468,6 +1468,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
         ) : null}
       </div>
       <PromptInputBar
+        projectId={selectedSpace?.projectId ?? null}
         sessionId={selectedActiveTerminal?.session.id ?? null}
         disabled={!selectedActiveTerminal}
         focusRequest={promptFocusRequest}
@@ -4349,12 +4350,14 @@ function CachedAvatar({ url }: { url: string }) {
 }
 
 function PromptInputBar({
+  projectId,
   sessionId,
   disabled,
   focusRequest,
   isAgentSession,
   onTerminalFocusRequest,
 }: {
+  projectId: string | null;
   sessionId: string | null;
   disabled: boolean;
   focusRequest: number;
@@ -4363,7 +4366,13 @@ function PromptInputBar({
 }) {
   const [value, setValue] = useState("");
   const [isComposing, setIsComposing] = useState(false);
+  const [historyCursor, setHistoryCursor] = useState<{ projectId: string; index: number; draft: string } | null>(null);
+  const historyByProject = useRef<Record<string, string[]>>({});
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    setHistoryCursor(null);
+  }, [projectId, sessionId]);
 
   useEffect(() => {
     if (disabled || !sessionId) return;
@@ -4392,19 +4401,79 @@ function PromptInputBar({
     else void sendTerminalInput(id, data);
   }
 
+  function resizeTextarea(textarea: HTMLTextAreaElement) {
+    textarea.style.height = "";
+    if (textarea.value) textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+  }
+
+  function setPromptValue(nextValue: string, textarea: HTMLTextAreaElement | null = textareaRef.current) {
+    setValue(nextValue);
+    if (!textarea) return;
+    textarea.value = nextValue;
+    resizeTextarea(textarea);
+    textarea.setSelectionRange(nextValue.length, nextValue.length);
+  }
+
+  function recordHistory(text: string) {
+    if (!projectId) return;
+    const history = historyByProject.current[projectId] ?? [];
+    historyByProject.current[projectId] = [...history, text];
+  }
+
   function submit() {
     const text = value;
     if (!text || !sessionId) return;
+    recordHistory(text);
     send(text);
     setTimeout(() => send("\r"), 30);
     setValue("");
+    setHistoryCursor(null);
     if (textareaRef.current) textareaRef.current.style.height = "";
   }
 
+  function canUseHistoryNavigation(event: KeyboardEvent<HTMLTextAreaElement>, direction: "previous" | "next") {
+    if (historyCursor?.projectId === projectId) return true;
+    const textarea = event.currentTarget;
+    if (textarea.selectionStart !== textarea.selectionEnd) return false;
+    const cursor = textarea.selectionStart;
+    return direction === "previous"
+      ? !textarea.value.slice(0, cursor).includes("\n")
+      : !textarea.value.slice(cursor).includes("\n");
+  }
+
+  function navigateHistory(event: KeyboardEvent<HTMLTextAreaElement>, direction: "previous" | "next") {
+    if (!projectId || disabled || !sessionId || !canUseHistoryNavigation(event, direction)) return false;
+    const history = historyByProject.current[projectId] ?? [];
+    if (!history.length) return false;
+    const currentCursor = historyCursor?.projectId === projectId ? historyCursor : null;
+    if (direction === "previous") {
+      const nextIndex = currentCursor ? Math.max(0, currentCursor.index - 1) : history.length - 1;
+      setHistoryCursor({ projectId, index: nextIndex, draft: currentCursor?.draft ?? value });
+      setPromptValue(history[nextIndex] ?? "", event.currentTarget);
+      event.preventDefault();
+      return true;
+    }
+    if (!currentCursor) return false;
+    const nextIndex = currentCursor.index + 1;
+    if (nextIndex >= history.length) {
+      setHistoryCursor(null);
+      setPromptValue(currentCursor.draft, event.currentTarget);
+    } else {
+      setHistoryCursor({ ...currentCursor, index: nextIndex });
+      setPromptValue(history[nextIndex] ?? "", event.currentTarget);
+    }
+    event.preventDefault();
+    return true;
+  }
+
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key !== "Enter" || event.shiftKey) return;
     const nativeEvent = event.nativeEvent as { isComposing?: boolean; keyCode?: number };
     if (isComposing || nativeEvent.isComposing || event.keyCode === 229 || nativeEvent.keyCode === 229) return;
+    if (!event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) {
+      if (event.key === "ArrowUp" && navigateHistory(event, "previous")) return;
+      if (event.key === "ArrowDown" && navigateHistory(event, "next")) return;
+    }
+    if (event.key !== "Enter" || event.shiftKey) return;
     event.preventDefault();
     submit();
   }
@@ -4412,6 +4481,7 @@ function PromptInputBar({
   function handleInput(event: FormEvent<HTMLTextAreaElement>) {
     const target = event.currentTarget;
     const nextValue = target.value;
+    setHistoryCursor(null);
     if (!disabled && sessionId && isAgentSession && !value && nextValue.startsWith("/")) {
       send(nextValue);
       setValue("");
@@ -4421,8 +4491,7 @@ function PromptInputBar({
       return;
     }
     setValue(nextValue);
-    target.style.height = "";
-    target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
+    resizeTextarea(target);
   }
 
   return (
@@ -4438,7 +4507,10 @@ function PromptInputBar({
         onCompositionEnd={() => setIsComposing(false)}
         onInput={handleInput}
         onKeyDown={handleKeyDown}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={(e) => {
+          setHistoryCursor(null);
+          setValue(e.target.value);
+        }}
       />
       <button className="prompt-input-send" disabled={disabled || !value} title="Send (Enter)" type="button" onClick={submit}>
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
