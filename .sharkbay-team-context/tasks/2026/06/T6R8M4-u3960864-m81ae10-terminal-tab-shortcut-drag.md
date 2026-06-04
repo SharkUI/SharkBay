@@ -12,12 +12,12 @@ agent: Codex GPT-5
 sessionId: 019e90c2-5779-7f61-9661-3add9ca6cdef
 branch: main
 createdAt: 2026-06-04T04:20:42Z
-updatedAt: 2026-06-04T04:25:36Z
-completedAt: 2026-06-04T04:25:36Z
+updatedAt: 2026-06-04T04:29:16Z
+completedAt: 2026-06-04T04:29:16Z
 ---
 
 ## Summary
-Added Command+T as an application-level shortcut for opening a new shell terminal tab in the current project, and added mouse drag reordering for tabs in the terminal tab strip.
+Added Command+T as an application-level shortcut for opening a new shell terminal tab in the current project, and added mouse drag reordering for tabs in the terminal tab strip while keeping the default cursor over tabs.
 
 ## Files
 - .sharkbay/tasks/T6R8M4-u3960864-m81ae10-terminal-tab-shortcut-drag.md
@@ -39,12 +39,14 @@ Added Command+T as an application-level shortcut for opening a new shell termina
 - Added `app:newTerminalTab` through the app menu, main-process forwarding, preload subscription, and renderer bridge type.
 - Subscribed `TerminalPane` to the app event and reused `openCurrentProjectTab` so the shortcut opens a shell terminal in the current project.
 - Added pointer capture based horizontal tab reordering and a lightweight dragging cursor state; close buttons stop pointer propagation so they do not start drags.
+- Adjusting terminal tab hover/drag cursor styling to keep the default arrow.
 
 ## Verification
 - `codegraph affected electron/main.ts electron/preload.mts src/main/application-menu.ts src/renderer/App.tsx src/renderer/types.ts src/shared/app-events.ts src/styles/app.css tests/application-menu.test.ts`
 - `git diff --check -- electron/main.ts electron/preload.mts src/main/application-menu.ts src/renderer/App.tsx src/renderer/types.ts src/shared/app-events.ts src/styles/app.css tests/application-menu.test.ts .sharkbay/tasks/T6R8M4-u3960864-m81ae10-terminal-tab-shortcut-drag.md`
 - `npm run typecheck`
 - `npm test -- tests/application-menu.test.ts tests/renderer-workflow.test.ts`
+- `git diff --check -- src/styles/app.css .sharkbay/tasks/T6R8M4-u3960864-m81ae10-terminal-tab-shortcut-drag.md`
 
 ## Notes
 - Treat `.sharkbay/team-context/` as read-only.
