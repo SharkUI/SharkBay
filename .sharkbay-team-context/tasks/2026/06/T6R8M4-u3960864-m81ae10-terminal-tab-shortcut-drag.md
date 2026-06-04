@@ -12,8 +12,8 @@ agent: Codex GPT-5
 sessionId: 019e90c2-5779-7f61-9661-3add9ca6cdef
 branch: main
 createdAt: 2026-06-04T04:20:42Z
-updatedAt: 2026-06-04T04:32:28Z
-completedAt: 2026-06-04T04:32:28Z
+updatedAt: 2026-06-04T04:35:43Z
+completedAt: 2026-06-04T04:35:43Z
 ---
 
 ## Summary
@@ -40,8 +40,8 @@ Added Command+T as an application-level shortcut for opening a new shell termina
 - Subscribed `TerminalPane` to the app event and reused `openCurrentProjectTab` so the shortcut opens a shell terminal in the current project.
 - Added pointer capture based horizontal tab reordering and a lightweight dragging cursor state; close buttons stop pointer propagation so they do not start drags.
 - Adjusting terminal tab hover/drag cursor styling to keep the default arrow.
-- Found the remaining hand cursor comes from button-level cursor styling inside the tab.
-- Overrode `.terminal-tab-main` and `.terminal-tab-close` to use the default cursor, covering the global button pointer rule.
+- Found the remaining hand cursor came from button-level cursor styling.
+- Removed the global `button { cursor: pointer; }` rule so buttons default to the arrow unless locally overridden.
 
 ## Verification
 - `codegraph affected electron/main.ts electron/preload.mts src/main/application-menu.ts src/renderer/App.tsx src/renderer/types.ts src/shared/app-events.ts src/styles/app.css tests/application-menu.test.ts`
@@ -49,6 +49,7 @@ Added Command+T as an application-level shortcut for opening a new shell termina
 - `npm run typecheck`
 - `npm test -- tests/application-menu.test.ts tests/renderer-workflow.test.ts`
 - `git diff --check -- src/styles/app.css .sharkbay/tasks/T6R8M4-u3960864-m81ae10-terminal-tab-shortcut-drag.md`
+- `rg -n "^button \\{" src/styles/app.css || true`
 
 ## Notes
 - Treat `.sharkbay/team-context/` as read-only.
