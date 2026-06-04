@@ -4366,13 +4366,14 @@ function PromptInputBar({
 }) {
   const [value, setValue] = useState("");
   const [isComposing, setIsComposing] = useState(false);
-  const [historyCursor, setHistoryCursor] = useState<{ projectId: string; index: number; draft: string } | null>(null);
-  const historyByProject = useRef<Record<string, string[]>>({});
+  const historyKey = projectId ? `${projectId}:${isAgentSession ? "agent" : "shell"}` : null;
+  const [historyCursor, setHistoryCursor] = useState<{ historyKey: string; index: number; draft: string } | null>(null);
+  const historyByKey = useRef<Record<string, string[]>>({});
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     setHistoryCursor(null);
-  }, [projectId, sessionId]);
+  }, [historyKey, sessionId]);
 
   useEffect(() => {
     if (disabled || !sessionId) return;
@@ -4415,9 +4416,9 @@ function PromptInputBar({
   }
 
   function recordHistory(text: string) {
-    if (!projectId) return;
-    const history = historyByProject.current[projectId] ?? [];
-    historyByProject.current[projectId] = [...history, text];
+    if (!historyKey) return;
+    const history = historyByKey.current[historyKey] ?? [];
+    historyByKey.current[historyKey] = [...history, text];
   }
 
   function submit() {
@@ -4432,7 +4433,7 @@ function PromptInputBar({
   }
 
   function canUseHistoryNavigation(event: KeyboardEvent<HTMLTextAreaElement>, direction: "previous" | "next") {
-    if (historyCursor?.projectId === projectId) return true;
+    if (historyCursor?.historyKey === historyKey) return true;
     const textarea = event.currentTarget;
     if (textarea.selectionStart !== textarea.selectionEnd) return false;
     const cursor = textarea.selectionStart;
@@ -4442,13 +4443,13 @@ function PromptInputBar({
   }
 
   function navigateHistory(event: KeyboardEvent<HTMLTextAreaElement>, direction: "previous" | "next") {
-    if (!projectId || disabled || !sessionId || !canUseHistoryNavigation(event, direction)) return false;
-    const history = historyByProject.current[projectId] ?? [];
+    if (!historyKey || disabled || !sessionId || !canUseHistoryNavigation(event, direction)) return false;
+    const history = historyByKey.current[historyKey] ?? [];
     if (!history.length) return false;
-    const currentCursor = historyCursor?.projectId === projectId ? historyCursor : null;
+    const currentCursor = historyCursor?.historyKey === historyKey ? historyCursor : null;
     if (direction === "previous") {
       const nextIndex = currentCursor ? Math.max(0, currentCursor.index - 1) : history.length - 1;
-      setHistoryCursor({ projectId, index: nextIndex, draft: currentCursor?.draft ?? value });
+      setHistoryCursor({ historyKey, index: nextIndex, draft: currentCursor?.draft ?? value });
       setPromptValue(history[nextIndex] ?? "", event.currentTarget);
       event.preventDefault();
       return true;
