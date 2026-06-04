@@ -64,16 +64,28 @@ import type {
   HookSessionViewModel
 } from "../src/shared/types.js";
 
-const openSettingsListeners = new Set<() => void>();
-let openSettingsPending = false;
+function createAppEventSubscription(channel: string) {
+  const listeners = new Set<() => void>();
+  let pending = false;
+  ipcRenderer.on(channel, () => {
+    if (!listeners.size) {
+      pending = true;
+      return;
+    }
+    listeners.forEach((callback) => callback());
+  });
+  return (callback: () => void) => {
+    listeners.add(callback);
+    if (pending) {
+      pending = false;
+      queueMicrotask(callback);
+    }
+    return () => listeners.delete(callback);
+  };
+}
 
-ipcRenderer.on(appChannels.openSettings, () => {
-  if (!openSettingsListeners.size) {
-    openSettingsPending = true;
-    return;
-  }
-  openSettingsListeners.forEach((callback) => callback());
-});
+const onOpenSettings = createAppEventSubscription(appChannels.openSettings);
+const onNewTerminalTab = createAppEventSubscription(appChannels.newTerminalTab);
 
 function invoke<Result>(channel: string, payload?: unknown): Promise<Result> {
   return ipcRenderer.invoke(channel, payload) as Promise<Result>;
@@ -81,14 +93,8 @@ function invoke<Result>(channel: string, payload?: unknown): Promise<Result> {
 
 const sharkBayApi = {
   app: {
-    onOpenSettings: (callback: () => void) => {
-      openSettingsListeners.add(callback);
-      if (openSettingsPending) {
-        openSettingsPending = false;
-        queueMicrotask(callback);
-      }
-      return () => openSettingsListeners.delete(callback);
-    }
+    onOpenSettings,
+    onNewTerminalTab,
   },
   config: {
     listRoots: () => invoke<AppConfig>(channels.listRoots),

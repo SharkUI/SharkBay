@@ -4,7 +4,16 @@ export type ApplicationMenuOptions = {
   appName: string;
   isMac: boolean;
   openSettings: () => void;
+  newTerminalTab: () => void;
 };
+
+function createNewTerminalTabItem(newTerminalTab: () => void): MenuItemConstructorOptions {
+  return {
+    label: "New Terminal Tab",
+    accelerator: "CmdOrCtrl+T",
+    click: newTerminalTab,
+  };
+}
 
 function createSettingsItem(openSettings: () => void): MenuItemConstructorOptions {
   return {
@@ -14,7 +23,12 @@ function createSettingsItem(openSettings: () => void): MenuItemConstructorOption
   };
 }
 
-function createSharedMenus(): MenuItemConstructorOptions[] {
+function createSharedMenus(newTerminalTab: () => void): MenuItemConstructorOptions[] {
+  const fileMenu: MenuItemConstructorOptions = {
+    label: "File",
+    submenu: [createNewTerminalTabItem(newTerminalTab)],
+  };
+
   const editMenu: MenuItemConstructorOptions = {
     label: "Edit",
     submenu: [
@@ -55,15 +69,17 @@ function createSharedMenus(): MenuItemConstructorOptions[] {
     submenu: [{ label: "SharkBay Help", enabled: false }],
   };
 
-  return [editMenu, viewMenu, windowMenu, helpMenu];
+  return [fileMenu, editMenu, viewMenu, windowMenu, helpMenu];
 }
 
 export function createApplicationMenuTemplate({
   appName,
   isMac,
   openSettings,
+  newTerminalTab,
 }: ApplicationMenuOptions): MenuItemConstructorOptions[] {
   const settingsItem = createSettingsItem(openSettings);
+  const newTerminalTabItem = createNewTerminalTabItem(newTerminalTab);
 
   if (isMac) {
     return [
@@ -83,15 +99,15 @@ export function createApplicationMenuTemplate({
           { role: "quit" },
         ],
       },
-      ...createSharedMenus(),
+      ...createSharedMenus(newTerminalTab),
     ];
   }
 
   return [
     {
       label: "File",
-      submenu: [settingsItem, { type: "separator" }, { role: "quit" }],
+      submenu: [newTerminalTabItem, { type: "separator" }, settingsItem, { type: "separator" }, { role: "quit" }],
     },
-    ...createSharedMenus(),
+    ...createSharedMenus(newTerminalTab).slice(1),
   ];
 }

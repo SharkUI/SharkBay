@@ -488,6 +488,7 @@ export type TasksChangedEvent = {
 export type SharkBayBridge = {
   app?: {
     onOpenSettings?: (callback: () => void) => () => void;
+    onNewTerminalTab?: (callback: () => void) => () => void;
   };
   config?: {
     listRoots?: () => Promise<AppConfig | RootRecord[] | string[]>;

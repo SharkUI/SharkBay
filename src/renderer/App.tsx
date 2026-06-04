@@ -960,6 +960,8 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const pendingTerminalOutput = useRef(new Map<string, string>());
   const focusRequestNonce = useRef(0);
   const [tabFocusRequest, setTabFocusRequest] = useState<{ projectId: string; nonce: number } | null>(null);
+  const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
+  const tabDragRef = useRef<{ projectId: string; tabId: string; pointerId: number } | null>(null);
   const agentSessionToTerminalRef = useRef<Record<string, string>>({});
   const hookStateByTerminalId = useMemo(() => {
     const map = agentSessionToTerminalRef.current;
@@ -1068,6 +1070,14 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     if (!candidate?.uri) return;
     await openProjectTab(candidate.id, candidate.uri, displayProjectName ?? candidate.name, candidate.displayPath);
   }
+
+  useEffect(() => {
+    const unsubscribe = getBridge().app?.onNewTerminalTab?.(() => {
+      if (!isVisible || !canCreate) return;
+      void openCurrentProjectTab();
+    });
+    return () => unsubscribe?.();
+  }, [canCreate, candidate?.displayPath, candidate?.id, candidate?.name, candidate?.uri, isVisible, projectAliases]);
 
   async function openAgentProjectTab(agent: AgentCli) {
     if (!candidate?.uri) return;
@@ -1359,6 +1369,48 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     });
   }
 
+  function reorderTab(projectId: string, tabId: string, targetIndex: number) {
+    setSpaces((current) => {
+      const space = current[projectId];
+      if (!space) return current;
+      const fromIndex = space.tabs.findIndex((tab) => tabIdForTab(tab) === tabId);
+      if (fromIndex < 0 || fromIndex === targetIndex) return current;
+      const nextTabs = [...space.tabs];
+      const [tab] = nextTabs.splice(fromIndex, 1);
+      if (!tab) return current;
+      nextTabs.splice(Math.min(targetIndex, nextTabs.length), 0, tab);
+      return { ...current, [projectId]: { ...space, tabs: nextTabs } };
+    });
+  }
+
+  function handleTabPointerDown(event: ReactPointerEvent<HTMLDivElement>, projectId: string, tabId: string) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    tabDragRef.current = { projectId, tabId, pointerId: event.pointerId };
+    setDraggingTabId(tabId);
+    setActiveTab(projectId, tabId);
+  }
+
+  function handleTabPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = tabDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const tabList = event.currentTarget.parentElement;
+    if (!tabList) return;
+    const targetIndex = tabIndexForPointer(tabList, event.clientX);
+    reorderTab(drag.projectId, drag.tabId, targetIndex);
+  }
+
+  function stopTabDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = tabDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    tabDragRef.current = null;
+    setDraggingTabId(null);
+  }
+
   function requestProjectTabFocus(projectId: string) {
     focusRequestNonce.current += 1;
     setTabFocusRequest({ projectId, nonce: focusRequestNonce.current });
@@ -1403,7 +1455,16 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                     const isActiveTab = tabId === space.activeId;
                     const tabTitle = titleForTab(tab);
                     return (
-                      <div className={cx("terminal-tab", isActiveTab && "is-active")} key={tabId} role="tab" aria-selected={isActiveTab}>
+                      <div
+                        className={cx("terminal-tab", isActiveTab && "is-active", draggingTabId === tabId && "is-dragging")}
+                        key={tabId}
+                        role="tab"
+                        aria-selected={isActiveTab}
+                        onPointerCancel={stopTabDrag}
+                        onPointerDown={(event) => handleTabPointerDown(event, space.projectId, tabId)}
+                        onPointerMove={handleTabPointerMove}
+                        onPointerUp={stopTabDrag}
+                      >
                         <button className="terminal-tab-main" type="button" onClick={() => { setActiveTab(space.projectId, tabId); }}>
                           {tab.kind === "terminal" ? (
                             <span className={cx("terminal-state", tab.session.service && tab.session.status === "running" && "is-service-running", tab.session.agentId && hookStateByTerminalId[tab.session.id] === "working" && "is-working", tab.session.agentId && !isActiveTab && hookStateByTerminalId[tab.session.id] === "idle" && "is-idle", tab.session.agentId && hookStateByTerminalId[tab.session.id] === "attention" && "is-attention", tab.session.status === "exited" && "is-exited")} />
@@ -1414,7 +1475,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                           )}
                           <span className="truncate">{tabTitle}{tab.kind === "editor" && tab.content !== tab.savedContent ? " •" : ""}</span>
                         </button>
-                        <button aria-label={`Close ${tabTitle}`} className="terminal-tab-close" type="button" onClick={(event) => { event.stopPropagation(); void closeTab(tabId); }}>x</button>
+                        <button aria-label={`Close ${tabTitle}`} className="terminal-tab-close" type="button" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); void closeTab(tabId); }}>x</button>
                       </div>
                     );
                   })}
@@ -1663,6 +1724,15 @@ function tabIdForTab(tab: TerminalTab): string {
   if (tab.kind === "terminal") return tab.session.id;
   if (tab.kind === "browser") return tab.browser.id;
   return tab.id;
+}
+
+function tabIndexForPointer(tabList: HTMLElement, clientX: number): number {
+  const tabs = Array.from(tabList.querySelectorAll<HTMLElement>(".terminal-tab"));
+  const targetIndex = tabs.findIndex((tab) => {
+    const rect = tab.getBoundingClientRect();
+    return clientX < rect.left + rect.width / 2;
+  });
+  return targetIndex >= 0 ? targetIndex : Math.max(0, tabs.length - 1);
 }
 
 function titleForTab(tab: TerminalTab): string {

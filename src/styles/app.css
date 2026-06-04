@@ -36,10 +36,6 @@ textarea {
   font: inherit;
 }
 
-button {
-  cursor: pointer;
-}
-
 button:disabled,
 input:disabled,
 select:disabled,
@@ -3412,6 +3408,12 @@ button.project-file-toggle:focus-visible {
   margin-bottom: 0;
   padding: 4px 8px 4px 10px;
   font-size: 12px;
+  touch-action: none;
+  user-select: none;
+}
+
+.terminal-tab.is-dragging {
+  z-index: 2;
 }
 
 .terminal-tab:not(.is-active)::after {

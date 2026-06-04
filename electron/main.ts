@@ -44,10 +44,10 @@ function setAppearanceTheme(theme: AppearanceTheme): void {
   installDockIcon(theme);
 }
 
-function sendOpenSettings(window: BrowserWindow): void {
+function sendAppEvent(window: BrowserWindow, channel: string): void {
   const send = () => {
     if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
-      window.webContents.send(appChannels.openSettings);
+      window.webContents.send(channel);
     }
   };
 
@@ -57,6 +57,14 @@ function sendOpenSettings(window: BrowserWindow): void {
   }
 
   send();
+}
+
+function sendOpenSettings(window: BrowserWindow): void {
+  sendAppEvent(window, appChannels.openSettings);
+}
+
+function sendNewTerminalTab(window: BrowserWindow): void {
+  sendAppEvent(window, appChannels.newTerminalTab);
 }
 
 function openSettingsFromApplicationMenu(): void {
@@ -73,11 +81,26 @@ function openSettingsFromApplicationMenu(): void {
   sendOpenSettings(mainWindow);
 }
 
+function newTerminalTabFromApplicationMenu(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    mainWindow = createMainWindow();
+  }
+
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+
+  mainWindow.show();
+  mainWindow.focus();
+  sendNewTerminalTab(mainWindow);
+}
+
 function installApplicationMenu(): void {
   const template = createApplicationMenuTemplate({
     appName: "SharkBay",
     isMac: process.platform === "darwin",
     openSettings: openSettingsFromApplicationMenu,
+    newTerminalTab: newTerminalTabFromApplicationMenu,
   });
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
