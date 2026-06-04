@@ -12,8 +12,8 @@ agent: Codex GPT-5
 sessionId: 019e90c2-5779-7f61-9661-3add9ca6cdef
 branch: main
 createdAt: 2026-06-04T04:20:42Z
-updatedAt: 2026-06-04T04:29:16Z
-completedAt: 2026-06-04T04:29:16Z
+updatedAt: 2026-06-04T04:32:28Z
+completedAt: 2026-06-04T04:32:28Z
 ---
 
 ## Summary
@@ -40,6 +40,8 @@ Added Command+T as an application-level shortcut for opening a new shell termina
 - Subscribed `TerminalPane` to the app event and reused `openCurrentProjectTab` so the shortcut opens a shell terminal in the current project.
 - Added pointer capture based horizontal tab reordering and a lightweight dragging cursor state; close buttons stop pointer propagation so they do not start drags.
 - Adjusting terminal tab hover/drag cursor styling to keep the default arrow.
+- Found the remaining hand cursor comes from button-level cursor styling inside the tab.
+- Overrode `.terminal-tab-main` and `.terminal-tab-close` to use the default cursor, covering the global button pointer rule.
 
 ## Verification
 - `codegraph affected electron/main.ts electron/preload.mts src/main/application-menu.ts src/renderer/App.tsx src/renderer/types.ts src/shared/app-events.ts src/styles/app.css tests/application-menu.test.ts`
