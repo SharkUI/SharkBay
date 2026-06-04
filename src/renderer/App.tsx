@@ -2878,6 +2878,8 @@ function FilesDetailTab({ active, candidate, codeGraphStatus, detail, setToast, 
   }, [fileMenu]);
 
   function refreshFiles() {
+    setExpandedDirectories(new Set());
+    setLoadingDirectories(new Set());
     setState({ loading: true, error: null, files: [] });
     void listProjectFiles(candidate).then((result) => {
       if (activeFilesProjectUri.current !== candidate.uri) return;
@@ -2886,12 +2888,38 @@ function FilesDetailTab({ active, candidate, codeGraphStatus, detail, setToast, 
     }).catch((error) => setState({ loading: false, error: asMessage(error), files: [] }));
   }
 
+  async function refreshDirectory(directoryPath: string) {
+    if (!directoryPath) {
+      refreshFiles();
+      return;
+    }
+    setLoadingDirectories((current) => new Set(current).add(directoryPath));
+    try {
+      const result = await listProjectFiles(candidate, directoryPath);
+      if (activeFilesProjectUri.current !== candidate.uri) return;
+      if (!result.ok) { setToast({ tone: "error", message: result.message }); return; }
+      setState((current) => ({
+        ...current,
+        loading: false,
+        error: null,
+        files: updateProjectFileChildren(current.files, directoryPath, result.files),
+      }));
+    } catch (error) {
+      if (activeFilesProjectUri.current === candidate.uri) setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      if (activeFilesProjectUri.current === candidate.uri) {
+        setLoadingDirectories((current) => { const next = new Set(current); next.delete(directoryPath); return next; });
+      }
+    }
+  }
+
   async function handleDelete(item: ProjectFileTreeItem) {
     const handler = getBridge().projects?.deleteFile;
     if (!handler) { setToast({ tone: "error", message: "Delete is not available." }); return; }
     const result = await handler({ projectUri: candidate.uri, relativePath: item.path });
     if (!result.ok) { setToast({ tone: "error", message: result.message }); return; }
-    refreshFiles();
+    if (item.kind === "directory") setExpandedDirectories((current) => removeExpandedProjectDirectory(current, item.path));
+    void refreshDirectory(parentProjectDirectoryPath(item.path));
   }
 
   async function handleRename(item: ProjectFileTreeItem, newName: string) {
@@ -2901,7 +2929,8 @@ function FilesDetailTab({ active, candidate, codeGraphStatus, detail, setToast, 
     const result = await handler({ projectUri: candidate.uri, relativePath: item.path, newName });
     setRenaming(null);
     if (!result.ok) { setToast({ tone: "error", message: result.message }); return; }
-    refreshFiles();
+    if (item.kind === "directory") setExpandedDirectories((current) => removeExpandedProjectDirectory(current, item.path));
+    void refreshDirectory(parentProjectDirectoryPath(item.path));
   }
 
   async function handleCreate(parentPath: string, kind: "file" | "directory", name: string) {
@@ -2921,7 +2950,7 @@ function FilesDetailTab({ active, candidate, codeGraphStatus, detail, setToast, 
       const result = await handler({ projectUri: candidate.uri, relativePath: `${relativePath}/.gitkeep`, content: "" });
       if (!result.ok) { setToast({ tone: "error", message: result.message }); return; }
     }
-    refreshFiles();
+    void refreshDirectory(parentPath);
   }
 
   function openFileMenu(item: ProjectFileTreeItem, x: number, y: number) {
@@ -3115,6 +3144,19 @@ function updateProjectFileChildren(items: ProjectFileTreeItem[], targetPath: str
     if (item.children) return { ...item, children: updateProjectFileChildren(item.children, targetPath, children) };
     return item;
   });
+}
+
+function parentProjectDirectoryPath(relativePath: string): string {
+  const separator = relativePath.lastIndexOf("/");
+  return separator === -1 ? "" : relativePath.slice(0, separator);
+}
+
+function removeExpandedProjectDirectory(paths: Set<string>, directoryPath: string): Set<string> {
+  const next = new Set(paths);
+  for (const path of paths) {
+    if (path === directoryPath || path.startsWith(`${directoryPath}/`)) next.delete(path);
+  }
+  return next;
 }
 
 function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, candidates, scanErrors, initialSection, setToast, onBack, onRemoveProject, onThemeChange }: {
