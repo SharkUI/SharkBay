@@ -676,9 +676,11 @@ function DashboardView({
   const [hookStateBySessionId, setHookStateBySessionId] = useState<Record<string, { state: ProjectActivityState; projectId: string; terminalSessionId?: string }>>({});
 
   // Derive project-level activity: highest priority state across all sessions in the project.
+  // Skip entries without terminalSessionId — they cannot be cleared via any UI path.
   useEffect(() => {
     const byProject: Record<string, ProjectActivityState> = {};
     for (const entry of Object.values(hookStateBySessionId)) {
+      if (!entry.terminalSessionId) continue;
       const current = byProject[entry.projectId];
       if (!current || priorityOf(entry.state) > priorityOf(current)) {
         byProject[entry.projectId] = entry.state;
