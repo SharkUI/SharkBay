@@ -14,6 +14,8 @@ branch: main
 createdAt: 2026-05-25T12:10:00Z
 updatedAt: 2026-05-25T12:30:00Z
 completedAt: 2026-05-25T12:30:00Z
+commits:
+  - 8eb4a96c
 ---
 
 ## Summary

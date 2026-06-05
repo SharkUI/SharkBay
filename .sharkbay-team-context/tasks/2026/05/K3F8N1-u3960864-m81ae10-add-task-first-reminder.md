@@ -12,6 +12,7 @@ agent: Kiro Claude 4.6
 createdAt: 2026-05-17T13:23:08Z
 updatedAt: 2026-05-17T13:25:30Z
 completedAt: 2026-05-17T13:25:30Z
+commit: 404cbb7f
 ---
 
 ## Summary
@@ -22,6 +23,9 @@ Added a prominent "⚠️ Before editing any project file, create a task record"
 
 - .kiro/steering/sharkbay-protocol.md
 - AGENTS.md
+- CLAUDE.md
+- GEMINI.md
+- QWEN.md
 - src/main/teamwork-harness.ts
 - tests/teamwork-harness.test.ts
 

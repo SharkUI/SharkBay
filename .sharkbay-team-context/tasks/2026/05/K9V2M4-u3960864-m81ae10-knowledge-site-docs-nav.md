@@ -24,6 +24,9 @@ Updated knowledge site generation to show Docs nav with /docs link and subdirect
 - Updated buildNav to show "Docs" link pointing to /docs and subdirectory links beneath.
 - HTML files are copied as-is to the site output; txt files are rendered like md.
 - Subdirectory folders are created in site output with their own index pages.
+- Replaced task card layout with thin-line-separated rows using details/summary for expand/collapse.
+- Added createdAt date display in task meta.
+- Task title is clickable; expanding shows full task body rendered as markdown with refined typography.
 - Bumped template version to v3 to force regeneration.
 
 ## Verification

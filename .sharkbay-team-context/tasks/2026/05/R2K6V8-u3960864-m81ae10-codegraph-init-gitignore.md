@@ -13,24 +13,31 @@ sessionId: 2117c1ca-b46e-41c6-95c1-423db5652cb3
 branch: main
 createdAt: 2026-05-27T04:13:55Z
 updatedAt: 2026-05-27T04:15:43Z
+completedAt: 2026-05-27T04:15:43Z
+commits:
+  - a2aa8c3c
+  - d0d87f03
 ---
 
 ## Summary
-After `codegraph init` succeeds, SharkBay now ensures `.codegraph` is listed in the project's root `.gitignore` so the index directory is never untracked.
+SharkBay manages the `.codegraph` entry in a project's `.gitignore`: adds it after `codegraph init`, removes it when the extension is disabled/index removed.
 
 ## Files
 - src/core/codegraph-manager.ts
 - tests/codegraph-manager.test.ts
 
 ## Work
-- Added `ensureGitignoreEntry` helper that creates or appends to `.gitignore`, skipping if the entry (with or without trailing slash) already exists.
-- Called it after `codegraph init` with `.catch(() => {})` so gitignore failures don't break the init flow.
-- Added 5 tests covering: new file creation, append, dedup, trailing-slash recognition, missing trailing newline.
+- Added `ensureGitignoreEntry` helper — creates or appends to `.gitignore`, skipping if entry already present.
+- Added `removeGitignoreEntry` helper — removes matching lines from `.gitignore`.
+- Called `ensureGitignoreEntry` after `codegraph init`.
+- Called `removeGitignoreEntry` in `removeProjectIndex` (disable/uninit path).
+- Both calls are best-effort (`.catch(() => {})`).
+- 12 tests total: 5 for ensure, 3 for remove, 4 existing.
 
 ## Verification
 - `npx tsc --noEmit -p tsconfig.node.json` — clean
-- `npx vitest run tests/codegraph-manager.test.ts` — 9/9 pass
+- `npx vitest run tests/codegraph-manager.test.ts` — 12/12 pass
 
 ## Notes
 - `codegraph init` itself creates `.codegraph/.gitignore` to protect db files, but never touches the project root `.gitignore`.
-- The helper is best-effort (swallowed errors) so edge cases like read-only filesystems don't block indexing.
+- Both helpers are best-effort so failures don't block init/uninit flows.

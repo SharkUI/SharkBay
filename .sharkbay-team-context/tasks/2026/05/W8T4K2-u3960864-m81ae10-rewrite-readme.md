@@ -5,7 +5,7 @@ taskTag: W8T4K2
 mode: task
 title: Rewrite README with positioning and feature highlights
 status: completed
-completedAt: 2026-05-22T10:05:00Z
+completedAt: 2026-05-22T02:05:00Z
 commit: 4a872f8b
 actor: SharkUI
 githubUserId: 3960864
@@ -13,8 +13,8 @@ machine: 81ae10
 agent: Claude Code Opus 4.6
 sessionId: ffee1f22-6605-4c7c-862a-89bbed62708f
 branch: main
-createdAt: 2026-05-22T10:00:00Z
-updatedAt: 2026-05-22T10:00:00Z
+createdAt: 2026-05-22T02:00:00Z
+updatedAt: 2026-05-22T02:05:00Z
 ---
 
 ## Summary

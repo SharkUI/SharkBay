@@ -2,53 +2,35 @@
 kind: sharkbay_task
 taskId: R3W7K5-u3960864-m81ae10
 taskTag: R3W7K5
-mode: task
-title: Fix Kiro sharkbay agent config to include default tools list
+mode: quick
+title: Clear attention tag when causing terminal tab is opened
 status: completed
-completedAt: 2026-05-30T04:19:04Z
-commits:
-  - 489a89b9
-  - 4615ec14
 actor: SharkUI
 githubUserId: 3960864
 machine: 81ae10
-agent: Claude Code Opus 4.6
-sessionId: b391fb24-23f2-451c-a2b9-2c77593f9e98
+agent: Kiro Claude
+sessionId: d821a344-abc5-45bc-8f7b-47d398901e9e
 branch: main
-createdAt: 2026-05-30T03:06:05Z
-updatedAt: 2026-05-30T04:25:14Z
+createdAt: 2026-05-22T06:52:00Z
+updatedAt: 2026-05-22T06:59:00Z
+completedAt: 2026-05-22T06:59:00Z
+commit: b615a599
 ---
 
 ## Summary
-Fixed KiroConnector install() to write `tools: ["*"]` in sharkbay.json, ensuring --agent sharkbay has all tools available (identical to kiro_default). Retains --agent sharkbay injection in App.tsx.
+Clear the project card "attention" pill when the user selects a project whose active terminal tab is the one in "done" state.
 
 ## Files
-- src/main/hooks/connectors/kiro.ts
-- src/main/hooks/connectors/gemini.ts
-- src/shared/agent-session-restore.ts
 - src/renderer/App.tsx
 
 ## Work
-- Investigated settings.json: confirmed Kiro does NOT read hooks from ~/.kiro/settings.json (manual echo test — no output)
-- Investigated kiro_default.json override: hooks fire but Kiro gives empty tool set when no tools field present
-- Final Kiro approach: sharkbay.json + --agent sharkbay + `tools: ["*"]` (wildcard includes all tools)
-- Validated with `kiro-cli agent validate` — passes
-- install() now sets config.tools = ["*"] if not already present
-- App.tsx --agent sharkbay injection restored in all 3 locations
-- Fixed GeminiConnector install(): Gemini requires nested `{matcher, hooks: [...]}` format, not flat entries
-- Prior flat format (`{type, command, timeout}` directly in event array) was silently ignored by Gemini CLI
-- Fixed CodeWhale session cards greyed out: restoreDefinitions match regex didn't include "deepseek" (the connector id used as agentId in hook sessions)
+- Identified that `clearTerminalDoneState` is only called on tab button click, not when the project becomes active and the active tab is already "done".
+- Added `clearTerminalDoneState` call in the candidate-change `useEffect`: when the project becomes active and the active tab is a terminal tab with "done" state, it clears it.
+- Related to team task K9P2V4 (keep working tag on project switch).
 
 ## Verification
-- `npm run typecheck` passes
-- `npm test` — 145 tests pass (39 files)
-- `kiro-cli agent validate --path ~/.kiro/agents/sharkbay.json` passes
-- Manual: Kiro hooks fire and session appears in SharkBay
-- Manual: Gemini hooks fire with corrected nested format
+- `npm run typecheck` — passes
+- `npm test` — 119 tests pass
 
 ## Notes
-- Kiro CLI does not read hooks from ~/.kiro/settings.json (only from agent configs)
-- Kiro CLI does not inherit built-in tools when an agent config omits the tools field — must be explicit
-- `tools: ["*"]` is the wildcard — includes all built-in tools, same as kiro_default's behavior
-- Using wildcard avoids maintaining a hardcoded list that could diverge from future Kiro versions
-- K96RNZ original approach was correct (--agent sharkbay); the missing piece was the tools field
+- The fix adds a call to `clearTerminalDoneState` in the candidate-change effect when the active tab has "done" state.

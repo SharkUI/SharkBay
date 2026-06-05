@@ -35,6 +35,10 @@ Implement OpenCode hook connector as a JS plugin that forwards lifecycle events 
 - Plugin reads socket path from the same `hook-socket-path` file used by sharkbay-hook CLI
 - Registered connector in `electron/ipc.ts` alongside existing connectors
 - Added JSONC comment stripping for reading `opencode.jsonc` config
+- Fixed: plugin must use `export default async function` (not named `server` export) — OpenCode expects default export
+- Fixed: cwd must use `input.directory` (not `input.project.worktree` which returns `/`)
+- Fixed: model info from `event.properties.info.model.id` in session.created
+- Added OpenCode to `hookSupportedAgents` and `SessionAgentIcon` in renderer
 - Wrote 11 tests covering normalize (all event types + edge cases) and install/uninstall round-trip
 
 ## Verification

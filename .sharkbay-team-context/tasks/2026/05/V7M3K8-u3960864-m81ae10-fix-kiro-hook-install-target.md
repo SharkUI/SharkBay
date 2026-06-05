@@ -6,6 +6,8 @@ mode: task
 title: Fix KiroConnector to install hooks into agent config
 status: completed
 completedAt: 2026-05-30T02:24:53Z
+commits:
+  - 0a617b37
 actor: SharkUI
 githubUserId: 3960864
 machine: 81ae10

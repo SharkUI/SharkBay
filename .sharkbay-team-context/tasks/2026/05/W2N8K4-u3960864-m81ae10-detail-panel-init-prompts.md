@@ -5,7 +5,9 @@ taskTag: W2N8K4
 mode: task
 title: Add init action prompts to detail panels
 status: completed
-completedAt: 2026-05-31T09:35:17Z
+completedAt: 2026-05-31T09:45:43Z
+commits:
+  - fd7e8286
 actor: SharkUI
 githubUserId: 3960864
 machine: 81ae10

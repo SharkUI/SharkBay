@@ -16,7 +16,6 @@ updatedAt: 2026-05-30T09:10:17Z
 completedAt: 2026-05-30T09:10:17Z
 commits:
   - 99b6d228
-  - 3f792854
 ---
 
 ## Summary
@@ -25,7 +24,6 @@ Fix hook-based agent status indicators (traffic lights and project card pills) b
 ## Files
 - src/main/hooks/bridge.ts
 - electron/ipc.ts
-- src/renderer/App.tsx
 
 ## Work
 - Root cause: `HookBridge.start()` had no idempotency guard. When `registerIpcHandlers` is called multiple times (or across app restarts with lingering file state), the socket path file can end up pointing to a dead socket from a prior instance.

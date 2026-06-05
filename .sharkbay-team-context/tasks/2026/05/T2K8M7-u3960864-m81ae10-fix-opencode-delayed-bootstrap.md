@@ -14,7 +14,7 @@ branch: main
 createdAt: 2026-05-24T03:55:00Z
 updatedAt: 2026-05-24T03:57:00Z
 completedAt: 2026-05-24T03:57:00Z
-commit: 7ffa3f66
+commit: 2dc23e3d
 ---
 
 ## Summary
@@ -24,17 +24,22 @@ Switch opencode from --prompt arg to delayedBootstrapPrompt mechanism (same as d
 - src/main/teamwork-harness.ts
 - src/main/terminal.ts
 - tests/teamwork-harness.test.ts
+- vite.config.ts
 
 ## Work
 - Changed `teamworkBootstrapArgs("opencode")` to return `[]` (bare command, no --prompt).
 - Added `"opencode"` to the delayedBootstrapPrompt condition in terminal.ts alongside deepseek.
 - Updated test assertion to expect bare `"opencode"` command without --prompt args.
+- Diagnosed persistent black screen in packaged app: esbuild minification corrupts xterm.js `requestMode` (const enum scope issue). opencode TUI sends DECRQM queries which trigger the crash.
+- Disabled renderer minification in vite.config.ts (Electron app, no network delivery benefit).
 
 ## Verification
 - `npm run typecheck`: clean.
 - `npm test`: 37 files, 119 tests passed.
+- Packaged app (`npm run build && npm run pack`) launches opencode TUI successfully.
 
 ## Notes
-- Root cause: opencode --prompt triggers TUI mode with terminal queries that congest even with fire-and-forget IPC.
-- Same fix pattern as 3XDEPR (deepseek).
-- This is what PR #9 was also trying to fix; we initially rejected it thinking Q24IBU's IPC fix was sufficient.
+- Root cause of black screen: esbuild minification breaks xterm.js internal const enum in requestMode(). Not an IPC or pending buffer issue.
+- delayedBootstrapPrompt fix (same pattern as 3XDEPR/deepseek) is also needed but was masked by the minification crash.
+- L4V8N3's pending output buffer was never verified in packaged app — the xterm crash was the real blocker all along.
+- Previous tasks (Q24IBU, H7Q2VB, L4V8N3) addressed real IPC issues but this specific crash was unrelated.
