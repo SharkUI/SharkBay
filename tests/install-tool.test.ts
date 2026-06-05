@@ -60,6 +60,7 @@ describe("CoreService installTool", () => {
       "codewhale",
       "qwen",
       "opencode",
+      "cursor",
     ]);
   });
 
@@ -121,6 +122,7 @@ describe("CoreService installTool", () => {
       "codewhale",
       "qwen",
       "opencode",
+      "cursor",
     ]);
 
     const recipes = await core.listInstallRecipes(runtime, { targetId: "local", toolId: "codex" });

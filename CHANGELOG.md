@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.2.2] — 2026-06-05
+
+### Added
+- Cursor CLI support with detection, hook connector, bootstrap injection, session restore, and settings panel entry
+- New Worktree project context-menu action for creating a branch worktree and registering it as a SharkBay project
+- Terminal bottom input history with separate shell and shared agent history buckets per project
+- Command+T shortcut for opening a new shell terminal tab in the current project
+- Drag reordering for terminal tabs
+
+### Changed
+- Bottom prompt input forwards leading slash commands directly to active agent terminals
+- Reduced spacing around the Projects sidebar header
+- Removed legacy harness entry-block uninstall cleanup code
+
+### Fixed
+- IME composition Enter no longer submits the bottom prompt input
+- Files panel refresh now preserves expanded folder children after create, delete, and rename operations
+- Cursor hook mapping keeps before* hook events as tool-start activity
+- `.deepseek/` local files are ignored and no longer tracked
+
 ## [0.2.1] — 2026-05-31
 
 ### Added

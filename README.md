@@ -18,7 +18,7 @@
 
 Launch and manage multiple AI coding agents from one workspace.
 
-Supported agents: **Claude Code** · **Codex** · **Gemini** · **Kiro** · **CodeWhale** · **Qwen** · **OpenCode**
+Supported agents: **Claude Code** · **Codex** · **Gemini** · **Kiro** · **CodeWhale** · **Qwen** · **OpenCode** · **Cursor CLI**
 
 ### Agent Status
 
@@ -26,11 +26,17 @@ Real-time hook-based status indicators (working/idle/attention) — see what eac
 
 ### Bottom Prompt Input
 
-Dedicated input bar at the bottom of agent terminals for composing prompts with comfortable editing before sending.
+Dedicated input bar at the bottom of agent terminals for composing prompts with comfortable editing, slash-command forwarding, and project-scoped history.
 
 ### Multi-Project Workspace
 
 Manage local projects in a unified sidebar. Add, remove, and switch between repositories instantly.
+
+Create a new branch worktree from a project context menu and register it as a SharkBay project in one step.
+
+### Terminal Tabs
+
+Open a new shell tab with Cmd+T, keep per-project tabs alive, and reorder terminal tabs by dragging.
 
 ### GitHub-Compatible Task Protocol
 
