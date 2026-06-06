@@ -103,6 +103,7 @@ export function parseHookSessions(repoPath: string): HookSession[] {
 
   const result: HookSession[] = [];
   for (const [sessionId, { transcriptPath, ...data }] of sessions) {
+    if (data.agentId === "kiro" && isKiroSubagent(sessionId)) continue;
     if (data.model === null) {
       if (data.agentId === "kiro") data.model = readKiroModel(sessionId);
       else if (data.agentId === "gemini" && transcriptPath) data.model = readGeminiModel(transcriptPath);
@@ -139,6 +140,16 @@ function readKiroModel(sessionId: string): string | null {
     return typeof model === "string" && model ? model : null;
   } catch {
     return null;
+  }
+}
+
+function isKiroSubagent(sessionId: string): boolean {
+  try {
+    const file = path.join(os.homedir(), ".kiro", "sessions", "cli", `${sessionId}.json`);
+    const data = JSON.parse(fs.readFileSync(file, "utf8"));
+    return data?.session_created_reason === "subagent" && typeof data?.parent_session_id === "string";
+  } catch {
+    return false;
   }
 }
 

@@ -62,3 +62,53 @@ describe("parseHookSessions Gemini model backfill", () => {
     expect(session as Record<string, unknown>).not.toHaveProperty("transcriptPath");
   });
 });
+
+describe("parseHookSessions Kiro sub-agent filtering", () => {
+  it("excludes sessions where session_created_reason is subagent", () => {
+    const repo = fs.mkdtempSync(path.join(tmp, "repo-"));
+    fakeHome = fs.mkdtempSync(path.join(tmp, "home-"));
+
+    const parentSid = "parent-001";
+    const subSid = "sub-001";
+    const logPath = path.join(repo, ".sharkbay", "logs", "hooks.log");
+    fs.mkdirSync(path.dirname(logPath), { recursive: true });
+    fs.writeFileSync(logPath, [
+      JSON.stringify({ timestamp: "2026-01-01T00:00:00Z", source: "kiro", payload: { session_id: parentSid }, normalized: { agent: "kiro", sessionId: parentSid, event: "prompt" } }),
+      JSON.stringify({ timestamp: "2026-01-01T00:01:00Z", source: "kiro", payload: { session_id: subSid }, normalized: { agent: "kiro", sessionId: subSid, event: "prompt" } }),
+    ].join("\n"));
+
+    const cliDir = path.join(fakeHome, ".kiro", "sessions", "cli");
+    fs.mkdirSync(cliDir, { recursive: true });
+    fs.writeFileSync(path.join(cliDir, `${parentSid}.json`), JSON.stringify({ session_created_reason: "user" }));
+    fs.writeFileSync(path.join(cliDir, `${subSid}.json`), JSON.stringify({ session_created_reason: "subagent", parent_session_id: parentSid }));
+
+    const sessions = parseHookSessions(repo);
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]!.sessionId).toBe(parentSid);
+  });
+
+  it("keeps sessions when kiro session file does not exist", () => {
+    const repo = fs.mkdtempSync(path.join(tmp, "repo-"));
+    fakeHome = fs.mkdtempSync(path.join(tmp, "home-"));
+    writeLog(repo, "no-file-sid");
+
+    const sessions = parseHookSessions(repo);
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]!.sessionId).toBe("no-file-sid");
+  });
+
+  it("keeps sessions with subagent reason but no parent_session_id", () => {
+    const repo = fs.mkdtempSync(path.join(tmp, "repo-"));
+    fakeHome = fs.mkdtempSync(path.join(tmp, "home-"));
+
+    const sid = "agent-flag-session";
+    writeLog(repo, sid);
+    const cliDir = path.join(fakeHome, ".kiro", "sessions", "cli");
+    fs.mkdirSync(cliDir, { recursive: true });
+    fs.writeFileSync(path.join(cliDir, `${sid}.json`), JSON.stringify({ session_created_reason: "subagent" }));
+
+    const sessions = parseHookSessions(repo);
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]!.sessionId).toBe(sid);
+  });
+});
