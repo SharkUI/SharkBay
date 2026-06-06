@@ -4044,6 +4044,10 @@ function AppearanceSettingsPanel({ appearanceTheme, setToast, onThemeChange, ter
   const [localFont, setLocalFont] = useState(terminalFontFamily);
   const [localSize, setLocalSize] = useState(terminalFontSize);
   const [localLh, setLocalLh] = useState(terminalLineHeight);
+  const availableFonts = useMemo(() => {
+    const candidates = ["SF Mono", "JetBrains Mono", "Fira Code", "Cascadia Code", "Source Code Pro", "IBM Plex Mono", "Menlo", "Consolas", "Monaco", "Ubuntu Mono", "Hack", "Inconsolata", "Courier New"];
+    return candidates.filter((f) => document.fonts.check(`12px "${f}"`));
+  }, []);
 
   const themeDefaults: Record<AppearanceTheme, string> = { morning: "atom-one-dark", day: "nord", night: "catppuccin-mocha" };
   const activeSchemeId = terminalColorScheme ?? themeDefaults[appearanceTheme];
@@ -4112,7 +4116,7 @@ function AppearanceSettingsPanel({ appearanceTheme, setToast, onThemeChange, ter
             <label htmlFor="term-font-family">Font Family</label>
             <select id="term-font-family" value={localFont ?? ""} onChange={(e) => { const v = e.target.value || null; setLocalFont(v); void onTerminalAppearanceChange({ fontFamily: v }); }}>
               <option value="">System Default</option>
-              {["SF Mono", "JetBrains Mono", "Fira Code", "Cascadia Code", "Source Code Pro", "IBM Plex Mono", "Menlo", "Consolas", "Monaco", "Ubuntu Mono", "Hack", "Inconsolata", "Courier New"].map((f) => <option key={f} value={f}>{f}</option>)}
+              {availableFonts.map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
           </div>
           <div className="appearance-field-row">
