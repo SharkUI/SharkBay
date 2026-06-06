@@ -399,6 +399,31 @@ function priorityOf(state: ProjectActivityState): number {
   return 0;
 }
 
+// Single source of truth for an agent tab's light state. The project pill is
+// aggregated from these per-tab states so the pill color always matches the tab
+// lights. The active tab never contributes idle or attention (focus clears them).
+function agentTabLightState(
+  tab: TerminalTab,
+  isActiveTab: boolean,
+  hookStateByTerminalId: Record<string, ProjectActivityState>,
+): ProjectActivityState | null {
+  if (tab.kind !== "terminal" || !tab.session.agentId) return null;
+  const state = hookStateByTerminalId[tab.session.id];
+  if (!state) return null;
+  if (isActiveTab && (state === "idle" || state === "attention")) return null;
+  return state;
+}
+
+function sameActivityMap(
+  left: Record<string, ProjectActivityState>,
+  right: Record<string, ProjectActivityState>,
+): boolean {
+  const leftKeys = Object.keys(left);
+  if (leftKeys.length !== Object.keys(right).length) return false;
+  for (const key of leftKeys) { if (left[key] !== right[key]) return false; }
+  return true;
+}
+
 function storedColumnWidth(key: string, fallback: number, min: number): number {
   if (typeof window === "undefined") return fallback;
   const saved = Number(window.localStorage.getItem(key));
@@ -674,20 +699,6 @@ function DashboardView({
   const [runningServiceProjectIds, setRunningServiceProjectIds] = useState<Set<string>>(() => new Set());
   const [hookActivityByProjectId, setHookActivityByProjectId] = useState<Record<string, ProjectActivityState>>({});
   const [hookStateBySessionId, setHookStateBySessionId] = useState<Record<string, { state: ProjectActivityState; projectId: string; terminalSessionId?: string }>>({});
-
-  // Derive project-level activity: highest priority state across all sessions in the project.
-  // Skip entries without terminalSessionId — they cannot be cleared via any UI path.
-  useEffect(() => {
-    const byProject: Record<string, ProjectActivityState> = {};
-    for (const entry of Object.values(hookStateBySessionId)) {
-      if (!entry.terminalSessionId) continue;
-      const current = byProject[entry.projectId];
-      if (!current || priorityOf(entry.state) > priorityOf(current)) {
-        byProject[entry.projectId] = entry.state;
-      }
-    }
-    setHookActivityByProjectId(byProject);
-  }, [hookStateBySessionId]);
   const [agentClis, setAgentClis] = useState<AgentCli[]>([]);
   const [agentListVersion, setAgentListVersion] = useState(0);
   const [agentStatusByProjectPath, setAgentStatusByProjectPath] = useState<AgentStatusByProjectPath>({});
@@ -899,6 +910,9 @@ function DashboardView({
           onRunningServiceProjectIdsChange={(nextIds) =>
             setRunningServiceProjectIds((currentIds) => sameStringSet(currentIds, nextIds) ? currentIds : nextIds)
           }
+          onProjectActivityChange={(nextActivity) =>
+            setHookActivityByProjectId((current) => sameActivityMap(current, nextActivity) ? current : nextActivity)
+          }
           onAgentSessionClear={clearAgentSession}
         />
       </section>
@@ -954,7 +968,8 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   onAgentListRefreshRequested: () => void;
   onAgentSessionClear: (agentSessionId: string) => void;
   onRunningServiceProjectIdsChange: (projectIds: Set<string>) => void;
-}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, hookStateBySessionId, projectAliases, isVisible, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onAgentSessionClear, onRunningServiceProjectIdsChange }, ref) {
+  onProjectActivityChange: (activityByProjectId: Record<string, ProjectActivityState>) => void;
+}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, hookStateBySessionId, projectAliases, isVisible, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onAgentSessionClear, onRunningServiceProjectIdsChange, onProjectActivityChange }, ref) {
   const [spaces, setSpaces] = useState<Record<string, TerminalSpace>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const spacesRef = useRef<Record<string, TerminalSpace>>({});
@@ -980,15 +995,37 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     return result;
   }, [hookStateBySessionId, spaces]);
 
-  // Auto-clear idle on the active tab so project pill never shows idle for it
+  // Auto-clear idle/attention on the active (focused) tab so neither the tab
+  // light nor the project pill shows those states for the focused tab.
   useEffect(() => {
     if (!activeProjectId) return;
     const space = spaces[activeProjectId];
     const activeTabId = space?.activeId;
-    if (!activeTabId || hookStateByTerminalId[activeTabId] !== "idle") return;
+    if (!activeTabId) return;
+    const state = hookStateByTerminalId[activeTabId];
+    if (state !== "idle" && state !== "attention") return;
     const agentSid = Object.entries(agentSessionToTerminalRef.current).find(([, tid]) => tid === activeTabId)?.[0];
     if (agentSid) onAgentSessionClear(agentSid);
   }, [hookStateByTerminalId, activeProjectId, spaces, onAgentSessionClear]);
+
+  // Project pill = highest-priority light state across the project's own SharkBay
+  // agent tabs (attention > idle > working > null). Tab lights are the single
+  // source of truth; sessions not running inside a SharkBay tab never count.
+  useEffect(() => {
+    const byProject: Record<string, ProjectActivityState> = {};
+    for (const space of Object.values(spaces)) {
+      for (const tab of space.tabs) {
+        const isActiveTab = tabIdForTab(tab) === space.activeId;
+        const state = agentTabLightState(tab, isActiveTab, hookStateByTerminalId);
+        if (!state) continue;
+        const current = byProject[space.projectId];
+        if (!current || priorityOf(state) > priorityOf(current)) {
+          byProject[space.projectId] = state;
+        }
+      }
+    }
+    onProjectActivityChange(byProject);
+  }, [spaces, hookStateByTerminalId, onProjectActivityChange]);
 
   const selectedSpace = candidate?.id ? spaces[candidate.id] ?? null : null;
   const canCreate = bridgeAvailable && Boolean(candidate?.uri) && (candidate?.providerKind === "local");
@@ -1359,8 +1396,9 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     const nextKind = tabKindForId(spacesRef.current[projectId], tabId);
     onActiveTabKindChange(nextKind);
     requestProjectTabFocus(projectId);
-    // Clear idle state when user focuses an agent tab
-    if (hookStateByTerminalId[tabId] === "idle") {
+    // Clear idle/attention when user focuses an agent tab
+    const focusedState = hookStateByTerminalId[tabId];
+    if (focusedState === "idle" || focusedState === "attention") {
       const agentSid = Object.entries(agentSessionToTerminalRef.current).find(([, tid]) => tid === tabId)?.[0];
       if (agentSid) onAgentSessionClear(agentSid);
     }
@@ -1456,6 +1494,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                     const tabId = tabIdForTab(tab);
                     const isActiveTab = tabId === space.activeId;
                     const tabTitle = titleForTab(tab);
+                    const lightState = agentTabLightState(tab, isActiveTab, hookStateByTerminalId);
                     return (
                       <div
                         className={cx("terminal-tab", isActiveTab && "is-active", draggingTabId === tabId && "is-dragging")}
@@ -1469,7 +1508,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                       >
                         <button className="terminal-tab-main" type="button" onClick={() => { setActiveTab(space.projectId, tabId); }}>
                           {tab.kind === "terminal" ? (
-                            <span className={cx("terminal-state", tab.session.service && tab.session.status === "running" && "is-service-running", tab.session.agentId && hookStateByTerminalId[tab.session.id] === "working" && "is-working", tab.session.agentId && !isActiveTab && hookStateByTerminalId[tab.session.id] === "idle" && "is-idle", tab.session.agentId && hookStateByTerminalId[tab.session.id] === "attention" && "is-attention", tab.session.status === "exited" && "is-exited")} />
+                            <span className={cx("terminal-state", tab.session.service && tab.session.status === "running" && "is-service-running", lightState === "working" && "is-working", lightState === "idle" && "is-idle", lightState === "attention" && "is-attention", tab.session.status === "exited" && "is-exited")} />
                           ) : tab.kind === "browser" ? (
                             <BrowserTabIcon browser={tab.browser} />
                           ) : (
