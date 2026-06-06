@@ -7,6 +7,10 @@ export type AppConfig = {
   projectAliases: Record<string, string>;
   disabledPluginIds: string[];
   appearanceTheme: AppearanceTheme;
+  terminalColorScheme?: string;
+  terminalFontFamily?: string;
+  terminalFontSize?: number;
+  terminalLineHeight?: number;
   updatedAt: string;
 };
 

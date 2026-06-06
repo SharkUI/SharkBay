@@ -14,6 +14,10 @@ export type AppConfig = {
   configuredProjects?: string[];
   projectAliases?: Record<string, string>;
   appearanceTheme?: AppearanceTheme;
+  terminalColorScheme?: string;
+  terminalFontFamily?: string;
+  terminalFontSize?: number;
+  terminalLineHeight?: number;
   updatedAt?: string;
 };
 
@@ -498,6 +502,7 @@ export type SharkBayBridge = {
     pickProjectFolder?: () => Promise<{ cancelled: boolean; paths: string[] }>;
     createWorktree?: (input: { sourceProjectPath: string; branchName: string }) => Promise<{ targetPath: string; branchName: string }>;
     setAppearanceTheme?: (input: { theme: AppearanceTheme }) => Promise<AppConfig>;
+    setTerminalAppearance?: (input: { colorScheme?: string; fontFamily?: string; fontSize?: number; lineHeight?: number }) => Promise<AppConfig>;
   };
   projects?: {
     scan?: () => Promise<ScanResult | ProjectCandidate[]>;
@@ -575,6 +580,9 @@ export type SharkBayBridge = {
   dock?: {
     updateBadge?: (count: number) => void;
     contentReady?: () => void;
+  };
+  shell?: {
+    openExternal?: (input: { url: string }) => Promise<void>;
   };
 };
 

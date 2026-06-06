@@ -6,6 +6,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import defaultProjectIconUrl from "./assets/shark-fin.png";
 import { CodeEditor } from "./code-editor";
+import { colorSchemes, getColorScheme } from "./color-schemes";
 import { buildAgentSessionRestoreCommand, inferAgentSessionRestoreAgent, type AgentSessionRestoreCommand } from "../shared/agent-session-restore";
 import type {
   AgentCli,
@@ -80,6 +81,7 @@ type TerminalShellTab = {
   session: TerminalSession;
   terminal: XTerm;
   fitAddon: FitAddon;
+  hoveredLink: { current: string | null };
   disposables: Disposable[];
 };
 
@@ -463,12 +465,6 @@ function formatRelativeTime(value: string): string {
   return new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(Math.round(diffSeconds / secondsPerUnit), unit);
 }
 
-function appearanceDescription(theme: AppearanceTheme): string {
-  if (theme === "morning") return "Morning icon and original dark terminal";
-  if (theme === "night") return "Night icon and dark colors";
-  return "Day icon and colors";
-}
-
 function localPathFromCandidate(candidate: ProjectCandidate): string | null {
   if (candidate.providerKind !== "local" || !candidate.uri.startsWith("local:")) return null;
   try {
@@ -494,6 +490,10 @@ export function App() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [scanErrors, setScanErrors] = useState<string[]>([]);
   const [appearanceTheme, setAppearanceTheme] = useState<AppearanceTheme>("day");
+  const [terminalColorScheme, setTerminalColorScheme] = useState<string | null>(null);
+  const [terminalFontFamily, setTerminalFontFamily] = useState<string | null>(null);
+  const [terminalFontSize, setTerminalFontSize] = useState<number | null>(null);
+  const [terminalLineHeight, setTerminalLineHeight] = useState<number | null>(null);
   const refreshInFlight = useRef(false);
 
   const bridgeAvailable = typeof window !== "undefined" && Boolean(window.sharkBay);
@@ -512,6 +512,10 @@ export function App() {
       const [rootConfig, scan] = await Promise.all([configHandler(), scanProjects()]);
       if (isAppConfig(rootConfig)) {
         setAppearanceTheme(normalizeAppearanceTheme(rootConfig.appearanceTheme));
+        if (rootConfig.terminalColorScheme) setTerminalColorScheme(rootConfig.terminalColorScheme);
+        if (rootConfig.terminalFontFamily) setTerminalFontFamily(rootConfig.terminalFontFamily);
+        if (rootConfig.terminalFontSize) setTerminalFontSize(rootConfig.terminalFontSize);
+        if (rootConfig.terminalLineHeight) setTerminalLineHeight(rootConfig.terminalLineHeight);
         setConfiguredProjects(rootConfig.configuredProjects ?? []);
         setProjectAliases(rootConfig.projectAliases ?? {});
       }
@@ -596,6 +600,10 @@ export function App() {
               filteredCandidates={candidates}
               isVisible={view === "dashboard"}
               loading={loading}
+              terminalColorScheme={terminalColorScheme}
+              terminalFontFamily={terminalFontFamily}
+              terminalFontSize={terminalFontSize}
+              terminalLineHeight={terminalLineHeight}
               
               scanErrors={scanErrors}
               selectedCandidate={selectedCandidate}
@@ -635,6 +643,18 @@ export function App() {
                   const config = await updateAppearanceTheme(theme);
                   setAppearanceTheme(normalizeAppearanceTheme(config.appearanceTheme));
                 }}
+                terminalColorScheme={terminalColorScheme}
+                terminalFontFamily={terminalFontFamily}
+                terminalFontSize={terminalFontSize}
+                terminalLineHeight={terminalLineHeight}
+                onTerminalAppearanceChange={async (opts) => {
+                  if (opts.colorScheme !== undefined) setTerminalColorScheme(opts.colorScheme);
+                  if (opts.fontFamily !== undefined) setTerminalFontFamily(opts.fontFamily);
+                  if (opts.fontSize !== undefined) setTerminalFontSize(opts.fontSize);
+                  if (opts.lineHeight !== undefined) setTerminalLineHeight(opts.lineHeight);
+                  const handler = getBridge().config?.setTerminalAppearance;
+                  if (handler) await handler({ colorScheme: opts.colorScheme ?? undefined, fontFamily: opts.fontFamily ?? undefined, fontSize: opts.fontSize ?? undefined, lineHeight: opts.lineHeight ?? undefined });
+                }}
               />
             </div>
           ) : null}
@@ -673,6 +693,10 @@ function DashboardView({
   onRemoveProject,
   onRenameProject,
   onUninstallProtocol,
+  terminalColorScheme,
+  terminalFontFamily,
+  terminalFontSize,
+  terminalLineHeight,
 }: {
   appearanceTheme: AppearanceTheme;
   bridgeAvailable: boolean;
@@ -693,6 +717,10 @@ function DashboardView({
   onRemoveProject: (uri: string) => Promise<void>;
   onRenameProject: (uri: string, name: string) => Promise<void>;
   onUninstallProtocol: (repoPath: string, cleanTeamContext?: boolean) => Promise<void>;
+  terminalColorScheme: string | null;
+  terminalFontFamily: string | null;
+  terminalFontSize: number | null;
+  terminalLineHeight: number | null;
 }) {
   const gridRef = useRef<HTMLDivElement | null>(null);
   const terminalPaneRef = useRef<TerminalPaneHandle | null>(null);
@@ -904,6 +932,10 @@ function DashboardView({
           projectAliases={projectAliases}
           bridgeAvailable={bridgeAvailable}
           isVisible={isVisible}
+          terminalColorScheme={terminalColorScheme}
+          terminalFontFamily={terminalFontFamily}
+          terminalFontSize={terminalFontSize}
+          terminalLineHeight={terminalLineHeight}
           setToast={setToast}
           onActiveTabKindChange={setActiveTerminalTabKind}
           onAgentListRefreshRequested={() => setAgentListVersion((current) => current + 1)}
@@ -963,13 +995,17 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   hookStateBySessionId: Record<string, { state: ProjectActivityState; projectId: string; terminalSessionId?: string }>;
   projectAliases: Record<string, string>;
   isVisible: boolean;
+  terminalColorScheme: string | null;
+  terminalFontFamily: string | null;
+  terminalFontSize: number | null;
+  terminalLineHeight: number | null;
   setToast: (toast: Toast) => void;
   onActiveTabKindChange: (kind: ActiveTerminalTabKind) => void;
   onAgentListRefreshRequested: () => void;
   onAgentSessionClear: (agentSessionId: string) => void;
   onRunningServiceProjectIdsChange: (projectIds: Set<string>) => void;
   onProjectActivityChange: (activityByProjectId: Record<string, ProjectActivityState>) => void;
-}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, hookStateBySessionId, projectAliases, isVisible, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onAgentSessionClear, onRunningServiceProjectIdsChange, onProjectActivityChange }, ref) {
+}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, hookStateBySessionId, projectAliases, isVisible, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onAgentSessionClear, onRunningServiceProjectIdsChange, onProjectActivityChange }, ref) {
   const [spaces, setSpaces] = useState<Record<string, TerminalSpace>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const spacesRef = useRef<Record<string, TerminalSpace>>({});
@@ -1066,12 +1102,26 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   useEffect(() => { onActiveTabKindChange(activeTabKindForProject(spaces, activeProjectId)); }, [activeProjectId, onActiveTabKindChange, spaces]);
 
   useEffect(() => {
+    const resolved = terminalColorScheme ? getColorScheme(terminalColorScheme)?.theme : undefined;
+    const theme = resolved ?? terminalThemes[appearanceTheme];
     for (const space of Object.values(spacesRef.current)) {
       for (const tab of space.tabs) {
-        if (tab.kind === "terminal") tab.terminal.options.theme = terminalThemes[appearanceTheme];
+        if (tab.kind === "terminal") tab.terminal.options.theme = theme;
       }
     }
-  }, [appearanceTheme]);
+  }, [appearanceTheme, terminalColorScheme]);
+
+  useEffect(() => {
+    for (const space of Object.values(spacesRef.current)) {
+      for (const tab of space.tabs) {
+        if (tab.kind === "terminal") {
+          if (terminalFontFamily) tab.terminal.options.fontFamily = terminalFontFamily;
+          if (terminalFontSize) tab.terminal.options.fontSize = terminalFontSize;
+          if (terminalLineHeight) tab.terminal.options.lineHeight = terminalLineHeight;
+        }
+      }
+    }
+  }, [terminalFontFamily, terminalFontSize, terminalLineHeight]);
 
   useEffect(() => {
     if (!bridgeAvailable) return;
@@ -1241,8 +1291,8 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   async function openProjectTab(projectId: string, cwdUri: string, projectName: string, displayPath: string, quiet = false, options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "initialCommandTitle" | "service"> = {}) {
     try {
       const session = await createTerminal(cwdUri, projectName, options);
-      const terminal = createXTerm(session.id, appearanceTheme, setToast);
-      const tab: TerminalTab = { kind: "terminal", session, terminal: terminal.instance, fitAddon: terminal.fitAddon, disposables: terminal.disposables };
+      const terminal = createXTerm(session.id, appearanceTheme, setToast, (url) => void openBrowserTab(projectId, cwdUri, projectName, displayPath, url), { colorScheme: terminalColorScheme, fontFamily: terminalFontFamily, fontSize: terminalFontSize, lineHeight: terminalLineHeight });
+      const tab: TerminalTab = { kind: "terminal", session, terminal: terminal.instance, fitAddon: terminal.fitAddon, hoveredLink: terminal.hoveredLink, disposables: terminal.disposables };
       onActiveTabKindChange("terminal");
       setSpaces((current) => {
         const existing = current[projectId] ?? { projectId, projectName, uri: cwdUri, displayPath, tabs: [], activeId: null, serviceUrl: null };
@@ -1672,6 +1722,8 @@ function XTermSurface({ active, focusRequest, onResize, tab }: { active: boolean
   const hostRef = useRef<HTMLDivElement | null>(null);
   const openedRef = useRef(false);
   const onResizeRef = useRef(onResize);
+  const [linkMenu, setLinkMenu] = useState<{ url: string; x: number; y: number } | null>(null);
+  const linkMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => { onResizeRef.current = onResize; }, [onResize]);
   useEffect(() => { if (!hostRef.current || openedRef.current) return; tab.terminal.open(hostRef.current); openedRef.current = true; }, [tab]);
   useEffect(() => {
@@ -1690,7 +1742,36 @@ function XTermSurface({ active, focusRequest, onResize, tab }: { active: boolean
     if (hostRef.current) observer.observe(hostRef.current);
     return () => { window.cancelAnimationFrame(frame); observer.disconnect(); };
   }, [active, focusRequest, tab]);
-  return <div aria-hidden={!active} className={cx("xterm-surface", active && "is-active")} ref={hostRef} />;
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const handler = (event: MouseEvent) => {
+      const url = tab.hoveredLink.current;
+      if (!url) return;
+      event.preventDefault();
+      setLinkMenu({ url, x: event.clientX, y: event.clientY });
+    };
+    host.addEventListener("contextmenu", handler);
+    return () => host.removeEventListener("contextmenu", handler);
+  }, [tab]);
+  useEffect(() => {
+    if (!linkMenu) return;
+    const dismiss = (event: MouseEvent) => { if (linkMenuRef.current && !linkMenuRef.current.contains(event.target as Node)) setLinkMenu(null); };
+    const escape = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") setLinkMenu(null); };
+    document.addEventListener("mousedown", dismiss);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("mousedown", dismiss); document.removeEventListener("keydown", escape); };
+  }, [linkMenu]);
+  return (
+    <div aria-hidden={!active} className={cx("xterm-surface", active && "is-active")} ref={hostRef}>
+      {linkMenu ? (
+        <div ref={linkMenuRef} className="terminal-link-context-menu" style={{ top: linkMenu.y, left: linkMenu.x }}>
+          <button className="terminal-link-context-menu-item" type="button" onClick={() => { void getBridge().shell?.openExternal?.({ url: linkMenu.url }); setLinkMenu(null); }}>Open in Default Browser</button>
+          <button className="terminal-link-context-menu-item" type="button" onClick={() => { void navigator.clipboard.writeText(linkMenu.url); setLinkMenu(null); }}>Copy URL</button>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function isUserEditingElsewhere(): boolean {
@@ -1700,13 +1781,19 @@ function isUserEditingElsewhere(): boolean {
   return node.isContentEditable === true;
 }
 
-function createXTerm(sessionId: string, appearanceTheme: AppearanceTheme, setToast: (toast: Toast) => void) {
-  const instance = new XTerm({ allowTransparency: false, cursorBlink: true, fontFamily: 'ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace', fontSize: 12, scrollback: 5000, theme: terminalThemes[appearanceTheme] });
+function createXTerm(sessionId: string, appearanceTheme: AppearanceTheme, setToast: (toast: Toast) => void, onLinkClick?: (url: string) => void, termOpts?: { colorScheme?: string | null; fontFamily?: string | null; fontSize?: number | null; lineHeight?: number | null }) {
+  const schemeTheme = termOpts?.colorScheme ? getColorScheme(termOpts.colorScheme)?.theme : undefined;
+  const theme = schemeTheme ?? terminalThemes[appearanceTheme];
+  const fontFamily = termOpts?.fontFamily || 'ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace';
+  const fontSize = termOpts?.fontSize || 12;
+  const lineHeight = termOpts?.lineHeight || 1.2;
+  const hoveredLink: { current: string | null } = { current: null };
+  const instance = new XTerm({ allowTransparency: false, cursorBlink: true, fontFamily, fontSize, lineHeight, scrollback: 5000, theme, linkHandler: { activate: (event, text) => { if (event.button === 0) onLinkClick?.(text); }, hover: (_event, text) => { hoveredLink.current = text; }, leave: () => { hoveredLink.current = null; } } });
   const fitAddon = new FitAddon();
   instance.loadAddon(fitAddon);
-  instance.loadAddon(new WebLinksAddon());
+  instance.loadAddon(new WebLinksAddon((event, uri) => { if (event.button === 0) onLinkClick?.(uri); }, { hover: (_event, text) => { hoveredLink.current = text; }, leave: () => { hoveredLink.current = null; } }));
   const inputDisposable = instance.onData((data) => { const fire = getBridge().terminal?.inputFire; if (fire) { fire({ sessionId, data }); } else { void sendTerminalInput(sessionId, data).catch((error) => setToast({ tone: "error", message: asMessage(error) })); } });
-  return { instance, fitAddon, disposables: [inputDisposable] };
+  return { instance, fitAddon, hoveredLink, disposables: [inputDisposable] };
 }
 
 function findTerminalTab(spaces: Record<string, TerminalSpace>, sessionId: string): TerminalShellTab | null {
@@ -3271,10 +3358,12 @@ function removeExpandedProjectDirectory(paths: Set<string>, directoryPath: strin
   return next;
 }
 
-function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, candidates, scanErrors, initialSection, setToast, onBack, onRemoveProject, onThemeChange }: {
+function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, candidates, scanErrors, initialSection, setToast, onBack, onRemoveProject, onThemeChange, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, onTerminalAppearanceChange }: {
   appearanceTheme: AppearanceTheme; configuredProjects: string[];  bridgeAvailable: boolean; candidates: ProjectCandidate[]; scanErrors: string[]; initialSection?: SettingsSection; setToast: (toast: Toast) => void;
   onBack: () => void; onRemoveProject: (path: string) => Promise<void>;
   onThemeChange: (theme: AppearanceTheme) => Promise<void>;
+  terminalColorScheme: string | null; terminalFontFamily: string | null; terminalFontSize: number | null; terminalLineHeight: number | null;
+  onTerminalAppearanceChange: (opts: { colorScheme?: string | null; fontFamily?: string | null; fontSize?: number | null; lineHeight?: number | null }) => Promise<void>;
 }) {
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection ?? "appearance");
   useEffect(() => { if (initialSection) setActiveSection(initialSection); }, [initialSection]);
@@ -3313,8 +3402,8 @@ function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, ca
             <DiagnosticsSettingsPanel active={activeSection === "diagnostics"} setToast={setToast} />
           </div>
           <div className="settings-section-panel" hidden={activeSection !== "appearance"}>
-            <div className="settings-section-heading"><h4>Appearance</h4><span>{appearanceDescription(appearanceTheme)}</span></div>
-            <AppearanceSettingsPanel appearanceTheme={appearanceTheme} setToast={setToast} onThemeChange={onThemeChange} />
+            <div className="settings-section-heading"><h4>Appearance</h4></div>
+            <AppearanceSettingsPanel appearanceTheme={appearanceTheme} setToast={setToast} onThemeChange={onThemeChange} terminalColorScheme={terminalColorScheme} terminalFontFamily={terminalFontFamily} terminalFontSize={terminalFontSize} terminalLineHeight={terminalLineHeight} onTerminalAppearanceChange={onTerminalAppearanceChange} />
           </div>
         </section>
       </div>
@@ -3945,24 +4034,121 @@ function ExtensionsSettingsPanel({ active, setToast }: { active: boolean; setToa
   );
 }
 
-function AppearanceSettingsPanel({ appearanceTheme, setToast, onThemeChange }: { appearanceTheme: AppearanceTheme; setToast: (toast: Toast) => void; onThemeChange: (theme: AppearanceTheme) => Promise<void> }) {
+function AppearanceSettingsPanel({ appearanceTheme, setToast, onThemeChange, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, onTerminalAppearanceChange }: {
+  appearanceTheme: AppearanceTheme; setToast: (toast: Toast) => void; onThemeChange: (theme: AppearanceTheme) => Promise<void>;
+  terminalColorScheme: string | null; terminalFontFamily: string | null; terminalFontSize: number | null; terminalLineHeight: number | null;
+  onTerminalAppearanceChange: (opts: { colorScheme?: string | null; fontFamily?: string | null; fontSize?: number | null; lineHeight?: number | null }) => Promise<void>;
+}) {
+  const [subTab, setSubTab] = useState<"theme" | "color" | "font">("theme");
   const [savingTheme, setSavingTheme] = useState<AppearanceTheme | null>(null);
+
+  const themeDefaults: Record<AppearanceTheme, string> = { morning: "atom-one-dark", day: "nord", night: "catppuccin-mocha" };
+  const activeSchemeId = terminalColorScheme ?? themeDefaults[appearanceTheme];
+
   async function chooseTheme(theme: AppearanceTheme) {
     if (theme === appearanceTheme || savingTheme) return;
     setSavingTheme(theme);
     try { await onThemeChange(theme); } catch (error) { setToast({ tone: "error", message: asMessage(error) }); } finally { setSavingTheme(null); }
   }
+
   return (
-    <div className="settings-theme-grid" role="radiogroup" aria-label="Appearance theme">
-      {appearanceThemes.map((theme) => {
-        const selected = theme.id === appearanceTheme;
-        return (
-          <button aria-checked={selected} className={cx("settings-theme-card", selected && "is-selected")} disabled={Boolean(savingTheme)} key={theme.id} role="radio" type="button" onClick={() => void chooseTheme(theme.id)}>
-            <ThemePreviewSvg theme={theme.id} />
-            <span className="settings-theme-label">{savingTheme === theme.id ? "Saving…" : theme.label}</span>
-          </button>
-        );
-      })}
+    <div className="appearance-panel">
+      <div className="appearance-sub-tabs">
+        <button className={cx("appearance-sub-tab", subTab === "theme" && "is-active")} type="button" onClick={() => setSubTab("theme")}>Theme</button>
+        <button className={cx("appearance-sub-tab", subTab === "color" && "is-active")} type="button" onClick={() => setSubTab("color")}>Color</button>
+        <button className={cx("appearance-sub-tab", subTab === "font" && "is-active")} type="button" onClick={() => setSubTab("font")}>Font</button>
+      </div>
+
+      {subTab === "theme" && (
+        <div className="settings-theme-grid" role="radiogroup" aria-label="Appearance theme">
+          {appearanceThemes.map((theme) => {
+            const selected = theme.id === appearanceTheme;
+            return (
+              <button aria-checked={selected} className={cx("settings-theme-card", selected && "is-selected")} disabled={Boolean(savingTheme)} key={theme.id} role="radio" type="button" onClick={() => void chooseTheme(theme.id)}>
+                <ThemePreviewSvg theme={theme.id} />
+                <span className="settings-theme-label">{savingTheme === theme.id ? "Saving…" : theme.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {subTab === "color" && (
+        <div className="appearance-color-layout">
+          <div className="appearance-color-list">
+            <div className="appearance-color-header">
+              <span className="appearance-color-title">Terminal Color Scheme</span>
+              {terminalColorScheme && <button className="appearance-reset-btn" type="button" onClick={() => void onTerminalAppearanceChange({ colorScheme: null })}>Reset to default</button>}
+            </div>
+            {colorSchemes.map((scheme) => {
+              const isDefault = scheme.id === themeDefaults[appearanceTheme];
+              const selected = scheme.id === activeSchemeId;
+              return (
+                <button className={cx("appearance-scheme-item", selected && "is-selected")} key={scheme.id} type="button" onClick={() => void onTerminalAppearanceChange({ colorScheme: scheme.id })}>
+                  <div className="appearance-swatches">
+                    <span style={{ background: scheme.theme.red }} />
+                    <span style={{ background: scheme.theme.green }} />
+                    <span style={{ background: scheme.theme.yellow }} />
+                    <span style={{ background: scheme.theme.blue }} />
+                    <span style={{ background: scheme.theme.magenta }} />
+                    <span style={{ background: scheme.theme.cyan }} />
+                  </div>
+                  <span className="appearance-scheme-name">{scheme.name}</span>
+                  {isDefault && <span className="appearance-default-badge">Default</span>}
+                </button>
+              );
+            })}
+          </div>
+          <ColorSchemePreview schemeId={activeSchemeId} fontFamily={terminalFontFamily} fontSize={terminalFontSize} lineHeight={terminalLineHeight} />
+        </div>
+      )}
+
+      {subTab === "font" && (
+        <div className="appearance-font-panel">
+          <div className="appearance-field">
+            <label htmlFor="term-font-family">Font Family</label>
+            <select id="term-font-family" value={terminalFontFamily ?? ""} onChange={(e) => void onTerminalAppearanceChange({ fontFamily: e.target.value || null })}>
+              <option value="">System Default</option>
+              {["SF Mono", "JetBrains Mono", "Fira Code", "Cascadia Code", "Source Code Pro", "IBM Plex Mono", "Menlo", "Consolas", "Monaco", "Ubuntu Mono", "Hack", "Inconsolata", "Courier New"].map((f) => <option key={f} value={f}>{f}</option>)}
+            </select>
+          </div>
+          <div className="appearance-field-row">
+            <div className="appearance-field">
+              <label htmlFor="term-font-size">Font Size</label>
+              <input id="term-font-size" type="number" min={10} max={24} step={1} value={terminalFontSize ?? 12} onChange={(e) => void onTerminalAppearanceChange({ fontSize: Number(e.target.value) || null })} />
+            </div>
+            <div className="appearance-field">
+              <label htmlFor="term-line-height">Line Height</label>
+              <input id="term-line-height" type="number" min={1.0} max={2.5} step={0.1} value={terminalLineHeight ?? 1.2} onChange={(e) => void onTerminalAppearanceChange({ lineHeight: Number(e.target.value) || null })} />
+            </div>
+          </div>
+          <ColorSchemePreview schemeId={activeSchemeId} fontFamily={terminalFontFamily} fontSize={terminalFontSize} lineHeight={terminalLineHeight} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ColorSchemePreview({ schemeId, fontFamily, fontSize, lineHeight }: { schemeId: string; fontFamily?: string | null; fontSize?: number | null; lineHeight?: number | null }) {
+  const scheme = getColorScheme(schemeId);
+  if (!scheme) return null;
+  const t = scheme.theme;
+  const style: CSSProperties = {
+    background: t.background,
+    fontFamily: fontFamily ? `"${fontFamily}", monospace` : 'ui-monospace, "SFMono-Regular", Menlo, monospace',
+    fontSize: `${fontSize ?? 12}px`,
+    lineHeight: `${lineHeight ?? 1.2}`,
+  };
+  return (
+    <div className="appearance-terminal-preview" style={style}>
+      <div><span style={{ color: t.green }}>shark@bay</span><span style={{ color: t.foreground }}>:</span><span style={{ color: t.blue }}>~/projects</span><span style={{ color: t.foreground }}> $ git log --oneline -3</span></div>
+      <div><span style={{ color: t.yellow }}>a1b2c3d</span><span style={{ color: t.foreground }}> feat: add appearance settings</span></div>
+      <div><span style={{ color: t.yellow }}>e4f5g6h</span><span style={{ color: t.foreground }}> fix: terminal resize</span></div>
+      <div><span style={{ color: t.yellow }}>i7j8k9l</span><span style={{ color: t.foreground }}> refactor: extract pty</span></div>
+      <div><span style={{ color: t.foreground }}> </span></div>
+      <div><span style={{ color: t.green }}>shark@bay</span><span style={{ color: t.foreground }}>:</span><span style={{ color: t.blue }}>~/projects</span><span style={{ color: t.foreground }}> $ echo </span><span style={{ color: t.red }}>&quot;error&quot;</span></div>
+      <div><span style={{ color: t.magenta }}>error</span></div>
+      <div><span style={{ color: t.green }}>shark@bay</span><span style={{ color: t.foreground }}>:</span><span style={{ color: t.blue }}>~/projects</span><span style={{ color: t.foreground }}> $ </span><span style={{ color: t.cyan, opacity: 0.6 }}>▌</span></div>
     </div>
   );
 }

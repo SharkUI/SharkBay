@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SharkBay – Appearance Settings Demo</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif; background: #eae7e0; height: 100vh; display: flex; align-items: center; justify-content: center; }
+
+.mock-shell { width: 1080px; height: 720px; background: #f4f1eb; border: 1px solid #dcd7ca; border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,0.12); display: flex; flex-direction: column; overflow: hidden; }
+.mock-titlebar { height: 38px; display: flex; align-items: center; padding: 0 14px; gap: 8px; border-bottom: 1px solid #e8e4db; }
+.mock-dot { width: 12px; height: 12px; border-radius: 50%; }
+.mock-dot.r { background: #ff5f57; } .mock-dot.y { background: #febc2e; } .mock-dot.g { background: #28c840; }
+
+.settings-layout { display: flex; flex: 1; min-height: 0; }
+.settings-nav { width: 200px; padding: 24px 12px; border-right: 1px solid #e8e4db; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+.nav-back { display: flex; align-items: center; gap: 6px; padding: 8px 10px; margin-bottom: 12px; border: none; background: none; color: #5a6b70; font-size: 13px; font-weight: 500; border-radius: 6px; cursor: pointer; }
+.nav-back:hover { background: rgba(45,88,96,0.05); color: #172528; }
+.nav-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: none; background: none; border-radius: 8px; font-size: 13.5px; font-weight: 520; color: #364448; cursor: pointer; text-align: left; }
+.nav-item:hover { background: rgba(45,88,96,0.06); }
+.nav-item.is-selected { background: rgba(45,88,96,0.10); color: #172528; font-weight: 620; }
+.nav-item svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+
+.settings-main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.settings-header { padding: 28px 36px 0; }
+.settings-header h2 { font-size: 22px; font-weight: 700; color: #172528; margin-bottom: 4px; }
+.settings-header p { font-size: 12px; color: #697477; }
+
+.sub-tabs { display: flex; gap: 0; padding: 16px 36px 0; border-bottom: 1px solid #e8e4db; }
+.sub-tab { padding: 8px 16px 10px; border: none; background: none; font-size: 13px; font-weight: 550; color: #697477; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.sub-tab:hover { color: #364448; }
+.sub-tab.is-active { color: #172528; border-bottom-color: #8b6d4a; }
+
+.panel-area { flex: 1; overflow-y: auto; padding: 24px 36px 32px; }
+.panel { display: none; } .panel.is-active { display: block; }
+
+/* Theme panel */
+.theme-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 420px; }
+.theme-card { display: grid; gap: 8px; justify-items: center; padding: 8px; border: 2px solid transparent; border-radius: 10px; cursor: pointer; background: none; }
+.theme-card:hover { background: rgba(45,88,96,0.04); }
+.theme-card.is-selected { border-color: #8b6d4a; }
+.theme-card svg { width: 100%; height: auto; border-radius: 6px; border: 1px solid rgba(0,0,0,0.08); }
+.theme-card span { font-size: 12px; font-weight: 600; color: #364448; }
+
+/* Color panel */
+.color-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.color-schemes { display: flex; flex-direction: column; gap: 8px; }
+.color-scheme-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 2px solid transparent; border-radius: 8px; cursor: pointer; background: none; width: 100%; text-align: left; }
+.color-scheme-item:hover { background: rgba(45,88,96,0.04); }
+.color-scheme-item.is-selected { border-color: #8b6d4a; background: rgba(139,109,74,0.04); }
+.color-swatches { display: flex; gap: 3px; }
+.color-swatches span { width: 14px; height: 14px; border-radius: 3px; }
+.color-scheme-name { font-size: 13px; font-weight: 520; color: #364448; flex: 1; }
+.color-default-badge { font-size: 10px; background: rgba(139,109,74,0.12); color: #8b6d4a; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+.reset-btn { border: none; background: none; font-size: 12px; color: #8b6d4a; cursor: pointer; font-weight: 550; padding: 4px 0; text-decoration: underline; text-underline-offset: 2px; }
+.reset-btn:hover { color: #6b5038; }
+
+.terminal-preview { background: #1a1e24; border-radius: 10px; padding: 16px 20px; font-family: var(--term-font, "SF Mono", "JetBrains Mono", "Fira Code", Menlo, monospace); font-size: var(--term-size, 13px); line-height: var(--term-lh, 1.5); overflow: hidden; min-height: 260px; }
+.terminal-preview .line { white-space: pre; }
+
+/* Font panel */
+.font-panel { max-width: 480px; display: flex; flex-direction: column; gap: 20px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-size: 12px; font-weight: 600; color: #5a6b70; text-transform: uppercase; letter-spacing: 0.3px; }
+.field select, .field input[type="number"] { padding: 8px 12px; border: 1px solid #dcd7ca; border-radius: 8px; font-size: 14px; color: #172528; background: #fff; appearance: none; -webkit-appearance: none; }
+.field select { background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3 3-3' fill='none' stroke='%23697477' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 12px center; padding-right: 32px; }
+.field input[type="number"] { width: 80px; }
+.field-row { display: flex; gap: 16px; }
+.font-preview-box { margin-top: 8px; padding: 16px 20px; background: #1a1e24; border-radius: 10px; font-family: var(--term-font, "SF Mono", Menlo, monospace); font-size: var(--term-size, 13px); line-height: var(--term-lh, 1.5); color: #c8d0d3; min-height: 80px; }
+</style>
+</head>
+<body>
+<div class="mock-shell">
+  <div class="mock-titlebar"><span class="mock-dot r"></span><span class="mock-dot y"></span><span class="mock-dot g"></span></div>
+  <div class="settings-layout">
+    <nav class="settings-nav">
+      <button class="nav-back">← Back</button>
+      <button class="nav-item is-selected"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg><span>Appearance</span></button>
+      <button class="nav-item"><svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span>Agent CLIs</span></button>
+      <button class="nav-item"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg><span>Extensions</span></button>
+      <button class="nav-item"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg><span>Diagnostics</span></button>
+    </nav>
+    <div class="settings-main">
+      <div class="settings-header"><h2>Appearance</h2><p>Customize the look and feel</p></div>
+      <div class="sub-tabs">
+        <button class="sub-tab is-active" data-tab="theme">Theme</button>
+        <button class="sub-tab" data-tab="color">Color</button>
+        <button class="sub-tab" data-tab="font">Font</button>
+      </div>
+      <div class="panel-area">
+        <!-- Theme -->
+        <div class="panel is-active" id="panel-theme">
+          <div class="theme-grid">
+            <button class="theme-card" data-theme="morning">
+              <svg viewBox="0 0 120 80"><rect width="120" height="80" rx="4" fill="#f4f1eb"/><rect x="4" y="8" width="28" height="68" rx="3" fill="#fffdfa" stroke="#dedad1" stroke-width=".5"/><rect x="35" y="8" width="50" height="68" rx="3" fill="#172022" stroke="#dedad1" stroke-width=".5"/><rect x="39" y="14" width="18" height="2" rx="1" fill="#4a5c5f"/><rect x="39" y="19" width="24" height="2" rx="1" fill="#4a5c5f"/><rect x="39" y="24" width="14" height="2" rx="1" fill="#4a5c5f"/><rect x="88" y="8" width="28" height="68" rx="3" fill="#fffdfa" stroke="#dedad1" stroke-width=".5"/></svg>
+              <span>Morning</span>
+            </button>
+            <button class="theme-card is-selected" data-theme="day">
+              <svg viewBox="0 0 120 80"><rect width="120" height="80" rx="4" fill="#f4f1eb"/><rect x="4" y="8" width="28" height="68" rx="3" fill="#fffdfa" stroke="#dedad1" stroke-width=".5"/><rect x="35" y="8" width="50" height="68" rx="3" fill="#f7f1e4" stroke="#dedad1" stroke-width=".5"/><rect x="39" y="14" width="18" height="2" rx="1" fill="#a09a90"/><rect x="39" y="19" width="24" height="2" rx="1" fill="#a09a90"/><rect x="39" y="24" width="14" height="2" rx="1" fill="#a09a90"/><rect x="88" y="8" width="28" height="68" rx="3" fill="#fffdfa" stroke="#dedad1" stroke-width=".5"/></svg>
+              <span>Day</span>
+            </button>
+            <button class="theme-card" data-theme="night">
+              <svg viewBox="0 0 120 80"><rect width="120" height="80" rx="4" fill="#101719"/><rect x="4" y="8" width="28" height="68" rx="3" fill="#1a2628" stroke="#32474b" stroke-width=".5"/><rect x="35" y="8" width="50" height="68" rx="3" fill="#101719" stroke="#32474b" stroke-width=".5"/><rect x="39" y="14" width="18" height="2" rx="1" fill="#4a5c5f"/><rect x="39" y="19" width="24" height="2" rx="1" fill="#4a5c5f"/><rect x="39" y="24" width="14" height="2" rx="1" fill="#4a5c5f"/><rect x="88" y="8" width="28" height="68" rx="3" fill="#1a2628" stroke="#32474b" stroke-width=".5"/></svg>
+              <span>Night</span>
+            </button>
+          </div>
+        </div>
+        <!-- Color -->
+        <div class="panel" id="panel-color">
+          <div class="color-layout">
+            <div>
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+                <span style="font-size:13px;font-weight:600;color:#364448;">Terminal Color Scheme</span>
+                <button class="reset-btn" id="reset-color">Reset to default</button>
+              </div>
+              <div class="color-schemes" id="color-schemes"></div>
+            </div>
+            <div class="terminal-preview" id="terminal-preview"></div>
+          </div>
+        </div>
+        <!-- Font -->
+        <div class="panel" id="panel-font">
+          <div class="font-panel">
+            <div class="field">
+              <label>Font Family</label>
+              <select id="font-family"></select>
+            </div>
+            <div class="field-row">
+              <div class="field"><label>Font Size</label><input type="number" id="font-size" value="13" min="10" max="24" step="1" /></div>
+              <div class="field"><label>Line Height</label><input type="number" id="line-height" value="1.5" min="1.0" max="2.5" step="0.1" /></div>
+            </div>
+            <div class="font-preview-box" id="font-preview">~/projects/sharkbay $ git status<br>On branch main<br>nothing to commit, working tree clean</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// --- Data ---
+const colorSchemes = [
+  { id: "dracula", name: "Dracula", colors: { bg: "#282a36", fg: "#f8f8f2", cursor: "#f8f8f2", black: "#21222c", red: "#ff5555", green: "#50fa7b", yellow: "#f1fa8c", blue: "#bd93f9", magenta: "#ff79c6", cyan: "#8be9fd", white: "#f8f8f2" }},
+  { id: "nord", name: "Nord", colors: { bg: "#2e3440", fg: "#d8dee9", cursor: "#d8dee9", black: "#3b4252", red: "#bf616a", green: "#a3be8c", yellow: "#ebcb8b", blue: "#81a1c1", magenta: "#b48ead", cyan: "#88c0d0", white: "#e5e9f0" }},
+  { id: "solarized-dark", name: "Solarized Dark", colors: { bg: "#002b36", fg: "#839496", cursor: "#839496", black: "#073642", red: "#dc322f", green: "#859900", yellow: "#b58900", blue: "#268bd2", magenta: "#d33682", cyan: "#2aa198", white: "#eee8d5" }},
+  { id: "one-dark", name: "One Dark", colors: { bg: "#282c34", fg: "#abb2bf", cursor: "#528bff", black: "#1e2127", red: "#e06c75", green: "#98c379", yellow: "#d19a66", blue: "#61afef", magenta: "#c678dd", cyan: "#56b6c2", white: "#abb2bf" }},
+  { id: "tokyo-night", name: "Tokyo Night", colors: { bg: "#1a1b26", fg: "#c0caf5", cursor: "#c0caf5", black: "#15161e", red: "#f7768e", green: "#9ece6a", yellow: "#e0af68", blue: "#7aa2f7", magenta: "#bb9af7", cyan: "#7dcfff", white: "#a9b1d6" }},
+  { id: "catppuccin", name: "Catppuccin Mocha", colors: { bg: "#1e1e2e", fg: "#cdd6f4", cursor: "#f5e0dc", black: "#45475a", red: "#f38ba8", green: "#a6e3a1", yellow: "#f9e2af", blue: "#89b4fa", magenta: "#f5c2e7", cyan: "#94e2d5", white: "#bac2de" }},
+  { id: "gruvbox", name: "Gruvbox Dark", colors: { bg: "#282828", fg: "#ebdbb2", cursor: "#ebdbb2", black: "#282828", red: "#cc241d", green: "#98971a", yellow: "#d79921", blue: "#458588", magenta: "#b16286", cyan: "#689d6a", white: "#a89984" }},
+  { id: "github-dark", name: "GitHub Dark", colors: { bg: "#0d1117", fg: "#c9d1d9", cursor: "#c9d1d9", black: "#484f58", red: "#ff7b72", green: "#7ee787", yellow: "#d29922", blue: "#79c0ff", magenta: "#d2a8ff", cyan: "#a5d6ff", white: "#f0f6fc" }},
+];
+
+const themeDefaults = { morning: "one-dark", day: "nord", night: "tokyo-night" };
+let currentTheme = "day";
+let currentScheme = themeDefaults[currentTheme];
+
+// --- Sub-tabs ---
+document.querySelectorAll(".sub-tab").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".sub-tab").forEach(b => b.classList.remove("is-active"));
+    document.querySelectorAll(".panel").forEach(p => p.classList.remove("is-active"));
+    btn.classList.add("is-active");
+    document.getElementById("panel-" + btn.dataset.tab).classList.add("is-active");
+  });
+});
+
+// --- Theme ---
+document.querySelectorAll(".theme-card").forEach(card => {
+  card.addEventListener("click", () => {
+    document.querySelectorAll(".theme-card").forEach(c => c.classList.remove("is-selected"));
+    card.classList.add("is-selected");
+    currentTheme = card.dataset.theme;
+    currentScheme = themeDefaults[currentTheme];
+    renderColorList();
+    renderPreview();
+  });
+});
+
+// --- Color schemes ---
+function renderColorList() {
+  const container = document.getElementById("color-schemes");
+  container.innerHTML = "";
+  colorSchemes.forEach(s => {
+    const isDefault = s.id === themeDefaults[currentTheme];
+    const el = document.createElement("button");
+    el.className = "color-scheme-item" + (s.id === currentScheme ? " is-selected" : "");
+    el.innerHTML = `
+      <div class="color-swatches">
+        <span style="background:${s.colors.red}"></span>
+        <span style="background:${s.colors.green}"></span>
+        <span style="background:${s.colors.yellow}"></span>
+        <span style="background:${s.colors.blue}"></span>
+        <span style="background:${s.colors.magenta}"></span>
+        <span style="background:${s.colors.cyan}"></span>
+      </div>
+      <span class="color-scheme-name">${s.name}</span>
+      ${isDefault ? '<span class="color-default-badge">Default</span>' : ''}
+    `;
+    el.addEventListener("click", () => { currentScheme = s.id; renderColorList(); renderPreview(); });
+    container.appendChild(el);
+  });
+}
+
+document.getElementById("reset-color").addEventListener("click", () => {
+  currentScheme = themeDefaults[currentTheme];
+  renderColorList();
+  renderPreview();
+});
+
+// --- Terminal preview ---
+function renderPreview() {
+  const s = colorSchemes.find(c => c.id === currentScheme).colors;
+  const el = document.getElementById("terminal-preview");
+  el.style.background = s.bg;
+  el.innerHTML = `
+<div class="line"><span style="color:${s.green}">shark@bay</span><span style="color:${s.fg}">:</span><span style="color:${s.blue}">~/projects/sharkbay</span><span style="color:${s.fg}"> $ </span><span style="color:${s.fg}">git log --oneline -5</span></div>
+<div class="line"><span style="color:${s.yellow}">a1b2c3d</span><span style="color:${s.fg}"> feat: add appearance settings panel</span></div>
+<div class="line"><span style="color:${s.yellow}">e4f5g6h</span><span style="color:${s.fg}"> fix: terminal resize on split view</span></div>
+<div class="line"><span style="color:${s.yellow}">i7j8k9l</span><span style="color:${s.fg}"> refactor: extract pty module</span></div>
+<div class="line"><span style="color:${s.yellow}">m0n1o2p</span><span style="color:${s.fg}"> docs: update README with setup guide</span></div>
+<div class="line"><span style="color:${s.yellow}">q3r4s5t</span><span style="color:${s.fg}"> chore: bump xterm.js to v6</span></div>
+<div class="line">&nbsp;</div>
+<div class="line"><span style="color:${s.green}">shark@bay</span><span style="color:${s.fg}">:</span><span style="color:${s.blue}">~/projects/sharkbay</span><span style="color:${s.fg}"> $ </span><span style="color:${s.fg}">echo </span><span style="color:${s.red}">"error example"</span></div>
+<div class="line"><span style="color:${s.magenta}">error example</span></div>
+<div class="line"><span style="color:${s.green}">shark@bay</span><span style="color:${s.fg}">:</span><span style="color:${s.blue}">~/projects/sharkbay</span><span style="color:${s.fg}"> $ </span><span style="color:${s.cyan};opacity:0.6">▌</span></div>
+  `;
+}
+
+// --- Font panel ---
+const defaultFonts = ["SF Mono", "JetBrains Mono", "Fira Code", "Cascadia Code", "Source Code Pro", "IBM Plex Mono", "Menlo", "Consolas", "Monaco", "Ubuntu Mono", "Hack", "Inconsolata", "Anonymous Pro", "Courier New"];
+
+function populateFonts() {
+  const select = document.getElementById("font-family");
+  // Try to use local fonts API, fallback to curated list
+  if (window.queryLocalFonts) {
+    window.queryLocalFonts().then(fonts => {
+      const mono = [...new Set(fonts.map(f => f.family))].filter(f => {
+        const lower = f.toLowerCase();
+        return lower.includes("mono") || lower.includes("code") || lower.includes("consol") || lower.includes("courier") || lower.includes("menlo") || lower.includes("hack") || lower.includes("fira") || lower.includes("jetbrain") || lower.includes("source") || lower.includes("ibm plex") || lower.includes("anonymous");
+      }).sort();
+      const all = [...new Set([...defaultFonts, ...mono])].sort();
+      all.forEach(f => { const o = document.createElement("option"); o.value = f; o.textContent = f; select.appendChild(o); });
+    }).catch(() => fillDefaults(select));
+  } else {
+    fillDefaults(select);
+  }
+}
+function fillDefaults(select) { defaultFonts.forEach(f => { const o = document.createElement("option"); o.value = f; o.textContent = f; select.appendChild(o); }); }
+
+function updateFontPreview() {
+  const font = document.getElementById("font-family").value;
+  const size = document.getElementById("font-size").value + "px";
+  const lh = document.getElementById("line-height").value;
+  document.documentElement.style.setProperty("--term-font", `"${font}", monospace`);
+  document.documentElement.style.setProperty("--term-size", size);
+  document.documentElement.style.setProperty("--term-lh", lh);
+}
+
+document.getElementById("font-family").addEventListener("change", updateFontPreview);
+document.getElementById("font-size").addEventListener("input", updateFontPreview);
+document.getElementById("line-height").addEventListener("input", updateFontPreview);
+
+// --- Init ---
+populateFonts();
+renderColorList();
+renderPreview();
+</script>
+</body>
+</html>
