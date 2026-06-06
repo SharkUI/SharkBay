@@ -56,4 +56,5 @@ export const ipcChannels = {
   setHooksEnabled: "agents:setHooksEnabled",
   hookGetSessions: "hooks:getSessions",
   createWorktree: "git:createWorktree",
+  openExternal: "shell:openExternal",
 } as const;

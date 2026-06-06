@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { BrowserWindow, dialog, ipcMain } from "electron";
+import { BrowserWindow, dialog, ipcMain, shell } from "electron";
 import {
   addConfiguredProject,
   getConfiguredRoots,
@@ -653,5 +653,9 @@ export async function registerIpcHandlers(
   handle<UsageReportFilter, UsageReportResult>(channels.usageGetReport, async (payload) => {
     const config = await getConfiguredRoots(runtime);
     return tokenUsageDb!.getReport(payload ?? {}, config.configuredProjects);
+  });
+
+  handle<{ url: string }, void>(channels.openExternal, async (payload) => {
+    await shell.openExternal(payload.url);
   });
 }
