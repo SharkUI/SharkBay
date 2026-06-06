@@ -2346,7 +2346,6 @@ button.project-file-toggle:focus-visible {
 .appearance-font-item:hover { background: rgba(45, 88, 96, 0.04); }
 .appearance-font-item.is-selected { border-color: #8b6d4a; background: rgba(139, 109, 74, 0.04); }
 .appearance-font-item-name { font-size: 13px; font-weight: 520; color: #364448; }
-.appearance-font-controls { display: flex; gap: 16px; margin-top: 12px; }
 .appearance-field { display: flex; flex-direction: column; gap: 6px; }
 .appearance-field label { font-size: 12px; font-weight: 600; color: #5a6b70; text-transform: uppercase; letter-spacing: 0.3px; }
 .appearance-field select,

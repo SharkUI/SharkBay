@@ -4042,11 +4042,17 @@ function AppearanceSettingsPanel({ appearanceTheme, setToast, onThemeChange, ter
   const [subTab, setSubTab] = useState<"theme" | "color" | "font">("theme");
   const [savingTheme, setSavingTheme] = useState<AppearanceTheme | null>(null);
   const [localFont, setLocalFont] = useState(terminalFontFamily);
-  const [localSize, setLocalSize] = useState(terminalFontSize);
-  const [localLh, setLocalLh] = useState(terminalLineHeight);
   const availableFonts = useMemo(() => {
-    const candidates = ["SF Mono", "JetBrains Mono", "Fira Code", "Cascadia Code", "Source Code Pro", "IBM Plex Mono", "Menlo", "Consolas", "Monaco", "Ubuntu Mono", "Hack", "Inconsolata", "Courier New"];
-    return candidates.filter((f) => document.fonts.check(`12px "${f}"`));
+    const candidates = ["SF Mono", "JetBrains Mono", "Fira Code", "Cascadia Code", "Source Code Pro", "IBM Plex Mono", "Menlo", "Consolas", "Monaco", "Ubuntu Mono", "Hack", "Inconsolata", "Courier New", "PingFang SC", "PingFang TC", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Microsoft YaHei", "Noto Sans Mono CJK SC", "Noto Sans Mono CJK TC", "Source Han Mono", "Sarasa Mono SC", "Sarasa Mono TC", "LXGW WenKai Mono", "Maple Mono", "Maple Mono SC", "Maple Mono NF"];
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return candidates;
+    const testStr = "mmmmmmmmlli1|W@#";
+    const fallbacks = ["monospace", "serif", "sans-serif"];
+    const fallbackWidths = fallbacks.map((fb) => { ctx.font = `72px ${fb}`; return ctx.measureText(testStr).width; });
+    return candidates.filter((f) => {
+      return fallbacks.some((fb, i) => { ctx.font = `72px "${f}", ${fb}`; return ctx.measureText(testStr).width !== fallbackWidths[i]; });
+    });
   }, []);
 
   const themeDefaults: Record<AppearanceTheme, string> = { morning: "atom-one-dark", day: "nord", night: "catppuccin-mocha" };
@@ -4135,18 +4141,8 @@ function AppearanceSettingsPanel({ appearanceTheme, setToast, onThemeChange, ter
                 </button>
               ))}
             </div>
-            <div className="appearance-font-controls">
-              <div className="appearance-field">
-                <label htmlFor="term-font-size">Size</label>
-                <input id="term-font-size" type="number" min={10} max={24} step={1} value={localSize ?? 12} onChange={(e) => { const v = Number(e.target.value) || null; setLocalSize(v); void onTerminalAppearanceChange({ fontSize: v }); }} />
-              </div>
-              <div className="appearance-field">
-                <label htmlFor="term-line-height">Line Height</label>
-                <input id="term-line-height" type="number" min={1.0} max={2.5} step={0.1} value={localLh ?? 1.2} onChange={(e) => { const v = Number(e.target.value) || null; setLocalLh(v); void onTerminalAppearanceChange({ lineHeight: v }); }} />
-              </div>
-            </div>
           </div>
-          <ColorSchemePreview schemeId={activeSchemeId} fontFamily={localFont} fontSize={localSize} lineHeight={localLh} />
+          <ColorSchemePreview schemeId={activeSchemeId} fontFamily={localFont} fontSize={null} lineHeight={null} />
         </div>
       )}
     </div>
@@ -4157,14 +4153,15 @@ function ColorSchemePreview({ schemeId, fontFamily, fontSize, lineHeight }: { sc
   const scheme = getColorScheme(schemeId);
   if (!scheme) return null;
   const t = scheme.theme;
+  const font = fontFamily ? `"${fontFamily}", monospace` : 'ui-monospace, "SFMono-Regular", Menlo, monospace';
   const style: CSSProperties = {
     background: t.background,
-    fontFamily: fontFamily ? `"${fontFamily}", monospace` : 'ui-monospace, "SFMono-Regular", Menlo, monospace',
+    fontFamily: font,
     fontSize: `${fontSize ?? 12}px`,
-    lineHeight: `${lineHeight ?? 1.2}`,
+    lineHeight: String(lineHeight ?? 1.2),
   };
   return (
-    <div className="appearance-terminal-preview" style={style}>
+    <div className="appearance-terminal-preview" data-font={fontFamily ?? "default"} style={style}>
       <div><span style={{ color: t.green }}>shark@bay</span><span style={{ color: t.foreground }}>:</span><span style={{ color: t.blue }}>~/projects</span><span style={{ color: t.foreground }}> $ git log --oneline -3</span></div>
       <div><span style={{ color: t.yellow }}>a1b2c3d</span><span style={{ color: t.foreground }}> feat: add appearance settings</span></div>
       <div><span style={{ color: t.yellow }}>e4f5g6h</span><span style={{ color: t.foreground }}> fix: terminal resize</span></div>
@@ -4173,6 +4170,7 @@ function ColorSchemePreview({ schemeId, fontFamily, fontSize, lineHeight }: { sc
       <div><span style={{ color: t.green }}>shark@bay</span><span style={{ color: t.foreground }}>:</span><span style={{ color: t.blue }}>~/projects</span><span style={{ color: t.foreground }}> $ echo </span><span style={{ color: t.red }}>&quot;error&quot;</span></div>
       <div><span style={{ color: t.magenta }}>error</span></div>
       <div><span style={{ color: t.green }}>shark@bay</span><span style={{ color: t.foreground }}>:</span><span style={{ color: t.blue }}>~/projects</span><span style={{ color: t.foreground }}> $ </span><span style={{ color: t.cyan, opacity: 0.6 }}>▌</span></div>
+      <div style={{ color: t.foreground, opacity: 0.4, marginTop: 8, fontSize: "10px" }}>{font}</div>
     </div>
   );
 }
