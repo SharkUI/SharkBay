@@ -4111,22 +4111,39 @@ function AppearanceSettingsPanel({ appearanceTheme, setToast, onThemeChange, ter
       )}
 
       {subTab === "font" && (
-        <div className="appearance-font-panel">
-          <div className="appearance-field">
-            <label htmlFor="term-font-family">Font Family</label>
-            <select id="term-font-family" value={localFont ?? ""} onChange={(e) => { const v = e.target.value || null; setLocalFont(v); void onTerminalAppearanceChange({ fontFamily: v }); }}>
-              <option value="">System Default</option>
-              {availableFonts.map((f) => <option key={f} value={f}>{f}</option>)}
-            </select>
-          </div>
-          <div className="appearance-field-row">
-            <div className="appearance-field">
-              <label htmlFor="term-font-size">Font Size</label>
-              <input id="term-font-size" type="number" min={10} max={24} step={1} value={localSize ?? 12} onChange={(e) => { const v = Number(e.target.value) || null; setLocalSize(v); void onTerminalAppearanceChange({ fontSize: v }); }} />
+        <div className="appearance-color-layout">
+          <div className="appearance-color-list">
+            <div className="appearance-color-header">
+              <span className="appearance-color-title">Font Family</span>
             </div>
-            <div className="appearance-field">
-              <label htmlFor="term-line-height">Line Height</label>
-              <input id="term-line-height" type="number" min={1.0} max={2.5} step={0.1} value={localLh ?? 1.2} onChange={(e) => { const v = Number(e.target.value) || null; setLocalLh(v); void onTerminalAppearanceChange({ lineHeight: v }); }} />
+            <div className="appearance-font-list" role="listbox" tabIndex={0} aria-activedescendant={localFont ? `font-${localFont}` : undefined} onKeyDown={(e) => {
+              if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+              e.preventDefault();
+              const items = ["", ...availableFonts];
+              const idx = items.indexOf(localFont ?? "");
+              const next = e.key === "ArrowDown" ? Math.min(idx + 1, items.length - 1) : Math.max(idx - 1, 0);
+              const v = items[next] || null;
+              setLocalFont(v);
+              void onTerminalAppearanceChange({ fontFamily: v });
+            }}>
+              <button id="font-" className={cx("appearance-font-item", !localFont && "is-selected")} role="option" aria-selected={!localFont} type="button" onClick={() => { setLocalFont(null); void onTerminalAppearanceChange({ fontFamily: null }); }}>
+                <span className="appearance-font-item-name">System Default</span>
+              </button>
+              {availableFonts.map((f) => (
+                <button id={`font-${f}`} className={cx("appearance-font-item", localFont === f && "is-selected")} key={f} role="option" aria-selected={localFont === f} type="button" onClick={() => { setLocalFont(f); void onTerminalAppearanceChange({ fontFamily: f }); }}>
+                  <span className="appearance-font-item-name" style={{ fontFamily: `"${f}", monospace` }}>{f}</span>
+                </button>
+              ))}
+            </div>
+            <div className="appearance-font-controls">
+              <div className="appearance-field">
+                <label htmlFor="term-font-size">Size</label>
+                <input id="term-font-size" type="number" min={10} max={24} step={1} value={localSize ?? 12} onChange={(e) => { const v = Number(e.target.value) || null; setLocalSize(v); void onTerminalAppearanceChange({ fontSize: v }); }} />
+              </div>
+              <div className="appearance-field">
+                <label htmlFor="term-line-height">Line Height</label>
+                <input id="term-line-height" type="number" min={1.0} max={2.5} step={0.1} value={localLh ?? 1.2} onChange={(e) => { const v = Number(e.target.value) || null; setLocalLh(v); void onTerminalAppearanceChange({ lineHeight: v }); }} />
+              </div>
             </div>
           </div>
           <ColorSchemePreview schemeId={activeSchemeId} fontFamily={localFont} fontSize={localSize} lineHeight={localLh} />

@@ -2341,6 +2341,12 @@ button.project-file-toggle:focus-visible {
 .appearance-terminal-preview div { line-height: inherit; }
 
 .appearance-font-panel { max-width: 560px; display: flex; flex-direction: column; gap: 20px; }
+.appearance-font-list { display: flex; flex-direction: column; gap: 2px; outline: none; }
+.appearance-font-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 2px solid transparent; border-radius: 8px; cursor: pointer; background: none; width: 100%; text-align: left; }
+.appearance-font-item:hover { background: rgba(45, 88, 96, 0.04); }
+.appearance-font-item.is-selected { border-color: #8b6d4a; background: rgba(139, 109, 74, 0.04); }
+.appearance-font-item-name { font-size: 13px; font-weight: 520; color: #364448; }
+.appearance-font-controls { display: flex; gap: 16px; margin-top: 12px; }
 .appearance-field { display: flex; flex-direction: column; gap: 6px; }
 .appearance-field label { font-size: 12px; font-weight: 600; color: #5a6b70; text-transform: uppercase; letter-spacing: 0.3px; }
 .appearance-field select,
@@ -4160,6 +4166,9 @@ body.is-resizing-columns .app-shell[data-theme="night"] .column-resizer::before 
 .app-shell[data-theme="night"] .appearance-scheme-item:hover { background: rgba(255, 255, 255, 0.04); }
 .app-shell[data-theme="night"] .appearance-scheme-item.is-selected { border-color: #b89a6a; background: rgba(184, 154, 106, 0.08); }
 .app-shell[data-theme="night"] .appearance-scheme-name { color: #d6e0dc; }
+.app-shell[data-theme="night"] .appearance-font-item:hover { background: rgba(255, 255, 255, 0.04); }
+.app-shell[data-theme="night"] .appearance-font-item.is-selected { border-color: #b89a6a; background: rgba(184, 154, 106, 0.08); }
+.app-shell[data-theme="night"] .appearance-font-item-name { color: #d6e0dc; }
 .app-shell[data-theme="night"] .appearance-field label { color: #8fa09c; }
 .app-shell[data-theme="night"] .appearance-field select,
 .app-shell[data-theme="night"] .appearance-field input[type="number"] { background: #1a2628; border-color: #32474b; color: #d6e0dc; }
