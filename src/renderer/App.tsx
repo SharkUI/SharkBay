@@ -4041,6 +4041,9 @@ function AppearanceSettingsPanel({ appearanceTheme, setToast, onThemeChange, ter
 }) {
   const [subTab, setSubTab] = useState<"theme" | "color" | "font">("theme");
   const [savingTheme, setSavingTheme] = useState<AppearanceTheme | null>(null);
+  const [localFont, setLocalFont] = useState(terminalFontFamily);
+  const [localSize, setLocalSize] = useState(terminalFontSize);
+  const [localLh, setLocalLh] = useState(terminalLineHeight);
 
   const themeDefaults: Record<AppearanceTheme, string> = { morning: "atom-one-dark", day: "nord", night: "catppuccin-mocha" };
   const activeSchemeId = terminalColorScheme ?? themeDefaults[appearanceTheme];
@@ -4107,7 +4110,7 @@ function AppearanceSettingsPanel({ appearanceTheme, setToast, onThemeChange, ter
         <div className="appearance-font-panel">
           <div className="appearance-field">
             <label htmlFor="term-font-family">Font Family</label>
-            <select id="term-font-family" value={terminalFontFamily ?? ""} onChange={(e) => void onTerminalAppearanceChange({ fontFamily: e.target.value || null })}>
+            <select id="term-font-family" value={localFont ?? ""} onChange={(e) => { const v = e.target.value || null; setLocalFont(v); void onTerminalAppearanceChange({ fontFamily: v }); }}>
               <option value="">System Default</option>
               {["SF Mono", "JetBrains Mono", "Fira Code", "Cascadia Code", "Source Code Pro", "IBM Plex Mono", "Menlo", "Consolas", "Monaco", "Ubuntu Mono", "Hack", "Inconsolata", "Courier New"].map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
@@ -4115,14 +4118,14 @@ function AppearanceSettingsPanel({ appearanceTheme, setToast, onThemeChange, ter
           <div className="appearance-field-row">
             <div className="appearance-field">
               <label htmlFor="term-font-size">Font Size</label>
-              <input id="term-font-size" type="number" min={10} max={24} step={1} value={terminalFontSize ?? 12} onChange={(e) => void onTerminalAppearanceChange({ fontSize: Number(e.target.value) || null })} />
+              <input id="term-font-size" type="number" min={10} max={24} step={1} value={localSize ?? 12} onChange={(e) => { const v = Number(e.target.value) || null; setLocalSize(v); void onTerminalAppearanceChange({ fontSize: v }); }} />
             </div>
             <div className="appearance-field">
               <label htmlFor="term-line-height">Line Height</label>
-              <input id="term-line-height" type="number" min={1.0} max={2.5} step={0.1} value={terminalLineHeight ?? 1.2} onChange={(e) => void onTerminalAppearanceChange({ lineHeight: Number(e.target.value) || null })} />
+              <input id="term-line-height" type="number" min={1.0} max={2.5} step={0.1} value={localLh ?? 1.2} onChange={(e) => { const v = Number(e.target.value) || null; setLocalLh(v); void onTerminalAppearanceChange({ lineHeight: v }); }} />
             </div>
           </div>
-          <ColorSchemePreview schemeId={activeSchemeId} fontFamily={terminalFontFamily} fontSize={terminalFontSize} lineHeight={terminalLineHeight} />
+          <ColorSchemePreview schemeId={activeSchemeId} fontFamily={localFont} fontSize={localSize} lineHeight={localLh} />
         </div>
       )}
     </div>
