@@ -2315,15 +2315,17 @@ button.project-file-toggle:focus-visible {
 }
 
 /* Appearance sub-tabs */
-.appearance-panel { display: flex; flex-direction: column; gap: 20px; }
+.appearance-panel { display: flex; flex-direction: column; gap: 20px; flex: 1; min-height: 0; }
 .appearance-sub-tabs { display: flex; gap: 0; border-bottom: 1px solid #e8e4db; }
 .appearance-sub-tab { padding: 8px 16px 10px; border: none; background: none; font-size: 13px; font-weight: 550; color: #697477; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .appearance-sub-tab:hover { color: #364448; }
 .appearance-sub-tab.is-active { color: #172528; border-bottom-color: #8b6d4a; }
 
-.appearance-color-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-.appearance-color-list { display: flex; flex-direction: column; gap: 4px; max-height: 360px; overflow-y: auto; scrollbar-width: none; }
-.appearance-color-list::-webkit-scrollbar { display: none; }
+.appearance-color-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; height: calc(100vh - 240px); min-height: 0; }
+.appearance-color-list { display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+.appearance-color-list::-webkit-scrollbar { display: block; width: 6px; }
+.appearance-color-list::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.15); border-radius: 3px; }
+.appearance-color-list::-webkit-scrollbar-track { background: transparent; }
 .appearance-color-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
 .appearance-color-title { font-size: 13px; font-weight: 600; color: #364448; }
 .appearance-reset-btn { border: none; background: none; font-size: 12px; color: #8b6d4a; cursor: pointer; font-weight: 550; text-decoration: underline; text-underline-offset: 2px; }
@@ -4162,6 +4164,7 @@ body.is-resizing-columns .app-shell[data-theme="night"] .column-resizer::before 
 .app-shell[data-theme="night"] .appearance-sub-tab:hover { color: #d6e0dc; }
 .app-shell[data-theme="night"] .appearance-sub-tab.is-active { color: #d6e0dc; border-bottom-color: #b89a6a; }
 .app-shell[data-theme="night"] .appearance-color-title { color: #d6e0dc; }
+.app-shell[data-theme="night"] .appearance-color-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); }
 .app-shell[data-theme="night"] .appearance-scheme-item:hover { background: rgba(255, 255, 255, 0.04); }
 .app-shell[data-theme="night"] .appearance-scheme-item.is-selected { border-color: #b89a6a; background: rgba(184, 154, 106, 0.08); }
 .app-shell[data-theme="night"] .appearance-scheme-name { color: #d6e0dc; }

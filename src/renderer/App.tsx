@@ -4089,10 +4089,7 @@ function AppearanceSettingsPanel({ appearanceTheme, setToast, onThemeChange, ter
       {subTab === "color" && (
         <div className="appearance-color-layout">
           <div className="appearance-color-list">
-            <div className="appearance-color-header">
-              <span className="appearance-color-title">Terminal Color Scheme</span>
-              {terminalColorScheme && <button className="appearance-reset-btn" type="button" onClick={() => void onTerminalAppearanceChange({ colorScheme: null })}>Reset to default</button>}
-            </div>
+            {terminalColorScheme && <button className="appearance-reset-btn" type="button" onClick={() => void onTerminalAppearanceChange({ colorScheme: null })}>Reset to default</button>}
             {colorSchemes.map((scheme) => {
               const isDefault = scheme.id === themeDefaults[appearanceTheme];
               const selected = scheme.id === activeSchemeId;
@@ -4119,9 +4116,6 @@ function AppearanceSettingsPanel({ appearanceTheme, setToast, onThemeChange, ter
       {subTab === "font" && (
         <div className="appearance-color-layout">
           <div className="appearance-color-list">
-            <div className="appearance-color-header">
-              <span className="appearance-color-title">Font Family</span>
-            </div>
             <div className="appearance-font-list" role="listbox" tabIndex={0} aria-activedescendant={localFont ? `font-${localFont}` : undefined} onKeyDown={(e) => {
               if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
               e.preventDefault();
