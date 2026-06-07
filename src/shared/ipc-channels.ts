@@ -57,4 +57,8 @@ export const ipcChannels = {
   hookGetSessions: "hooks:getSessions",
   createWorktree: "git:createWorktree",
   openExternal: "shell:openExternal",
+  islandGetAllSessions: "island:getAllSessions",
+  islandFocusSession: "island:focusSession",
+  islandTabsSync: "island:tabsSync",
+  recordSessionPrompt: "session:recordPrompt",
 } as const;

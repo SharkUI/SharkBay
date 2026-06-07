@@ -123,6 +123,7 @@ type TerminalPaneHandle = {
   openGitDiff: (projectUri: string, projectName: string, relativePath: string) => Promise<void>;
   openBrowserTab: (projectUri: string, projectName: string, initialUrl: string) => Promise<void>;
   openAgentSession: (projectUri: string, projectName: string, command: string, title: string, agentId?: string) => Promise<void>;
+  focusTerminalSession: (terminalSessionId: string) => string | null;
 };
 
 type AgentStatusByProjectPath = Record<string, string>;
@@ -724,9 +725,19 @@ function DashboardView({
 }) {
   const gridRef = useRef<HTMLDivElement | null>(null);
   const terminalPaneRef = useRef<TerminalPaneHandle | null>(null);
+
+  useEffect(() => {
+    if (!bridgeAvailable) return;
+    const unsubscribe = getBridge().app?.onFocusTerminalSession?.((terminalSessionId: string) => {
+      const projectId = terminalPaneRef.current?.focusTerminalSession(terminalSessionId);
+      if (projectId) setSelectedId(projectId);
+    });
+    return () => unsubscribe?.();
+  }, [bridgeAvailable]);
+
   const [runningServiceProjectIds, setRunningServiceProjectIds] = useState<Set<string>>(() => new Set());
   const [hookActivityByProjectId, setHookActivityByProjectId] = useState<Record<string, ProjectActivityState>>({});
-  const [hookStateBySessionId, setHookStateBySessionId] = useState<Record<string, { state: ProjectActivityState; projectId: string; terminalSessionId?: string }>>({});
+  const [hookStateBySessionId, setHookStateBySessionId] = useState<Record<string, { state: ProjectActivityState; projectId: string; terminalSessionId?: string; lastPrompt?: string }>>({});
   const [agentClis, setAgentClis] = useState<AgentCli[]>([]);
   const [agentListVersion, setAgentListVersion] = useState(0);
   const [agentStatusByProjectPath, setAgentStatusByProjectPath] = useState<AgentStatusByProjectPath>({});
@@ -836,8 +847,8 @@ function DashboardView({
         if (event.sessionId && matchedProjectId) {
           setHookStateBySessionId((current) => {
             const existing = current[event.sessionId!];
-            if (existing && existing.state === event.hookState && existing.projectId === matchedProjectId && existing.terminalSessionId === event.terminalSessionId) return current;
-            return { ...current, [event.sessionId!]: { state: event.hookState!, projectId: matchedProjectId, terminalSessionId: event.terminalSessionId } };
+            if (existing && existing.state === event.hookState && existing.projectId === matchedProjectId && existing.terminalSessionId === event.terminalSessionId && (!event.lastPrompt || existing.lastPrompt === event.lastPrompt)) return current;
+            return { ...current, [event.sessionId!]: { state: event.hookState!, projectId: matchedProjectId, terminalSessionId: event.terminalSessionId, lastPrompt: event.lastPrompt || existing?.lastPrompt } };
           });
         }
       }
@@ -992,7 +1003,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   agentClis: AgentCli[];
   bridgeAvailable: boolean;
   candidate: ProjectCandidate | null;
-  hookStateBySessionId: Record<string, { state: ProjectActivityState; projectId: string; terminalSessionId?: string }>;
+  hookStateBySessionId: Record<string, { state: ProjectActivityState; projectId: string; terminalSessionId?: string; lastPrompt?: string }>;
   projectAliases: Record<string, string>;
   isVisible: boolean;
   terminalColorScheme: string | null;
@@ -1068,6 +1079,23 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const services = candidate?.services ?? [];
 
   useEffect(() => { spacesRef.current = spaces; }, [spaces]);
+  useEffect(() => {
+    const tabs: Array<{ sessionId: string; title: string; projectName: string; agentId?: string; state: string; lastPrompt?: string }> = [];
+    for (const space of Object.values(spaces)) {
+      for (const tab of space.tabs) {
+        if (tab.kind === "terminal" && tab.session.agentId && tab.session.status === "running") {
+          const hookState = hookStateByTerminalId[tab.session.id];
+          // Find lastPrompt: hookStateBySessionId is keyed by hook sessionId, find entry with matching terminalSessionId
+          let lastPrompt: string | undefined;
+          for (const entry of Object.values(hookStateBySessionId)) {
+            if (entry.terminalSessionId === tab.session.id) { lastPrompt = entry.lastPrompt; break; }
+          }
+          tabs.push({ sessionId: tab.session.id, title: tab.session.title, projectName: space.projectName ?? space.projectId, agentId: tab.session.agentId, state: hookState || "awaiting", lastPrompt });
+        }
+      }
+    }
+    getBridge().dock?.syncIslandTabs?.(tabs);
+  }, [spaces, hookStateByTerminalId, hookStateBySessionId]);
   useEffect(() => {
     const pending = pendingTerminalOutput.current;
     for (const [sessionId, data] of [...pending]) {
@@ -1198,6 +1226,14 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     },
     openAgentSession: async (projectUri, projectName, command, title, agentId) => {
       await openProjectTab(projectUri, projectUri, projectName, selectedSpace?.displayPath ?? projectUri, false, { agentId, initialCommand: command, initialCommandTitle: title });
+    },
+    focusTerminalSession: (terminalSessionId) => {
+      const match = findTerminalTabWithSpace(spacesRef.current, terminalSessionId);
+      if (match) {
+        setActiveTab(match.space.projectId, match.tab.session.id);
+        return match.space.projectId;
+      }
+      return null;
     },
   }));
 
@@ -4738,6 +4774,7 @@ function PromptInputBar({
     const text = value;
     if (!text || !sessionId) return;
     recordHistory(text);
+    if (isAgentSession) getBridge().terminal?.recordPrompt?.({ terminalSessionId: sessionId, text });
     send(text);
     setTimeout(() => send("\r"), 30);
     setValue("");

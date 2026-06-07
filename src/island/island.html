@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>SharkBay Island</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { background: transparent; overflow: hidden; height: 100%; -webkit-app-region: no-drag; user-select: none; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
+
+:root {
+  --ink: #0d0d0f;
+  --paper: #f1ead9;
+  --notch-height: 32px;
+  --notch-width: 209px;
+  --pill-radius: 12px;
+  --panel-width: 520px;
+  --panel-radius: 20px;
+  --closed-width: 295px;
+}
+
+#island {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  transition: width 0.45s cubic-bezier(0.4, 0, 0.2, 1), height 0.45s cubic-bezier(0.4, 0, 0.2, 1), border-radius 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--ink);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+#island.closed {
+  width: var(--closed-width);
+  height: var(--notch-height);
+  border-radius: 0 0 var(--pill-radius) var(--pill-radius);
+}
+
+#island.opened {
+  width: var(--panel-width);
+  border-radius: 0 0 var(--panel-radius) var(--panel-radius);
+  cursor: default;
+}
+
+/* Bottom corners are convex (border-radius handles this).
+   Top corners merge flush with the screen edge - no extra decoration needed. */
+
+/* Closed pill content - items on left/right of the notch center */
+#pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--notch-height);
+  padding: 0 14px;
+  transition: opacity 0.2s;
+  overflow: hidden;
+}
+#island.opened #pill { opacity: 0; pointer-events: none; position: absolute; top: 0; left: 0; right: 0; }
+
+.pill-left, .pill-right {
+  display: flex; align-items: center; gap: 6px;
+}
+
+.pill-tiles {
+  display: flex; gap: 3px; align-items: center;
+}
+.pill-tile {
+  width: 6px; height: 6px; border-radius: 50%;
+}
+.pill-tile.working { background: #28c840; }
+.pill-tile.idle { background: #febc2e; }
+.pill-tile.attention {
+  background: #ff5f57;
+  animation: pulse 0.7s ease-in-out infinite alternate;
+}
+.pill-tile.awaiting { background: #888; }
+@keyframes pulse { from { opacity: 0.35; } to { opacity: 1; } }
+
+/* Opened panel content */
+#panel {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute; top: var(--notch-height); left: 0; right: 0; bottom: 0;
+  display: flex; flex-direction: column;
+  padding: 14px 16px 16px;
+  transition: opacity 0.25s 0.15s;
+}
+#island.opened #panel { opacity: 1; pointer-events: auto; }
+
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 4px 0 12px;
+  border-bottom: 1px solid rgba(241, 234, 217, 0.1);
+  margin-bottom: 8px;
+}
+.panel-title {
+  font-size: 12px; font-weight: 600; color: var(--paper); opacity: 0.7;
+  letter-spacing: 0.5px; text-transform: uppercase;
+}
+.panel-count {
+  font-size: 11px; font-weight: 500; color: var(--paper); opacity: 0.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-list {
+  flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; min-height: 0;
+}
+.session-list::-webkit-scrollbar { width: 4px; }
+.session-list::-webkit-scrollbar-thumb { background: rgba(241,234,217,0.15); border-radius: 2px; }
+
+.session-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 10px;
+  transition: background 0.15s;
+  cursor: pointer;
+}
+.session-row:hover { background: rgba(241, 234, 217, 0.06); }
+
+.session-dot {
+  width: 7px; height: 7px; border-radius: 999px; flex-shrink: 0;
+  margin: 3px 4px;
+}
+.session-dot.working { background: #28c840; box-shadow: 0 0 0 3px rgba(40, 200, 64, 0.16); }
+.session-dot.idle { background: #febc2e; box-shadow: 0 0 0 3px rgba(254, 188, 46, 0.16); }
+.session-dot.attention { background: #ff5f57; box-shadow: 0 0 0 3px rgba(255, 95, 87, 0.16); }
+.session-dot.awaiting { background: #888; }
+
+.session-info { flex: 1; min-width: 0; }
+.session-agent {
+  font-size: 13px; font-weight: 600; color: var(--paper);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.session-prompt {
+  font-weight: 400; opacity: 0.5;
+}
+.session-status {
+  font-weight: 400; font-size: 11px;
+  margin-left: 8px;
+}
+.session-status.working { color: #28c840; }
+.session-status.idle { color: #febc2e; }
+.session-status.attention { color: #ff5f57; }
+.session-action {
+  font-size: 11px; color: var(--paper); opacity: 0.5;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.session-project {
+  font-size: 10px; color: var(--paper); opacity: 0.3;
+  flex-shrink: 0;
+}
+</style>
+</head>
+<body>
+<div id="island" class="closed">
+  <div id="pill">
+    <div class="pill-left" id="pillLeft"></div>
+    <div class="pill-right">
+      <div class="pill-tiles" id="pillTiles"></div>
+    </div>
+  </div>
+  <div id="panel">
+    <div class="panel-header">
+      <span class="panel-title">Sessions</span>
+      <span class="panel-count" id="panelCount"></span>
+    </div>
+    <div class="session-list" id="sessionList"></div>
+  </div>
+</div>
+
+<script>
+// Tabs from main window are the source of truth
+let tabs = []; // Array<{ sessionId, title, projectName, agentId, state }>
+
+const islandEl = document.getElementById("island");
+const pillTiles = document.getElementById("pillTiles");
+const panelCount = document.getElementById("panelCount");
+const sessionList = document.getElementById("sessionList");
+
+function isOpen() { return islandEl.classList.contains("opened"); }
+
+function renderPillTiles() {
+  pillTiles.innerHTML = tabs.map(t =>
+    `<div class="pill-tile ${t.state}"></div>`
+  ).join("");
+}
+
+function stateLabel(state) {
+  switch (state) {
+    case "attention": return "need attention";
+    case "working": return "working";
+    case "idle": return "idle";
+    default: return "";
+  }
+}
+
+function renderSessionList() {
+  panelCount.textContent = `${tabs.length} active`;
+  sessionList.innerHTML = tabs.map(t => {
+    const label = t.state !== "awaiting" ? stateLabel(t.state) : "";
+    return `
+    <div class="session-row" data-tid="${t.sessionId}">
+      <div class="session-dot ${t.state}"></div>
+      <div class="session-info">
+        <div class="session-agent">${t.projectName}${label ? ` <span class="session-status ${t.state}">${label}</span>` : ""}</div>
+        <div class="session-action">${t.lastPrompt || ""}</div>
+      </div>
+      <div class="session-project">${t.title || t.agentId || ""}</div>
+    </div>`;
+  }).join("");
+}
+
+sessionList.addEventListener("click", (e) => {
+  const row = e.target.closest(".session-row");
+  if (row && row.dataset.tid) window.island.focusSession(row.dataset.tid);
+});
+
+function handleTabs(newTabs) {
+  tabs = newTabs;
+  renderPillTiles();
+  if (isOpen()) renderSessionList();
+}
+
+const HEADER_HEIGHT = 44; // panel-header + padding
+const ROW_HEIGHT = 52; // session-row height approx
+const MAX_PANEL_HEIGHT = 320;
+const NOTCH_HEIGHT = 32;
+
+function panelHeight() {
+  const content = HEADER_HEIGHT + tabs.length * ROW_HEIGHT + 16;
+  return Math.min(content, MAX_PANEL_HEIGHT);
+}
+
+function open() {
+  const h = panelHeight();
+  islandEl.style.height = (NOTCH_HEIGHT + h) + "px";
+  window.island.setExpanded(true, NOTCH_HEIGHT + h);
+  islandEl.classList.remove("closed");
+  islandEl.classList.add("opened");
+  renderSessionList();
+}
+
+function close() {
+  islandEl.classList.remove("opened");
+  islandEl.classList.add("closed");
+  islandEl.style.height = "";
+  setTimeout(() => window.island.setExpanded(false, 0), 450);
+}
+
+islandEl.addEventListener("click", () => {
+  if (islandEl.classList.contains("closed")) open();
+});
+
+document.addEventListener("click", (e) => {
+  if (islandEl.classList.contains("opened") && !islandEl.contains(e.target)) close();
+});
+
+let hoverTimer = null;
+islandEl.addEventListener("mouseenter", () => {
+  if (islandEl.classList.contains("closed")) hoverTimer = setTimeout(open, 300);
+});
+islandEl.addEventListener("mouseleave", () => {
+  clearTimeout(hoverTimer);
+  if (islandEl.classList.contains("opened")) {
+    setTimeout(() => { if (!islandEl.matches(":hover")) close(); }, 400);
+  }
+});
+
+// Initialize
+window.island.onTabs(handleTabs);
+window.island.onCollapse(() => close());
+</script>
+</body>
+</html>

@@ -84,6 +84,7 @@ import { setPluginEnabledConfig } from "../src/main/config.js";
 import type { PluginSummary } from "../src/plugins/plugin-host.js";
 import { HookBridge } from "../src/main/hooks/bridge.js";
 import { AgentHookStateManager } from "../src/main/hooks/state-manager.js";
+import { SessionPromptStore } from "../src/main/hooks/prompt-store.js";
 import { ClaudeConnector, CodexConnector, QwenConnector } from "../src/main/hooks/connectors/claude-family.js";
 import { GeminiConnector } from "../src/main/hooks/connectors/gemini.js";
 import { KiroConnector } from "../src/main/hooks/connectors/kiro.js";
@@ -131,6 +132,10 @@ const terminalPidToId = new Map<number, string>();
 const hookSessionToTerminal = new Map<string, string>();
 // Hook sessions pending PID resolution (pid → hookSessionId)
 const pendingHookResolutions = new Map<string, number>();
+// Persistent store of the latest prompt per agent (hook) session id.
+let promptStore: SessionPromptStore | null = null;
+// Prompts recorded by terminal id before the hook session mapping resolved.
+const pendingPromptsByTerminal = new Map<string, string>();
 
 function resolveTerminalForPid(agentPid: number): Promise<string | null> {
   return new Promise((resolve) => {
@@ -327,6 +332,7 @@ export async function registerIpcHandlers(
           if (!terminalId) return;
           hookSessionToTerminal.set(sessionId, terminalId);
           pendingHookResolutions.delete(sessionId);
+          flushPendingPrompt(sessionId, terminalId);
           const state = hookStateManager.getStatus(null, sessionId);
           if (state) {
             const statusEvent: AgentProjectStatusEvent = {
@@ -379,6 +385,10 @@ export async function registerIpcHandlers(
     collector.backfill().catch(() => {});
   }
 
+  if (!promptStore) {
+    promptStore = new SessionPromptStore(runtime.userDataPath);
+  }
+
   agentSessionWatcher.start();
 
   // Hook-based agent status system
@@ -386,8 +396,10 @@ export async function registerIpcHandlers(
   hookBridge.on("event", (msg) => hookStateManager.handleMessage(msg));
   hookStateManager.removeAllListeners("stateChange");
   hookStateManager.on("stateChange", (event) => {
+    if (event.lastPrompt) promptStore?.record(event.sessionId, event.lastPrompt);
     const cached = hookSessionToTerminal.get(event.sessionId);
     const sendStatus = (terminalSessionId?: string) => {
+      const storedPrompt = promptStore?.get(event.sessionId) ?? undefined;
       const statusEvent: AgentProjectStatusEvent = {
         agentId: event.agent,
         projectPath: event.projectPath,
@@ -397,6 +409,7 @@ export async function registerIpcHandlers(
         hookState: event.state,
         pid: event.pid,
         terminalSessionId,
+        lastPrompt: storedPrompt ?? event.lastPrompt,
       };
       BrowserWindow.getAllWindows().forEach((window) => {
         window.webContents.send(channels.agentStatus, statusEvent);
@@ -410,6 +423,7 @@ export async function registerIpcHandlers(
         if (terminalId) {
           hookSessionToTerminal.set(event.sessionId, terminalId);
           pendingHookResolutions.delete(event.sessionId);
+          flushPendingPrompt(event.sessionId, terminalId);
         } else {
           pendingHookResolutions.set(event.sessionId, event.pid!);
         }
@@ -658,4 +672,80 @@ export async function registerIpcHandlers(
   handle<{ url: string }, void>(channels.openExternal, async (payload) => {
     await shell.openExternal(payload.url);
   });
+
+  ipcMain.handle(channels.islandGetAllSessions, () => {
+    return hookStateManager.getAllStatuses().map((entry) => {
+      const statusEvent: AgentProjectStatusEvent = {
+        agentId: entry.agent,
+        projectPath: entry.projectPath,
+        sessionId: entry.sessionId,
+        text: entry.action,
+        timestamp: entry.timestamp,
+        hookState: entry.state,
+        pid: entry.pid,
+        terminalSessionId: hookSessionToTerminal.get(entry.sessionId),
+      };
+      return statusEvent;
+    });
+  });
+
+  ipcMain.on(channels.islandFocusSession, (_event, terminalSessionId: string) => {
+    const allWindows = BrowserWindow.getAllWindows();
+    const mainWin = allWindows.find((w) => !w.isAlwaysOnTop());
+    const islandWin = allWindows.find((w) => w.isAlwaysOnTop());
+    if (mainWin) {
+      mainWin.show();
+      mainWin.focus();
+      mainWin.webContents.send("app:focusTerminalSession", terminalSessionId);
+    }
+    if (islandWin && !islandWin.isDestroyed()) {
+      islandWin.webContents.send("island:collapse");
+    }
+  });
+
+  ipcMain.on(channels.islandTabsSync, (_event, tabs: unknown) => {
+    const islandWin = BrowserWindow.getAllWindows().find((w) => w.isAlwaysOnTop());
+    if (!islandWin || islandWin.isDestroyed()) return;
+    // Inject the authoritative lastPrompt from the store. The main process
+    // owns the agent-session → terminal mapping and the prompt store, so it
+    // resolves prompts reliably regardless of hook event timing on restore.
+    let enriched = tabs;
+    if (Array.isArray(tabs)) {
+      enriched = tabs.map((tab) => {
+        const t = tab as { sessionId?: string; lastPrompt?: string };
+        if (!t.sessionId) return tab;
+        const agentSessionId = findAgentSessionForTerminal(t.sessionId);
+        const stored = agentSessionId ? promptStore?.get(agentSessionId) : null;
+        return stored ? { ...t, lastPrompt: stored } : tab;
+      });
+    }
+    islandWin.webContents.send("island:tabs", enriched);
+  });
+
+  ipcMain.on(channels.recordSessionPrompt, (_event, input: { terminalSessionId: string; text: string }) => {
+    if (!promptStore || !input?.terminalSessionId || !input?.text) return;
+    // Map terminal session id back to the agent (hook) session id, which is
+    // stable across restore. If not yet resolved, buffer until it is.
+    const agentSessionId = findAgentSessionForTerminal(input.terminalSessionId);
+    if (agentSessionId) {
+      promptStore.record(agentSessionId, input.text);
+    } else {
+      pendingPromptsByTerminal.set(input.terminalSessionId, input.text);
+    }
+  });
+}
+
+function findAgentSessionForTerminal(terminalSessionId: string): string | null {
+  for (const [sid, tid] of hookSessionToTerminal) {
+    if (tid === terminalSessionId) return sid;
+  }
+  return null;
+}
+
+function flushPendingPrompt(agentSessionId: string, terminalId: string): void {
+  const pending = pendingPromptsByTerminal.get(terminalId);
+  if (pending && promptStore) {
+    promptStore.record(agentSessionId, pending);
+    pendingPromptsByTerminal.delete(terminalId);
+  }
 }

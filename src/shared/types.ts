@@ -621,6 +621,7 @@ export type AgentProjectStatusEvent = {
   hookState?: "working" | "idle" | "attention";
   pid?: number;
   terminalSessionId?: string;
+  lastPrompt?: string;
 };
 
 export type HookSessionViewModel = {

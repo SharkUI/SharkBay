@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, shell } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, shell } from "electron";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { closeAllTerminalSessions, registerIpcHandlers } from "./ipc.js";
@@ -13,6 +13,7 @@ const currentDir = dirname(currentFile);
 const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? "http://127.0.0.1:5173";
 
 let mainWindow: BrowserWindow | null = null;
+let islandWindow: BrowserWindow | null = null;
 let appearanceTheme: AppearanceTheme = "day";
 
 app.setName("SharkBay");
@@ -150,6 +151,67 @@ function createMainWindow(): BrowserWindow {
   return window;
 }
 
+function createIslandWindow(): BrowserWindow {
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width: screenWidth } = primaryDisplay.size;
+  // On notch Macs, workArea.y gives the menu bar / notch height.
+  // We position the window at the very top of the screen (bounds.y)
+  // and let the HTML content handle vertical offset so the pill
+  // visually merges with the notch's black area.
+  const menuBarHeight = primaryDisplay.workArea.y - primaryDisplay.bounds.y;
+  const panelWidth = 520;
+  const panelHeight = 360 + menuBarHeight;
+  const x = Math.round((screenWidth - panelWidth) / 2) + primaryDisplay.bounds.x;
+  const y = primaryDisplay.bounds.y;
+
+  const preload = join(currentDir, "island-preload.mjs");
+  const window = new BrowserWindow({
+    x,
+    y,
+    width: panelWidth,
+    height: panelHeight,
+    frame: false,
+    transparent: true,
+    hasShadow: false,
+    roundedCorners: false,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    closable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    focusable: false,
+    show: false,
+    enableLargerThanScreen: true,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      preload,
+    },
+  });
+
+  window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false });
+  window.setAlwaysOnTop(true, "screen-saver");
+
+  const islandPath = join(app.getAppPath(), "src/island/island.html");
+
+  void window.loadFile(islandPath);
+  window.once("ready-to-show", () => {
+    window.setSize(panelWidth, menuBarHeight + 32);
+    window.show();
+  });
+
+  ipcMain.on("island:setExpanded", (_event, expanded: boolean, height?: number) => {
+    if (window.isDestroyed()) return;
+    const h = expanded && height ? height : menuBarHeight + 32;
+    window.setSize(panelWidth, h);
+  });
+
+  return window;
+}
+
 app.whenReady().then(async () => {
   const runtime = {
     userDataPath: app.getPath("userData"),
@@ -173,6 +235,7 @@ app.whenReady().then(async () => {
   });
 
   mainWindow = createMainWindow();
+  islandWindow = createIslandWindow();
 
   mainWindow.on("focus", () => {
     if (process.platform === "darwin" && app.dock) app.dock.setBadge("");
@@ -194,5 +257,9 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  if (islandWindow && !islandWindow.isDestroyed()) {
+    islandWindow.destroy();
+    islandWindow = null;
+  }
   closeAllTerminalSessions();
 });

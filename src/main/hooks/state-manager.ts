@@ -19,6 +19,7 @@ export type HookStateEvent = {
   agent: string;
   timestamp: string;
   pid?: number;
+  lastPrompt?: string;
 };
 
 export type StateManagerEvents = {
@@ -32,7 +33,7 @@ const MAX_LOG_ARRAY_ITEMS = 25;
 const MAX_LOG_OBJECT_KEYS = 50;
 
 export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
-  private states = new Map<string, AgentHookStatus & { agent: string; sessionId: string; projectPath: string; pid?: number; pendingAction: string | null; debounceTimer: ReturnType<typeof setTimeout> | null }>();
+  private states = new Map<string, AgentHookStatus & { agent: string; sessionId: string; projectPath: string; pid?: number; pendingAction: string | null; debounceTimer: ReturnType<typeof setTimeout> | null; lastPrompt: string | null }>();
   private connectors = new Map<string, AgentConnector>();
   private timeoutTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -91,6 +92,14 @@ export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
     this.applyEvent(event);
   }
 
+  getAllStatuses(): HookStateEvent[] {
+    const results: HookStateEvent[] = [];
+    for (const entry of this.states.values()) {
+      results.push({ projectPath: entry.projectPath, sessionId: entry.sessionId, state: entry.state, action: entry.action, agent: entry.agent, timestamp: new Date(entry.lastUpdate).toISOString(), pid: entry.pid, lastPrompt: entry.lastPrompt ?? undefined });
+    }
+    return results;
+  }
+
   getStatus(projectPath: string | null, sessionId?: string): HookStateEvent | null {
     for (const entry of this.states.values()) {
       if (sessionId && entry.sessionId === sessionId) {
@@ -124,12 +133,13 @@ export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
     const stateChanged = !existing || existing.state !== newState;
 
     if (!existing) {
-      this.states.set(stateKey, { state: newState, action: newAction, lastUpdate: now, agent: event.agent, sessionId, projectPath, pid: event.pid, pendingAction: null, debounceTimer: null });
+      this.states.set(stateKey, { state: newState, action: newAction, lastUpdate: now, agent: event.agent, sessionId, projectPath, pid: event.pid, pendingAction: null, debounceTimer: null, lastPrompt: event.prompt || null });
     } else {
       existing.state = newState;
       existing.lastUpdate = now;
       existing.agent = event.agent;
       if (event.pid != null) existing.pid = event.pid;
+      if (event.prompt) existing.lastPrompt = event.prompt;
       if (stateChanged) {
         existing.action = newAction;
       } else {
@@ -196,7 +206,7 @@ export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
   private emitState(stateKey: string): void {
     const entry = this.states.get(stateKey);
     if (!entry) return;
-    this.emit("stateChange", { projectPath: entry.projectPath, sessionId: entry.sessionId, state: entry.state, action: entry.action, agent: entry.agent, timestamp: new Date(entry.lastUpdate).toISOString(), pid: entry.pid });
+    this.emit("stateChange", { projectPath: entry.projectPath, sessionId: entry.sessionId, state: entry.state, action: entry.action, agent: entry.agent, timestamp: new Date(entry.lastUpdate).toISOString(), pid: entry.pid, lastPrompt: entry.lastPrompt ?? undefined });
   }
 
   private resetTimeout(stateKey: string): void {
