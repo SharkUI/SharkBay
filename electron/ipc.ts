@@ -400,7 +400,9 @@ export async function registerIpcHandlers(
   hookBridge.on("event", (msg) => hookStateManager.handleMessage(msg));
   hookStateManager.removeAllListeners("stateChange");
   hookStateManager.on("stateChange", (event) => {
-    if (event.lastPrompt) promptStore?.record(event.sessionId, event.lastPrompt);
+    if (event.lastPrompt && promptStore?.get(event.sessionId) !== event.lastPrompt) {
+      promptStore?.record(event.sessionId, event.lastPrompt);
+    }
     const cached = hookSessionToTerminal.get(event.sessionId);
     const sendStatus = (terminalSessionId?: string) => {
       const storedPrompt = promptStore?.get(event.sessionId) ?? undefined;
@@ -738,11 +740,9 @@ export async function registerIpcHandlers(
 
   ipcMain.on(channels.recordSessionPrompt, (_event, input: { terminalSessionId: string; text: string }) => {
     if (!promptStore || !input?.terminalSessionId || !input?.text) return;
-    // Map terminal session id back to the agent (hook) session id, which is
-    // stable across restore. If not yet resolved, buffer until it is.
     const agentSessionId = findAgentSessionForTerminal(input.terminalSessionId);
     if (agentSessionId) {
-      promptStore.record(agentSessionId, input.text);
+      if (promptStore.get(agentSessionId) !== input.text) promptStore.record(agentSessionId, input.text);
     } else {
       pendingPromptsByTerminal.set(input.terminalSessionId, [...(pendingPromptsByTerminal.get(input.terminalSessionId) ?? []), input.text]);
     }
