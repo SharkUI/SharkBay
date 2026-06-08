@@ -84,7 +84,7 @@ describe("CodeWhale status hooks", () => {
     manager.dispose();
   });
 
-  it.each(["task_shell_start", "write_file"])("maps CodeWhale approval tool %s to attention", (toolName) => {
+  it.each(["task_shell_start", "write_file"])("maps CodeWhale approval tool %s to approval state", (toolName) => {
     const manager = new AgentHookStateManager();
     const events: Array<{ projectPath: string; state: string; action: string; agent: string }> = [];
     manager.registerConnector(new CodeWhaleConnector());
@@ -103,7 +103,7 @@ describe("CodeWhale status hooks", () => {
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
       projectPath: "/tmp/sharkbay-project",
-      state: "attention",
+      state: "approval",
       action: `Codewhale: ${toolName}`,
       agent: "codewhale",
     });
@@ -132,7 +132,7 @@ describe("CodeWhale status hooks", () => {
       const record = JSON.parse(lines[0]!) as Record<string, any>;
       expect(record).toMatchObject({
         source: "codewhale",
-        state: "attention",
+        state: "approval",
         action: "Codewhale: write_file",
         normalized: {
           agent: "codewhale",
@@ -165,14 +165,14 @@ describe("CodeWhale status hooks", () => {
 
     expect(events[0]).toMatchObject({
       projectPath: "/tmp/sharkbay-project",
-      state: "idle",
+      state: "stopped",
       action: "",
       agent: "codewhale",
     });
     manager.dispose();
   });
 
-  it("maps CodeWhale error hooks to attention state", () => {
+  it("maps CodeWhale error hooks to approval state", () => {
     const manager = new AgentHookStateManager();
     const events: Array<{ projectPath: string; state: string; action: string; agent: string }> = [];
     manager.registerConnector(new CodeWhaleConnector());
@@ -190,7 +190,7 @@ describe("CodeWhale status hooks", () => {
 
     expect(events[0]).toMatchObject({
       projectPath: "/tmp/sharkbay-project",
-      state: "attention",
+      state: "approval",
       action: "Codewhale: Invalid approval_policy 'full-auto'",
       agent: "codewhale",
     });

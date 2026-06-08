@@ -11,7 +11,7 @@ export type WorkflowProjectCandidate = {
   dirtyWorktree?: boolean | null;
 };
 
-export type WorkflowProjectActivityState = "working" | "idle" | "attention";
+export type WorkflowProjectActivityState = "working" | "stopped" | "approval";
 export type WorkflowCodeGraphStatusState = "disabled" | "unsupported" | "not-installed" | "uninitialized" | "stale" | "indexed" | "error";
 
 export function validTerminalResizeDimensions(cols: number | null | undefined, rows: number | null | undefined): boolean {

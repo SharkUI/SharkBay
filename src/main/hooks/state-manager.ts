@@ -1,7 +1,7 @@
 /**
  * AgentHookStateManager — aggregates hook events into per-project three-state status.
  *
- * States: working (green) / idle (yellow) / attention (red)
+ * States: working (green) / stopped (yellow) / approval (red)
  * Emits state changes via EventEmitter for IPC relay to renderer.
  */
 
@@ -143,7 +143,7 @@ export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
       if (stateChanged) {
         existing.action = newAction;
       } else {
-        if (newState === "idle") {
+        if (newState === "stopped") {
           this.resetTimeout(stateKey);
           return;
         }
@@ -172,7 +172,7 @@ export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
   private eventToState(event: UnifiedHookEvent["event"]): AgentHookState {
     switch (event) {
       case "session_start":
-        return "idle";
+        return "stopped";
       case "prompt":
       case "tool_start":
         return "working";
@@ -180,9 +180,9 @@ export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
         return "working";
       case "turn_end":
       case "session_end":
-        return "idle";
+        return "stopped";
       case "attention":
-        return "attention";
+        return "approval";
     }
   }
 
@@ -193,7 +193,7 @@ export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
       case "tool_end":
         return "";
       case "attention":
-        return event.prompt ? `${capitalize(event.agent)}: ${oneLine(event.prompt)}` : "Awaiting attention";
+        return event.prompt ? `${capitalize(event.agent)}: ${oneLine(event.prompt)}` : "Awaiting approval";
       case "prompt":
         return `${capitalize(event.agent)}: processing`;
       case "turn_end":

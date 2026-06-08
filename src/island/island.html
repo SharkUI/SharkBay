@@ -68,12 +68,12 @@ html, body { background: transparent; overflow: hidden; height: 100%; -webkit-ap
   width: 6px; height: 6px; border-radius: 50%;
 }
 .pill-tile.working { background: #28c840; }
-.pill-tile.idle { background: #febc2e; }
-.pill-tile.attention {
+.pill-tile.stopped { background: #febc2e; }
+.pill-tile.approval {
   background: #ff5f57;
   animation: pulse 0.7s ease-in-out infinite alternate;
 }
-.pill-tile.awaiting { background: #888; }
+.pill-tile.unknown { background: #888; }
 @keyframes pulse { from { opacity: 0.35; } to { opacity: 1; } }
 
 /* Animated shark mark in the notch-left area (2:1 rectangle) */
@@ -157,9 +157,9 @@ body.glow-on #glowRing { opacity: 1; }
   margin: 3px 4px;
 }
 .session-dot.working { background: #28c840; box-shadow: 0 0 0 3px rgba(40, 200, 64, 0.16); }
-.session-dot.idle { background: #febc2e; box-shadow: 0 0 0 3px rgba(254, 188, 46, 0.16); }
-.session-dot.attention { background: #ff5f57; box-shadow: 0 0 0 3px rgba(255, 95, 87, 0.16); }
-.session-dot.awaiting { background: #888; }
+.session-dot.stopped { background: #febc2e; box-shadow: 0 0 0 3px rgba(254, 188, 46, 0.16); }
+.session-dot.approval { background: #ff5f57; box-shadow: 0 0 0 3px rgba(255, 95, 87, 0.16); }
+.session-dot.unknown { background: #888; }
 
 .session-info { flex: 1; min-width: 0; }
 .session-agent {
@@ -174,8 +174,8 @@ body.glow-on #glowRing { opacity: 1; }
   margin-left: 8px;
 }
 .session-status.working { color: #28c840; }
-.session-status.idle { color: #febc2e; }
-.session-status.attention { color: #ff5f57; }
+.session-status.stopped { color: #febc2e; }
+.session-status.approval { color: #ff5f57; }
 .session-action {
   font-size: 11px; color: var(--paper); opacity: 0.5;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -243,37 +243,37 @@ const finGroup = document.getElementById("finGroup");
 const glowRing = document.getElementById("glowRing");
 const WAVE_COLORS = {
   working: "#28c840",
-  idle: "#febc2e",
-  attention: "#ff5f57",
+  stopped: "#febc2e",
+  approval: "#ff5f57",
   neutral: "#9ea0a4",
 };
 const SPEED_FACTORS = {
   neutral: 0.5,   // gray: 50% slower
   working: 1.0,   // green: baseline
-  idle: 1.5,      // yellow: 50% faster
-  attention: 2.0, // red: 100% faster
+  stopped: 1.5,   // yellow: 50% faster
+  approval: 2.0,  // red: 100% faster
 };
 let finSpeed = 1.0;
 function updateMarkState() {
   // Nothing to show when there are no sessions.
   if (!tabs.length) { sharkMark.style.display = "none"; document.body.classList.remove("glow-on"); return; }
   sharkMark.style.display = "block";
-  // Priority: attention > idle > working > otherwise neutral gray.
+  // Priority: approval > stopped > working > otherwise neutral gray.
   let key = "neutral";
-  if (tabs.some(t => t.state === "attention")) key = "attention";
-  else if (tabs.some(t => t.state === "idle")) key = "idle";
+  if (tabs.some(t => t.state === "approval")) key = "approval";
+  else if (tabs.some(t => t.state === "stopped")) key = "stopped";
   else if (tabs.some(t => t.state === "working")) key = "working";
   const color = WAVE_COLORS[key];
   sharkMark.style.setProperty("--mark-color", color);
   finSpeed = SPEED_FACTORS[key];
 
-  // Flowing glow ring only for idle (yellow) and attention (red), and only
+  // Flowing glow ring only for stopped (yellow) and approval (red), and only
   // while collapsed.
-  const glow = (key === "idle" || key === "attention") && !isOpen();
+  const glow = (key === "stopped" || key === "approval") && !isOpen();
   if (glow) {
     glowRing.style.setProperty("--glow-color", color);
-    // red (attention) highlight flows 100% faster than yellow (idle)
-    glowRing.style.setProperty("--glow-flow-dur", key === "attention" ? "1.1s" : "2.2s");
+    // red (approval) highlight flows 100% faster than yellow (stopped)
+    glowRing.style.setProperty("--glow-flow-dur", key === "approval" ? "1.1s" : "2.2s");
   }
   document.body.classList.toggle("glow-on", glow);
 }
@@ -334,9 +334,9 @@ function updateMarkState() {
 function isOpen() { return islandEl.classList.contains("opened"); }
 
 function renderPillTiles() {
-  // Order tiles left-to-right by ascending priority so attention sits rightmost:
-  // awaiting < working < idle < attention.
-  const TILE_ORDER = { awaiting: 0, working: 1, idle: 2, attention: 3 };
+  // Order tiles left-to-right by ascending priority so approval sits rightmost:
+  // unknown < working < stopped < approval.
+  const TILE_ORDER = { unknown: 0, working: 1, stopped: 2, approval: 3 };
   const ordered = tabs.slice().sort(
     (a, b) => (TILE_ORDER[a.state] ?? 0) - (TILE_ORDER[b.state] ?? 0)
   );
@@ -347,16 +347,16 @@ function renderPillTiles() {
 
 function stateLabel(state) {
   switch (state) {
-    case "attention": return "need attention";
+    case "approval": return "need approval";
     case "working": return "working";
-    case "idle": return "idle";
+    case "stopped": return "stopped";
     default: return "";
   }
 }
 
 function renderSessionList() {
   sessionList.innerHTML = tabs.map(t => {
-    const label = t.state !== "awaiting" ? stateLabel(t.state) : "";
+    const label = t.state !== "unknown" ? stateLabel(t.state) : "";
     return `
     <div class="session-row" data-tid="${t.sessionId}">
       <div class="session-dot ${t.state}"></div>

@@ -342,7 +342,7 @@ export type AgentProjectStatusEvent = {
   sessionId: string | null;
   text: string;
   timestamp: string;
-  hookState?: "working" | "idle" | "attention";
+  hookState?: "working" | "stopped" | "approval";
   pid?: number;
   terminalSessionId?: string;
   lastPrompt?: string;
