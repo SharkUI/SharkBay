@@ -1563,6 +1563,9 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     (tab): tab is TerminalShellTab => tab.kind === "terminal" && tab.session.id === selectedSpace.activeId && tab.session.status === "running",
   ) ?? null;
   const promptFocusRequest = selectedSpace && tabFocusRequest?.projectId === selectedSpace.projectId ? tabFocusRequest.nonce : 0;
+  const agentHookSessionId = selectedActiveTerminal?.session.id
+    ? Object.entries(hookStateBySessionId).find(([, v]) => v.terminalSessionId === selectedActiveTerminal.session.id)?.[0] ?? null
+    : null;
 
   return (
     <div className="terminal-layout">
@@ -1673,6 +1676,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       <PromptInputBar
         projectId={selectedSpace?.projectId ?? null}
         sessionId={selectedActiveTerminal?.session.id ?? null}
+        agentHookSessionId={agentHookSessionId}
         disabled={!selectedActiveTerminal}
         focusRequest={promptFocusRequest}
         isAgentSession={Boolean(selectedActiveTerminal?.session.agentId)}
@@ -4716,6 +4720,7 @@ function CachedAvatar({ url }: { url: string }) {
 function PromptInputBar({
   projectId,
   sessionId,
+  agentHookSessionId,
   disabled,
   focusRequest,
   isAgentSession,
@@ -4723,6 +4728,7 @@ function PromptInputBar({
 }: {
   projectId: string | null;
   sessionId: string | null;
+  agentHookSessionId: string | null;
   disabled: boolean;
   focusRequest: number;
   isAgentSession: boolean;
@@ -4730,7 +4736,7 @@ function PromptInputBar({
 }) {
   const [value, setValue] = useState("");
   const [isComposing, setIsComposing] = useState(false);
-  const historyKey = isAgentSession ? sessionId : (projectId ? `${projectId}:shell` : null);
+  const historyKey = isAgentSession ? (agentHookSessionId ?? sessionId) : (projectId ? `${projectId}:shell` : null);
   const [historyCursor, setHistoryCursor] = useState<{ historyKey: string; index: number; draft: string } | null>(null);
   const historyByKey = useRef<Record<string, string[]>>({});
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -4738,12 +4744,27 @@ function PromptInputBar({
   useEffect(() => {
     setHistoryCursor(null);
     if (!historyKey) return;
+    // If agent hook session id resolved and we had data under terminal session id, migrate it
+    if (isAgentSession && agentHookSessionId && sessionId && agentHookSessionId !== sessionId) {
+      const prev = historyByKey.current[sessionId];
+      if (prev?.length) {
+        historyByKey.current[agentHookSessionId] = [...(historyByKey.current[agentHookSessionId] ?? []), ...prev];
+        delete historyByKey.current[sessionId];
+      }
+    }
     const load = getBridge().terminal?.loadPromptHistory;
     if (!load) return;
     let cancelled = false;
     load({ sessionId: historyKey }).then((history) => {
       if (cancelled || !history?.length) return;
-      historyByKey.current[historyKey] = history;
+      const existing = historyByKey.current[historyKey] ?? [];
+      // Merge: persisted history first, then any in-memory entries not yet persisted
+      if (!existing.length) {
+        historyByKey.current[historyKey] = history;
+      } else {
+        // Append any local entries that go beyond persisted length
+        historyByKey.current[historyKey] = existing.length > history.length ? existing : history;
+      }
     });
     return () => { cancelled = true; };
   }, [historyKey]);
@@ -4798,8 +4819,11 @@ function PromptInputBar({
     const text = value;
     if (!text || !sessionId) return;
     recordHistory(text);
-    if (isAgentSession) getBridge().terminal?.recordPrompt?.({ terminalSessionId: sessionId, text });
-    if (historyKey) getBridge().terminal?.recordPromptHistoryEntry?.({ key: historyKey, text });
+    if (isAgentSession) {
+      getBridge().terminal?.recordPrompt?.({ terminalSessionId: sessionId, text });
+    } else if (historyKey) {
+      getBridge().terminal?.recordPromptHistoryEntry?.({ key: historyKey, text });
+    }
     send(text);
     setTimeout(() => send("\r"), 30);
     setValue("");

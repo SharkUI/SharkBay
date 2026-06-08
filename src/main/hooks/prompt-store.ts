@@ -93,6 +93,15 @@ export class SessionPromptStore {
     this.writeTimer.unref?.();
   }
 
+  /** Flush immediately. Call on app quit to avoid data loss. */
+  flushSync(): void {
+    if (this.writeTimer) {
+      clearTimeout(this.writeTimer);
+      this.writeTimer = null;
+    }
+    this.flush();
+  }
+
   private flush(): void {
     try {
       const obj: Record<string, StoredSession> = {};

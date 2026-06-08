@@ -135,7 +135,7 @@ const pendingHookResolutions = new Map<string, number>();
 // Persistent store of the latest prompt per agent (hook) session id.
 let promptStore: SessionPromptStore | null = null;
 // Prompts recorded by terminal id before the hook session mapping resolved.
-const pendingPromptsByTerminal = new Map<string, string>();
+const pendingPromptsByTerminal = new Map<string, string[]>();
 
 function resolveTerminalForPid(agentPid: number): Promise<string | null> {
   return new Promise((resolve) => {
@@ -169,6 +169,10 @@ export function closeAllTerminalSessions(): void {
   syncInstances.clear();
   for (const cleanup of taskWatcherCleanups.values()) cleanup();
   taskWatcherCleanups.clear();
+}
+
+export function flushPromptStore(): void {
+  promptStore?.flushSync();
 }
 
 async function resolveProtocolRepoPath(runtime: IpcRuntime, repoPath: string): Promise<string> {
@@ -730,7 +734,7 @@ export async function registerIpcHandlers(
     if (agentSessionId) {
       promptStore.record(agentSessionId, input.text);
     } else {
-      pendingPromptsByTerminal.set(input.terminalSessionId, input.text);
+      pendingPromptsByTerminal.set(input.terminalSessionId, [...(pendingPromptsByTerminal.get(input.terminalSessionId) ?? []), input.text]);
     }
   });
 
@@ -754,8 +758,8 @@ function findAgentSessionForTerminal(terminalSessionId: string): string | null {
 
 function flushPendingPrompt(agentSessionId: string, terminalId: string): void {
   const pending = pendingPromptsByTerminal.get(terminalId);
-  if (pending && promptStore) {
-    promptStore.record(agentSessionId, pending);
+  if (pending?.length && promptStore) {
+    for (const text of pending) promptStore.record(agentSessionId, text);
     pendingPromptsByTerminal.delete(terminalId);
   }
 }

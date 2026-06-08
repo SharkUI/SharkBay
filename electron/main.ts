@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, shell } from "electron";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { closeAllTerminalSessions, registerIpcHandlers } from "./ipc.js";
+import { closeAllTerminalSessions, flushPromptStore, registerIpcHandlers } from "./ipc.js";
 import { createApplicationMenuTemplate } from "../src/main/application-menu.js";
 import { getRuntimeConfigPath, loadAppConfig } from "../src/main/config.js";
 import { appChannels } from "../src/shared/app-events.js";
@@ -274,5 +274,6 @@ app.on("before-quit", () => {
     islandWindow.destroy();
     islandWindow = null;
   }
+  flushPromptStore();
   closeAllTerminalSessions();
 });
