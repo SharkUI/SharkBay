@@ -79,6 +79,7 @@ type ProjectActivityState = WorkflowProjectActivityState;
 type TerminalShellTab = {
   kind: "terminal";
   session: TerminalSession;
+  hookSessionId?: string;
   terminal: XTerm;
   fitAddon: FitAddon;
   hoveredLink: { current: string | null };
@@ -122,7 +123,7 @@ type TerminalPaneHandle = {
   openFileInEditor: (projectUri: string, projectName: string, relativePath: string) => Promise<void>;
   openGitDiff: (projectUri: string, projectName: string, relativePath: string) => Promise<void>;
   openBrowserTab: (projectUri: string, projectName: string, initialUrl: string) => Promise<void>;
-  openAgentSession: (projectUri: string, projectName: string, command: string, title: string, agentId?: string) => Promise<void>;
+  openAgentSession: (projectUri: string, projectName: string, command: string, title: string, agentId?: string, hookSessionId?: string) => Promise<void>;
   focusTerminalSession: (terminalSessionId: string) => string | null;
 };
 
@@ -988,7 +989,7 @@ function DashboardView({
               terminalPaneRef.current?.openAgentSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, options.initialCommand ?? "", options.title ?? "Shell") ?? Promise.resolve()
             }
             onRestoreAgentSession={(restore) =>
-              terminalPaneRef.current?.openAgentSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, restore.command, restore.title, restore.agentId) ?? Promise.resolve()
+              terminalPaneRef.current?.openAgentSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, restore.command, restore.title, restore.agentId, restore.hookSessionId) ?? Promise.resolve()
             }
           />
         ) : (
@@ -1239,8 +1240,8 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     openBrowserTab: async (projectUri, projectName, initialUrl) => {
       await openBrowserTab(projectUri, projectUri, projectName, selectedSpace?.displayPath ?? projectUri, initialUrl);
     },
-    openAgentSession: async (projectUri, projectName, command, title, agentId) => {
-      await openProjectTab(projectUri, projectUri, projectName, selectedSpace?.displayPath ?? projectUri, false, { agentId, initialCommand: command, initialCommandTitle: title });
+    openAgentSession: async (projectUri, projectName, command, title, agentId, hookSessionId) => {
+      await openProjectTab(projectUri, projectUri, projectName, selectedSpace?.displayPath ?? projectUri, false, { agentId, initialCommand: command, initialCommandTitle: title, hookSessionId });
     },
     focusTerminalSession: (terminalSessionId) => {
       const match = findTerminalTabWithSpace(spacesRef.current, terminalSessionId);
@@ -1339,11 +1340,12 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     }
   }
 
-  async function openProjectTab(projectId: string, cwdUri: string, projectName: string, displayPath: string, quiet = false, options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "initialCommandTitle" | "service"> = {}) {
+  async function openProjectTab(projectId: string, cwdUri: string, projectName: string, displayPath: string, quiet = false, options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "initialCommandTitle" | "service"> & { hookSessionId?: string } = {}) {
     try {
-      const session = await createTerminal(cwdUri, projectName, options);
+      const { hookSessionId, ...createOptions } = options;
+      const session = await createTerminal(cwdUri, projectName, createOptions);
       const terminal = createXTerm(session.id, appearanceTheme, setToast, (url) => void openBrowserTab(projectId, cwdUri, projectName, displayPath, url), { colorScheme: terminalColorScheme, fontFamily: terminalFontFamily, fontSize: terminalFontSize, lineHeight: terminalLineHeight });
-      const tab: TerminalTab = { kind: "terminal", session, terminal: terminal.instance, fitAddon: terminal.fitAddon, hoveredLink: terminal.hoveredLink, disposables: terminal.disposables };
+      const tab: TerminalTab = { kind: "terminal", session, hookSessionId, terminal: terminal.instance, fitAddon: terminal.fitAddon, hoveredLink: terminal.hoveredLink, disposables: terminal.disposables };
       onActiveTabKindChange("terminal");
       setSpaces((current) => {
         const existing = current[projectId] ?? { projectId, projectName, uri: cwdUri, displayPath, tabs: [], activeId: null, serviceUrl: null };
@@ -1563,9 +1565,10 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     (tab): tab is TerminalShellTab => tab.kind === "terminal" && tab.session.id === selectedSpace.activeId && tab.session.status === "running",
   ) ?? null;
   const promptFocusRequest = selectedSpace && tabFocusRequest?.projectId === selectedSpace.projectId ? tabFocusRequest.nonce : 0;
-  const agentHookSessionId = selectedActiveTerminal?.session.id
-    ? Object.entries(hookStateBySessionId).find(([, v]) => v.terminalSessionId === selectedActiveTerminal.session.id)?.[0] ?? null
-    : null;
+  const agentHookSessionId = selectedActiveTerminal?.hookSessionId
+    ?? (selectedActiveTerminal?.session.id
+      ? Object.entries(hookStateBySessionId).find(([, v]) => v.terminalSessionId === selectedActiveTerminal.session.id)?.[0] ?? null
+      : null);
 
   return (
     <div className="terminal-layout">

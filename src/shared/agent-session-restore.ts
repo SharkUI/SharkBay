@@ -4,6 +4,7 @@ export type AgentSessionRestoreAgentId = "codex" | "claude" | "gemini" | "kiro" 
 
 export type AgentSessionRestoreCommand = {
   agentId: AgentSessionRestoreAgentId;
+  hookSessionId: string;
   label: string;
   shortLabel: string;
   command: string;
@@ -52,6 +53,7 @@ export function buildAgentSessionRestoreCommand(input: {
   const executable = detectedAgent?.executablePath || detectedAgent?.command || definition.defaultCommand;
   return {
     agentId: definition.id,
+    hookSessionId: sessionId,
     label: detectedAgent?.label || definition.label,
     shortLabel: detectedAgent?.shortLabel || definition.shortLabel,
     command: restoreCommand(definition.id, executable, sessionId, input.launchFlags),

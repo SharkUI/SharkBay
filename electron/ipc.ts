@@ -740,7 +740,13 @@ export async function registerIpcHandlers(
 
   ipcMain.handle(channels.loadSessionPromptHistory, (_event, input: { sessionId: string }) => {
     if (!promptStore || !input?.sessionId) return [];
-    return promptStore.getHistory(input.sessionId);
+    // Try direct lookup first
+    const direct = promptStore.getHistory(input.sessionId);
+    if (direct.length) return direct;
+    // If the key is a terminal session id, resolve to hook session id
+    const hookId = findAgentSessionForTerminal(input.sessionId);
+    if (hookId) return promptStore.getHistory(hookId);
+    return [];
   });
 
   ipcMain.on(channels.recordPromptHistoryEntry, (_event, input: { key: string; text: string }) => {
