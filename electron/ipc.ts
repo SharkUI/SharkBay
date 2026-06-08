@@ -422,6 +422,16 @@ export async function registerIpcHandlers(
 
     if (cached) {
       sendStatus(cached);
+      // Re-resolve if PID changed (session was re-restored in a new terminal)
+      if (event.pid != null) {
+        resolveTerminalForPid(event.pid).then((terminalId) => {
+          if (terminalId && terminalId !== cached) {
+            hookSessionToTerminal.set(event.sessionId, terminalId);
+            flushPendingPrompt(event.sessionId, terminalId);
+            sendStatus(terminalId);
+          }
+        });
+      }
     } else if (event.pid != null) {
       resolveTerminalForPid(event.pid).then((terminalId) => {
         if (terminalId) {
