@@ -75,6 +75,15 @@ html, body { background: transparent; overflow: hidden; height: 100%; -webkit-ap
 .pill-tile.awaiting { background: #888; }
 @keyframes pulse { from { opacity: 0.35; } to { opacity: 1; } }
 
+/* Animated shark mark in the notch-left area (2:1 rectangle) */
+.shark-mark {
+  width: 36px; height: 18px;
+  display: block;
+  overflow: visible;
+}
+
+/* Sea waves + fin are JS-driven (requestAnimationFrame) */
+
 /* Opened panel content */
 #panel {
   opacity: 0;
@@ -139,7 +148,28 @@ html, body { background: transparent; overflow: hidden; height: 100%; -webkit-ap
 <body>
 <div id="island" class="closed">
   <div id="pill">
-    <div class="pill-left" id="pillLeft"></div>
+    <div class="pill-left" id="pillLeft">
+      <svg id="sharkMark" class="shark-mark" viewBox="5 0 64 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <!-- waves fade out over ~one wavelength at each end, blending into background -->
+          <linearGradient id="waveFade" gradientUnits="userSpaceOnUse" x1="3" y1="0" x2="61" y2="0">
+            <stop offset="0" stop-color="#9ea0a4" stop-opacity="0" />
+            <stop offset="0.2" stop-color="#9ea0a4" stop-opacity="1" />
+            <stop offset="0.8" stop-color="#9ea0a4" stop-opacity="1" />
+            <stop offset="1" stop-color="#9ea0a4" stop-opacity="0" />
+          </linearGradient>
+        </defs>
+        <!-- dorsal fin: purchased vector outline, single open stroke (no base line),
+             scaled to ~62% and lifted to float just above the upper wave -->
+        <g transform="translate(-4 -20.3) translate(32.5 39) scale(0.62) translate(-32.5 -39)">
+          <path id="finGroup" class="shark-fin" fill="none" stroke="#9ea0a4" stroke-width="3.87" stroke-linecap="round" stroke-linejoin="round"
+            d="M45.613 39.025 C45.422 34.084 43.35 14.474 22.627 13.288 C22.301 13.27 21.985 13.413 21.783 13.67 C21.581 13.928 21.518 14.268 21.614 14.581 C21.656 14.717 25.686 28.195 19.438 39.095" />
+        </g>
+        <!-- two sea-wave lines; d set by JS (traveling sine, fixed x endpoints) -->
+        <path id="wave1" class="shark-wave" stroke="url(#waveFade)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+        <path id="wave2" class="shark-wave" stroke="url(#waveFade)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+    </div>
     <div class="pill-right">
       <div class="pill-tiles" id="pillTiles"></div>
     </div>
@@ -156,6 +186,52 @@ let tabs = []; // Array<{ sessionId, title, projectName, agentId, state }>
 const islandEl = document.getElementById("island");
 const pillTiles = document.getElementById("pillTiles");
 const sessionList = document.getElementById("sessionList");
+
+// Traveling sine waves (fixed x endpoints) + a fin that swims and flips on turnaround
+(function animate() {
+  const wave1 = document.getElementById("wave1");
+  const wave2 = document.getElementById("wave2");
+  const finGroup = document.getElementById("finGroup");
+  const X0 = 3, X1 = 61;          // fixed left/right x endpoints
+  const STEP = 1;                 // sample spacing in viewBox units
+  const AMP = 1.3;                // wave amplitude (smaller = gentler waves)
+  const K = 0.55;                 // spatial frequency (higher = denser waves)
+  const W = 1.5;                  // angular frequency (radians per second)
+  const WAVE_Y1 = 21;             // upper wave baseline
+  const WAVE_Y2 = 29;             // lower wave baseline (spaced apart)
+
+  const FIN_CX = 32;              // fin midline x in its own coords (flip pivot)
+  const SWIM_AMP = 11;            // horizontal swim distance from center (longer travel)
+  const SWIM_W = 0.4;             // swim angular frequency (slower = fewer turnarounds)
+
+  function buildPath(baseY, phase, t) {
+    let d = "";
+    for (let x = X0; x <= X1; x += STEP) {
+      const y = baseY + AMP * Math.sin(K * x - W * t + phase);
+      d += (x === X0 ? "M" : "L") + x.toFixed(2) + " " + y.toFixed(2) + " ";
+    }
+    return d.trim();
+  }
+
+  function frame(now) {
+    const t = now / 1000;
+    wave1.setAttribute("d", buildPath(WAVE_Y1, 0, t));
+    wave2.setAttribute("d", buildPath(WAVE_Y2, Math.PI / 2, t));
+
+    // Position swims as a sine; velocity sign decides facing direction.
+    const phase = SWIM_W * t;
+    const tx = SWIM_AMP * Math.sin(phase);
+    const dir = Math.cos(phase) >= 0 ? 1 : -1; // moving right vs left
+    // translate to swim, then mirror about the fin apex when heading left
+    finGroup.setAttribute(
+      "transform",
+      `translate(${tx.toFixed(2)} 0) translate(${FIN_CX} 0) scale(${dir} 1) translate(${-FIN_CX} 0)`
+    );
+
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
 
 function isOpen() { return islandEl.classList.contains("opened"); }
 
