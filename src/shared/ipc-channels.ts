@@ -61,5 +61,6 @@ export const ipcChannels = {
   islandFocusSession: "island:focusSession",
   islandTabsSync: "island:tabsSync",
   recordSessionPrompt: "session:recordPrompt",
+  recordPromptHistoryEntry: "session:recordPromptEntry",
   loadSessionPromptHistory: "session:loadPromptHistory",
 } as const;

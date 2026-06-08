@@ -66,6 +66,7 @@ describe("IPC channels", () => {
       islandFocusSession: "island:focusSession",
       islandTabsSync: "island:tabsSync",
       recordSessionPrompt: "session:recordPrompt",
+      recordPromptHistoryEntry: "session:recordPromptEntry",
       loadSessionPromptHistory: "session:loadPromptHistory",
     });
     expect(Object.values(ipcChannels).some((channel) => channel.startsWith("harness:"))).toBe(false);

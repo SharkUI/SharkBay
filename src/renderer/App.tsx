@@ -4730,23 +4730,23 @@ function PromptInputBar({
 }) {
   const [value, setValue] = useState("");
   const [isComposing, setIsComposing] = useState(false);
-  const historyKey = sessionId;
+  const historyKey = isAgentSession ? sessionId : (projectId ? `${projectId}:shell` : null);
   const [historyCursor, setHistoryCursor] = useState<{ historyKey: string; index: number; draft: string } | null>(null);
   const historyByKey = useRef<Record<string, string[]>>({});
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     setHistoryCursor(null);
-    if (!isAgentSession || !sessionId) return;
+    if (!historyKey) return;
     const load = getBridge().terminal?.loadPromptHistory;
     if (!load) return;
     let cancelled = false;
-    load({ sessionId }).then((history) => {
+    load({ sessionId: historyKey }).then((history) => {
       if (cancelled || !history?.length) return;
-      historyByKey.current[sessionId] = history;
+      historyByKey.current[historyKey] = history;
     });
     return () => { cancelled = true; };
-  }, [sessionId, isAgentSession]);
+  }, [historyKey]);
 
   useEffect(() => {
     if (disabled || !sessionId) return;
@@ -4798,7 +4798,11 @@ function PromptInputBar({
     const text = value;
     if (!text || !sessionId) return;
     recordHistory(text);
-    if (isAgentSession) getBridge().terminal?.recordPrompt?.({ terminalSessionId: sessionId, text });
+    if (isAgentSession) {
+      getBridge().terminal?.recordPrompt?.({ terminalSessionId: sessionId, text });
+    } else if (historyKey) {
+      getBridge().terminal?.recordPromptHistoryEntry?.({ key: historyKey, text });
+    }
     send(text);
     setTimeout(() => send("\r"), 30);
     setValue("");

@@ -738,6 +738,11 @@ export async function registerIpcHandlers(
     if (!promptStore || !input?.sessionId) return [];
     return promptStore.getHistory(input.sessionId);
   });
+
+  ipcMain.on(channels.recordPromptHistoryEntry, (_event, input: { key: string; text: string }) => {
+    if (!promptStore || !input?.key || !input?.text) return;
+    promptStore.record(input.key, input.text);
+  });
 }
 
 function findAgentSessionForTerminal(terminalSessionId: string): string | null {

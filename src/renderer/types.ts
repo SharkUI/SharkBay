@@ -524,6 +524,7 @@ export type SharkBayBridge = {
     input?: (input: TerminalInput) => Promise<TerminalSession>;
     inputFire?: (input: TerminalInput) => void;
     recordPrompt?: (input: { terminalSessionId: string; text: string }) => void;
+    recordPromptHistoryEntry?: (input: { key: string; text: string }) => void;
     loadPromptHistory?: (input: { sessionId: string }) => Promise<string[]>;
     resize?: (input: TerminalResizeInput) => Promise<TerminalSession>;
     close?: (input: TerminalCloseInput) => Promise<TerminalSession>;
