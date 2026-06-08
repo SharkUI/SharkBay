@@ -118,7 +118,7 @@ html, body { background: transparent; overflow: hidden; height: 100%; -webkit-ap
   /* several short highlights; blurred so each is a soft gradient blob, not a hard line */
   stroke-dasharray: 5 19;
   filter: blur(2.5px);
-  animation: glowFlow 2.2s linear infinite;
+  animation: glowFlow var(--glow-flow-dur, 2.2s) linear infinite;
 }
 body.glow-on #glowRing { opacity: 1; }
 @keyframes glowFlow {
@@ -270,7 +270,11 @@ function updateMarkState() {
   // Flowing glow ring only for idle (yellow) and attention (red), and only
   // while collapsed.
   const glow = (key === "idle" || key === "attention") && !isOpen();
-  if (glow) glowRing.style.setProperty("--glow-color", color);
+  if (glow) {
+    glowRing.style.setProperty("--glow-color", color);
+    // red (attention) highlight flows 100% faster than yellow (idle)
+    glowRing.style.setProperty("--glow-flow-dur", key === "attention" ? "1.1s" : "2.2s");
+  }
   document.body.classList.toggle("glow-on", glow);
 }
 
