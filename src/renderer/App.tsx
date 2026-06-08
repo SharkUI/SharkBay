@@ -404,7 +404,8 @@ function priorityOf(state: ProjectActivityState): number {
 
 // Single source of truth for an agent tab's light state. The project pill is
 // aggregated from these per-tab states so the pill color always matches the tab
-// lights. The active tab never contributes idle or attention (focus clears them).
+// lights. The active tab suppresses idle/attention only when the window has
+// focus — if the app is in the background the user hasn't seen the state yet.
 function agentTabLightState(
   tab: TerminalTab,
   isActiveTab: boolean,
@@ -413,7 +414,7 @@ function agentTabLightState(
   if (tab.kind !== "terminal" || !tab.session.agentId) return null;
   const state = hookStateByTerminalId[tab.session.id];
   if (!state) return null;
-  if (isActiveTab && (state === "idle" || state === "attention")) return null;
+  if (isActiveTab && document.hasFocus() && (state === "idle" || state === "attention")) return null;
   return state;
 }
 
@@ -1044,34 +1045,48 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
 
   // Auto-clear idle/attention on the active (focused) tab so neither the tab
   // light nor the project pill shows those states for the focused tab.
+  // Only clear when the window itself has focus — if SharkBay is in the
+  // background the user isn't actually looking at the tab.
   useEffect(() => {
-    if (!activeProjectId) return;
-    const space = spaces[activeProjectId];
-    const activeTabId = space?.activeId;
-    if (!activeTabId) return;
-    const state = hookStateByTerminalId[activeTabId];
-    if (state !== "idle" && state !== "attention") return;
-    const agentSid = Object.entries(agentSessionToTerminalRef.current).find(([, tid]) => tid === activeTabId)?.[0];
-    if (agentSid) onAgentSessionClear(agentSid);
+    const tryClear = () => {
+      if (!document.hasFocus()) return;
+      if (!activeProjectId) return;
+      const space = spaces[activeProjectId];
+      const activeTabId = space?.activeId;
+      if (!activeTabId) return;
+      const state = hookStateByTerminalId[activeTabId];
+      if (state !== "idle" && state !== "attention") return;
+      const agentSid = Object.entries(agentSessionToTerminalRef.current).find(([, tid]) => tid === activeTabId)?.[0];
+      if (agentSid) onAgentSessionClear(agentSid);
+    };
+    tryClear();
+    window.addEventListener("focus", tryClear);
+    return () => window.removeEventListener("focus", tryClear);
   }, [hookStateByTerminalId, activeProjectId, spaces, onAgentSessionClear]);
 
   // Project pill = highest-priority light state across the project's own SharkBay
   // agent tabs (attention > idle > working > null). Tab lights are the single
   // source of truth; sessions not running inside a SharkBay tab never count.
   useEffect(() => {
-    const byProject: Record<string, ProjectActivityState> = {};
-    for (const space of Object.values(spaces)) {
-      for (const tab of space.tabs) {
-        const isActiveTab = tabIdForTab(tab) === space.activeId;
-        const state = agentTabLightState(tab, isActiveTab, hookStateByTerminalId);
-        if (!state) continue;
-        const current = byProject[space.projectId];
-        if (!current || priorityOf(state) > priorityOf(current)) {
-          byProject[space.projectId] = state;
+    const compute = () => {
+      const byProject: Record<string, ProjectActivityState> = {};
+      for (const space of Object.values(spaces)) {
+        for (const tab of space.tabs) {
+          const isActiveTab = tabIdForTab(tab) === space.activeId;
+          const state = agentTabLightState(tab, isActiveTab, hookStateByTerminalId);
+          if (!state) continue;
+          const current = byProject[space.projectId];
+          if (!current || priorityOf(state) > priorityOf(current)) {
+            byProject[space.projectId] = state;
+          }
         }
       }
-    }
-    onProjectActivityChange(byProject);
+      onProjectActivityChange(byProject);
+    };
+    compute();
+    window.addEventListener("focus", compute);
+    window.addEventListener("blur", compute);
+    return () => { window.removeEventListener("focus", compute); window.removeEventListener("blur", compute); };
   }, [spaces, hookStateByTerminalId, onProjectActivityChange]);
 
   const selectedSpace = candidate?.id ? spaces[candidate.id] ?? null : null;
