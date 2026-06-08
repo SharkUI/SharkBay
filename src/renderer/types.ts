@@ -342,9 +342,10 @@ export type AgentProjectStatusEvent = {
   sessionId: string | null;
   text: string;
   timestamp: string;
-  hookState?: "working" | "idle" | "attention";
+  hookState?: "working" | "stopped" | "approval";
   pid?: number;
   terminalSessionId?: string;
+  lastPrompt?: string;
 };
 
 export type HookSessionViewModel = {
@@ -493,6 +494,7 @@ export type SharkBayBridge = {
   app?: {
     onOpenSettings?: (callback: () => void) => () => void;
     onNewTerminalTab?: (callback: () => void) => () => void;
+    onFocusTerminalSession?: (callback: (id: string) => void) => () => void;
   };
   config?: {
     listRoots?: () => Promise<AppConfig | RootRecord[] | string[]>;
@@ -521,6 +523,9 @@ export type SharkBayBridge = {
     create?: (input: TerminalCreateInput) => Promise<TerminalSession>;
     input?: (input: TerminalInput) => Promise<TerminalSession>;
     inputFire?: (input: TerminalInput) => void;
+    recordPrompt?: (input: { terminalSessionId: string; text: string }) => void;
+    recordPromptHistoryEntry?: (input: { key: string; text: string }) => void;
+    loadPromptHistory?: (input: { sessionId: string }) => Promise<string[]>;
     resize?: (input: TerminalResizeInput) => Promise<TerminalSession>;
     close?: (input: TerminalCloseInput) => Promise<TerminalSession>;
     onData?: (callback: (event: TerminalDataEvent) => void) => () => void;
@@ -580,6 +585,7 @@ export type SharkBayBridge = {
   dock?: {
     updateBadge?: (count: number) => void;
     contentReady?: () => void;
+    syncIslandTabs?: (tabs: Array<{ sessionId: string; title: string; projectName: string; agentId?: string; state: string; lastPrompt?: string }>) => void;
   };
   shell?: {
     openExternal?: (input: { url: string }) => Promise<void>;

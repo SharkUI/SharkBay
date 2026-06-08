@@ -87,6 +87,15 @@ function createAppEventSubscription(channel: string) {
 const onOpenSettings = createAppEventSubscription(appChannels.openSettings);
 const onNewTerminalTab = createAppEventSubscription(appChannels.newTerminalTab);
 
+const focusTerminalSessionListeners = new Set<(id: string) => void>();
+ipcRenderer.on(appChannels.focusTerminalSession, (_ev, id: string) => {
+  focusTerminalSessionListeners.forEach((cb) => cb(id));
+});
+const onFocusTerminalSession = (callback: (id: string) => void) => {
+  focusTerminalSessionListeners.add(callback);
+  return () => focusTerminalSessionListeners.delete(callback);
+};
+
 function invoke<Result>(channel: string, payload?: unknown): Promise<Result> {
   return ipcRenderer.invoke(channel, payload) as Promise<Result>;
 }
@@ -95,6 +104,7 @@ const sharkBayApi = {
   app: {
     onOpenSettings,
     onNewTerminalTab,
+    onFocusTerminalSession,
   },
   config: {
     listRoots: () => invoke<AppConfig>(channels.listRoots),
@@ -122,6 +132,9 @@ const sharkBayApi = {
     create: (input: TerminalCreateInput) => invoke<TerminalSession>(channels.createTerminal, input),
     input: (input: TerminalInput) => invoke<TerminalSession>(channels.terminalInput, input),
     inputFire: (input: TerminalInput) => { ipcRenderer.send(channels.terminalInput, input); },
+    recordPrompt: (input: { terminalSessionId: string; text: string }) => { ipcRenderer.send(channels.recordSessionPrompt, input); },
+    recordPromptHistoryEntry: (input: { key: string; text: string }) => { ipcRenderer.send(channels.recordPromptHistoryEntry, input); },
+    loadPromptHistory: (input: { sessionId: string }) => invoke<string[]>(channels.loadSessionPromptHistory, input),
     resize: (input: TerminalResizeInput) => invoke<TerminalSession>(channels.resizeTerminal, input),
     close: (input: TerminalCloseInput) => invoke<TerminalSession>(channels.closeTerminal, input),
     onData: (callback: (event: TerminalDataEvent) => void) => {
@@ -209,6 +222,7 @@ const sharkBayApi = {
   dock: {
     updateBadge: (count: number) => { ipcRenderer.send(channels.dockBadgeUpdate, count); },
     contentReady: () => { ipcRenderer.send(channels.contentReady); },
+    syncIslandTabs: (tabs: Array<{ sessionId: string; title: string; projectName: string; agentId?: string; state: string; lastPrompt?: string }>) => { ipcRenderer.send(channels.islandTabsSync, tabs); },
   },
   shell: {
     openExternal: (input: { url: string }) => invoke<void>(channels.openExternal, input),

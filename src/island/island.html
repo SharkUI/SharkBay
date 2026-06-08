@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>SharkBay Island</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { background: transparent; overflow: hidden; height: 100%; -webkit-app-region: no-drag; user-select: none; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
+
+:root {
+  --ink: #0d0d0f;
+  --paper: #f1ead9;
+  --notch-height: 32px;
+  --notch-width: 209px;
+  --pill-radius: 12px;
+  --panel-width: 520px;
+  --panel-radius: 20px;
+  --closed-width: 295px;
+}
+
+#island {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 1;
+  transform: translateX(-50%);
+  transition: width 0.45s cubic-bezier(0.4, 0, 0.2, 1), height 0.45s cubic-bezier(0.4, 0, 0.2, 1), border-radius 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--ink);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+#island.closed {
+  width: var(--closed-width);
+  height: var(--notch-height);
+  border-radius: 0 0 var(--pill-radius) var(--pill-radius);
+}
+
+#island.opened {
+  width: var(--panel-width);
+  border-radius: 0 0 var(--panel-radius) var(--panel-radius);
+  cursor: default;
+}
+
+/* Bottom corners are convex (border-radius handles this).
+   Top corners merge flush with the screen edge - no extra decoration needed. */
+
+/* Closed pill content - items on left/right of the notch center */
+#pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--notch-height);
+  padding: 0 14px;
+  transition: opacity 0.2s;
+  overflow: hidden;
+}
+#island.opened #pill { opacity: 0; pointer-events: none; position: absolute; top: 0; left: 0; right: 0; }
+
+.pill-left, .pill-right {
+  display: flex; align-items: center; gap: 6px;
+}
+
+.pill-tiles {
+  display: flex; gap: 3px; align-items: center;
+}
+.pill-tile {
+  width: 6px; height: 6px; border-radius: 50%;
+}
+.pill-tile.working { background: #28c840; }
+.pill-tile.stopped { background: #febc2e; }
+.pill-tile.approval {
+  background: #ff5f57;
+  animation: pulse 0.7s ease-in-out infinite alternate;
+}
+.pill-tile.unknown { background: #888; }
+@keyframes pulse { from { opacity: 0.35; } to { opacity: 1; } }
+
+/* Animated shark mark in the notch-left area (2:1 rectangle) */
+.shark-mark {
+  width: 36px; height: 18px;
+  display: none; /* shown by updateMarkState when sessions exist */
+  overflow: visible;
+  --mark-color: #9ea0a4; /* set per session state in JS */
+}
+.shark-fin { stroke: var(--mark-color); }
+.wave-stop { stop-color: var(--mark-color); }
+
+/* Glow ring around the collapsed island (yellow/idle, red/attention).
+   Sibling behind #island, same footprint. Two stacked SVG paths trace the
+   left/bottom/right edges (no top):
+     .glow-base = continuous solid color (the full ring, tight to the edge)
+     .glow-flow = a brighter highlight segment that travels along the path
+                  (uniform along the perimeter via stroke-dash). */
+#glowRing {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: var(--closed-width);
+  height: calc(var(--notch-height) + 10px);
+  transform: translateX(-50%);
+  opacity: 0; /* shown only for idle/attention via body.glow-on */
+  transition: opacity 0.3s;
+  pointer-events: none;
+  z-index: 0;
+  filter: blur(1.5px);
+}
+#glowRing svg { width: 100%; height: 100%; overflow: visible; display: block; }
+#glowRing path { fill: none; stroke-linecap: round; }
+#glowRing .glow-base {
+  stroke: var(--glow-color);
+  stroke-width: 7;
+}
+#glowRing .glow-flow {
+  stroke: #fff;
+  stroke-width: 7;
+  opacity: 0.55;
+  /* several short highlights; blurred so each is a soft gradient blob, not a hard line */
+  stroke-dasharray: 5 19;
+  filter: blur(2.5px);
+  animation: glowFlow var(--glow-flow-dur, 2.2s) linear infinite;
+}
+body.glow-on #glowRing { opacity: 1; }
+@keyframes glowFlow {
+  to { stroke-dashoffset: -24; } /* one dash+gap period; negative = counter-clockwise */
+}
+
+/* Sea waves + fin are JS-driven (requestAnimationFrame) */
+
+/* Opened panel content */
+#panel {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute; top: var(--notch-height); left: 0; right: 0; bottom: 0;
+  display: flex; flex-direction: column;
+  padding: 14px 16px 16px;
+  transition: opacity 0.25s 0.15s;
+}
+#island.opened #panel { opacity: 1; pointer-events: auto; }
+
+.session-list {
+  flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; min-height: 0;
+}
+.session-list::-webkit-scrollbar { width: 4px; }
+.session-list::-webkit-scrollbar-thumb { background: rgba(241,234,217,0.15); border-radius: 2px; }
+
+.session-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 10px;
+  transition: background 0.15s;
+  cursor: pointer;
+}
+.session-row:hover { background: rgba(241, 234, 217, 0.06); }
+
+.session-dot {
+  width: 7px; height: 7px; border-radius: 999px; flex-shrink: 0;
+  margin: 3px 4px;
+}
+.session-dot.working { background: #28c840; box-shadow: 0 0 0 3px rgba(40, 200, 64, 0.16); }
+.session-dot.stopped { background: #febc2e; box-shadow: 0 0 0 3px rgba(254, 188, 46, 0.16); }
+.session-dot.approval { background: #ff5f57; box-shadow: 0 0 0 3px rgba(255, 95, 87, 0.16); }
+.session-dot.unknown { background: #888; }
+
+.session-info { flex: 1; min-width: 0; }
+.session-agent {
+  font-size: 13px; font-weight: 600; color: var(--paper);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.session-prompt {
+  font-weight: 400; opacity: 0.5;
+}
+.session-status {
+  font-weight: 400; font-size: 11px;
+  margin-left: 8px;
+}
+.session-status.working { color: #28c840; }
+.session-status.stopped { color: #febc2e; }
+.session-status.approval { color: #ff5f57; }
+.session-action {
+  font-size: 11px; color: var(--paper); opacity: 0.5;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.session-project {
+  font-size: 10px; color: var(--paper); opacity: 0.3;
+  flex-shrink: 0;
+}
+</style>
+</head>
+<body>
+<div id="glowRing" aria-hidden="true">
+  <svg viewBox="0 0 295 42" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- hug the island edge: left down, rounded bottom, right up; no top edge -->
+    <path class="glow-base" d="M1.5 0 L1.5 20 Q1.5 32 13.5 32 L281.5 32 Q293.5 32 293.5 20 L293.5 0" />
+    <path class="glow-flow" d="M1.5 0 L1.5 20 Q1.5 32 13.5 32 L281.5 32 Q293.5 32 293.5 20 L293.5 0" />
+  </svg>
+</div>
+<div id="island" class="closed">
+  <div id="pill">
+    <div class="pill-left" id="pillLeft">
+      <svg id="sharkMark" class="shark-mark" viewBox="5 0 64 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <!-- waves fade out over ~one wavelength at each end, blending into background -->
+          <linearGradient id="waveFade" gradientUnits="userSpaceOnUse" x1="3" y1="0" x2="61" y2="0">
+            <stop class="wave-stop" offset="0" stop-opacity="0" />
+            <stop class="wave-stop" offset="0.2" stop-opacity="1" />
+            <stop class="wave-stop" offset="0.8" stop-opacity="1" />
+            <stop class="wave-stop" offset="1" stop-opacity="0" />
+          </linearGradient>
+        </defs>
+        <!-- dorsal fin: purchased vector outline, single open stroke (no base line),
+             scaled to ~62% and lifted to float just above the upper wave -->
+        <g transform="translate(-4 -20.3) translate(32.5 39) scale(0.62) translate(-32.5 -39)">
+          <path id="finGroup" class="shark-fin" fill="none" stroke-width="3.87" stroke-linecap="round" stroke-linejoin="round"
+            d="M45.613 39.025 C45.422 34.084 43.35 14.474 22.627 13.288 C22.301 13.27 21.985 13.413 21.783 13.67 C21.581 13.928 21.518 14.268 21.614 14.581 C21.656 14.717 25.686 28.195 19.438 39.095" />
+        </g>
+        <!-- two sea-wave lines; d set by JS (traveling sine, fixed x endpoints) -->
+        <path id="wave1" class="shark-wave" stroke="url(#waveFade)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+        <path id="wave2" class="shark-wave" stroke="url(#waveFade)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+    </div>
+    <div class="pill-right">
+      <div class="pill-tiles" id="pillTiles"></div>
+    </div>
+  </div>
+  <div id="panel">
+    <div class="session-list" id="sessionList"></div>
+  </div>
+</div>
+
+<script>
+// Tabs from main window are the source of truth
+let tabs = []; // Array<{ sessionId, title, projectName, agentId, state }>
+
+const islandEl = document.getElementById("island");
+const pillTiles = document.getElementById("pillTiles");
+const sessionList = document.getElementById("sessionList");
+
+// Shark mark visibility + wave/fin color + speed driven by aggregate session state.
+const sharkMark = document.getElementById("sharkMark");
+const finGroup = document.getElementById("finGroup");
+const glowRing = document.getElementById("glowRing");
+const WAVE_COLORS = {
+  working: "#28c840",
+  stopped: "#febc2e",
+  approval: "#ff5f57",
+  neutral: "#9ea0a4",
+};
+const SPEED_FACTORS = {
+  neutral: 0.5,   // gray: 50% slower
+  working: 1.0,   // green: baseline
+  stopped: 1.5,   // yellow: 50% faster
+  approval: 2.0,  // red: 100% faster
+};
+let finSpeed = 1.0;
+function updateMarkState() {
+  // Nothing to show when there are no sessions.
+  if (!tabs.length) { sharkMark.style.display = "none"; document.body.classList.remove("glow-on"); return; }
+  sharkMark.style.display = "block";
+  // Priority: approval > stopped > working > otherwise neutral gray.
+  let key = "neutral";
+  if (tabs.some(t => t.state === "approval")) key = "approval";
+  else if (tabs.some(t => t.state === "stopped")) key = "stopped";
+  else if (tabs.some(t => t.state === "working")) key = "working";
+  const color = WAVE_COLORS[key];
+  sharkMark.style.setProperty("--mark-color", color);
+  finSpeed = SPEED_FACTORS[key];
+
+  // Flowing glow ring only for stopped (yellow) and approval (red), and only
+  // while collapsed.
+  const glow = (key === "stopped" || key === "approval") && !isOpen();
+  if (glow) {
+    glowRing.style.setProperty("--glow-color", color);
+    // red (approval) highlight flows 100% faster than yellow (stopped)
+    glowRing.style.setProperty("--glow-flow-dur", key === "approval" ? "1.1s" : "2.2s");
+  }
+  document.body.classList.toggle("glow-on", glow);
+}
+
+// Traveling sine waves (fixed x endpoints) + a fin that swims and flips on turnaround
+(function animate() {
+  const wave1 = document.getElementById("wave1");
+  const wave2 = document.getElementById("wave2");
+  const X0 = 3, X1 = 61;          // fixed left/right x endpoints
+  const STEP = 1;                 // sample spacing in viewBox units
+  const AMP = 1.3;                // wave amplitude (smaller = gentler waves)
+  const K = 0.55;                 // spatial frequency (higher = denser waves)
+  const W = 1.5;                  // angular frequency (radians per second)
+  const WAVE_Y1 = 21;             // upper wave baseline
+  const WAVE_Y2 = 29;             // lower wave baseline (spaced apart)
+
+  const FIN_CX = 32;              // fin midline x in its own coords (flip pivot)
+  const SWIM_AMP = 11;            // horizontal swim distance from center (longer travel)
+  const SWIM_W = 0.4;             // swim angular frequency (slower = fewer turnarounds)
+
+  function buildPath(baseY, phase, t) {
+    let d = "";
+    for (let x = X0; x <= X1; x += STEP) {
+      const y = baseY + AMP * Math.sin(K * x - W * t + phase);
+      d += (x === X0 ? "M" : "L") + x.toFixed(2) + " " + y.toFixed(2) + " ";
+    }
+    return d.trim();
+  }
+
+  // Waves run at constant speed (real time). The fin accumulates speed-scaled
+  // time so its swim speeds up/slows down with state without phase jumps.
+  let finT = 0;
+  let prev = null;
+  function frame(now) {
+    if (prev === null) prev = now;
+    const dt = (now - prev) / 1000;
+    prev = now;
+    const waveT = now / 1000;          // constant-speed waves
+    finT += dt * finSpeed;             // state-scaled fin swim
+    wave1.setAttribute("d", buildPath(WAVE_Y1, 0, waveT));
+    wave2.setAttribute("d", buildPath(WAVE_Y2, Math.PI / 2, waveT));
+
+    // Position swims as a sine; velocity sign decides facing direction.
+    const phase = SWIM_W * finT;
+    const tx = SWIM_AMP * Math.sin(phase);
+    const dir = Math.cos(phase) >= 0 ? 1 : -1; // moving right vs left
+    // translate to swim, then mirror about the fin apex when heading left
+    finGroup.setAttribute(
+      "transform",
+      `translate(${tx.toFixed(2)} 0) translate(${FIN_CX} 0) scale(${dir} 1) translate(${-FIN_CX} 0)`
+    );
+
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+
+function isOpen() { return islandEl.classList.contains("opened"); }
+
+function renderPillTiles() {
+  // Order tiles left-to-right by ascending priority so approval sits rightmost:
+  // unknown < working < stopped < approval.
+  const TILE_ORDER = { unknown: 0, working: 1, stopped: 2, approval: 3 };
+  const ordered = tabs.slice().sort(
+    (a, b) => (TILE_ORDER[a.state] ?? 0) - (TILE_ORDER[b.state] ?? 0)
+  );
+  pillTiles.innerHTML = ordered.map(t =>
+    `<div class="pill-tile ${t.state}"></div>`
+  ).join("");
+}
+
+function stateLabel(state) {
+  switch (state) {
+    case "approval": return "need approval";
+    case "working": return "working";
+    case "stopped": return "stopped";
+    default: return "";
+  }
+}
+
+function renderSessionList() {
+  sessionList.innerHTML = tabs.map(t => {
+    const label = t.state !== "unknown" ? stateLabel(t.state) : "";
+    return `
+    <div class="session-row" data-tid="${t.sessionId}">
+      <div class="session-dot ${t.state}"></div>
+      <div class="session-info">
+        <div class="session-agent">${t.projectName}${label ? ` <span class="session-status ${t.state}">${label}</span>` : ""}</div>
+        <div class="session-action">${t.lastPrompt || ""}</div>
+      </div>
+      <div class="session-project">${t.title || t.agentId || ""}</div>
+    </div>`;
+  }).join("");
+}
+
+sessionList.addEventListener("click", (e) => {
+  const row = e.target.closest(".session-row");
+  if (row && row.dataset.tid) window.island.focusSession(row.dataset.tid);
+});
+
+function handleTabs(newTabs) {
+  tabs = newTabs;
+  renderPillTiles();
+  updateMarkState();
+  if (isOpen()) renderSessionList();
+}
+
+const HEADER_HEIGHT = 14; // top padding only
+const ROW_HEIGHT = 52; // session-row height approx
+const MAX_PANEL_HEIGHT = 320;
+const NOTCH_HEIGHT = 32;
+
+function panelHeight() {
+  const content = HEADER_HEIGHT + tabs.length * ROW_HEIGHT + 16;
+  return Math.min(content, MAX_PANEL_HEIGHT);
+}
+
+function open() {
+  const h = panelHeight();
+  islandEl.style.height = (NOTCH_HEIGHT + h) + "px";
+  window.island.setExpanded(true, NOTCH_HEIGHT + h);
+  islandEl.classList.remove("closed");
+  islandEl.classList.add("opened");
+  renderSessionList();
+  updateMarkState();
+}
+
+function close() {
+  islandEl.classList.remove("opened");
+  islandEl.classList.add("closed");
+  islandEl.style.height = "";
+  updateMarkState();
+  setTimeout(() => window.island.setExpanded(false, 0), 450);
+}
+
+islandEl.addEventListener("click", () => {
+  if (islandEl.classList.contains("closed")) open();
+});
+
+document.addEventListener("click", (e) => {
+  if (islandEl.classList.contains("opened") && !islandEl.contains(e.target)) close();
+});
+
+let hoverTimer = null;
+islandEl.addEventListener("mouseenter", () => {
+  window.island.setIgnoreMouseEvents(false);
+  if (islandEl.classList.contains("closed")) hoverTimer = setTimeout(open, 300);
+});
+islandEl.addEventListener("mouseleave", () => {
+  window.island.setIgnoreMouseEvents(true);
+  clearTimeout(hoverTimer);
+  if (islandEl.classList.contains("opened")) {
+    setTimeout(() => { if (!islandEl.matches(":hover")) close(); }, 400);
+  }
+});
+
+// Initialize
+window.island.onTabs(handleTabs);
+window.island.onCollapse(() => close());
+</script>
+</body>
+</html>

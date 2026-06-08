@@ -62,6 +62,12 @@ describe("IPC channels", () => {
       hookGetSessions: "hooks:getSessions",
       createWorktree: "git:createWorktree",
       openExternal: "shell:openExternal",
+      islandGetAllSessions: "island:getAllSessions",
+      islandFocusSession: "island:focusSession",
+      islandTabsSync: "island:tabsSync",
+      recordSessionPrompt: "session:recordPrompt",
+      recordPromptHistoryEntry: "session:recordPromptEntry",
+      loadSessionPromptHistory: "session:loadPromptHistory",
     });
     expect(Object.values(ipcChannels).some((channel) => channel.startsWith("harness:"))).toBe(false);
   });

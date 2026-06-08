@@ -32,7 +32,7 @@ export type UnifiedHookEvent = {
 // Agent hook state (three-state model)
 // ---------------------------------------------------------------------------
 
-export type AgentHookState = "working" | "idle" | "attention";
+export type AgentHookState = "working" | "stopped" | "approval";
 
 export type AgentHookStatus = {
   state: AgentHookState;

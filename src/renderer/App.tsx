@@ -123,6 +123,7 @@ type TerminalPaneHandle = {
   openGitDiff: (projectUri: string, projectName: string, relativePath: string) => Promise<void>;
   openBrowserTab: (projectUri: string, projectName: string, initialUrl: string) => Promise<void>;
   openAgentSession: (projectUri: string, projectName: string, command: string, title: string, agentId?: string) => Promise<void>;
+  focusTerminalSession: (terminalSessionId: string) => string | null;
 };
 
 type AgentStatusByProjectPath = Record<string, string>;
@@ -395,15 +396,16 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function priorityOf(state: ProjectActivityState): number {
-  if (state === "attention") return 3;
-  if (state === "idle") return 2;
+  if (state === "approval") return 3;
+  if (state === "stopped") return 2;
   if (state === "working") return 1;
   return 0;
 }
 
 // Single source of truth for an agent tab's light state. The project pill is
 // aggregated from these per-tab states so the pill color always matches the tab
-// lights. The active tab never contributes idle or attention (focus clears them).
+// lights. The active tab suppresses stopped/approval only when the window has
+// focus — if the app is in the background the user hasn't seen the state yet.
 function agentTabLightState(
   tab: TerminalTab,
   isActiveTab: boolean,
@@ -412,7 +414,7 @@ function agentTabLightState(
   if (tab.kind !== "terminal" || !tab.session.agentId) return null;
   const state = hookStateByTerminalId[tab.session.id];
   if (!state) return null;
-  if (isActiveTab && (state === "idle" || state === "attention")) return null;
+  if (isActiveTab && document.hasFocus() && (state === "stopped" || state === "approval")) return null;
   return state;
 }
 
@@ -724,9 +726,19 @@ function DashboardView({
 }) {
   const gridRef = useRef<HTMLDivElement | null>(null);
   const terminalPaneRef = useRef<TerminalPaneHandle | null>(null);
+
+  useEffect(() => {
+    if (!bridgeAvailable) return;
+    const unsubscribe = getBridge().app?.onFocusTerminalSession?.((terminalSessionId: string) => {
+      const projectId = terminalPaneRef.current?.focusTerminalSession(terminalSessionId);
+      if (projectId) setSelectedId(projectId);
+    });
+    return () => unsubscribe?.();
+  }, [bridgeAvailable]);
+
   const [runningServiceProjectIds, setRunningServiceProjectIds] = useState<Set<string>>(() => new Set());
   const [hookActivityByProjectId, setHookActivityByProjectId] = useState<Record<string, ProjectActivityState>>({});
-  const [hookStateBySessionId, setHookStateBySessionId] = useState<Record<string, { state: ProjectActivityState; projectId: string; terminalSessionId?: string }>>({});
+  const [hookStateBySessionId, setHookStateBySessionId] = useState<Record<string, { state: ProjectActivityState; projectId: string; terminalSessionId?: string; lastPrompt?: string }>>({});
   const [agentClis, setAgentClis] = useState<AgentCli[]>([]);
   const [agentListVersion, setAgentListVersion] = useState(0);
   const [agentStatusByProjectPath, setAgentStatusByProjectPath] = useState<AgentStatusByProjectPath>({});
@@ -836,8 +848,8 @@ function DashboardView({
         if (event.sessionId && matchedProjectId) {
           setHookStateBySessionId((current) => {
             const existing = current[event.sessionId!];
-            if (existing && existing.state === event.hookState && existing.projectId === matchedProjectId && existing.terminalSessionId === event.terminalSessionId) return current;
-            return { ...current, [event.sessionId!]: { state: event.hookState!, projectId: matchedProjectId, terminalSessionId: event.terminalSessionId } };
+            if (existing && existing.state === event.hookState && existing.projectId === matchedProjectId && existing.terminalSessionId === event.terminalSessionId && (!event.lastPrompt || existing.lastPrompt === event.lastPrompt)) return current;
+            return { ...current, [event.sessionId!]: { state: event.hookState!, projectId: matchedProjectId, terminalSessionId: event.terminalSessionId, lastPrompt: event.lastPrompt || existing?.lastPrompt } };
           });
         }
       }
@@ -858,7 +870,7 @@ function DashboardView({
   useEffect(() => {
     const updateBadge = getBridge().dock?.updateBadge;
     if (!updateBadge) return;
-    const count = Object.values(hookActivityByProjectId).filter((s) => s === "idle" || s === "attention").length;
+    const count = Object.values(hookActivityByProjectId).filter((s) => s === "stopped" || s === "approval").length;
     const changed = count !== prevBadgeCountRef.current;
     prevBadgeCountRef.current = count;
     const send = () => { if (!document.hasFocus()) updateBadge(count); };
@@ -992,7 +1004,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   agentClis: AgentCli[];
   bridgeAvailable: boolean;
   candidate: ProjectCandidate | null;
-  hookStateBySessionId: Record<string, { state: ProjectActivityState; projectId: string; terminalSessionId?: string }>;
+  hookStateBySessionId: Record<string, { state: ProjectActivityState; projectId: string; terminalSessionId?: string; lastPrompt?: string }>;
   projectAliases: Record<string, string>;
   isVisible: boolean;
   terminalColorScheme: string | null;
@@ -1033,34 +1045,48 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
 
   // Auto-clear idle/attention on the active (focused) tab so neither the tab
   // light nor the project pill shows those states for the focused tab.
+  // Only clear when the window itself has focus — if SharkBay is in the
+  // background the user isn't actually looking at the tab.
   useEffect(() => {
-    if (!activeProjectId) return;
-    const space = spaces[activeProjectId];
-    const activeTabId = space?.activeId;
-    if (!activeTabId) return;
-    const state = hookStateByTerminalId[activeTabId];
-    if (state !== "idle" && state !== "attention") return;
-    const agentSid = Object.entries(agentSessionToTerminalRef.current).find(([, tid]) => tid === activeTabId)?.[0];
-    if (agentSid) onAgentSessionClear(agentSid);
+    const tryClear = () => {
+      if (!document.hasFocus()) return;
+      if (!activeProjectId) return;
+      const space = spaces[activeProjectId];
+      const activeTabId = space?.activeId;
+      if (!activeTabId) return;
+      const state = hookStateByTerminalId[activeTabId];
+      if (state !== "stopped" && state !== "approval") return;
+      const agentSid = Object.entries(agentSessionToTerminalRef.current).find(([, tid]) => tid === activeTabId)?.[0];
+      if (agentSid) onAgentSessionClear(agentSid);
+    };
+    tryClear();
+    window.addEventListener("focus", tryClear);
+    return () => window.removeEventListener("focus", tryClear);
   }, [hookStateByTerminalId, activeProjectId, spaces, onAgentSessionClear]);
 
   // Project pill = highest-priority light state across the project's own SharkBay
-  // agent tabs (attention > idle > working > null). Tab lights are the single
+  // agent tabs (approval > stopped > working > null). Tab lights are the single
   // source of truth; sessions not running inside a SharkBay tab never count.
   useEffect(() => {
-    const byProject: Record<string, ProjectActivityState> = {};
-    for (const space of Object.values(spaces)) {
-      for (const tab of space.tabs) {
-        const isActiveTab = tabIdForTab(tab) === space.activeId;
-        const state = agentTabLightState(tab, isActiveTab, hookStateByTerminalId);
-        if (!state) continue;
-        const current = byProject[space.projectId];
-        if (!current || priorityOf(state) > priorityOf(current)) {
-          byProject[space.projectId] = state;
+    const compute = () => {
+      const byProject: Record<string, ProjectActivityState> = {};
+      for (const space of Object.values(spaces)) {
+        for (const tab of space.tabs) {
+          const isActiveTab = tabIdForTab(tab) === space.activeId;
+          const state = agentTabLightState(tab, isActiveTab, hookStateByTerminalId);
+          if (!state) continue;
+          const current = byProject[space.projectId];
+          if (!current || priorityOf(state) > priorityOf(current)) {
+            byProject[space.projectId] = state;
+          }
         }
       }
-    }
-    onProjectActivityChange(byProject);
+      onProjectActivityChange(byProject);
+    };
+    compute();
+    window.addEventListener("focus", compute);
+    window.addEventListener("blur", compute);
+    return () => { window.removeEventListener("focus", compute); window.removeEventListener("blur", compute); };
   }, [spaces, hookStateByTerminalId, onProjectActivityChange]);
 
   const selectedSpace = candidate?.id ? spaces[candidate.id] ?? null : null;
@@ -1068,6 +1094,23 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const services = candidate?.services ?? [];
 
   useEffect(() => { spacesRef.current = spaces; }, [spaces]);
+  useEffect(() => {
+    const tabs: Array<{ sessionId: string; title: string; projectName: string; agentId?: string; state: string; lastPrompt?: string }> = [];
+    for (const space of Object.values(spaces)) {
+      for (const tab of space.tabs) {
+        if (tab.kind === "terminal" && tab.session.agentId && tab.session.status === "running") {
+          const hookState = hookStateByTerminalId[tab.session.id];
+          // Find lastPrompt: hookStateBySessionId is keyed by hook sessionId, find entry with matching terminalSessionId
+          let lastPrompt: string | undefined;
+          for (const entry of Object.values(hookStateBySessionId)) {
+            if (entry.terminalSessionId === tab.session.id) { lastPrompt = entry.lastPrompt; break; }
+          }
+          tabs.push({ sessionId: tab.session.id, title: tab.session.title, projectName: space.projectName ?? space.projectId, agentId: tab.session.agentId, state: hookState || "unknown", lastPrompt });
+        }
+      }
+    }
+    getBridge().dock?.syncIslandTabs?.(tabs);
+  }, [spaces, hookStateByTerminalId, hookStateBySessionId]);
   useEffect(() => {
     const pending = pendingTerminalOutput.current;
     for (const [sessionId, data] of [...pending]) {
@@ -1198,6 +1241,14 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     },
     openAgentSession: async (projectUri, projectName, command, title, agentId) => {
       await openProjectTab(projectUri, projectUri, projectName, selectedSpace?.displayPath ?? projectUri, false, { agentId, initialCommand: command, initialCommandTitle: title });
+    },
+    focusTerminalSession: (terminalSessionId) => {
+      const match = findTerminalTabWithSpace(spacesRef.current, terminalSessionId);
+      if (match) {
+        setActiveTab(match.space.projectId, match.tab.session.id);
+        return match.space.projectId;
+      }
+      return null;
     },
   }));
 
@@ -1446,9 +1497,9 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     const nextKind = tabKindForId(spacesRef.current[projectId], tabId);
     onActiveTabKindChange(nextKind);
     requestProjectTabFocus(projectId);
-    // Clear idle/attention when user focuses an agent tab
+    // Clear stopped/approval when user focuses an agent tab
     const focusedState = hookStateByTerminalId[tabId];
-    if (focusedState === "idle" || focusedState === "attention") {
+    if (focusedState === "stopped" || focusedState === "approval") {
       const agentSid = Object.entries(agentSessionToTerminalRef.current).find(([, tid]) => tid === tabId)?.[0];
       if (agentSid) onAgentSessionClear(agentSid);
     }
@@ -1512,6 +1563,9 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     (tab): tab is TerminalShellTab => tab.kind === "terminal" && tab.session.id === selectedSpace.activeId && tab.session.status === "running",
   ) ?? null;
   const promptFocusRequest = selectedSpace && tabFocusRequest?.projectId === selectedSpace.projectId ? tabFocusRequest.nonce : 0;
+  const agentHookSessionId = selectedActiveTerminal?.session.id
+    ? Object.entries(hookStateBySessionId).find(([, v]) => v.terminalSessionId === selectedActiveTerminal.session.id)?.[0] ?? null
+    : null;
 
   return (
     <div className="terminal-layout">
@@ -1558,7 +1612,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                       >
                         <button className="terminal-tab-main" type="button" onClick={() => { setActiveTab(space.projectId, tabId); }}>
                           {tab.kind === "terminal" ? (
-                            <span className={cx("terminal-state", tab.session.service && tab.session.status === "running" && "is-service-running", lightState === "working" && "is-working", lightState === "idle" && "is-idle", lightState === "attention" && "is-attention", tab.session.status === "exited" && "is-exited")} />
+                            <span className={cx("terminal-state", tab.session.service && tab.session.status === "running" && "is-service-running", lightState === "working" && "is-working", lightState === "stopped" && "is-stopped", lightState === "approval" && "is-approval", tab.session.status === "exited" && "is-exited")} />
                           ) : tab.kind === "browser" ? (
                             <BrowserTabIcon browser={tab.browser} />
                           ) : (
@@ -1622,6 +1676,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       <PromptInputBar
         projectId={selectedSpace?.projectId ?? null}
         sessionId={selectedActiveTerminal?.session.id ?? null}
+        agentHookSessionId={agentHookSessionId}
         disabled={!selectedActiveTerminal}
         focusRequest={promptFocusRequest}
         isAgentSession={Boolean(selectedActiveTerminal?.session.agentId)}
@@ -2043,7 +2098,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
           const projectActivity = projectActivityForCandidate(candidate, projectActivityByProjectId);
           const hasProjectStatus = Boolean(projectActivity);
           const agentStatus = agentStatusByProjectPath[candidate.displayPath];
-          const subtitle = projectActivity === "idle" ? candidate.displayPath : agentStatus ?? candidate.displayPath;
+          const subtitle = projectActivity === "stopped" ? candidate.displayPath : agentStatus ?? candidate.displayPath;
           const displayName = projectAliases[candidate.uri] || candidate.name;
           const isRenaming = renamingId === candidate.id;
           return (
@@ -2088,7 +2143,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
               </span>
               <span className="project-row-status">
                 {hasProjectStatus && projectActivity ? (
-                  <span className={cx("terminal-activity-pill", projectActivity === "working" ? "is-working" : projectActivity === "attention" ? "is-attention" : "is-idle")}>{projectActivity === "working" ? "working" : projectActivity === "attention" ? "attention" : "idle"}</span>
+                  <span className={cx("terminal-activity-pill", projectActivity === "working" ? "is-working" : projectActivity === "approval" ? "is-approval" : "is-stopped")}>{projectActivity === "working" ? "working" : projectActivity === "approval" ? "approval" : "stopped"}</span>
                 ) : null}
               </span>
             </button>
@@ -4665,6 +4720,7 @@ function CachedAvatar({ url }: { url: string }) {
 function PromptInputBar({
   projectId,
   sessionId,
+  agentHookSessionId,
   disabled,
   focusRequest,
   isAgentSession,
@@ -4672,6 +4728,7 @@ function PromptInputBar({
 }: {
   projectId: string | null;
   sessionId: string | null;
+  agentHookSessionId: string | null;
   disabled: boolean;
   focusRequest: number;
   isAgentSession: boolean;
@@ -4679,14 +4736,38 @@ function PromptInputBar({
 }) {
   const [value, setValue] = useState("");
   const [isComposing, setIsComposing] = useState(false);
-  const historyKey = projectId ? `${projectId}:${isAgentSession ? "agent" : "shell"}` : null;
+  const historyKey = isAgentSession ? (agentHookSessionId ?? sessionId) : (projectId ? `${projectId}:shell` : null);
   const [historyCursor, setHistoryCursor] = useState<{ historyKey: string; index: number; draft: string } | null>(null);
   const historyByKey = useRef<Record<string, string[]>>({});
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     setHistoryCursor(null);
-  }, [historyKey, sessionId]);
+    if (!historyKey) return;
+    // If agent hook session id resolved and we had data under terminal session id, migrate it
+    if (isAgentSession && agentHookSessionId && sessionId && agentHookSessionId !== sessionId) {
+      const prev = historyByKey.current[sessionId];
+      if (prev?.length) {
+        historyByKey.current[agentHookSessionId] = [...(historyByKey.current[agentHookSessionId] ?? []), ...prev];
+        delete historyByKey.current[sessionId];
+      }
+    }
+    const load = getBridge().terminal?.loadPromptHistory;
+    if (!load) return;
+    let cancelled = false;
+    load({ sessionId: historyKey }).then((history) => {
+      if (cancelled || !history?.length) return;
+      const existing = historyByKey.current[historyKey] ?? [];
+      // Merge: persisted history first, then any in-memory entries not yet persisted
+      if (!existing.length) {
+        historyByKey.current[historyKey] = history;
+      } else {
+        // Append any local entries that go beyond persisted length
+        historyByKey.current[historyKey] = existing.length > history.length ? existing : history;
+      }
+    });
+    return () => { cancelled = true; };
+  }, [historyKey]);
 
   useEffect(() => {
     if (disabled || !sessionId) return;
@@ -4738,6 +4819,11 @@ function PromptInputBar({
     const text = value;
     if (!text || !sessionId) return;
     recordHistory(text);
+    if (isAgentSession) {
+      getBridge().terminal?.recordPrompt?.({ terminalSessionId: sessionId, text });
+    } else if (historyKey) {
+      getBridge().terminal?.recordPromptHistoryEntry?.({ key: historyKey, text });
+    }
     send(text);
     setTimeout(() => send("\r"), 30);
     setValue("");
