@@ -176,14 +176,29 @@ const BOOTSTRAP_TASK_PROMPT = [
 
 export type BootstrapPromptOptions = {
   codeGraphEnabled?: boolean;
+  locale?: string;
 };
 
 export function bootstrapPrompt(options: BootstrapPromptOptions = {}): string {
+  const languageSuffix = localeLanguageSuffix(options.locale);
   return [
     ...BOOTSTRAP_INTRO,
     ...(options.codeGraphEnabled ? [BOOTSTRAP_CODEGRAPH_PROMPT] : []),
     ...BOOTSTRAP_TASK_PROMPT,
+    ...(languageSuffix ? [languageSuffix] : []),
   ].join(" ");
+}
+
+function localeLanguageSuffix(locale: string | undefined): string | null {
+  const tag = locale || process.env.SHARKBAY_LOCALE;
+  if (!tag) return null;
+  const primary = tag.split("-")[0]!.toLowerCase();
+  if (primary === "en") return null;
+  try {
+    const name = new Intl.DisplayNames([tag], { type: "language" }).of(primary);
+    if (name) return `Respond in ${name}.`;
+  } catch { /* unsupported locale */ }
+  return null;
 }
 
 export const BOOTSTRAP_PROMPT = bootstrapPrompt();

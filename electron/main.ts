@@ -213,6 +213,8 @@ function createIslandWindow(): BrowserWindow {
 }
 
 app.whenReady().then(async () => {
+  process.env.SHARKBAY_LOCALE = app.getLocale();
+
   const runtime = {
     userDataPath: app.getPath("userData"),
     configPath: process.env.SHARKBAY_CONFIG_PATH,
