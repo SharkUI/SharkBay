@@ -236,9 +236,11 @@ document.addEventListener("click", (e) => {
 
 let hoverTimer = null;
 islandEl.addEventListener("mouseenter", () => {
+  window.island.setIgnoreMouseEvents(false);
   if (islandEl.classList.contains("closed")) hoverTimer = setTimeout(open, 300);
 });
 islandEl.addEventListener("mouseleave", () => {
+  window.island.setIgnoreMouseEvents(true);
   clearTimeout(hoverTimer);
   if (islandEl.classList.contains("opened")) {
     setTimeout(() => { if (!islandEl.matches(":hover")) close(); }, 400);

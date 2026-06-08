@@ -209,6 +209,17 @@ function createIslandWindow(): BrowserWindow {
     window.setSize(panelWidth, h);
   });
 
+  ipcMain.on("island:setIgnoreMouseEvents", (_event, ignore: boolean) => {
+    if (window.isDestroyed()) return;
+    if (ignore) {
+      window.setIgnoreMouseEvents(true, { forward: true });
+    } else {
+      window.setIgnoreMouseEvents(false);
+    }
+  });
+
+  window.setIgnoreMouseEvents(true, { forward: true });
+
   return window;
 }
 

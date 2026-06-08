@@ -20,6 +20,9 @@ const islandApi = {
   setExpanded(expanded: boolean, height?: number): void {
     ipcRenderer.send("island:setExpanded", expanded, height);
   },
+  setIgnoreMouseEvents(ignore: boolean): void {
+    ipcRenderer.send("island:setIgnoreMouseEvents", ignore);
+  },
   onCollapse(callback: () => void): void {
     ipcRenderer.on("island:collapse", () => callback());
   },
