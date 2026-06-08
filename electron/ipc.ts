@@ -733,6 +733,11 @@ export async function registerIpcHandlers(
       pendingPromptsByTerminal.set(input.terminalSessionId, input.text);
     }
   });
+
+  ipcMain.handle(channels.loadSessionPromptHistory, (_event, input: { sessionId: string }) => {
+    if (!promptStore || !input?.sessionId) return [];
+    return promptStore.getHistory(input.sessionId);
+  });
 }
 
 function findAgentSessionForTerminal(terminalSessionId: string): string | null {

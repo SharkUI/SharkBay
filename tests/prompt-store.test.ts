@@ -15,7 +15,7 @@ describe("SessionPromptStore", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it("records and returns the latest prompt per session id", () => {
+  it("records and returns the latest prompt via get()", () => {
     const store = new SessionPromptStore(dir);
     store.record("sess-1", "first prompt");
     store.record("sess-1", "second prompt");
@@ -27,6 +27,17 @@ describe("SessionPromptStore", () => {
     expect(store.get(null)).toBeNull();
   });
 
+  it("returns full history via getHistory()", () => {
+    const store = new SessionPromptStore(dir);
+    store.record("sess-1", "first");
+    store.record("sess-1", "second");
+    store.record("sess-1", "third");
+
+    expect(store.getHistory("sess-1")).toEqual(["first", "second", "third"]);
+    expect(store.getHistory("missing")).toEqual([]);
+    expect(store.getHistory(null)).toEqual([]);
+  });
+
   it("normalizes whitespace and ignores empty prompts", () => {
     const store = new SessionPromptStore(dir);
     store.record("s", "  hello\n  world  ");
@@ -35,14 +46,24 @@ describe("SessionPromptStore", () => {
     expect(store.get("s2")).toBeNull();
   });
 
-  it("persists prompts across instances (survives restart)", async () => {
+  it("persists history across instances (survives restart)", async () => {
     const store = new SessionPromptStore(dir);
-    store.record("restored-session", "the prompt before restart");
-    // Allow the debounced write to flush.
+    store.record("restored-session", "prompt one");
+    store.record("restored-session", "prompt two");
     await new Promise((resolve) => setTimeout(resolve, 600));
 
     const reloaded = new SessionPromptStore(dir);
-    expect(reloaded.get("restored-session")).toBe("the prompt before restart");
+    expect(reloaded.getHistory("restored-session")).toEqual(["prompt one", "prompt two"]);
+    expect(reloaded.get("restored-session")).toBe("prompt two");
+  });
+
+  it("migrates old single-prompt format", async () => {
+    const oldData = { "old-session": { text: "legacy prompt", updatedAt: 1000 } };
+    fs.writeFileSync(path.join(dir, "session-prompts.json"), JSON.stringify(oldData));
+
+    const store = new SessionPromptStore(dir);
+    expect(store.getHistory("old-session")).toEqual(["legacy prompt"]);
+    expect(store.get("old-session")).toBe("legacy prompt");
   });
 
   it("truncates very long prompts", () => {

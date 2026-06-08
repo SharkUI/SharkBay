@@ -4730,14 +4730,23 @@ function PromptInputBar({
 }) {
   const [value, setValue] = useState("");
   const [isComposing, setIsComposing] = useState(false);
-  const historyKey = projectId ? `${projectId}:${isAgentSession ? "agent" : "shell"}` : null;
+  const historyKey = sessionId;
   const [historyCursor, setHistoryCursor] = useState<{ historyKey: string; index: number; draft: string } | null>(null);
   const historyByKey = useRef<Record<string, string[]>>({});
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     setHistoryCursor(null);
-  }, [historyKey, sessionId]);
+    if (!isAgentSession || !sessionId) return;
+    const load = getBridge().terminal?.loadPromptHistory;
+    if (!load) return;
+    let cancelled = false;
+    load({ sessionId }).then((history) => {
+      if (cancelled || !history?.length) return;
+      historyByKey.current[sessionId] = history;
+    });
+    return () => { cancelled = true; };
+  }, [sessionId, isAgentSession]);
 
   useEffect(() => {
     if (disabled || !sessionId) return;

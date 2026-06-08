@@ -1,14 +1,9 @@
 /**
- * SessionPromptStore — records the latest user prompt per agent session,
+ * SessionPromptStore — records prompt history per agent session,
  * keyed by the agent (hook) session id.
  *
- * SharkBay owns the prompt input bar, so it can capture every prompt the user
- * submits regardless of agent type. This is the authoritative source for the
- * island's "last prompt" line, including restored sessions: a restored agent
- * reuses the same session id, so its previously recorded prompt is still
- * available here even though the agent never re-emits it over hooks.
- *
- * Persisted to userData so prompts survive app restarts.
+ * Stores a full ordered list of prompts per session so the renderer can
+ * offer arrow-key history navigation that persists across app restarts.
  */
 
 import * as fs from "node:fs";
@@ -16,11 +11,12 @@ import * as path from "node:path";
 
 const MAX_PROMPT_LENGTH = 200;
 const MAX_ENTRIES = 500;
+const MAX_HISTORY_PER_SESSION = 200;
 
-type StoredPrompt = { text: string; updatedAt: number };
+type StoredSession = { history: string[]; updatedAt: number };
 
 export class SessionPromptStore {
-  private prompts = new Map<string, StoredPrompt>();
+  private sessions = new Map<string, StoredSession>();
   private filePath: string;
   private writeTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -29,11 +25,17 @@ export class SessionPromptStore {
     this.load();
   }
 
-  /** Record the latest prompt for an agent session id. */
+  /** Append a prompt to the history for an agent session id. */
   record(sessionId: string, text: string): void {
     const trimmed = text.replace(/\s+/g, " ").trim();
     if (!sessionId || !trimmed) return;
-    this.prompts.set(sessionId, { text: trimmed.slice(0, MAX_PROMPT_LENGTH), updatedAt: Date.now() });
+    const entry = this.sessions.get(sessionId) ?? { history: [], updatedAt: 0 };
+    entry.history.push(trimmed.slice(0, MAX_PROMPT_LENGTH));
+    if (entry.history.length > MAX_HISTORY_PER_SESSION) {
+      entry.history = entry.history.slice(-MAX_HISTORY_PER_SESSION);
+    }
+    entry.updatedAt = Date.now();
+    this.sessions.set(sessionId, entry);
     this.evictIfNeeded();
     this.scheduleWrite();
   }
@@ -41,26 +43,40 @@ export class SessionPromptStore {
   /** Get the latest recorded prompt for an agent session id. */
   get(sessionId: string | null | undefined): string | null {
     if (!sessionId) return null;
-    return this.prompts.get(sessionId)?.text ?? null;
+    const entry = this.sessions.get(sessionId);
+    return entry?.history.length ? entry.history[entry.history.length - 1]! : null;
+  }
+
+  /** Get the full prompt history for an agent session id. */
+  getHistory(sessionId: string | null | undefined): string[] {
+    if (!sessionId) return [];
+    return this.sessions.get(sessionId)?.history ?? [];
   }
 
   private evictIfNeeded(): void {
-    if (this.prompts.size <= MAX_ENTRIES) return;
-    const sorted = [...this.prompts.entries()].sort((a, b) => a[1].updatedAt - b[1].updatedAt);
-    const removeCount = this.prompts.size - MAX_ENTRIES;
+    if (this.sessions.size <= MAX_ENTRIES) return;
+    const sorted = [...this.sessions.entries()].sort((a, b) => a[1].updatedAt - b[1].updatedAt);
+    const removeCount = this.sessions.size - MAX_ENTRIES;
     for (let i = 0; i < removeCount; i++) {
       const entry = sorted[i];
-      if (entry) this.prompts.delete(entry[0]);
+      if (entry) this.sessions.delete(entry[0]);
     }
   }
 
   private load(): void {
     try {
       const raw = fs.readFileSync(this.filePath, "utf8");
-      const parsed = JSON.parse(raw) as Record<string, StoredPrompt>;
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
       for (const [sessionId, value] of Object.entries(parsed)) {
-        if (value && typeof value.text === "string" && typeof value.updatedAt === "number") {
-          this.prompts.set(sessionId, value);
+        if (!value || typeof value !== "object") continue;
+        const v = value as Record<string, unknown>;
+        // Support new format: { history: string[], updatedAt: number }
+        if (Array.isArray(v.history) && typeof v.updatedAt === "number") {
+          this.sessions.set(sessionId, { history: v.history.filter((s): s is string => typeof s === "string"), updatedAt: v.updatedAt });
+        }
+        // Migrate old format: { text: string, updatedAt: number }
+        else if (typeof v.text === "string" && typeof v.updatedAt === "number") {
+          this.sessions.set(sessionId, { history: [v.text], updatedAt: v.updatedAt });
         }
       }
     } catch {
@@ -79,8 +95,8 @@ export class SessionPromptStore {
 
   private flush(): void {
     try {
-      const obj: Record<string, StoredPrompt> = {};
-      for (const [sessionId, value] of this.prompts) obj[sessionId] = value;
+      const obj: Record<string, StoredSession> = {};
+      for (const [sessionId, value] of this.sessions) obj[sessionId] = value;
       fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
       fs.writeFileSync(this.filePath, JSON.stringify(obj), "utf8");
     } catch {
