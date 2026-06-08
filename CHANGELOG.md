@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.2.3] — 2026-06-08
+
+### Added
+- Island overlay: macOS Dynamic Island–style floating notch displaying live agent session states
+- Animated shark mark with glow ring driven by session state
+- Per-session prompt history with persistence for agent sessions
+- Appearance settings with Theme, Color Scheme (526 options), and Font sub-tabs
+- CJK font support with system-installed font filtering
+- shell:openExternal IPC for terminal URL context menu
+- Harness bootstrap prompt appends system locale language instruction
+
+### Changed
+- Rename session states: idle→stopped, attention→approval, awaiting→unknown
+- Attention (red) glow animation speed increased by 100%
+- Island expanded panel removes sessions header, count, and divider
+- Font tab simplified to list + preview layout with keyboard navigation
+- Filter Kiro sub-agent sessions from Sessions tab
+- Project status pill derived from agent tab lights
+
+### Fixed
+- Island transparent areas pass through mouse events correctly
+- Preserve attention/idle state when SharkBay loses window focus
+- Prompt history persists on quit, uses hook session id for agent history
+- Font preview uses local state for immediate rendering
+
 ## [0.2.2] — 2026-06-05
 
 ### Added

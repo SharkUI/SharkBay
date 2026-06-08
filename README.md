@@ -24,6 +24,14 @@ Supported agents: **Claude Code** · **Codex** · **Gemini** · **Kiro** · **Co
 
 Real-time hook-based status indicators (working/idle/attention) — see what each agent is doing without switching terminals.
 
+### Island Overlay
+
+macOS Dynamic Island–style floating notch displaying live agent session states with animated shark mark and glow ring — always visible, click-through transparent areas.
+
+### Appearance
+
+Theme, color scheme (526 options), and font customization — including CJK fonts with instant preview and keyboard navigation.
+
 ### Bottom Prompt Input
 
 Dedicated input bar at the bottom of agent terminals for composing prompts with comfortable editing, slash-command forwarding, and project-scoped history.
