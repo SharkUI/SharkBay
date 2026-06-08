@@ -86,21 +86,6 @@ html, body { background: transparent; overflow: hidden; height: 100%; -webkit-ap
 }
 #island.opened #panel { opacity: 1; pointer-events: auto; }
 
-.panel-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 4px 0 12px;
-  border-bottom: 1px solid rgba(241, 234, 217, 0.1);
-  margin-bottom: 8px;
-}
-.panel-title {
-  font-size: 12px; font-weight: 600; color: var(--paper); opacity: 0.7;
-  letter-spacing: 0.5px; text-transform: uppercase;
-}
-.panel-count {
-  font-size: 11px; font-weight: 500; color: var(--paper); opacity: 0.4;
-  font-variant-numeric: tabular-nums;
-}
-
 .session-list {
   flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; min-height: 0;
 }
@@ -160,10 +145,6 @@ html, body { background: transparent; overflow: hidden; height: 100%; -webkit-ap
     </div>
   </div>
   <div id="panel">
-    <div class="panel-header">
-      <span class="panel-title">Sessions</span>
-      <span class="panel-count" id="panelCount"></span>
-    </div>
     <div class="session-list" id="sessionList"></div>
   </div>
 </div>
@@ -174,7 +155,6 @@ let tabs = []; // Array<{ sessionId, title, projectName, agentId, state }>
 
 const islandEl = document.getElementById("island");
 const pillTiles = document.getElementById("pillTiles");
-const panelCount = document.getElementById("panelCount");
 const sessionList = document.getElementById("sessionList");
 
 function isOpen() { return islandEl.classList.contains("opened"); }
@@ -195,7 +175,6 @@ function stateLabel(state) {
 }
 
 function renderSessionList() {
-  panelCount.textContent = `${tabs.length} active`;
   sessionList.innerHTML = tabs.map(t => {
     const label = t.state !== "awaiting" ? stateLabel(t.state) : "";
     return `
@@ -221,7 +200,7 @@ function handleTabs(newTabs) {
   if (isOpen()) renderSessionList();
 }
 
-const HEADER_HEIGHT = 44; // panel-header + padding
+const HEADER_HEIGHT = 14; // top padding only
 const ROW_HEIGHT = 52; // session-row height approx
 const MAX_PANEL_HEIGHT = 320;
 const NOTCH_HEIGHT = 32;
