@@ -421,7 +421,7 @@ function agentTabLightState(
   if (tab.kind !== "terminal" || !tab.session.agentId) return null;
   const state = hookStateByTerminalId[tab.session.id];
   if (!state) return null;
-  // if (isActiveTab && document.hasFocus() && (state === "stopped" || state === "approval")) return null;
+  if (isActiveTab && document.hasFocus() && (state === "stopped" || state === "approval")) return null;
   return state;
 }
 
@@ -1053,22 +1053,22 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   // light nor the project pill shows those states for the focused tab.
   // Only clear when the window itself has focus — if SharkBay is in the
   // background the user isn't actually looking at the tab.
-  // useEffect(() => {
-  //   const tryClear = () => {
-  //     if (!document.hasFocus()) return;
-  //     if (!activeProjectId) return;
-  //     const space = spaces[activeProjectId];
-  //     const activeTabId = space?.activeId;
-  //     if (!activeTabId) return;
-  //     const state = hookStateByTerminalId[activeTabId];
-  //     if (state !== "stopped" && state !== "approval") return;
-  //     const agentSid = Object.entries(agentSessionToTerminalRef.current).find(([, tid]) => tid === activeTabId)?.[0];
-  //     if (agentSid) onAgentSessionClear(agentSid);
-  //   };
-  //   tryClear();
-  //   window.addEventListener("focus", tryClear);
-  //   return () => window.removeEventListener("focus", tryClear);
-  // }, [hookStateByTerminalId, activeProjectId, spaces, onAgentSessionClear]);
+  useEffect(() => {
+    const tryClear = () => {
+      if (!document.hasFocus()) return;
+      if (!activeProjectId) return;
+      const space = spaces[activeProjectId];
+      const activeTabId = space?.activeId;
+      if (!activeTabId) return;
+      const state = hookStateByTerminalId[activeTabId];
+      if (state !== "stopped" && state !== "approval") return;
+      const agentSid = Object.entries(agentSessionToTerminalRef.current).find(([, tid]) => tid === activeTabId)?.[0];
+      if (agentSid) onAgentSessionClear(agentSid);
+    };
+    tryClear();
+    window.addEventListener("focus", tryClear);
+    return () => window.removeEventListener("focus", tryClear);
+  }, [hookStateByTerminalId, activeProjectId, spaces, onAgentSessionClear]);
 
   // Project pill = highest-priority light state across the project's own SharkBay
   // agent tabs (approval > stopped > working > null). Tab lights are the single
@@ -1505,11 +1505,11 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     onActiveTabKindChange(nextKind);
     requestProjectTabFocus(projectId);
     // Clear stopped/approval when user focuses an agent tab
-    // const focusedState = hookStateByTerminalId[tabId];
-    // if (focusedState === "stopped" || focusedState === "approval") {
-    //   const agentSid = Object.entries(agentSessionToTerminalRef.current).find(([, tid]) => tid === tabId)?.[0];
-    //   if (agentSid) onAgentSessionClear(agentSid);
-    // }
+    const focusedState = hookStateByTerminalId[tabId];
+    if (focusedState === "stopped" || focusedState === "approval") {
+      const agentSid = Object.entries(agentSessionToTerminalRef.current).find(([, tid]) => tid === tabId)?.[0];
+      if (agentSid) onAgentSessionClear(agentSid);
+    }
     setSpaces((current) => {
       const space = current[projectId];
       if (!space) return current;
