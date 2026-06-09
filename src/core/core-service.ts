@@ -303,6 +303,10 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
     return this.codeGraph.removeProjectIndexes(input.projectUris);
   }
 
+  cancelAllCodeGraphJobs(): void {
+    this.codeGraph.cancelAll();
+  }
+
   readMachineProfile(runtime: IpcRuntimeLike, targetId: string, options?: ProfileReadOptions): Promise<MachineProfile> {
     return this.profiles.readMachineProfile(runtime, targetId, options);
   }

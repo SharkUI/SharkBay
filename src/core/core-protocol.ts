@@ -48,6 +48,7 @@ export type CoreMethodMap = {
   readCodeGraphStatus: { args: [IpcRuntimeLike, { projectUri: string }]; result: CodeGraphProjectStatus };
   ensureCodeGraphStatus: { args: [IpcRuntimeLike, { projectUri: string }]; result: CodeGraphProjectStatus };
   removeCodeGraphIndexes: { args: [IpcRuntimeLike, { projectUris: string[] }]; result: void };
+  cancelAllCodeGraphJobs: { args: []; result: void };
   pathExistsOnTarget: { args: [IpcRuntimeLike, PathExistsInput]; result: PathExistsResult };
   listPlugins: { args: []; result: PluginSummary[] };
   setPluginEnabled: { args: [string, boolean]; result: PluginSummary[] };

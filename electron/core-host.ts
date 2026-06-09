@@ -46,6 +46,7 @@ const dispatchers: Record<CoreMethodName, Dispatcher> = {
   readCodeGraphStatus: ([runtime, input]) => core.readCodeGraphStatus(runtime as never, input as never),
   ensureCodeGraphStatus: ([runtime, input]) => core.ensureCodeGraphStatus(runtime as never, input as never),
   removeCodeGraphIndexes: ([runtime, input]) => core.removeCodeGraphIndexes(runtime as never, input as never),
+  cancelAllCodeGraphJobs: () => core.cancelAllCodeGraphJobs(),
   pathExistsOnTarget: ([runtime, input]) => core.pathExistsOnTarget(runtime as never, input as never),
   listPlugins: () => core.listPlugins(),
   setPluginEnabled: ([pluginId, enabled]) => core.setPluginEnabled(pluginId as string, enabled as boolean),
