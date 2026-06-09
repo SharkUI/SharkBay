@@ -10,6 +10,9 @@
 - CJK font support with system-installed font filtering
 - shell:openExternal IPC for terminal URL context menu
 - Harness bootstrap prompt appends system locale language instruction
+- Detect Kiro approval state from terminal output
+- CodeGraph cancellable job lifecycle with detached process groups
+- Incremental transcript indexing via size+mtime skip for token usage
 
 ### Changed
 - Rename session states: idle→stopped, attention→approval, awaiting→unknown
@@ -18,12 +21,20 @@
 - Font tab simplified to list + preview layout with keyboard navigation
 - Filter Kiro sub-agent sessions from Sessions tab
 - Project status pill derived from agent tab lights
+- Prompt history max length increased from 200 to 10000 chars
+- CodeGraph auto-init gated behind opt-in setting
+- Disable dock badge and bounce notifications
 
 ### Fixed
 - Island transparent areas pass through mouse events correctly
 - Preserve attention/idle state when SharkBay loses window focus
 - Prompt history persists on quit, uses hook session id for agent history
 - Font preview uses local state for immediate rendering
+- Deduplicate prompt history recording
+- Pass hookSessionId through restore flow for immediate history load
+- Re-resolve terminal mapping when session is re-restored
+- Cancel CodeGraph jobs before killing core on app exit
+- Active-tab auto-clear of stopped/approval state re-enabled
 
 ## [0.2.2] — 2026-06-05
 
