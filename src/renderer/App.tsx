@@ -1500,11 +1500,11 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     onActiveTabKindChange(nextKind);
     requestProjectTabFocus(projectId);
     // Clear stopped/approval when user focuses an agent tab
-    const focusedState = hookStateByTerminalId[tabId];
-    if (focusedState === "stopped" || focusedState === "approval") {
-      const agentSid = Object.entries(agentSessionToTerminalRef.current).find(([, tid]) => tid === tabId)?.[0];
-      if (agentSid) onAgentSessionClear(agentSid);
-    }
+    // const focusedState = hookStateByTerminalId[tabId];
+    // if (focusedState === "stopped" || focusedState === "approval") {
+    //   const agentSid = Object.entries(agentSessionToTerminalRef.current).find(([, tid]) => tid === tabId)?.[0];
+    //   if (agentSid) onAgentSessionClear(agentSid);
+    // }
     setSpaces((current) => {
       const space = current[projectId];
       if (!space) return current;
