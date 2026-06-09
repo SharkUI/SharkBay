@@ -868,21 +868,7 @@ function DashboardView({
   }
 
   const prevBadgeCountRef = useRef(0);
-  useEffect(() => {
-    const updateBadge = getBridge().dock?.updateBadge;
-    if (!updateBadge) return;
-    const count = Object.values(hookActivityByProjectId).filter((s) => s === "stopped" || s === "approval").length;
-    const changed = count !== prevBadgeCountRef.current;
-    prevBadgeCountRef.current = count;
-    const send = () => { if (!document.hasFocus()) updateBadge(count); };
-    if (changed && count > 0 && !document.hasFocus()) updateBadge(count);
-    else send();
-    const onBlur = () => updateBadge(count);
-    const onFocus = () => updateBadge(0);
-    window.addEventListener("blur", onBlur);
-    window.addEventListener("focus", onFocus);
-    return () => { window.removeEventListener("blur", onBlur); window.removeEventListener("focus", onFocus); };
-  }, [hookActivityByProjectId]);
+  void prevBadgeCountRef;
 
   const gridStyle = {
     gridTemplateColumns: detailPanelHidden

@@ -240,12 +240,13 @@ app.whenReady().then(async () => {
   installApplicationMenu();
   installDockIcon();
 
-  ipcMain.on(channels.dockBadgeUpdate, (_event, count: number) => {
-    if (process.platform !== "darwin" || !app.dock) return;
-    const badge = count > 0 ? String(count) : "";
-    app.dock.setBadge(badge);
-    if (count > 0) app.dock.bounce("informational");
-  });
+  // Dock badge/bounce disabled — island provides sufficient notification.
+  // ipcMain.on(channels.dockBadgeUpdate, (_event, count: number) => {
+  //   if (process.platform !== "darwin" || !app.dock) return;
+  //   const badge = count > 0 ? String(count) : "";
+  //   app.dock.setBadge(badge);
+  //   if (count > 0) app.dock.bounce("informational");
+  // });
 
   mainWindow = createMainWindow();
   islandWindow = createIslandWindow();
