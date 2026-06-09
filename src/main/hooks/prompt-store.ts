@@ -9,7 +9,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-const MAX_PROMPT_LENGTH = 200;
+const MAX_PROMPT_LENGTH = 10000;
 const MAX_ENTRIES = 500;
 const MAX_HISTORY_PER_SESSION = 200;
 
