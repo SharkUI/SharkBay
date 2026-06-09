@@ -42,6 +42,7 @@ type AgentSessionWatcherEvents = {
 };
 
 const defaultPollIntervalMs = 1000;
+const defaultDiscoveryIntervalMs = 5000;
 const discoveredFileGraceMs = 5000;
 const maxStatusLength = 180;
 
@@ -75,22 +76,27 @@ export class AgentSessionWatcher extends EventEmitter<AgentSessionWatcherEvents>
   private readonly codexSessionsRoot: string;
   private readonly claudeProjectsRoot: string;
   private readonly pollIntervalMs: number;
+  private readonly discoveryIntervalMs: number;
   private readonly startedAt: number;
   private readonly files = new Map<string, AgentSessionState>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private scanning = false;
   private usageCollector: TokenUsageCollector | null = null;
+  private discoveredFiles: AgentLogFile[] = [];
+  private lastDiscoveryAt = 0;
 
   constructor(options: {
     codexSessionsRoot?: string;
     claudeProjectsRoot?: string;
     pollIntervalMs?: number;
+    discoveryIntervalMs?: number;
     startedAt?: number;
   } = {}) {
     super();
     this.codexSessionsRoot = options.codexSessionsRoot ?? path.join(os.homedir(), ".codex", "sessions");
     this.claudeProjectsRoot = options.claudeProjectsRoot ?? path.join(os.homedir(), ".claude", "projects");
     this.pollIntervalMs = options.pollIntervalMs ?? defaultPollIntervalMs;
+    this.discoveryIntervalMs = options.discoveryIntervalMs ?? defaultDiscoveryIntervalMs;
     this.startedAt = options.startedAt ?? Date.now();
   }
 
@@ -115,14 +121,30 @@ export class AgentSessionWatcher extends EventEmitter<AgentSessionWatcherEvents>
     if (this.scanning) return;
     this.scanning = true;
     try {
-      const [codexFiles, claudeFiles] = await Promise.all([
-        recentCodexSessionFiles(this.codexSessionsRoot, new Date()),
-        claudeTranscriptFiles(this.claudeProjectsRoot),
-      ]);
-      await Promise.all([...codexFiles, ...claudeFiles].map((file) => this.readNewContent(file)));
+      const files = await this.discoverFiles();
+      await Promise.all(files.map((file) => this.readNewContent(file)));
     } finally {
       this.scanning = false;
     }
+  }
+
+  /**
+   * Enumerate transcript files, but cache the result and refresh only every
+   * discoveryIntervalMs. This avoids re-reading every Claude project directory
+   * on each 1s poll while still polling known files' content every tick
+   * (issue #15). New session files are picked up within one discovery interval.
+   */
+  private async discoverFiles(now = Date.now()): Promise<AgentLogFile[]> {
+    if (!shouldRefreshDiscovery(this.lastDiscoveryAt, now, this.discoveryIntervalMs, this.discoveredFiles.length > 0)) {
+      return this.discoveredFiles;
+    }
+    const [codexFiles, claudeFiles] = await Promise.all([
+      recentCodexSessionFiles(this.codexSessionsRoot, new Date(now)),
+      claudeTranscriptFiles(this.claudeProjectsRoot),
+    ]);
+    this.discoveredFiles = [...codexFiles, ...claudeFiles];
+    this.lastDiscoveryAt = now;
+    return this.discoveredFiles;
   }
 
   private async readNewContent(file: AgentLogFile): Promise<void> {
@@ -308,6 +330,22 @@ async function rolloutFiles(directory: string): Promise<string[]> {
   return entries
     .filter((entry) => entry.isFile() && /^rollout-.+\.jsonl$/u.test(entry.name))
     .map((entry) => path.join(directory, entry.name));
+}
+
+/**
+ * Decide whether the watcher should re-enumerate transcript directories. Cached
+ * results are reused until the discovery interval elapses, so the 1s content
+ * poll does not re-readdir every Claude project directory each tick (issue #15).
+ * Pure for unit testing.
+ */
+export function shouldRefreshDiscovery(
+  lastDiscoveryAt: number,
+  now: number,
+  intervalMs: number,
+  hasCached: boolean,
+): boolean {
+  if (!hasCached) return true;
+  return now - lastDiscoveryAt >= intervalMs;
 }
 
 async function claudeTranscriptFiles(root: string): Promise<AgentLogFile[]> {

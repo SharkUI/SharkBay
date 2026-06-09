@@ -20,6 +20,11 @@ export type TokenEvent = {
   sourceOffset: number;
 };
 
+export type FileIndexEntry = {
+  mtimeMs: number;
+  size: number;
+};
+
 export type UsageSummary = {
   totalInputTokens: number;
   totalOutputTokens: number;
@@ -153,6 +158,16 @@ export class TokenUsageDb {
       CREATE INDEX IF NOT EXISTS idx_project_time ON token_events(project_path, recorded_at);
       CREATE INDEX IF NOT EXISTS idx_agent_time ON token_events(agent_id, recorded_at);
       CREATE INDEX IF NOT EXISTS idx_time ON token_events(recorded_at);
+
+      -- Per-file scan index: lets backfill skip files whose size+mtime are
+      -- unchanged since the last scan, instead of re-reading every history file
+      -- on each startup (issue #15). Stores no usage data, only scan metadata.
+      CREATE TABLE IF NOT EXISTS file_index (
+        source_file TEXT PRIMARY KEY,
+        mtime_ms REAL NOT NULL,
+        size INTEGER NOT NULL,
+        scanned_at TEXT NOT NULL
+      );
     `);
   }
 
@@ -314,6 +329,23 @@ export class TokenUsageDb {
       "SELECT MAX(source_offset) AS max_offset FROM token_events WHERE source_file = ?"
     ).get(sourceFile) as { max_offset: number | null } | undefined;
     return row?.max_offset ?? 0;
+  }
+
+  /** Scan metadata for a file, or null if it has never been scanned. */
+  getFileIndex(sourceFile: string): FileIndexEntry | null {
+    const row = this.db.prepare(
+      "SELECT mtime_ms AS mtimeMs, size FROM file_index WHERE source_file = ?"
+    ).get(sourceFile) as { mtimeMs: number; size: number } | undefined;
+    return row ? { mtimeMs: row.mtimeMs, size: row.size } : null;
+  }
+
+  /** Record that a file was fully scanned at the given size+mtime. */
+  setFileIndex(sourceFile: string, mtimeMs: number, size: number): void {
+    this.db.prepare(`
+      INSERT INTO file_index (source_file, mtime_ms, size, scanned_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(source_file) DO UPDATE SET mtime_ms = excluded.mtime_ms, size = excluded.size, scanned_at = excluded.scanned_at
+    `).run(sourceFile, mtimeMs, size, new Date().toISOString());
   }
 
   close(): void {

@@ -198,12 +198,28 @@ export class TokenUsageCollector {
   }
 
   private async backfillFile(filePath: string, agentId: string): Promise<void> {
+    // Cheap stat-based short-circuit: if the file's size and mtime are unchanged
+    // since the last scan, there is no new content to index — skip the readFile
+    // entirely. This keeps full history (events already in the DB are retained)
+    // while avoiding re-reading every transcript on each startup (issue #15).
+    let stat;
+    try {
+      stat = await fs.stat(filePath);
+    } catch {
+      return;
+    }
+    const indexed = this.db.getFileIndex(filePath);
+    if (isTranscriptFileUnchanged(indexed, stat)) return;
+
     const lastOffset = this.db.getLastOffset(filePath);
 
     let content: string;
     try {
       const buf = await fs.readFile(filePath);
-      if (buf.length <= lastOffset) return;
+      if (buf.length <= lastOffset) {
+        this.db.setFileIndex(filePath, stat.mtimeMs, stat.size);
+        return;
+      }
       content = buf.slice(lastOffset).toString("utf8");
     } catch {
       return;
@@ -234,6 +250,8 @@ export class TokenUsageCollector {
       this.processLine(line, filePath, byteOffset, session);
       byteOffset += Buffer.byteLength(line, "utf8") + 1;
     }
+
+    this.db.setFileIndex(filePath, stat.mtimeMs, stat.size);
   }
 
   private async backfillKiroSessions(root: string): Promise<void> {
@@ -247,7 +265,18 @@ export class TokenUsageCollector {
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
       const filePath = path.join(root, entry.name);
-      if (this.db.hasEvent(filePath, 0)) continue;
+
+      // Skip unchanged session files via size+mtime (issue #15). Re-reading a
+      // grown file is safe and idempotent (INSERT OR IGNORE on source_file +
+      // turn offset) and lets new turns in an existing session get indexed.
+      let stat;
+      try {
+        stat = await fs.stat(filePath);
+      } catch {
+        continue;
+      }
+      const indexed = this.db.getFileIndex(filePath);
+      if (isTranscriptFileUnchanged(indexed, stat)) continue;
 
       let content: string;
       try {
@@ -262,6 +291,10 @@ export class TokenUsageCollector {
       } catch {
         continue;
       }
+
+      // File was read and parsed; mark it scanned so unchanged sessions are
+      // skipped next startup. Re-inserts on growth are idempotent.
+      this.db.setFileIndex(filePath, stat.mtimeMs, stat.size);
 
       const cwd = typeof data.cwd === "string" ? data.cwd : null;
       const sessionId = typeof data.session_id === "string" ? data.session_id : null;
@@ -331,6 +364,18 @@ export class TokenUsageCollector {
 
 function toInt(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.round(value) : 0;
+}
+
+/**
+ * True when a transcript file's current size and mtime match what was recorded
+ * at the last scan, meaning there is no new content to index. Pure so it can be
+ * unit-tested without the native DB or filesystem.
+ */
+export function isTranscriptFileUnchanged(
+  indexed: { mtimeMs: number; size: number } | null,
+  stat: { mtimeMs: number; size: number },
+): boolean {
+  return indexed !== null && indexed.size === stat.size && indexed.mtimeMs === stat.mtimeMs;
 }
 
 export function codexTotalUsageKey(value: unknown): string | null {

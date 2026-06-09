@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codexTotalUsageKey, TokenUsageCollector, type CollectorSessionState } from "../src/main/token-usage-collector.js";
+import { codexTotalUsageKey, isTranscriptFileUnchanged, TokenUsageCollector, type CollectorSessionState } from "../src/main/token-usage-collector.js";
 import type { TokenEvent, TokenUsageDb } from "../src/main/token-usage-db.js";
 
 describe("token usage collector", () => {
@@ -30,6 +30,17 @@ describe("token usage collector", () => {
       cached_input_tokens: 1800,
       reasoning_output_tokens: 12,
     })).toBe("2100:100:1800:12");
+  });
+
+  it("treats a transcript as unchanged only when size and mtime both match", () => {
+    // Never scanned -> must be processed.
+    expect(isTranscriptFileUnchanged(null, { mtimeMs: 1000, size: 10 })).toBe(false);
+    // Identical size + mtime -> skip.
+    expect(isTranscriptFileUnchanged({ mtimeMs: 1000, size: 10 }, { mtimeMs: 1000, size: 10 })).toBe(true);
+    // Grew (size changed) -> process.
+    expect(isTranscriptFileUnchanged({ mtimeMs: 1000, size: 10 }, { mtimeMs: 1000, size: 20 })).toBe(false);
+    // Rewritten (mtime changed) -> process.
+    expect(isTranscriptFileUnchanged({ mtimeMs: 1000, size: 10 }, { mtimeMs: 2000, size: 10 })).toBe(false);
   });
 });
 
