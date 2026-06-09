@@ -182,8 +182,14 @@ function requireCore(): CoreClient {
   return core;
 }
 
-export function closeAllTerminalSessions(): void {
-  void core?.dispose();
+/**
+ * Awaitable shutdown for app exit: cancels background CodeGraph jobs and closes
+ * terminals via the core process (awaited) BEFORE the core utility process is
+ * killed, then tears down the remaining main-process resources. Prevents
+ * orphaned codegraph process groups (issue #15).
+ */
+export async function shutdownCore(): Promise<void> {
+  await core?.dispose();
   browserManager.closeAll();
   for (const sync of syncInstances.values()) sync.stop();
   syncInstances.clear();

@@ -32,6 +32,7 @@ export class CoreClient extends EventEmitter<CoreClientEvents> {
   private readonly readyPromise: Promise<void>;
   private sequence = 0;
   private disposed = false;
+  private disposing = false;
 
   constructor(child: UtilityProcess) {
     super();
@@ -72,13 +73,22 @@ export class CoreClient extends EventEmitter<CoreClientEvents> {
   }
 
   async dispose(): Promise<void> {
-    if (this.disposed) return;
-    this.disposed = true;
+    if (this.disposing || this.disposed) return;
+    this.disposing = true;
+    // Cancel background CodeGraph jobs BEFORE killing the core process, so the
+    // detached codegraph process groups are terminated and cannot be orphaned
+    // (issue #15). Run cleanup while calls still work, then mark disposed.
+    try {
+      await this.call("cancelAllCodeGraphJobs", []);
+    } catch {
+      // Ignore — best-effort cleanup.
+    }
     try {
       await this.call("closeAllTerminalSessions", []);
     } catch {
       // Ignore — best-effort cleanup.
     }
+    this.disposed = true;
     this.child.kill();
   }
 

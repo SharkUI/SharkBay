@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, shell } from "electron";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { closeAllTerminalSessions, flushPromptStore, registerIpcHandlers } from "./ipc.js";
+import { flushPromptStore, registerIpcHandlers, shutdownCore } from "./ipc.js";
 import { createApplicationMenuTemplate } from "../src/main/application-menu.js";
 import { getRuntimeConfigPath, loadAppConfig } from "../src/main/config.js";
 import { appChannels } from "../src/shared/app-events.js";
@@ -270,11 +270,27 @@ app.on("window-all-closed", () => {
   }
 });
 
-app.on("before-quit", () => {
+let cleanupComplete = false;
+
+app.on("before-quit", (event) => {
   if (islandWindow && !islandWindow.isDestroyed()) {
     islandWindow.destroy();
     islandWindow = null;
   }
   flushPromptStore();
-  closeAllTerminalSessions();
+
+  if (cleanupComplete) return;
+
+  // Defer the actual quit until background CodeGraph jobs are cancelled and the
+  // core utility process has been shut down cleanly, so no codegraph process
+  // group is orphaned (issue #15).
+  event.preventDefault();
+  void shutdownCore()
+    .catch(() => {
+      // Best-effort: fall through to quit even if cleanup failed.
+    })
+    .finally(() => {
+      cleanupComplete = true;
+      app.quit();
+    });
 });
