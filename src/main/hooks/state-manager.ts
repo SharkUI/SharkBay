@@ -41,6 +41,20 @@ export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
     this.connectors.set(connector.id, connector);
   }
 
+  injectEvent(event: UnifiedHookEvent): void {
+    if (!event.cwd) return;
+    const state = this.eventToState(event.event);
+    const action = this.eventToAction(event);
+    writeHookLog(event.cwd, {
+      timestamp: new Date().toISOString(),
+      source: `${event.agent}:synthetic`,
+      normalized: summarizeUnifiedEvent(event),
+      state,
+      action,
+    });
+    this.applyEvent(event);
+  }
+
   handleMessage(msg: HookBridgeMessage): void {
     const receivedAt = new Date().toISOString();
     const rawProjectPath = projectPathFromRawPayload(msg.payload);

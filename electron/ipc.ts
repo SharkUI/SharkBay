@@ -92,6 +92,7 @@ import { CodeWhaleConnector } from "../src/main/hooks/connectors/codewhale.js";
 import { OpenCodeConnector } from "../src/main/hooks/connectors/opencode.js";
 import { CursorConnector } from "../src/main/hooks/connectors/cursor.js";
 import type { AgentConnector } from "../src/main/hooks/types.js";
+import { TerminalApprovalDetector } from "../src/main/hooks/terminal-approval-detector.js";
 import { parseHookSessions } from "../src/main/hooks/sessions.js";
 
 export type IpcRuntime = {
@@ -123,6 +124,23 @@ const hookConnectors = new Map<string, AgentConnector>([
 for (const connector of hookConnectors.values()) {
   hookStateManager.registerConnector(connector);
 }
+
+const terminalApprovalDetector = new TerminalApprovalDetector();
+terminalApprovalDetector.setCallback((event) => {
+  let hookSessionId: string | undefined;
+  for (const [sid, tid] of hookSessionToTerminal) {
+    if (tid === event.terminalSessionId) { hookSessionId = sid; break; }
+  }
+  if (!hookSessionId) return;
+  hookStateManager.injectEvent({
+    agent: event.agentId,
+    sessionId: hookSessionId,
+    event: "attention",
+    timestamp: new Date().toISOString(),
+    cwd: event.cwd,
+  });
+});
+
 const syncInstances = new Map<string, TeamworkSync>();
 const taskWatcherCleanups = new Map<string, () => void>();
 
@@ -323,6 +341,7 @@ export async function registerIpcHandlers(
   agentSessionWatcher.removeAllListeners("status");
   browserManager.removeAllListeners("update");
   core.on("terminalData", (event) => {
+    terminalApprovalDetector.feed(event.sessionId, event.data);
     BrowserWindow.getAllWindows().forEach((window) => {
       window.webContents.send(channels.terminalData, event);
     });
@@ -361,6 +380,7 @@ export async function registerIpcHandlers(
     });
   });
   core.on("terminalExit", (event) => {
+    terminalApprovalDetector.untrack(event.sessionId);
     for (const [pid, id] of terminalPidToId) {
       if (id === event.sessionId) { terminalPidToId.delete(pid); break; }
     }
@@ -577,6 +597,10 @@ export async function registerIpcHandlers(
     const session = await requireCore().call("createTerminal", [runtime, payload]);
     if (session.pid != null && session.agentId) {
       terminalPidToId.set(session.pid, session.id);
+    }
+    if (session.agentId === "kiro") {
+      const cwd = session.cwdUri.startsWith("local:") ? decodeURI(session.cwdUri.slice(6)) : session.cwdUri.replace(/^file:\/\//, "");
+      terminalApprovalDetector.track(session.id, "kiro", cwd);
     }
     return session;
   });
