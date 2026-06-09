@@ -7,6 +7,7 @@ export type AppConfig = {
   projectAliases: Record<string, string>;
   disabledPluginIds: string[];
   appearanceTheme: AppearanceTheme;
+  codeGraphAutoMaintain: boolean;
   terminalColorScheme?: string;
   terminalFontFamily?: string;
   terminalFontSize?: number;
@@ -53,6 +54,10 @@ export type CreateWorktreeResult = {
 
 export type AppearanceThemeInput = {
   theme: AppearanceTheme;
+};
+
+export type CodeGraphAutoMaintainInput = {
+  enabled: boolean;
 };
 
 export type ExecutionTargetKind = "local" | "container" | "wsl";
