@@ -251,13 +251,19 @@ app.whenReady().then(async () => {
   mainWindow = createMainWindow();
   islandWindow = createIslandWindow();
 
+  mainWindow.on("closed", () => { mainWindow = null; });
+
   mainWindow.on("focus", () => {
     if (process.platform === "darwin" && app.dock) app.dock.setBadge("");
   });
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+    if (!mainWindow || mainWindow.isDestroyed()) {
       mainWindow = createMainWindow();
+      mainWindow.on("closed", () => { mainWindow = null; });
+    } else {
+      mainWindow.show();
+      mainWindow.focus();
     }
   });
 });
