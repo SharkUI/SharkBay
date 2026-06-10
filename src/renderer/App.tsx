@@ -411,17 +411,16 @@ function priorityOf(state: ProjectActivityState): number {
 
 // Single source of truth for an agent tab's light state. The project pill is
 // aggregated from these per-tab states so the pill color always matches the tab
-// lights. The active tab suppresses stopped/approval only when the window has
-// focus — if the app is in the background the user hasn't seen the state yet.
+// lights. The active tab suppresses stopped/approval only after the delayed
+// clear has fired (managed separately).
 function agentTabLightState(
   tab: TerminalTab,
-  isActiveTab: boolean,
+  _isActiveTab: boolean,
   hookStateByTerminalId: Record<string, ProjectActivityState>,
 ): ProjectActivityState | null {
   if (tab.kind !== "terminal" || !tab.session.agentId) return null;
   const state = hookStateByTerminalId[tab.session.id];
   if (!state) return null;
-  if (isActiveTab && document.hasFocus() && (state === "stopped" || state === "approval")) return null;
   return state;
 }
 
@@ -1031,6 +1030,8 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const pendingTerminalOutput = useRef(new Map<string, string>());
   const focusRequestNonce = useRef(0);
   const [tabFocusRequest, setTabFocusRequest] = useState<{ projectId: string; nonce: number } | null>(null);
+  const hookPromptFocusNonce = useRef(0);
+  const [hookPromptFocus, setHookPromptFocus] = useState(0);
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
   const tabDragRef = useRef<{ projectId: string; tabId: string; pointerId: number } | null>(null);
   const agentSessionToTerminalRef = useRef<Record<string, string>>({});
@@ -1049,12 +1050,51 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     return result;
   }, [hookStateBySessionId, spaces]);
 
-  // Auto-clear idle/attention on the active (focused) tab so neither the tab
-  // light nor the project pill shows those states for the focused tab.
-  // Only clear when the window itself has focus — if SharkBay is in the
-  // background the user isn't actually looking at the tab.
+  // Auto-focus based on hookState: approval → terminal, working/stopped → prompt input bar
+  const prevHookFocusState = useRef<string | undefined>(undefined);
   useEffect(() => {
-    const tryClear = () => {
+    if (!activeProjectId) return;
+    const space = spaces[activeProjectId];
+    const activeTabId = space?.activeId;
+    if (!activeTabId) return;
+    const state = hookStateByTerminalId[activeTabId];
+    if (state === prevHookFocusState.current) return;
+    prevHookFocusState.current = state;
+    if (!state) return;
+    if (state === "approval") {
+      const tab = space.tabs.find((t): t is TerminalShellTab => t.kind === "terminal" && t.session.id === activeTabId);
+      if (tab) tab.terminal.focus();
+    } else {
+      hookPromptFocusNonce.current += 1;
+      setHookPromptFocus(hookPromptFocusNonce.current);
+    }
+  }, [hookStateByTerminalId, activeProjectId, spaces]);
+
+  // Delayed auto-clear of stopped/approval on the active tab.
+  // Fires 300s after the tab becomes focused; cancelled if the user types
+  // in the prompt input bar (which triggers immediatelyClearActiveTab).
+  const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearActiveTab = useCallback(() => {
+    if (!activeProjectId) return;
+    const space = spaces[activeProjectId];
+    const activeTabId = space?.activeId;
+    if (!activeTabId) return;
+    const agentSid = Object.entries(agentSessionToTerminalRef.current).find(([, tid]) => tid === activeTabId)?.[0];
+    if (agentSid) onAgentSessionClear(agentSid);
+  }, [activeProjectId, spaces, onAgentSessionClear]);
+
+  const scheduleClear = useCallback(() => {
+    if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
+    clearTimerRef.current = setTimeout(() => { clearTimerRef.current = null; clearActiveTab(); }, 300_000);
+  }, [clearActiveTab]);
+
+  const immediatelyClearActiveTab = useCallback(() => {
+    if (clearTimerRef.current) { clearTimeout(clearTimerRef.current); clearTimerRef.current = null; }
+    clearActiveTab();
+  }, [clearActiveTab]);
+
+  useEffect(() => {
+    const trySchedule = () => {
       if (!document.hasFocus()) return;
       if (!activeProjectId) return;
       const space = spaces[activeProjectId];
@@ -1062,13 +1102,12 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       if (!activeTabId) return;
       const state = hookStateByTerminalId[activeTabId];
       if (state !== "stopped" && state !== "approval") return;
-      const agentSid = Object.entries(agentSessionToTerminalRef.current).find(([, tid]) => tid === activeTabId)?.[0];
-      if (agentSid) onAgentSessionClear(agentSid);
+      scheduleClear();
     };
-    tryClear();
-    window.addEventListener("focus", tryClear);
-    return () => window.removeEventListener("focus", tryClear);
-  }, [hookStateByTerminalId, activeProjectId, spaces, onAgentSessionClear]);
+    trySchedule();
+    window.addEventListener("focus", trySchedule);
+    return () => { window.removeEventListener("focus", trySchedule); if (clearTimerRef.current) { clearTimeout(clearTimerRef.current); clearTimerRef.current = null; } };
+  }, [hookStateByTerminalId, activeProjectId, spaces, scheduleClear]);
 
   // Project pill = highest-priority light state across the project's own SharkBay
   // agent tabs (approval > stopped > working > null). Tab lights are the single
@@ -1504,11 +1543,10 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     const nextKind = tabKindForId(spacesRef.current[projectId], tabId);
     onActiveTabKindChange(nextKind);
     requestProjectTabFocus(projectId);
-    // Clear stopped/approval when user focuses an agent tab
+    // Schedule delayed clear when user focuses a stopped/approval tab
     const focusedState = hookStateByTerminalId[tabId];
     if (focusedState === "stopped" || focusedState === "approval") {
-      const agentSid = Object.entries(agentSessionToTerminalRef.current).find(([, tid]) => tid === tabId)?.[0];
-      if (agentSid) onAgentSessionClear(agentSid);
+      scheduleClear();
     }
     setSpaces((current) => {
       const space = current[projectId];
@@ -1569,7 +1607,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const selectedActiveTerminal = selectedSpace?.tabs.find(
     (tab): tab is TerminalShellTab => tab.kind === "terminal" && tab.session.id === selectedSpace.activeId && tab.session.status === "running",
   ) ?? null;
-  const promptFocusRequest = selectedSpace && tabFocusRequest?.projectId === selectedSpace.projectId ? tabFocusRequest.nonce : 0;
+  const promptFocusRequest = Math.max(selectedSpace && tabFocusRequest?.projectId === selectedSpace.projectId ? tabFocusRequest.nonce : 0, hookPromptFocus);
   const agentHookSessionId = selectedActiveTerminal?.hookSessionId
     ?? (selectedActiveTerminal?.session.id
       ? Object.entries(hookStateBySessionId).find(([, v]) => v.terminalSessionId === selectedActiveTerminal.session.id)?.[0] ?? null
@@ -1689,6 +1727,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
         focusRequest={promptFocusRequest}
         isAgentSession={Boolean(selectedActiveTerminal?.session.agentId)}
         onTerminalFocusRequest={() => selectedActiveTerminal?.terminal.focus()}
+        onInput={immediatelyClearActiveTab}
       />
     </div>
   );
@@ -4765,6 +4804,7 @@ function PromptInputBar({
   focusRequest,
   isAgentSession,
   onTerminalFocusRequest,
+  onInput: onInputCallback,
 }: {
   projectId: string | null;
   sessionId: string | null;
@@ -4773,6 +4813,7 @@ function PromptInputBar({
   focusRequest: number;
   isAgentSession: boolean;
   onTerminalFocusRequest: () => void;
+  onInput?: () => void;
 }) {
   const [value, setValue] = useState("");
   const [isComposing, setIsComposing] = useState(false);
@@ -4922,6 +4963,7 @@ function PromptInputBar({
     const target = event.currentTarget;
     const nextValue = target.value;
     setHistoryCursor(null);
+    onInputCallback?.();
     if (!disabled && sessionId && isAgentSession && !value && nextValue.startsWith("/")) {
       send(nextValue);
       setValue("");
