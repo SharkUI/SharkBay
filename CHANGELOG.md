@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.4] — 2026-06-10
+
+### Added
+- App update hint: check GitHub latest release on startup; show subtle bottom-left link when a newer version is available for 48+ hours
+
+### Changed
+- Delay auto-clear of stopped/approval state by 300s on tab/window focus; prompt input cancels the timer and clears immediately
+
 ## [0.2.3] — 2026-06-08
 
 ### Added

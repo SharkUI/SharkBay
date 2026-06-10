@@ -68,7 +68,7 @@ describe("SessionPromptStore", () => {
 
   it("truncates very long prompts", () => {
     const store = new SessionPromptStore(dir);
-    store.record("s", "x".repeat(500));
-    expect(store.get("s")?.length).toBe(200);
+    store.record("s", "x".repeat(20000));
+    expect(store.get("s")?.length).toBe(10000);
   });
 });

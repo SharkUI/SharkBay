@@ -264,7 +264,7 @@ describe("harness install", () => {
     expect(result.injected).toBe(true);
     expect(result.initialCommand).toContain("codex 'I'\\''m working in SharkBay Task Protocol mode");
     expect(result.initialCommand).toContain(".sharkbay/harness/protocol.md");
-    expect(bootstrapPrompt({ codeGraphEnabled: true })).toBe([
+    expect(bootstrapPrompt({ codeGraphEnabled: true, locale: "en" })).toBe([
       "I'm working in SharkBay Task Protocol mode for this project.",
       "Please read `.sharkbay/harness/protocol.md` first and follow it for the rest of this session.",
       "CodeGraph is installed and configured for this project; when searching or understanding project code, use CodeGraph before rg/grep/ broad file reads.",
