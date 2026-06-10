@@ -6,7 +6,6 @@ import {
   removeConfiguredProject,
   renameProject,
   setAppearanceTheme,
-  setCodeGraphAutoMaintain,
 } from "../src/main/config.js";
 import { createWorktree } from "../src/main/worktree.js";
 import type {
@@ -15,7 +14,6 @@ import type {
   AppConfig,
   AppearanceTheme,
   AppearanceThemeInput,
-  CodeGraphAutoMaintainInput,
   CodeGraphProjectStatus,
   UsageReportFilter,
   UsageReportResult,
@@ -506,9 +504,6 @@ export async function registerIpcHandlers(
       callbacks.onAppearanceThemeChanged?.(config.appearanceTheme);
       return config;
     })
-  );
-  handle<CodeGraphAutoMaintainInput, AppConfig>(channels.setCodeGraphAutoMaintain, (payload) =>
-    setCodeGraphAutoMaintain(runtime, payload)
   );
   handle<ProjectScanInput | undefined, ScanProjectsResult>(channels.scanProjects, (payload) =>
     requireCore().call("scanProjects", [runtime, payload])

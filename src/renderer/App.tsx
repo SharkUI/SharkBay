@@ -133,7 +133,7 @@ const minProjectColumnWidth = 216;
 const minDetailColumnWidth = 340;
 const minTerminalColumnWidth = 420;
 const maxPendingTerminalOutputChars = 1024 * 1024;
-const codeGraphSyncDebounceMs = 10000;
+const codeGraphSyncDebounceMs = 300000;
 const defaultProjectColumnWidth = minProjectColumnWidth;
 const defaultDetailColumnWidth = minDetailColumnWidth;
 const resizerColumnWidth = 12;
@@ -234,12 +234,6 @@ async function updateAppearanceTheme(theme: AppearanceTheme): Promise<AppConfig>
   const handler = getBridge().config?.setAppearanceTheme;
   if (!handler) throw new Error("Appearance theme settings are not exposed by the preload API.");
   return handler({ theme });
-}
-
-async function updateCodeGraphAutoMaintain(enabled: boolean): Promise<AppConfig> {
-  const handler = getBridge().config?.setCodeGraphAutoMaintain;
-  if (!handler) throw new Error("CodeGraph auto-maintain setting is not exposed by the preload API.");
-  return handler({ enabled });
 }
 
 async function addProject(path: string): Promise<void> {
@@ -498,7 +492,6 @@ export function App() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [scanErrors, setScanErrors] = useState<string[]>([]);
   const [appearanceTheme, setAppearanceTheme] = useState<AppearanceTheme>("day");
-  const [codeGraphAutoMaintain, setCodeGraphAutoMaintain] = useState<boolean>(false);
   const [terminalColorScheme, setTerminalColorScheme] = useState<string | null>(null);
   const [terminalFontFamily, setTerminalFontFamily] = useState<string | null>(null);
   const [terminalFontSize, setTerminalFontSize] = useState<number | null>(null);
@@ -521,7 +514,6 @@ export function App() {
       const [rootConfig, scan] = await Promise.all([configHandler(), scanProjects()]);
       if (isAppConfig(rootConfig)) {
         setAppearanceTheme(normalizeAppearanceTheme(rootConfig.appearanceTheme));
-        setCodeGraphAutoMaintain(rootConfig.codeGraphAutoMaintain === true);
         if (rootConfig.terminalColorScheme) setTerminalColorScheme(rootConfig.terminalColorScheme);
         if (rootConfig.terminalFontFamily) setTerminalFontFamily(rootConfig.terminalFontFamily);
         if (rootConfig.terminalFontSize) setTerminalFontSize(rootConfig.terminalFontSize);
@@ -632,11 +624,6 @@ export function App() {
               onRemoveProject={async (uri) => { await removeProject(uri); await refreshProjects({ showToast: true }); }}
               onRenameProject={async (uri, name) => { await renameProjectAlias(uri, name); await refreshProjects({ showToast: false }); }}
               onUninstallProtocol={async (repoPath, cleanTeamContext) => { await uninstallProtocol(repoPath, cleanTeamContext); await refreshProjects({ showToast: false }); }}
-              codeGraphAutoMaintain={codeGraphAutoMaintain}
-              onCodeGraphAutoMaintainChange={async (enabled) => {
-                const config = await updateCodeGraphAutoMaintain(enabled);
-                setCodeGraphAutoMaintain(config.codeGraphAutoMaintain === true);
-              }}
               projectAliases={projectAliases}
             />
           </div>
@@ -740,8 +727,6 @@ function DashboardView({
   onRemoveProject,
   onRenameProject,
   onUninstallProtocol,
-  codeGraphAutoMaintain,
-  onCodeGraphAutoMaintainChange,
   terminalColorScheme,
   terminalFontFamily,
   terminalFontSize,
@@ -766,8 +751,6 @@ function DashboardView({
   onRemoveProject: (uri: string) => Promise<void>;
   onRenameProject: (uri: string, name: string) => Promise<void>;
   onUninstallProtocol: (repoPath: string, cleanTeamContext?: boolean) => Promise<void>;
-  codeGraphAutoMaintain: boolean;
-  onCodeGraphAutoMaintainChange: (enabled: boolean) => Promise<void>;
   terminalColorScheme: string | null;
   terminalFontFamily: string | null;
   terminalFontSize: number | null;
@@ -1025,8 +1008,6 @@ function DashboardView({
             onRestoreAgentSession={(restore) =>
               terminalPaneRef.current?.openAgentSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, restore.command, restore.title, restore.agentId, restore.hookSessionId) ?? Promise.resolve()
             }
-            codeGraphAutoMaintain={codeGraphAutoMaintain}
-            onCodeGraphAutoMaintainChange={onCodeGraphAutoMaintainChange}
           />
         ) : (
           <EmptyState title="No project selected" body="Select a project to get started." />
@@ -2474,7 +2455,7 @@ function EditorSurface({ active, appearanceTheme, tab, onChange, onSave }: {
   );
 }
 
-function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, onOpenFileInEditor, onOpenGitDiff, onOpenBrowserTab, onOpenTerminal, onRestoreAgentSession, codeGraphAutoMaintain, onCodeGraphAutoMaintainChange }: {
+function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, onOpenFileInEditor, onOpenGitDiff, onOpenBrowserTab, onOpenTerminal, onRestoreAgentSession }: {
   agentClis: AgentCli[];
   detail: ProjectDetail | null;
   candidate: ProjectCandidate;
@@ -2485,8 +2466,6 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
   onOpenBrowserTab: (url: string) => Promise<void>;
   onOpenTerminal: (options: { title?: string; initialCommand?: string }) => Promise<void>;
   onRestoreAgentSession: (restore: AgentSessionRestoreCommand) => Promise<void>;
-  codeGraphAutoMaintain: boolean;
-  onCodeGraphAutoMaintainChange: (enabled: boolean) => Promise<void>;
 }) {
   const isLocal = candidate.providerKind === "local";
   const availableTabs = detailTabs.filter((tab) => !tab.localOnly || isLocal);
@@ -2513,17 +2492,9 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
     return () => { cancelled = true; };
   }, [candidate.uri]);
 
-  const runManualCodeGraphEnsure = useCallback(() => {
-    setCodeGraphStatus((current) => ({ ...current, loading: true, error: null }));
-    void ensureCodeGraphStatus(candidate.uri)
-      .then((status) => setCodeGraphStatus({ loading: false, status, error: null }))
-      .catch((error) => setCodeGraphStatus({ loading: false, status: null, error: asMessage(error) }));
-  }, [candidate.uri]);
-
   useEffect(() => {
-    if (!codeGraphAutoMaintain) return;
     const statusState = codeGraphStatus.status?.state;
-    if (!statusState || !shouldEnsureCodeGraphForSelection({ providerKind: candidate.providerKind, isGitManaged, statusState, autoMaintain: codeGraphAutoMaintain })) return;
+    if (!statusState || !shouldEnsureCodeGraphForSelection({ providerKind: candidate.providerKind, isGitManaged, statusState })) return;
     let cancelled = false;
     setCodeGraphStatus((current) => ({ ...current, loading: true, error: null }));
     void ensureCodeGraphStatus(candidate.uri)
@@ -2534,10 +2505,10 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
         if (!cancelled) setCodeGraphStatus({ loading: false, status: null, error: asMessage(error) });
       });
     return () => { cancelled = true; };
-  }, [candidate.providerKind, candidate.uri, codeGraphStatus.status?.state, isGitManaged, codeGraphAutoMaintain]);
+  }, [candidate.providerKind, candidate.uri, codeGraphStatus.status?.state, isGitManaged]);
 
   useEffect(() => {
-    if (!codeGraphAutoMaintain || !isLocal || isGitManaged !== false) return;
+    if (!isLocal || isGitManaged !== false) return;
     let cancelled = false;
     setCodeGraphStatus({ loading: true, status: null, error: null });
     void ensureCodeGraphStatus(candidate.uri)
@@ -2548,10 +2519,10 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
         if (!cancelled) setCodeGraphStatus({ loading: false, status: null, error: asMessage(error) });
       });
     return () => { cancelled = true; };
-  }, [candidate.uri, isLocal, isGitManaged, codeGraphAutoMaintain]);
+  }, [candidate.uri, isLocal, isGitManaged]);
 
   useEffect(() => {
-    if (!codeGraphAutoMaintain || !isLocal || isGitManaged !== true || gitDirtyFileCount === null) return;
+    if (!isLocal || isGitManaged !== true || gitDirtyFileCount === null) return;
     const previous = lastCodeGraphDirtyCount.current;
     lastCodeGraphDirtyCount.current = { projectUri: candidate.uri, count: gitDirtyFileCount };
     if (!previous || previous.projectUri !== candidate.uri || previous.count === gitDirtyFileCount) return;
@@ -2572,7 +2543,7 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [candidate.uri, gitDirtyFileCount, isGitManaged, isLocal, codeGraphAutoMaintain]);
+  }, [candidate.uri, gitDirtyFileCount, isGitManaged, isLocal]);
 
   function handleDetailTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, tab: DetailTab) {
     const currentIndex = availableTabs.findIndex((item) => item.id === tab);
@@ -2624,7 +2595,7 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
         </div>
       ) : null}
       <div aria-labelledby="project-detail-tab-files" className="detail-tab-panel" hidden={visibleDetailTab !== "files"} id="project-detail-tabpanel-files" role="tabpanel">
-        <FilesDetailTab active={visibleDetailTab === "files"} candidate={candidate} codeGraphStatus={codeGraphStatus} detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} onOpenTerminal={onOpenTerminal} codeGraphAutoMaintain={codeGraphAutoMaintain} onCodeGraphAutoMaintainChange={onCodeGraphAutoMaintainChange} onRunCodeGraphEnsure={runManualCodeGraphEnsure} />
+        <FilesDetailTab active={visibleDetailTab === "files"} candidate={candidate} codeGraphStatus={codeGraphStatus} detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} onOpenTerminal={onOpenTerminal} />
       </div>
     </div>
   );
@@ -3145,7 +3116,7 @@ function GitHistoryItems({ events }: { events: NonNullable<ProjectDetail["gitHis
 }
 
 
-function FilesDetailTab({ active, candidate, codeGraphStatus, detail, setToast, onOpenFileInEditor, onOpenGitDiff, onOpenTerminal, codeGraphAutoMaintain, onCodeGraphAutoMaintainChange, onRunCodeGraphEnsure }: {
+function FilesDetailTab({ active, candidate, codeGraphStatus, detail, setToast, onOpenFileInEditor, onOpenGitDiff, onOpenTerminal }: {
   active: boolean;
   candidate: ProjectCandidate;
   codeGraphStatus: CodeGraphStatusView;
@@ -3154,9 +3125,6 @@ function FilesDetailTab({ active, candidate, codeGraphStatus, detail, setToast, 
   onOpenFileInEditor: (relativePath: string) => Promise<void>;
   onOpenGitDiff: (relativePath: string) => Promise<void>;
   onOpenTerminal: (options: { title?: string; initialCommand?: string }) => Promise<void>;
-  codeGraphAutoMaintain: boolean;
-  onCodeGraphAutoMaintainChange: (enabled: boolean) => Promise<void>;
-  onRunCodeGraphEnsure: () => void;
 }) {
   const [state, setState] = useState<{ loading: boolean; error: string | null; files: ProjectFileTreeItem[] }>({ loading: false, error: null, files: [] });
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(() => new Set());
@@ -3330,13 +3298,13 @@ function FilesDetailTab({ active, candidate, codeGraphStatus, detail, setToast, 
 
   return (
     <>
-      <CodeGraphStatusSummary codeGraphStatus={codeGraphStatus} onOpenTerminal={onOpenTerminal} codeGraphAutoMaintain={codeGraphAutoMaintain} onCodeGraphAutoMaintainChange={onCodeGraphAutoMaintainChange} onRunCodeGraphEnsure={onRunCodeGraphEnsure} />
+      <CodeGraphStatusSummary codeGraphStatus={codeGraphStatus} onOpenTerminal={onOpenTerminal} />
       {fileContent}
     </>
   );
 }
 
-function CodeGraphStatusSummary({ codeGraphStatus, onOpenTerminal, codeGraphAutoMaintain, onCodeGraphAutoMaintainChange, onRunCodeGraphEnsure }: { codeGraphStatus: CodeGraphStatusView; onOpenTerminal: (options: { title?: string; initialCommand?: string }) => Promise<void>; codeGraphAutoMaintain: boolean; onCodeGraphAutoMaintainChange: (enabled: boolean) => Promise<void>; onRunCodeGraphEnsure: () => void }) {
+function CodeGraphStatusSummary({ codeGraphStatus, onOpenTerminal }: { codeGraphStatus: CodeGraphStatusView; onOpenTerminal: (options: { title?: string; initialCommand?: string }) => Promise<void> }) {
   if (!codeGraphStatus.loading && codeGraphStatus.status?.state === "not-installed") {
     return (
       <section className="subpanel confirm-panel protocol-action-card codegraph-status-card" aria-label="CodeGraph status summary">
@@ -3353,34 +3321,16 @@ function CodeGraphStatusSummary({ codeGraphStatus, onOpenTerminal, codeGraphAuto
     );
   }
 
-  const state = codeGraphStatus.status?.state;
   const line = codeGraphStatus.loading
     ? "Checking CodeGraph index."
     : codeGraphStatus.error
       ? `CodeGraph status unavailable: ${codeGraphStatus.error}`
       : codeGraphStatus.status?.summary ?? "CodeGraph status unavailable.";
 
-  // Explicit indexing actions only apply to supported local projects whose status was read.
-  const canIndex = !codeGraphStatus.loading && (state === "uninitialized" || state === "stale" || state === "indexed");
-  const actionLabel = state === "uninitialized" ? "Init index" : "Sync index";
-
   return (
     <section className="subpanel codegraph-status-card" aria-label="CodeGraph status summary">
       <h4>CodeGraph</h4>
       <div className="codegraph-status-line">{line}</div>
-      {canIndex ? (
-        <div className="button-row">
-          <button className="button compact" type="button" disabled={codeGraphStatus.loading} onClick={() => onRunCodeGraphEnsure()}>{actionLabel}</button>
-        </div>
-      ) : null}
-      <label className="codegraph-automaintain-toggle">
-        <input
-          type="checkbox"
-          checked={codeGraphAutoMaintain}
-          onChange={(event) => { void onCodeGraphAutoMaintainChange(event.currentTarget.checked); }}
-        />
-        <span>Automatically maintain index on project changes</span>
-      </label>
     </section>
   );
 }

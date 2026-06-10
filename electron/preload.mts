@@ -7,7 +7,6 @@ import type {
   AgentProjectStatusEvent,
   AppConfig,
   AppearanceThemeInput,
-  CodeGraphAutoMaintainInput,
   BrowserActionInput,
   BrowserCloseInput,
   BrowserCreateInput,
@@ -114,8 +113,7 @@ const sharkBayApi = {
     renameProject: (input: RenameProjectInput) => invoke<AppConfig>(channels.renameProject, input),
     pickProjectFolder: () => invoke<{ cancelled: boolean; paths: string[] }>(channels.pickProjectFolder),
     createWorktree: (input: CreateWorktreeInput) => invoke<CreateWorktreeResult>(channels.createWorktree, input),
-    setAppearanceTheme: (input: AppearanceThemeInput) => invoke<AppConfig>(channels.setAppearanceTheme, input),
-    setCodeGraphAutoMaintain: (input: CodeGraphAutoMaintainInput) => invoke<AppConfig>(channels.setCodeGraphAutoMaintain, input)
+    setAppearanceTheme: (input: AppearanceThemeInput) => invoke<AppConfig>(channels.setAppearanceTheme, input)
   },
   projects: {
     scan: (input?: ProjectScanInput) => invoke<ScanProjectsResult>(channels.scanProjects, input),

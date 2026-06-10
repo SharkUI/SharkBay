@@ -48,36 +48,26 @@ describe("renderer workflow contracts", () => {
     expect(shouldKeepCurrentServiceUrl("https://nextjs.org/docs", "http://127.0.0.1:3000")).toBe(false);
   });
 
-  it("initializes unindexed local Git projects only when auto-maintain is on", () => {
+  it("initializes unindexed local Git projects", () => {
     expect(shouldEnsureCodeGraphForSelection({
       providerKind: "local",
       isGitManaged: true,
       statusState: "uninitialized",
-      autoMaintain: true,
     })).toBe(true);
     expect(shouldEnsureCodeGraphForSelection({
       providerKind: "local",
       isGitManaged: true,
-      statusState: "uninitialized",
-      autoMaintain: false,
-    })).toBe(false);
-    expect(shouldEnsureCodeGraphForSelection({
-      providerKind: "local",
-      isGitManaged: true,
       statusState: "stale",
-      autoMaintain: true,
     })).toBe(false);
     expect(shouldEnsureCodeGraphForSelection({
       providerKind: "local",
       isGitManaged: false,
       statusState: "uninitialized",
-      autoMaintain: true,
     })).toBe(false);
     expect(shouldEnsureCodeGraphForSelection({
       providerKind: "container",
       isGitManaged: true,
       statusState: "uninitialized",
-      autoMaintain: true,
     })).toBe(false);
   });
 

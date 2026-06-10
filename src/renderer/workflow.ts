@@ -41,10 +41,8 @@ export function shouldEnsureCodeGraphForSelection(input: {
   providerKind: WorkflowProjectCandidate["providerKind"];
   isGitManaged: boolean | null;
   statusState: WorkflowCodeGraphStatusState;
-  autoMaintain: boolean;
 }): boolean {
-  return input.autoMaintain === true
-    && input.providerKind === "local"
+  return input.providerKind === "local"
     && input.isGitManaged === true
     && input.statusState === "uninitialized";
 }
