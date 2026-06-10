@@ -4850,3 +4850,29 @@ body.is-resizing-columns .app-shell[data-theme="morning"] .column-resizer::befor
     border-bottom: 1px solid #e4dfd4;
   }
 }
+
+.update-hint {
+  position: fixed;
+  left: 12px;
+  bottom: 10px;
+  z-index: 90;
+  padding: 0;
+  font: 9px/1.4 inherit;
+  color: #7a9e93;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.update-hint:hover {
+  color: #4a7c6f;
+  text-decoration: underline;
+}
+
+.app-shell[data-theme="night"] .update-hint {
+  color: #6fa897;
+}
+
+.app-shell[data-theme="night"] .update-hint:hover {
+  color: #8ecdb8;
+}
