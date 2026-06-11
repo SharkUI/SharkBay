@@ -182,6 +182,11 @@ function createIslandWindow(): BrowserWindow {
     alwaysOnTop: true,
     skipTaskbar: true,
     focusable: false,
+    // macOS: a `panel` window with `focusable: false` becomes a non-activating
+    // NSPanel, so clicking the island does NOT activate SharkBay or bring the main
+    // window to the front. Opening + locating a session is still explicit via the
+    // islandFocusSession IPC (mainWin.show()/focus()) on a session-card click.
+    type: process.platform === "darwin" ? "panel" : undefined,
     show: false,
     enableLargerThanScreen: true,
     webPreferences: {
