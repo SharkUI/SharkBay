@@ -12,8 +12,10 @@ agent: Codex GPT-5
 sessionId: 019eb5ea-9bd2-7eb0-85c9-20e696401d4d
 branch: main
 createdAt: 2026-06-11T09:06:06Z
-updatedAt: 2026-06-11T09:08:17Z
-completedAt: 2026-06-11T09:08:17Z
+updatedAt: 2026-06-11T09:13:15Z
+completedAt: 2026-06-11T09:13:15Z
+commits:
+  - e633895307ea8bea0acabad94e4dc3e54e66bebf
 ---
 
 ## Summary
@@ -28,6 +30,7 @@ Fixed the macOS main-window close/reopen behavior so red close hides the existin
 - Found prior Dock/island tasks M3K7V2-u3960864-m81ae10 and I7P3W9-u3960864-m81ae10; this fix must preserve Dock reopen and island non-activating behavior.
 - Identified current root cause: `closed` nulls `mainWindow`, so Dock activation creates a fresh BrowserWindow instead of restoring the still-running hidden UI state.
 - Changed macOS main-window close to hide the existing BrowserWindow during normal use, while allowing real destruction during app quit.
+- Preparing a focused commit for the main-window lifecycle fix.
 
 ## Verification
 - `npm run typecheck` passed.
