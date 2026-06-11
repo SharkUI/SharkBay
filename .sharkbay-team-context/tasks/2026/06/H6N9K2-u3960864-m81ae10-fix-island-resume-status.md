@@ -12,7 +12,7 @@ agent: Codex GPT-5
 sessionId: 019eb5ff-e4b1-7801-887a-3e8411b5b76f
 branch: main
 createdAt: 2026-06-11T09:33:17Z
-updatedAt: 2026-06-11T09:39:10Z
+updatedAt: 2026-06-11T10:44:29Z
 completedAt: 2026-06-11T09:39:10Z
 commits:
   - 1ef151f296dcdddbdcf3d12a5bed89074b457a31
@@ -31,6 +31,7 @@ Fixed island status selection after Codex/Claude resume or session switching by 
 - Updated renderer state aggregation so one terminal uses the latest hook event by timestamp, with a `working`-only unique project+agent fallback for unresolved terminalSessionId.
 - Updated terminal cleanup paths to clear all hook sessions associated with the terminal.
 - Updated main-process helper paths to choose the latest mapped hook session and delete all terminal mappings on exit.
+- Replied to and closed GitHub issue #17 as completed.
 
 ## Verification
 - `npm run typecheck`
