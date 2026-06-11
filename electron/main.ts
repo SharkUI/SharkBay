@@ -15,6 +15,7 @@ const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? "http://127.0.0.1:5173";
 let mainWindow: BrowserWindow | null = null;
 let islandWindow: BrowserWindow | null = null;
 let appearanceTheme: AppearanceTheme = "day";
+let isQuitting = false;
 
 app.setName("SharkBay");
 
@@ -139,6 +140,18 @@ function createMainWindow(): BrowserWindow {
     return { action: "deny" };
   });
 
+  window.on("close", (event) => {
+    if (process.platform !== "darwin" || isQuitting) return;
+    event.preventDefault();
+    window.hide();
+  });
+
+  window.on("closed", () => {
+    if (mainWindow === window) {
+      mainWindow = null;
+    }
+  });
+
   if (app.isPackaged) {
     void window.loadFile(join(currentDir, "../../dist/renderer/index.html"));
   } else {
@@ -256,8 +269,6 @@ app.whenReady().then(async () => {
   mainWindow = createMainWindow();
   islandWindow = createIslandWindow();
 
-  mainWindow.on("closed", () => { mainWindow = null; });
-
   mainWindow.on("focus", () => {
     if (process.platform === "darwin" && app.dock) app.dock.setBadge("");
   });
@@ -265,7 +276,6 @@ app.whenReady().then(async () => {
   app.on("activate", () => {
     if (!mainWindow || mainWindow.isDestroyed()) {
       mainWindow = createMainWindow();
-      mainWindow.on("closed", () => { mainWindow = null; });
     } else {
       mainWindow.show();
       mainWindow.focus();
@@ -284,6 +294,8 @@ app.on("window-all-closed", () => {
 let cleanupComplete = false;
 
 app.on("before-quit", (event) => {
+  isQuitting = true;
+
   if (islandWindow && !islandWindow.isDestroyed()) {
     islandWindow.destroy();
     islandWindow = null;
