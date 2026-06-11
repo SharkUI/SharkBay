@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { getConfiguredRoots } from "../../main/config.js";
 import { readLocalProjectFile, writeLocalProjectFile, deleteLocalProjectFile, renameLocalProjectFile } from "../../main/file-content.js";
 import { readGitDirtyFiles, readGitHistory, readGitMetadata } from "../../main/git.js";
+import { readGitHubInfo } from "../../main/github.js";
 import { listProjectFiles } from "../../main/project-files.js";
 import { scanProjects } from "../../main/scanner.js";
 import { TerminalManager } from "../../main/terminal.js";
@@ -17,6 +18,7 @@ import type {
   ExecutionTarget,
   GitDirtyFile,
   GitEvent,
+  GitHubInfo,
   GitMetadata,
   IpcRuntimeLike,
   MachineProfile,
@@ -123,6 +125,10 @@ export class LocalProvider extends EventEmitter implements ExecutionProvider {
 
   readGitDirtyFiles(_runtime: IpcRuntimeLike, projectUri: string): Promise<GitDirtyFile[]> {
     return readGitDirtyFiles(localPathFromUri(projectUri));
+  }
+
+  readGitHubInfo(_runtime: IpcRuntimeLike, projectUri: string): Promise<GitHubInfo> {
+    return readGitHubInfo(localPathFromUri(projectUri));
   }
 
   async createMachineProbeContext(runtime: IpcRuntimeLike, targetId: string): Promise<MachineProbeContext> {

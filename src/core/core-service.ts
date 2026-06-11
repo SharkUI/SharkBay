@@ -10,6 +10,7 @@ import type {
   DeleteFileInput,
   DeleteFileResult,
   DiagnosticsSnapshot,
+  GitHubInfo,
   InstallLogEvent,
   InstallLogStream,
   InstallToolInput,
@@ -255,6 +256,10 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
 
   listProjectFiles(runtime: IpcRuntimeLike, input: ProjectFilesInput): Promise<ProjectFilesResult> {
     return this.providers.providerForUri(input.projectUri).listProjectFiles(runtime, input);
+  }
+
+  readProjectGitHub(runtime: IpcRuntimeLike, input: { projectUri: string }): Promise<GitHubInfo> {
+    return this.providers.providerForUri(input.projectUri).readGitHubInfo(runtime, input.projectUri);
   }
 
   readProjectFile(runtime: IpcRuntimeLike, input: ReadFileInput): Promise<ReadFileResult> {

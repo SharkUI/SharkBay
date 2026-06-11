@@ -35,6 +35,7 @@ import type {
   RenameFileInput,
   RenameFileResult,
   DiagnosticsSnapshot,
+  GitHubInfo,
   PathExistsInput,
   PathExistsResult,
   ProjectConfigInput,
@@ -510,6 +511,9 @@ export async function registerIpcHandlers(
   );
   handle<{ projectUri: string }, ProjectDetail>(channels.getProjectDetail, (payload) =>
     requireCore().call("getProjectDetail", [runtime, payload])
+  );
+  handle<{ projectUri: string }, GitHubInfo>(channels.readProjectGitHub, (payload) =>
+    requireCore().call("readProjectGitHub", [runtime, payload])
   );
   handle<ProjectFilesInput, ProjectFilesResult>(channels.listProjectFiles, (payload) =>
     requireCore().call("listProjectFiles", [runtime, payload])

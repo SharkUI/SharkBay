@@ -5,6 +5,7 @@ import type {
   ExecutionTargetKind,
   GitDirtyFile,
   GitEvent,
+  GitHubInfo,
   GitMetadata,
   IpcRuntimeLike,
   MachineProfile,
@@ -113,6 +114,7 @@ export interface ExecutionProvider {
   readGitMetadata(runtime: IpcRuntimeLike, projectUri: string): Promise<GitMetadata>;
   readGitHistory(runtime: IpcRuntimeLike, projectUri: string): Promise<GitEvent[]>;
   readGitDirtyFiles(runtime: IpcRuntimeLike, projectUri: string): Promise<GitDirtyFile[]>;
+  readGitHubInfo(runtime: IpcRuntimeLike, projectUri: string): Promise<GitHubInfo>;
 
   createMachineProbeContext(runtime: IpcRuntimeLike, targetId: string): Promise<MachineProbeContext>;
   createProjectProbeContext(runtime: IpcRuntimeLike, projectUri: string): Promise<ProjectProbeContext>;

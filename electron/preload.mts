@@ -29,6 +29,7 @@ import type {
   ProjectConfigInput,
   ProjectScanInput,
   ProjectDetail,
+  GitHubInfo,
   ProjectFilesInput,
   ProjectFilesResult,
   ReadFileInput,
@@ -118,6 +119,7 @@ const sharkBayApi = {
   projects: {
     scan: (input?: ProjectScanInput) => invoke<ScanProjectsResult>(channels.scanProjects, input),
     getDetail: (input: { projectUri: string }) => invoke<ProjectDetail>(channels.getProjectDetail, input),
+    getGitHub: (input: { projectUri: string }) => invoke<GitHubInfo>(channels.readProjectGitHub, input),
     listFiles: (input: ProjectFilesInput) => invoke<ProjectFilesResult>(channels.listProjectFiles, input),
     readFile: (input: ReadFileInput) => invoke<ReadFileResult>(channels.readProjectFile, input),
     writeFile: (input: WriteFileInput) => invoke<WriteFileResult>(channels.writeProjectFile, input),

@@ -524,6 +524,42 @@ export type GitDirtyFile = {
   unstaged: string;
 };
 
+export type GitHubIssue = {
+  number: number;
+  title: string;
+  author: string;
+  createdAt: string;
+  url: string;
+  labels: string[];
+};
+
+export type GitHubPullRequest = {
+  number: number;
+  title: string;
+  author: string;
+  createdAt: string;
+  url: string;
+  headRefName: string;
+  isDraft: boolean;
+  reviewDecision: string | null;
+  labels: string[];
+};
+
+export type GitHubRelease = {
+  tagName: string;
+  name: string;
+  publishedAt: string;
+  isLatest: boolean;
+  isPrerelease: boolean;
+};
+
+export type GitHubInfo = {
+  available: boolean;
+  issues: GitHubIssue[];
+  pullRequests: GitHubPullRequest[];
+  latestRelease: GitHubRelease | null;
+};
+
 export type ProjectSummary = {
   id: string;
   uri: string;

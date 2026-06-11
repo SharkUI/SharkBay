@@ -38,6 +38,7 @@ const dispatchers: Record<CoreMethodName, Dispatcher> = {
   listInstallRecipes: ([runtime, input]) => core.listInstallRecipes(runtime as never, input as never),
   installTool: ([runtime, input]) => core.installTool(runtime as never, input as never),
   getProjectDetail: ([runtime, input]) => core.getProjectDetail(runtime as never, input as never),
+  readProjectGitHub: ([runtime, input]) => core.readProjectGitHub(runtime as never, input as never),
   listProjectFiles: ([runtime, input]) => core.listProjectFiles(runtime as never, input as never),
   readProjectFile: ([runtime, input]) => core.readProjectFile(runtime as never, input as never),
   writeProjectFile: ([runtime, input]) => core.writeProjectFile(runtime as never, input as never),

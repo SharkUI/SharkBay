@@ -4,6 +4,7 @@ import type {
   DeleteFileInput,
   DeleteFileResult,
   DiagnosticsSnapshot,
+  GitHubInfo,
   InstallLogEvent,
   InstallRecipe,
   InstallToolInput,
@@ -40,6 +41,7 @@ export type CoreMethodMap = {
   listInstallRecipes: { args: [IpcRuntimeLike, ListInstallRecipesInput]; result: InstallRecipe[] };
   installTool: { args: [IpcRuntimeLike, InstallToolInput]; result: InstallToolResult };
   getProjectDetail: { args: [IpcRuntimeLike, { projectUri: string }]; result: ProjectDetail };
+  readProjectGitHub: { args: [IpcRuntimeLike, { projectUri: string }]; result: GitHubInfo };
   listProjectFiles: { args: [IpcRuntimeLike, ProjectFilesInput]; result: ProjectFilesResult };
   readProjectFile: { args: [IpcRuntimeLike, ReadFileInput]; result: ReadFileResult };
   writeProjectFile: { args: [IpcRuntimeLike, WriteFileInput]; result: WriteFileResult };

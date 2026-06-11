@@ -18,6 +18,8 @@ import type {
   BrowserUpdateEvent,
   CodeGraphProjectStatus,
   DiagnosticsSnapshot,
+  GitHubInfo,
+  GitHubRelease,
   InstallLogEvent,
   InstallRecipe,
   InstallToolResult,
@@ -294,6 +296,12 @@ async function listProjectFiles(project: ProjectCandidate | ProjectDetail, direc
 async function readCodeGraphStatus(projectUri: string): Promise<CodeGraphProjectStatus> {
   const handler = getBridge().codeGraph?.getStatus;
   if (!handler) throw new Error("CodeGraph status is not exposed by the preload API.");
+  return handler({ projectUri });
+}
+
+async function readProjectGitHub(projectUri: string): Promise<GitHubInfo> {
+  const handler = getBridge().projects?.getGitHub;
+  if (!handler) throw new Error("GitHub info is not exposed by the preload API.");
   return handler({ projectUri });
 }
 
@@ -2568,7 +2576,7 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
         ))}
       </div>
       <div aria-labelledby="project-detail-tab-git" className="detail-tab-panel" hidden={visibleDetailTab !== "git"} id="project-detail-tabpanel-git" role="tabpanel">
-        <GitDetailTab detail={detail} candidate={candidate} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} onOpenTerminal={onOpenTerminal} />
+        <GitDetailTab detail={detail} candidate={candidate} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} onOpenTerminal={onOpenTerminal} onOpenBrowserTab={onOpenBrowserTab} />
       </div>
       {isLocal ? (
         <div aria-labelledby="project-detail-tab-sessions" className="detail-tab-panel" hidden={visibleDetailTab !== "sessions"} id="project-detail-tabpanel-sessions" role="tabpanel">
@@ -2601,10 +2609,24 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
   );
 }
 
-function GitDetailTab({ detail, candidate, setToast, onOpenFileInEditor, onOpenGitDiff, onOpenTerminal }: { detail: ProjectDetail | null; candidate: ProjectCandidate; setToast: (toast: Toast) => void; onOpenFileInEditor: (relativePath: string) => Promise<void>; onOpenGitDiff: (relativePath: string) => Promise<void>; onOpenTerminal: (options: { title?: string; initialCommand?: string }) => Promise<void> }) {
+function GitDetailTab({ detail, candidate, setToast, onOpenFileInEditor, onOpenGitDiff, onOpenTerminal, onOpenBrowserTab }: { detail: ProjectDetail | null; candidate: ProjectCandidate; setToast: (toast: Toast) => void; onOpenFileInEditor: (relativePath: string) => Promise<void>; onOpenGitDiff: (relativePath: string) => Promise<void>; onOpenTerminal: (options: { title?: string; initialCommand?: string }) => Promise<void>; onOpenBrowserTab: (url: string) => Promise<void> }) {
   const isGitManaged = detail ? detail.dirtyWorktree !== null : null;
   const [showCloneInput, setShowCloneInput] = useState(false);
   const [cloneUrl, setCloneUrl] = useState("");
+  const [gitHub, setGitHub] = useState<GitHubInfo | null>(null);
+
+  useEffect(() => {
+    if (isGitManaged !== true) {
+      setGitHub(null);
+      return;
+    }
+    let cancelled = false;
+    setGitHub(null);
+    void readProjectGitHub(candidate.uri)
+      .then((info) => { if (!cancelled) setGitHub(info); })
+      .catch(() => { if (!cancelled) setGitHub(null); });
+    return () => { cancelled = true; };
+  }, [candidate.uri, isGitManaged]);
 
   if (isGitManaged === false) {
     return (
@@ -2656,8 +2678,9 @@ function GitDetailTab({ detail, candidate, setToast, onOpenFileInEditor, onOpenG
 
   return (
     <>
-      <ProjectFactsCard detail={detail} candidate={candidate} />
+      <ProjectFactsCard detail={detail} candidate={candidate} latestRelease={gitHub?.latestRelease ?? null} />
       <DirtyFilesPanel detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} />
+      <GitHubCards info={gitHub} setToast={setToast} onOpenBrowserTab={onOpenBrowserTab} />
       {detail?.gitHistory?.length || detail?.currentBranch ? (
         <GitHistoryItems events={detail?.gitHistory ?? []} />
       ) : (
@@ -3033,13 +3056,15 @@ function TaskSessionRestoreCard({ agentName, restore, onRestore }: {
   );
 }
 
-function ProjectFactsCard({ detail, candidate }: { detail: ProjectDetail | null; candidate: ProjectCandidate }) {
+function ProjectFactsCard({ detail, candidate, latestRelease = null }: { detail: ProjectDetail | null; candidate: ProjectCandidate; latestRelease?: GitHubRelease | null }) {
   const worktree = detail?.dirtyWorktree === null ? null : detail?.dirtyWorktree ? "Dirty" : "Clean";
+  const releaseLabel = latestRelease ? `${latestRelease.tagName}${latestRelease.isPrerelease ? " (pre-release)" : ""}` : null;
   const facts = [
     { label: "Path", value: detail?.displayPath ?? candidate.displayPath },
     { label: "URI", value: detail?.uri ?? candidate.uri },
     { label: "Repo URL", value: detail?.repoUrl },
     { label: "Branch", value: detail?.currentBranch },
+    { label: "Latest Release", value: releaseLabel },
     { label: "Worktree", value: worktree, tone: detail?.dirtyWorktree ? "warn" as const : undefined },
   ].filter((fact): fact is { label: string; value: string; tone?: "warn" } => Boolean(fact.value));
 
@@ -3085,6 +3110,77 @@ function DirtyFilesPanel({ detail, setToast, onOpenFileInEditor, onOpenGitDiff }
       </div>
     </section>
   );
+}
+
+function GitHubCards({ info, setToast, onOpenBrowserTab }: { info: GitHubInfo | null; setToast: (toast: Toast) => void; onOpenBrowserTab: (url: string) => Promise<void> }) {
+  if (!info || !info.available) return null;
+  const { issues, pullRequests } = info;
+  if (!issues.length && !pullRequests.length) return null;
+
+  const open = (url: string) => {
+    void onOpenBrowserTab(url).catch((error) => setToast({ tone: "error", message: asMessage(error) }));
+  };
+
+  return (
+    <>
+      {pullRequests.length ? (
+        <section className="subpanel github-card">
+          <div className="panel-title-row compact-title-row">
+            <h4>Open Pull Requests</h4>
+            <span className="form-note">{pullRequests.length}</span>
+          </div>
+          <div className="github-row-list">
+            {pullRequests.map((pr) => (
+              <button className="github-row" key={pr.number} type="button" title={pr.title} onClick={() => open(pr.url)}>
+                <span className="github-row-number">#{pr.number}</span>
+                <span className="github-row-title">{pr.title}</span>
+                <span className="github-row-meta">
+                  {pr.isDraft ? <span className="github-badge is-draft">draft</span> : null}
+                  {reviewBadge(pr.reviewDecision)}
+                  <span className="github-branch">{pr.headRefName}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      {issues.length ? (
+        <section className="subpanel github-card">
+          <div className="panel-title-row compact-title-row">
+            <h4>Open Issues</h4>
+            <span className="form-note">{issues.length}</span>
+          </div>
+          <div className="github-row-list">
+            {issues.map((issue) => (
+              <button className="github-row" key={issue.number} type="button" title={issue.title} onClick={() => open(issue.url)}>
+                <span className="github-row-number">#{issue.number}</span>
+                <span className="github-row-title">{issue.title}</span>
+                {issue.labels.length ? (
+                  <span className="github-row-meta">
+                    {issue.labels.slice(0, 3).map((label) => (
+                      <span className="github-label" key={label}>{label}</span>
+                    ))}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </>
+  );
+}
+
+function reviewBadge(decision: string | null) {
+  if (!decision) return null;
+  const map: Record<string, { label: string; tone: string }> = {
+    APPROVED: { label: "approved", tone: "is-approved" },
+    CHANGES_REQUESTED: { label: "changes", tone: "is-changes" },
+    REVIEW_REQUIRED: { label: "review", tone: "is-review" },
+  };
+  const entry = map[decision];
+  if (!entry) return null;
+  return <span className={cx("github-badge", entry.tone)}>{entry.label}</span>;
 }
 
 function GitHistoryItems({ events }: { events: NonNullable<ProjectDetail["gitHistory"]> }) {
