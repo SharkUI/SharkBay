@@ -128,10 +128,7 @@ for (const connector of hookConnectors.values()) {
 
 const terminalApprovalDetector = new TerminalApprovalDetector();
 terminalApprovalDetector.setCallback((event) => {
-  let hookSessionId: string | undefined;
-  for (const [sid, tid] of hookSessionToTerminal) {
-    if (tid === event.terminalSessionId) { hookSessionId = sid; break; }
-  }
+  const hookSessionId = findAgentSessionForTerminal(event.terminalSessionId, event.agentId);
   if (!hookSessionId) return;
   hookStateManager.injectEvent({
     agent: event.agentId,
@@ -392,7 +389,7 @@ export async function registerIpcHandlers(
       if (id === event.sessionId) { terminalPidToId.delete(pid); break; }
     }
     for (const [sid, tid] of hookSessionToTerminal) {
-      if (tid === event.sessionId) { hookSessionToTerminal.delete(sid); break; }
+      if (tid === event.sessionId) hookSessionToTerminal.delete(sid);
     }
     BrowserWindow.getAllWindows().forEach((window) => {
       window.webContents.send(channels.terminalExit, event);
@@ -799,11 +796,27 @@ export async function registerIpcHandlers(
   });
 }
 
-function findAgentSessionForTerminal(terminalSessionId: string): string | null {
+function timestampValue(value: string): number {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function findAgentSessionForTerminal(terminalSessionId: string, agentId?: string): string | null {
+  const statuses = new Map(hookStateManager.getAllStatuses().map((entry) => [entry.sessionId, entry]));
+  let fallback: string | null = null;
+  let latest: { sessionId: string; timestamp: number } | null = null;
   for (const [sid, tid] of hookSessionToTerminal) {
-    if (tid === terminalSessionId) return sid;
+    if (tid !== terminalSessionId) continue;
+    const status = statuses.get(sid);
+    if (agentId && (!status || status.agent !== agentId)) continue;
+    fallback = sid;
+    if (!status) continue;
+    const timestamp = timestampValue(status.timestamp);
+    if (!latest || timestamp >= latest.timestamp) {
+      latest = { sessionId: sid, timestamp };
+    }
   }
-  return null;
+  return latest?.sessionId ?? fallback;
 }
 
 function flushPendingPrompt(agentSessionId: string, terminalId: string): void {

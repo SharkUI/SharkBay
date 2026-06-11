@@ -78,6 +78,15 @@ type Disposable = {
 
 type ProjectActivityState = WorkflowProjectActivityState;
 
+type HookSessionStateEntry = {
+  state: ProjectActivityState;
+  projectId: string;
+  agentId: string;
+  timestamp: string;
+  terminalSessionId?: string;
+  lastPrompt?: string;
+};
+
 type TerminalShellTab = {
   kind: "terminal";
   session: TerminalSession;
@@ -409,6 +418,11 @@ function priorityOf(state: ProjectActivityState): number {
   if (state === "stopped") return 2;
   if (state === "working") return 1;
   return 0;
+}
+
+function timestampValue(value: string): number {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 // Single source of truth for an agent tab's light state. The project pill is
@@ -778,7 +792,7 @@ function DashboardView({
 
   const [runningServiceProjectIds, setRunningServiceProjectIds] = useState<Set<string>>(() => new Set());
   const [hookActivityByProjectId, setHookActivityByProjectId] = useState<Record<string, ProjectActivityState>>({});
-  const [hookStateBySessionId, setHookStateBySessionId] = useState<Record<string, { state: ProjectActivityState; projectId: string; terminalSessionId?: string; lastPrompt?: string }>>({});
+  const [hookStateBySessionId, setHookStateBySessionId] = useState<Record<string, HookSessionStateEntry>>({});
   const [agentClis, setAgentClis] = useState<AgentCli[]>([]);
   const [agentListVersion, setAgentListVersion] = useState(0);
   const [agentStatusByProjectPath, setAgentStatusByProjectPath] = useState<AgentStatusByProjectPath>({});
@@ -888,8 +902,9 @@ function DashboardView({
         if (event.sessionId && matchedProjectId) {
           setHookStateBySessionId((current) => {
             const existing = current[event.sessionId!];
-            if (existing && existing.state === event.hookState && existing.projectId === matchedProjectId && existing.terminalSessionId === event.terminalSessionId && (!event.lastPrompt || existing.lastPrompt === event.lastPrompt)) return current;
-            return { ...current, [event.sessionId!]: { state: event.hookState!, projectId: matchedProjectId, terminalSessionId: event.terminalSessionId, lastPrompt: event.lastPrompt || existing?.lastPrompt } };
+            if (existing && timestampValue(event.timestamp) < timestampValue(existing.timestamp)) return current;
+            if (existing && existing.state === event.hookState && existing.projectId === matchedProjectId && existing.agentId === event.agentId && existing.timestamp === event.timestamp && existing.terminalSessionId === event.terminalSessionId && (!event.lastPrompt || existing.lastPrompt === event.lastPrompt)) return current;
+            return { ...current, [event.sessionId!]: { state: event.hookState!, projectId: matchedProjectId, agentId: event.agentId, timestamp: event.timestamp, terminalSessionId: event.terminalSessionId, lastPrompt: event.lastPrompt || existing?.lastPrompt } };
           });
         }
       }
@@ -1030,7 +1045,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   agentClis: AgentCli[];
   bridgeAvailable: boolean;
   candidate: ProjectCandidate | null;
-  hookStateBySessionId: Record<string, { state: ProjectActivityState; projectId: string; terminalSessionId?: string; lastPrompt?: string }>;
+  hookStateBySessionId: Record<string, HookSessionStateEntry>;
   projectAliases: Record<string, string>;
   isVisible: boolean;
   terminalColorScheme: string | null;
@@ -1056,20 +1071,58 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
   const tabDragRef = useRef<{ projectId: string; tabId: string; pointerId: number } | null>(null);
   const agentSessionToTerminalRef = useRef<Record<string, string>>({});
-  const hookStateByTerminalId = useMemo(() => {
+  const hookSnapshotByTerminalId = useMemo(() => {
     const map = agentSessionToTerminalRef.current;
+    const runningTabsByProjectAgent = new Map<string, string[]>();
+    for (const space of Object.values(spaces)) {
+      for (const tab of space.tabs) {
+        if (tab.kind !== "terminal" || !tab.session.agentId || tab.session.status !== "running") continue;
+        const key = `${space.projectId}\0${tab.session.agentId}`;
+        runningTabsByProjectAgent.set(key, [...(runningTabsByProjectAgent.get(key) ?? []), tab.session.id]);
+      }
+    }
     for (const [sid, entry] of Object.entries(hookStateBySessionId)) {
       if (entry.terminalSessionId) {
         map[sid] = entry.terminalSessionId;
       }
     }
-    const result: Record<string, ProjectActivityState> = {};
+    const result: Record<string, { sessionId: string; state: ProjectActivityState; timestampMs: number; lastPrompt?: string }> = {};
     for (const [sid, entry] of Object.entries(hookStateBySessionId)) {
-      const termId = map[sid];
-      if (termId) result[termId] = entry.state;
+      let termId = map[sid];
+      if (!termId && entry.state === "working") {
+        const candidates = runningTabsByProjectAgent.get(`${entry.projectId}\0${entry.agentId}`);
+        if (candidates?.length === 1) termId = candidates[0];
+      }
+      if (!termId) continue;
+      const timestampMs = timestampValue(entry.timestamp);
+      const current = result[termId];
+      if (!current || timestampMs >= current.timestampMs) {
+        result[termId] = { sessionId: sid, state: entry.state, timestampMs, lastPrompt: entry.lastPrompt };
+      }
     }
     return result;
   }, [hookStateBySessionId, spaces]);
+  const hookStateByTerminalId = useMemo(() => {
+    const result: Record<string, ProjectActivityState> = {};
+    for (const [terminalId, snapshot] of Object.entries(hookSnapshotByTerminalId)) {
+      result[terminalId] = snapshot.state;
+    }
+    return result;
+  }, [hookSnapshotByTerminalId]);
+  const hookSnapshotByTerminalIdRef = useRef(hookSnapshotByTerminalId);
+  useEffect(() => { hookSnapshotByTerminalIdRef.current = hookSnapshotByTerminalId; }, [hookSnapshotByTerminalId]);
+  const clearAgentSessionsForTerminal = useCallback((terminalId: string) => {
+    const sessionIds = new Set<string>();
+    for (const [sid, tid] of Object.entries(agentSessionToTerminalRef.current)) {
+      if (tid === terminalId) sessionIds.add(sid);
+    }
+    const selectedSessionId = hookSnapshotByTerminalIdRef.current[terminalId]?.sessionId;
+    if (selectedSessionId) sessionIds.add(selectedSessionId);
+    for (const sid of sessionIds) {
+      delete agentSessionToTerminalRef.current[sid];
+      onAgentSessionClear(sid);
+    }
+  }, [onAgentSessionClear]);
 
   // Auto-focus based on hookState: approval → terminal, working/stopped → prompt input bar
   const prevHookFocusState = useRef<string | undefined>(undefined);
@@ -1100,9 +1153,8 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     const space = spaces[activeProjectId];
     const activeTabId = space?.activeId;
     if (!activeTabId) return;
-    const agentSid = Object.entries(agentSessionToTerminalRef.current).find(([, tid]) => tid === activeTabId)?.[0];
-    if (agentSid) onAgentSessionClear(agentSid);
-  }, [activeProjectId, spaces, onAgentSessionClear]);
+    clearAgentSessionsForTerminal(activeTabId);
+  }, [activeProjectId, spaces, clearAgentSessionsForTerminal]);
 
   const scheduleClear = useCallback(() => {
     if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
@@ -1166,17 +1218,13 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       for (const tab of space.tabs) {
         if (tab.kind === "terminal" && tab.session.agentId && tab.session.status === "running") {
           const hookState = hookStateByTerminalId[tab.session.id];
-          // Find lastPrompt: hookStateBySessionId is keyed by hook sessionId, find entry with matching terminalSessionId
-          let lastPrompt: string | undefined;
-          for (const entry of Object.values(hookStateBySessionId)) {
-            if (entry.terminalSessionId === tab.session.id) { lastPrompt = entry.lastPrompt; break; }
-          }
+          const lastPrompt = hookSnapshotByTerminalId[tab.session.id]?.lastPrompt;
           tabs.push({ sessionId: tab.session.id, title: tab.session.title, projectName: space.projectName ?? space.projectId, agentId: tab.session.agentId, state: hookState || "unknown", lastPrompt });
         }
       }
     }
     getBridge().dock?.syncIslandTabs?.(tabs);
-  }, [spaces, hookStateByTerminalId, hookStateBySessionId]);
+  }, [spaces, hookStateByTerminalId, hookSnapshotByTerminalId]);
   useEffect(() => {
     const pending = pendingTerminalOutput.current;
     for (const [sessionId, data] of [...pending]) {
@@ -1480,8 +1528,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       const hint = explainEarlyTerminalExit(match.tab, event);
       if (hint) setToast({ tone: "error", message: hint });
       if (match.tab.session.agentId) {
-        const agentSid = Object.entries(agentSessionToTerminalRef.current).find(([, tid]) => tid === match.tab.session.id)?.[0];
-        if (agentSid) onAgentSessionClear(agentSid);
+        clearAgentSessionsForTerminal(match.tab.session.id);
       }
     }
     setSpaces((current) => mapTerminalTab(current, event.sessionId, (currentTab) => ({ ...currentTab, session: { ...currentTab.session, status: "exited" } })));
@@ -1542,11 +1589,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       termTab.disposables.forEach((d) => d.dispose());
       termTab.terminal.dispose();
       if (termTab.session.agentId) {
-        const agentSid = Object.entries(agentSessionToTerminalRef.current).find(([, tid]) => tid === termTab.session.id)?.[0];
-        if (agentSid) {
-          delete agentSessionToTerminalRef.current[agentSid];
-          onAgentSessionClear(agentSid);
-        }
+        clearAgentSessionsForTerminal(termTab.session.id);
       }
     }
     setSpaces((current) => {
