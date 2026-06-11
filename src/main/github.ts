@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { GitHubInfo, GitHubIssue, GitHubPullRequest, GitHubRelease } from "../shared/types.js";
+import { prependPathDirectories, resolveCommandPath, resolveCommandSearchPaths } from "./command-path.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -14,9 +15,19 @@ const EMPTY_INFO: GitHubInfo = {
 };
 
 export async function readGitHubInfo(repoPath: string): Promise<GitHubInfo> {
-  // Guard: confirms gh is installed, authenticated, and the repo is on GitHub.
-  // When this fails the panel simply hides the GitHub cards.
-  const repoView = await gh(repoPath, ["repo", "view", "--json", "nameWithOwner"]).catch(() => null);
+  // Packaged GUI apps inherit only a minimal PATH, so `gh` (typically installed
+  // under Homebrew) is not on PATH the way it is in a dev shell. Resolve its
+  // absolute path and augment PATH so gh can also find the `git` it shells out
+  // to. When gh cannot be located the panel simply hides the GitHub cards.
+  const searchPaths = await resolveCommandSearchPaths();
+  const ghPath = await resolveCommandPath("gh");
+  if (!ghPath) {
+    return EMPTY_INFO;
+  }
+  const envPath = prependPathDirectories(process.env.PATH, searchPaths);
+
+  // Guard: confirms gh is authenticated and the repo is on GitHub.
+  const repoView = await gh(repoPath, ["repo", "view", "--json", "nameWithOwner"], ghPath, envPath).catch(() => null);
   if (repoView === null) {
     return EMPTY_INFO;
   }
@@ -25,15 +36,15 @@ export async function readGitHubInfo(repoPath: string): Promise<GitHubInfo> {
     gh(repoPath, [
       "issue", "list", "--state", "open", "--limit", String(LIST_LIMIT),
       "--json", "number,title,author,createdAt,url,labels",
-    ]).catch(() => "[]"),
+    ], ghPath, envPath).catch(() => "[]"),
     gh(repoPath, [
       "pr", "list", "--state", "open", "--limit", String(LIST_LIMIT),
       "--json", "number,title,author,createdAt,url,headRefName,isDraft,reviewDecision,labels",
-    ]).catch(() => "[]"),
+    ], ghPath, envPath).catch(() => "[]"),
     gh(repoPath, [
       "release", "list", "--limit", "1",
       "--json", "tagName,name,publishedAt,isLatest,isPrerelease",
-    ]).catch(() => "[]"),
+    ], ghPath, envPath).catch(() => "[]"),
   ]);
 
   return {
@@ -131,12 +142,12 @@ function asLabelNames(value: unknown): string[] {
   });
 }
 
-async function gh(repoPath: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync("gh", args, {
+async function gh(repoPath: string, args: string[], ghPath: string, envPath: string): Promise<string> {
+  const { stdout } = await execFileAsync(ghPath, args, {
     cwd: repoPath,
     timeout: 8000,
     maxBuffer: 1024 * 1024,
-    env: { ...process.env, GH_PROMPT_DISABLED: "1", GH_NO_UPDATE_NOTIFIER: "1" },
+    env: { ...process.env, PATH: envPath, GH_PROMPT_DISABLED: "1", GH_NO_UPDATE_NOTIFIER: "1" },
   });
   return stdout.trimEnd();
 }
