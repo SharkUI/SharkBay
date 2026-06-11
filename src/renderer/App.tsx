@@ -1148,23 +1148,37 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   // Fires 300s after the tab becomes focused; cancelled if the user types
   // in the prompt input bar (which triggers immediatelyClearActiveTab).
   const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const clearActiveTab = useCallback(() => {
-    if (!activeProjectId) return;
+  const clearActiveTabForStates = useCallback((states: ProjectActivityState[]): boolean => {
+    if (!activeProjectId) return false;
     const space = spaces[activeProjectId];
     const activeTabId = space?.activeId;
-    if (!activeTabId) return;
+    if (!activeTabId) return false;
+    const state = hookSnapshotByTerminalIdRef.current[activeTabId]?.state;
+    if (!state || !states.includes(state)) return false;
     clearAgentSessionsForTerminal(activeTabId);
+    return true;
   }, [activeProjectId, spaces, clearAgentSessionsForTerminal]);
+
+  const clearStoppedTerminalSession = useCallback((terminalId: string): boolean => {
+    if (hookSnapshotByTerminalIdRef.current[terminalId]?.state !== "stopped") return false;
+    clearAgentSessionsForTerminal(terminalId);
+    return true;
+  }, [clearAgentSessionsForTerminal]);
 
   const scheduleClear = useCallback(() => {
     if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
-    clearTimerRef.current = setTimeout(() => { clearTimerRef.current = null; clearActiveTab(); }, 300_000);
-  }, [clearActiveTab]);
+    clearTimerRef.current = setTimeout(() => { clearTimerRef.current = null; clearActiveTabForStates(["stopped", "approval"]); }, 300_000);
+  }, [clearActiveTabForStates]);
 
   const immediatelyClearActiveTab = useCallback(() => {
     if (clearTimerRef.current) { clearTimeout(clearTimerRef.current); clearTimerRef.current = null; }
-    clearActiveTab();
-  }, [clearActiveTab]);
+    clearActiveTabForStates(["stopped", "approval"]);
+  }, [clearActiveTabForStates]);
+
+  const acknowledgeActiveStoppedSession = useCallback(() => {
+    if (!clearActiveTabForStates(["stopped"])) return;
+    if (clearTimerRef.current) { clearTimeout(clearTimerRef.current); clearTimerRef.current = null; }
+  }, [clearActiveTabForStates]);
 
   useEffect(() => {
     const trySchedule = () => {
@@ -1457,7 +1471,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     try {
       const { hookSessionId, ...createOptions } = options;
       const session = await createTerminal(cwdUri, projectName, createOptions);
-      const terminal = createXTerm(session.id, appearanceTheme, setToast, (url) => void openBrowserTab(projectId, cwdUri, projectName, displayPath, url), { colorScheme: terminalColorScheme, fontFamily: terminalFontFamily, fontSize: terminalFontSize, lineHeight: terminalLineHeight });
+      const terminal = createXTerm(session.id, appearanceTheme, setToast, (url) => void openBrowserTab(projectId, cwdUri, projectName, displayPath, url), () => clearStoppedTerminalSession(session.id), { colorScheme: terminalColorScheme, fontFamily: terminalFontFamily, fontSize: terminalFontSize, lineHeight: terminalLineHeight });
       const tab: TerminalTab = { kind: "terminal", session, hookSessionId, terminal: terminal.instance, fitAddon: terminal.fitAddon, hoveredLink: terminal.hoveredLink, disposables: terminal.disposables };
       onActiveTabKindChange("terminal");
       setSpaces((current) => {
@@ -1791,6 +1805,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
         focusRequest={promptFocusRequest}
         isAgentSession={Boolean(selectedActiveTerminal?.session.agentId)}
         onTerminalFocusRequest={() => selectedActiveTerminal?.terminal.focus()}
+        onInteraction={acknowledgeActiveStoppedSession}
         onInput={immediatelyClearActiveTab}
       />
     </div>
@@ -1947,7 +1962,7 @@ function isUserEditingElsewhere(): boolean {
   return node.isContentEditable === true;
 }
 
-function createXTerm(sessionId: string, appearanceTheme: AppearanceTheme, setToast: (toast: Toast) => void, onLinkClick?: (url: string) => void, termOpts?: { colorScheme?: string | null; fontFamily?: string | null; fontSize?: number | null; lineHeight?: number | null }) {
+function createXTerm(sessionId: string, appearanceTheme: AppearanceTheme, setToast: (toast: Toast) => void, onLinkClick?: (url: string) => void, onUserInput?: () => void, termOpts?: { colorScheme?: string | null; fontFamily?: string | null; fontSize?: number | null; lineHeight?: number | null }) {
   const schemeTheme = termOpts?.colorScheme ? getColorScheme(termOpts.colorScheme)?.theme : undefined;
   const theme = schemeTheme ?? terminalThemes[appearanceTheme];
   const fontFamily = termOpts?.fontFamily || 'ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace';
@@ -1958,7 +1973,7 @@ function createXTerm(sessionId: string, appearanceTheme: AppearanceTheme, setToa
   const fitAddon = new FitAddon();
   instance.loadAddon(fitAddon);
   instance.loadAddon(new WebLinksAddon((event, uri) => { if (event.button === 0) onLinkClick?.(uri); }, { hover: (_event, text) => { hoveredLink.current = text; }, leave: () => { hoveredLink.current = null; } }));
-  const inputDisposable = instance.onData((data) => { const fire = getBridge().terminal?.inputFire; if (fire) { fire({ sessionId, data }); } else { void sendTerminalInput(sessionId, data).catch((error) => setToast({ tone: "error", message: asMessage(error) })); } });
+  const inputDisposable = instance.onData((data) => { onUserInput?.(); const fire = getBridge().terminal?.inputFire; if (fire) { fire({ sessionId, data }); } else { void sendTerminalInput(sessionId, data).catch((error) => setToast({ tone: "error", message: asMessage(error) })); } });
   return { instance, fitAddon, hoveredLink, disposables: [inputDisposable] };
 }
 
@@ -4925,6 +4940,7 @@ function PromptInputBar({
   focusRequest,
   isAgentSession,
   onTerminalFocusRequest,
+  onInteraction: onInteractionCallback,
   onInput: onInputCallback,
 }: {
   projectId: string | null;
@@ -4934,6 +4950,7 @@ function PromptInputBar({
   focusRequest: number;
   isAgentSession: boolean;
   onTerminalFocusRequest: () => void;
+  onInteraction?: () => void;
   onInput?: () => void;
 }) {
   const [value, setValue] = useState("");
@@ -5069,6 +5086,7 @@ function PromptInputBar({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    onInteractionCallback?.();
     const nativeEvent = event.nativeEvent as { isComposing?: boolean; keyCode?: number };
     if (isComposing || nativeEvent.isComposing || event.keyCode === 229 || nativeEvent.keyCode === 229) return;
     if (!event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) {
@@ -5098,7 +5116,7 @@ function PromptInputBar({
   }
 
   return (
-    <div className={cx("prompt-input-bar", disabled && "is-disabled")}>
+    <div className={cx("prompt-input-bar", disabled && "is-disabled")} onPointerDown={() => onInteractionCallback?.()}>
       <textarea
         ref={textareaRef}
         className="prompt-input-textarea"
