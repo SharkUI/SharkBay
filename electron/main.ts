@@ -6,7 +6,7 @@ import { createApplicationMenuTemplate } from "../src/main/application-menu.js";
 import { getRuntimeConfigPath, loadAppConfig } from "../src/main/config.js";
 import { appChannels } from "../src/shared/app-events.js";
 import { ipcChannels as channels } from "../src/shared/ipc-channels.js";
-import type { AppearanceTheme } from "../src/shared/types.js";
+import type { AppConfig, AppearanceTheme } from "../src/shared/types.js";
 
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = dirname(currentFile);
@@ -164,7 +164,7 @@ function createMainWindow(): BrowserWindow {
   return window;
 }
 
-function createIslandWindow(): BrowserWindow {
+function createIslandWindow(config: Pick<AppConfig, "statusChangeNotificationsEnabled">): BrowserWindow {
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width: screenWidth } = primaryDisplay.size;
   // On notch Macs, workArea.y gives the menu bar / notch height.
@@ -218,6 +218,9 @@ function createIslandWindow(): BrowserWindow {
   void window.loadFile(islandPath);
   window.once("ready-to-show", () => {
     window.setSize(panelWidth, menuBarHeight + 32);
+    window.webContents.send("island:preferences", {
+      statusChangeNotificationsEnabled: config.statusChangeNotificationsEnabled !== false,
+    });
     window.show();
   });
 
@@ -253,6 +256,12 @@ app.whenReady().then(async () => {
 
   await registerIpcHandlers(runtime, {
     onAppearanceThemeChanged: setAppearanceTheme,
+    onStatusChangeNotificationsChanged: (enabled) => {
+      if (!islandWindow || islandWindow.isDestroyed()) return;
+      islandWindow.webContents.send("island:preferences", {
+        statusChangeNotificationsEnabled: enabled,
+      });
+    },
   });
 
   installApplicationMenu();
@@ -267,7 +276,7 @@ app.whenReady().then(async () => {
   // });
 
   mainWindow = createMainWindow();
-  islandWindow = createIslandWindow();
+  islandWindow = createIslandWindow(config);
 
   mainWindow.on("focus", () => {
     if (process.platform === "darwin" && app.dock) app.dock.setBadge("");

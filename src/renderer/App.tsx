@@ -54,7 +54,7 @@ import type { WorkflowProjectActivityState } from "./workflow";
 
 type View = "dashboard" | "settings";
 type DetailTab = "sessions" | "tasks" | "git" | "files";
-type SettingsSection = "agent-clis" | "appearance" | "extensions" | "diagnostics";
+type SettingsSection = "general" | "agent-clis" | "appearance" | "extensions" | "diagnostics";
 
 type Toast = {
   tone: "info" | "error" | "success";
@@ -504,7 +504,7 @@ function githubOwnerFromRemote(remoteOrigin: string | null | undefined): string 
 
 export function App() {
   const [view, setView] = useState<View>("dashboard");
-  const [settingsSection, setSettingsSection] = useState<SettingsSection>("appearance");
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const [configuredProjects, setConfiguredProjects] = useState<string[]>([]);
   const [projectAliases, setProjectAliases] = useState<Record<string, string>>({});
   const [candidates, setCandidates] = useState<ProjectCandidate[]>([]);
@@ -518,6 +518,7 @@ export function App() {
   const [terminalFontFamily, setTerminalFontFamily] = useState<string | null>(null);
   const [terminalFontSize, setTerminalFontSize] = useState<number | null>(null);
   const [terminalLineHeight, setTerminalLineHeight] = useState<number | null>(null);
+  const [statusChangeNotificationsEnabled, setStatusChangeNotificationsEnabled] = useState(true);
   const refreshInFlight = useRef(false);
 
   const bridgeAvailable = typeof window !== "undefined" && Boolean(window.sharkBay);
@@ -540,6 +541,7 @@ export function App() {
         if (rootConfig.terminalFontFamily) setTerminalFontFamily(rootConfig.terminalFontFamily);
         if (rootConfig.terminalFontSize) setTerminalFontSize(rootConfig.terminalFontSize);
         if (rootConfig.terminalLineHeight) setTerminalLineHeight(rootConfig.terminalLineHeight);
+        setStatusChangeNotificationsEnabled(rootConfig.statusChangeNotificationsEnabled !== false);
         setConfiguredProjects(rootConfig.configuredProjects ?? []);
         setProjectAliases(rootConfig.projectAliases ?? {});
       }
@@ -663,6 +665,20 @@ export function App() {
                 setToast={setToast}
                 onBack={() => setView("dashboard")}
                 onRemoveProject={async (path) => { await removeProject(path); await refreshProjects({ showToast: true }); }}
+                statusChangeNotificationsEnabled={statusChangeNotificationsEnabled}
+                onStatusChangeNotificationsChange={async (enabled) => {
+                  const previous = statusChangeNotificationsEnabled;
+                  setStatusChangeNotificationsEnabled(enabled);
+                  const handler = getBridge().config?.setStatusChangeNotifications;
+                  try {
+                    if (!handler) throw new Error("Status notification settings are not exposed by the preload API.");
+                    const config = await handler({ enabled });
+                    setStatusChangeNotificationsEnabled(config.statusChangeNotificationsEnabled !== false);
+                  } catch (error) {
+                    setStatusChangeNotificationsEnabled(previous);
+                    throw error;
+                  }
+                }}
                 onThemeChange={async (theme) => {
                   const config = await updateAppearanceTheme(theme);
                   setAppearanceTheme(normalizeAppearanceTheme(config.appearanceTheme));
@@ -3628,14 +3644,16 @@ function removeExpandedProjectDirectory(paths: Set<string>, directoryPath: strin
   return next;
 }
 
-function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, candidates, scanErrors, initialSection, setToast, onBack, onRemoveProject, onThemeChange, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, onTerminalAppearanceChange }: {
+function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, candidates, scanErrors, initialSection, setToast, onBack, onRemoveProject, statusChangeNotificationsEnabled, onStatusChangeNotificationsChange, onThemeChange, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, onTerminalAppearanceChange }: {
   appearanceTheme: AppearanceTheme; configuredProjects: string[];  bridgeAvailable: boolean; candidates: ProjectCandidate[]; scanErrors: string[]; initialSection?: SettingsSection; setToast: (toast: Toast) => void;
   onBack: () => void; onRemoveProject: (path: string) => Promise<void>;
+  statusChangeNotificationsEnabled: boolean;
+  onStatusChangeNotificationsChange: (enabled: boolean) => Promise<void>;
   onThemeChange: (theme: AppearanceTheme) => Promise<void>;
   terminalColorScheme: string | null; terminalFontFamily: string | null; terminalFontSize: number | null; terminalLineHeight: number | null;
   onTerminalAppearanceChange: (opts: { colorScheme?: string | null; fontFamily?: string | null; fontSize?: number | null; lineHeight?: number | null }) => Promise<void>;
 }) {
-  const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection ?? "appearance");
+  const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection ?? "general");
   useEffect(() => { if (initialSection) setActiveSection(initialSection); }, [initialSection]);
 
   return (
@@ -3644,6 +3662,9 @@ function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, ca
         <aside className="settings-nav" aria-label="Settings sections">
           <button className="settings-back-button" type="button" onClick={onBack}><ArrowLeftIcon /><span>Back</span></button>
           <div className="settings-nav-group">
+            <button aria-current={activeSection === "general" ? "page" : undefined} className={cx("settings-nav-item", activeSection === "general" && "is-selected")} type="button" onClick={() => setActiveSection("general")}>
+              <SettingsGearIcon /><span>General</span>
+            </button>
             <button aria-current={activeSection === "appearance" ? "page" : undefined} className={cx("settings-nav-item", activeSection === "appearance" && "is-selected")} type="button" onClick={() => setActiveSection("appearance")}>
               <SunIcon /><span>Appearance</span>
             </button>
@@ -3659,6 +3680,14 @@ function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, ca
           </div>
         </aside>
         <section className="settings-content" aria-label="Settings content">
+          <div className="settings-section-panel" hidden={activeSection !== "general"}>
+            <div className="settings-section-heading"><h4>General</h4><span>Application behavior</span></div>
+            <GeneralSettingsPanel
+              statusChangeNotificationsEnabled={statusChangeNotificationsEnabled}
+              setToast={setToast}
+              onStatusChangeNotificationsChange={onStatusChangeNotificationsChange}
+            />
+          </div>
           <div className="settings-section-panel" hidden={activeSection !== "agent-clis"}>
             <div className="settings-section-heading"><h4>Agent CLIs</h4><span>Installed coding agents</span></div>
             <AgentClisSettingsPanel active={activeSection === "agent-clis"} bridgeAvailable={bridgeAvailable} setToast={setToast} />
@@ -3678,6 +3707,42 @@ function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, ca
         </section>
       </div>
     </div>
+  );
+}
+
+function GeneralSettingsPanel({ statusChangeNotificationsEnabled, setToast, onStatusChangeNotificationsChange }: {
+  statusChangeNotificationsEnabled: boolean;
+  setToast: (toast: Toast) => void;
+  onStatusChangeNotificationsChange: (enabled: boolean) => Promise<void>;
+}) {
+  const [saving, setSaving] = useState(false);
+
+  async function toggleNotifications() {
+    if (saving) return;
+    const next = !statusChangeNotificationsEnabled;
+    setSaving(true);
+    try {
+      await onStatusChangeNotificationsChange(next);
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="workflow-panel">
+      <label className="checkbox-row">
+        <input
+          type="checkbox"
+          checked={statusChangeNotificationsEnabled}
+          disabled={saving}
+          onChange={() => void toggleNotifications()}
+        />
+        <span>Play island status sounds</span>
+      </label>
+      <p className="form-note">Sounds play when an agent leaves working state or needs approval.</p>
+    </section>
   );
 }
 
