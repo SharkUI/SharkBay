@@ -5,6 +5,7 @@ export const ipcChannels = {
   removeProject: "config:removeProject",
   renameProject: "config:renameProject",
   setAppearanceTheme: "config:setAppearanceTheme",
+  setStatusChangeNotifications: "config:setStatusChangeNotifications",
   scanProjects: "projects:scan",
   getProjectDetail: "projects:getDetail",
   readProjectGitHub: "projects:getGitHub",

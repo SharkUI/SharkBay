@@ -14,6 +14,7 @@ export type AppConfig = {
   configuredProjects?: string[];
   projectAliases?: Record<string, string>;
   appearanceTheme?: AppearanceTheme;
+  statusChangeNotificationsEnabled?: boolean;
   terminalColorScheme?: string;
   terminalFontFamily?: string;
   terminalFontSize?: number;
@@ -540,6 +541,7 @@ export type SharkBayBridge = {
     pickProjectFolder?: () => Promise<{ cancelled: boolean; paths: string[] }>;
     createWorktree?: (input: { sourceProjectPath: string; branchName: string }) => Promise<{ targetPath: string; branchName: string }>;
     setAppearanceTheme?: (input: { theme: AppearanceTheme }) => Promise<AppConfig>;
+    setStatusChangeNotifications?: (input: { enabled: boolean }) => Promise<AppConfig>;
     setTerminalAppearance?: (input: { colorScheme?: string; fontFamily?: string; fontSize?: number; lineHeight?: number }) => Promise<AppConfig>;
   };
   projects?: {

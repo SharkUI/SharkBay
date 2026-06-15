@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { AppearanceTheme, AppearanceThemeInput, AppConfig, IpcRuntimeLike, ProjectConfigInput, RemoveProjectInput, RemoveRootInput, RenameProjectInput, RootConfigInput } from "../shared/types.js";
+import type { AppearanceTheme, AppearanceThemeInput, AppConfig, IpcRuntimeLike, ProjectConfigInput, RemoveProjectInput, RemoveRootInput, RenameProjectInput, RootConfigInput, StatusChangeNotificationsInput } from "../shared/types.js";
 import { isRecord } from "../shared/schema.js";
 import { writeJsonAtomic, readJsonFile } from "./json-file.js";
 
@@ -23,6 +23,7 @@ export function createDefaultConfig(): AppConfig {
     projectAliases: {},
     disabledPluginIds: [],
     appearanceTheme: "day",
+    statusChangeNotificationsEnabled: true,
     updatedAt: today(),
   };
 }
@@ -153,6 +154,15 @@ export async function setAppearanceTheme(first: AppearanceTheme | IpcRuntimeLike
   return config;
 }
 
+export async function setStatusChangeNotificationsEnabled(runtime: IpcRuntimeLike, input: StatusChangeNotificationsInput): Promise<AppConfig> {
+  const configPath = getRuntimeConfigPath(runtime);
+  const config = await loadAppConfig(configPath);
+  config.statusChangeNotificationsEnabled = input.enabled !== false;
+  config.updatedAt = today();
+  await saveAppConfig(config, configPath);
+  return config;
+}
+
 function rootFromInput(input: string | RootConfigInput | RemoveRootInput | undefined): string {
   if (typeof input === "string") return input;
   const rootPath = input?.path || input?.rootPath;
@@ -186,6 +196,7 @@ function normalizeAppConfig(value: unknown): AppConfig {
       ? [...new Set(value.disabledPluginIds.filter((item): item is string => typeof item === "string" && item.trim().length > 0))]
       : [],
     appearanceTheme: normalizeAppearanceTheme(value.appearanceTheme),
+    statusChangeNotificationsEnabled: value.statusChangeNotificationsEnabled !== false,
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : today(),
   };
 }
@@ -226,6 +237,7 @@ function shouldPersistMigratedConfig(raw: unknown, normalized: AppConfig): boole
   if (!isRecord(raw.projectAliases)) return true;
   if (!Array.isArray(raw.disabledPluginIds)) return true;
   if (raw.appearanceTheme !== normalized.appearanceTheme) return true;
+  if (raw.statusChangeNotificationsEnabled !== normalized.statusChangeNotificationsEnabled) return true;
   if (raw.updatedAt !== normalized.updatedAt) return true;
   return !sameStringArray(raw.configuredRoots, normalized.configuredRoots)
     || !sameStringArray(raw.configuredProjects, normalized.configuredProjects)

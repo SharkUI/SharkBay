@@ -25,8 +25,27 @@ describe("config migration", () => {
       projectAliases: {},
       disabledPluginIds: [],
       appearanceTheme: "night",
+      statusChangeNotificationsEnabled: true,
     }));
     expect(persisted.configuredProjects).toEqual([project]);
     expect(persisted.disabledPluginIds).toEqual([]);
+  });
+
+  it("preserves manually disabled status change notifications", async () => {
+    const runtime = await makeTestRuntime("config-notifications-disabled");
+    await writeJson(getRuntimeConfigPath(runtime), {
+      schemaVersion: 1,
+      configuredRoots: [],
+      configuredProjects: [],
+      projectAliases: {},
+      disabledPluginIds: [],
+      appearanceTheme: "day",
+      statusChangeNotificationsEnabled: false,
+      updatedAt: "2026-05-01",
+    });
+
+    const loaded = await loadAppConfig(getRuntimeConfigPath(runtime));
+
+    expect(loaded.statusChangeNotificationsEnabled).toBe(false);
   });
 });

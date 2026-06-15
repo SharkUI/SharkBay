@@ -6,6 +6,7 @@ import {
   removeConfiguredProject,
   renameProject,
   setAppearanceTheme,
+  setStatusChangeNotificationsEnabled,
 } from "../src/main/config.js";
 import { createWorktree } from "../src/main/worktree.js";
 import type {
@@ -14,6 +15,7 @@ import type {
   AppConfig,
   AppearanceTheme,
   AppearanceThemeInput,
+  StatusChangeNotificationsInput,
   CodeGraphProjectStatus,
   UsageReportFilter,
   UsageReportResult,
@@ -103,6 +105,7 @@ export type IpcRuntime = {
 
 export type IpcCallbacks = {
   onAppearanceThemeChanged?: (theme: AppearanceTheme) => void;
+  onStatusChangeNotificationsChanged?: (enabled: boolean) => void;
 };
 
 let core: CoreClient | null = null;
@@ -500,6 +503,12 @@ export async function registerIpcHandlers(
   handle<AppearanceThemeInput, AppConfig>(channels.setAppearanceTheme, (payload) =>
     setAppearanceTheme(runtime, payload).then((config) => {
       callbacks.onAppearanceThemeChanged?.(config.appearanceTheme);
+      return config;
+    })
+  );
+  handle<StatusChangeNotificationsInput, AppConfig>(channels.setStatusChangeNotifications, (payload) =>
+    setStatusChangeNotificationsEnabled(runtime, payload).then((config) => {
+      callbacks.onStatusChangeNotificationsChanged?.(config.statusChangeNotificationsEnabled !== false);
       return config;
     })
   );

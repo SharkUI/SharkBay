@@ -254,15 +254,96 @@ const SPEED_FACTORS = {
   approval: 2.0,  // red: 100% faster
 };
 let finSpeed = 1.0;
-function updateMarkState() {
+let lastStateBySessionId = new Map();
+let audioContext = null;
+// Persisted as `statusChangeNotificationsEnabled`; Settings writes the same
+// config field that can also be edited manually in ~/.sharkbay/config.json.
+let statusChangeNotificationsEnabled = true;
+
+function aggregateState(nextTabs) {
+  if (!nextTabs.length) return "neutral";
+  // Priority: approval > stopped > working > otherwise neutral gray.
+  if (nextTabs.some(t => t.state === "approval")) return "approval";
+  if (nextTabs.some(t => t.state === "stopped")) return "stopped";
+  if (nextTabs.some(t => t.state === "working")) return "working";
+  return "neutral";
+}
+
+function getAudioContext() {
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextCtor) return null;
+  if (!audioContext) audioContext = new AudioContextCtor();
+  if (audioContext.state === "suspended") audioContext.resume().catch(() => {});
+  return audioContext;
+}
+
+function playTone({ frequency, duration, type = "sine", gain = 0.04, startAt = 0, endFrequency = frequency }) {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const oscillator = ctx.createOscillator();
+  const envelope = ctx.createGain();
+  const start = ctx.currentTime + startAt;
+  oscillator.type = type;
+  oscillator.frequency.setValueAtTime(frequency, start);
+  oscillator.frequency.exponentialRampToValueAtTime(endFrequency, start + duration);
+  envelope.gain.setValueAtTime(0.0001, start);
+  envelope.gain.exponentialRampToValueAtTime(gain, start + 0.012);
+  envelope.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+  oscillator.connect(envelope);
+  envelope.connect(ctx.destination);
+  oscillator.start(start);
+  oscillator.stop(start + duration + 0.02);
+}
+
+function playCrispNotification() {
+  playTone({ frequency: 880, duration: 0.16, type: "triangle", gain: 0.04 });
+  playTone({ frequency: 1318.5, duration: 0.2, type: "triangle", gain: 0.035, startAt: 0.13 });
+}
+
+function playBuzzNotification() {
+  playTone({ frequency: 150, endFrequency: 90, duration: 0.18, type: "sine", gain: 0.065 });
+  playTone({ frequency: 220, endFrequency: 135, duration: 0.2, type: "sine", gain: 0.052, startAt: 0.18 });
+  playTone({ frequency: 880, endFrequency: 740, duration: 0.12, type: "triangle", gain: 0.032, startAt: 0.04 });
+  playTone({ frequency: 988, endFrequency: 784, duration: 0.14, type: "triangle", gain: 0.034, startAt: 0.22 });
+  playTone({ frequency: 120, endFrequency: 80, duration: 0.16, type: "sine", gain: 0.05, startAt: 0.38 });
+  if (navigator.vibrate) navigator.vibrate([120, 45, 160, 45, 90]);
+}
+
+function updatePreviousSessionStates(nextTabs) {
+  lastStateBySessionId = new Map(nextTabs.map(t => [t.sessionId, t.state || "unknown"]));
+}
+
+function notifySessionTransitions(nextTabs) {
+  if (!statusChangeNotificationsEnabled) {
+    updatePreviousSessionStates(nextTabs);
+    return;
+  }
+
+  if (!lastStateBySessionId.size) {
+    updatePreviousSessionStates(nextTabs);
+    return;
+  }
+
+  let needsCrisp = false;
+  let needsBuzz = false;
+  for (const tab of nextTabs) {
+    const previousState = lastStateBySessionId.get(tab.sessionId);
+    const nextState = tab.state || "unknown";
+    if (previousState === "working" && nextState !== "working") {
+      if (nextState === "approval") needsBuzz = true;
+      else needsCrisp = true;
+    }
+  }
+
+  if (needsBuzz) playBuzzNotification();
+  else if (needsCrisp) playCrispNotification();
+  updatePreviousSessionStates(nextTabs);
+}
+
+function updateMarkState(key = aggregateState(tabs)) {
   // Nothing to show when there are no sessions.
   if (!tabs.length) { sharkMark.style.display = "none"; document.body.classList.remove("glow-on"); return; }
   sharkMark.style.display = "block";
-  // Priority: approval > stopped > working > otherwise neutral gray.
-  let key = "neutral";
-  if (tabs.some(t => t.state === "approval")) key = "approval";
-  else if (tabs.some(t => t.state === "stopped")) key = "stopped";
-  else if (tabs.some(t => t.state === "working")) key = "working";
   const color = WAVE_COLORS[key];
   sharkMark.style.setProperty("--mark-color", color);
   finSpeed = SPEED_FACTORS[key];
@@ -375,10 +456,17 @@ sessionList.addEventListener("click", (e) => {
 });
 
 function handleTabs(newTabs) {
+  const nextKey = aggregateState(newTabs);
+  notifySessionTransitions(newTabs);
   tabs = newTabs;
   renderPillTiles();
-  updateMarkState();
+  updateMarkState(nextKey);
   if (isOpen()) renderSessionList();
+}
+
+function handlePreferences(preferences) {
+  statusChangeNotificationsEnabled = preferences?.statusChangeNotificationsEnabled !== false;
+  updatePreviousSessionStates(tabs);
 }
 
 const HEADER_HEIGHT = 14; // top padding only
@@ -432,6 +520,7 @@ islandEl.addEventListener("mouseleave", () => {
 
 // Initialize
 window.island.onTabs(handleTabs);
+window.island.onPreferences?.(handlePreferences);
 window.island.onCollapse(() => close());
 </script>
 </body>
