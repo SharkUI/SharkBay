@@ -227,6 +227,64 @@ function asMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+type AudioContextConstructor = new (contextOptions?: AudioContextOptions) => AudioContext;
+
+let statusSoundPreviewAudioContext: AudioContext | null = null;
+
+function getAgentStatusSoundPreviewAudioContext(): AudioContext {
+  const AudioContextCtor = window.AudioContext ?? (window as Window & { webkitAudioContext?: AudioContextConstructor }).webkitAudioContext;
+  if (!AudioContextCtor) throw new Error("Audio playback is not available in this browser.");
+  if (!statusSoundPreviewAudioContext || statusSoundPreviewAudioContext.state === "closed") {
+    statusSoundPreviewAudioContext = new AudioContextCtor();
+  }
+  return statusSoundPreviewAudioContext;
+}
+
+function playStatusPreviewTone(ctx: AudioContext, { frequency, duration, type = "sine", gain = 0.04, startAt = 0, endFrequency = frequency }: {
+  frequency: number;
+  duration: number;
+  type?: OscillatorType;
+  gain?: number;
+  startAt?: number;
+  endFrequency?: number;
+}): void {
+  const oscillator = ctx.createOscillator();
+  const envelope = ctx.createGain();
+  const start = ctx.currentTime + startAt;
+  oscillator.type = type;
+  oscillator.frequency.setValueAtTime(frequency, start);
+  oscillator.frequency.exponentialRampToValueAtTime(endFrequency, start + duration);
+  envelope.gain.setValueAtTime(0.0001, start);
+  envelope.gain.exponentialRampToValueAtTime(gain, start + 0.012);
+  envelope.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+  oscillator.connect(envelope);
+  envelope.connect(ctx.destination);
+  oscillator.start(start);
+  oscillator.stop(start + duration + 0.02);
+}
+
+function playStatusPreviewCrisp(ctx: AudioContext, startAt = 0): void {
+  playStatusPreviewTone(ctx, { frequency: 880, duration: 0.16, type: "triangle", gain: 0.04, startAt });
+  playStatusPreviewTone(ctx, { frequency: 1318.5, duration: 0.2, type: "triangle", gain: 0.035, startAt: startAt + 0.13 });
+}
+
+function playStatusPreviewBuzz(ctx: AudioContext, startAt = 0): void {
+  playStatusPreviewTone(ctx, { frequency: 150, endFrequency: 90, duration: 0.18, type: "sine", gain: 0.065, startAt });
+  playStatusPreviewTone(ctx, { frequency: 220, endFrequency: 135, duration: 0.2, type: "sine", gain: 0.052, startAt: startAt + 0.18 });
+  playStatusPreviewTone(ctx, { frequency: 880, endFrequency: 740, duration: 0.12, type: "triangle", gain: 0.032, startAt: startAt + 0.04 });
+  playStatusPreviewTone(ctx, { frequency: 988, endFrequency: 784, duration: 0.14, type: "triangle", gain: 0.034, startAt: startAt + 0.22 });
+  playStatusPreviewTone(ctx, { frequency: 120, endFrequency: 80, duration: 0.16, type: "sine", gain: 0.05, startAt: startAt + 0.38 });
+}
+
+type AgentStatusSoundKind = "completion" | "approval";
+
+async function playAgentStatusSoundPreview(kind: AgentStatusSoundKind): Promise<void> {
+  const ctx = getAgentStatusSoundPreviewAudioContext();
+  if (ctx.state === "suspended") await ctx.resume();
+  if (kind === "approval") playStatusPreviewBuzz(ctx);
+  else playStatusPreviewCrisp(ctx);
+}
+
 function isAppConfig(value: unknown): value is AppConfig {
   return Boolean(value && typeof value === "object" && "configuredRoots" in value);
 }
@@ -518,7 +576,8 @@ export function App() {
   const [terminalFontFamily, setTerminalFontFamily] = useState<string | null>(null);
   const [terminalFontSize, setTerminalFontSize] = useState<number | null>(null);
   const [terminalLineHeight, setTerminalLineHeight] = useState<number | null>(null);
-  const [statusChangeNotificationsEnabled, setStatusChangeNotificationsEnabled] = useState(true);
+  const [agentStatusCompletionSoundEnabled, setAgentStatusCompletionSoundEnabled] = useState(true);
+  const [agentStatusApprovalSoundEnabled, setAgentStatusApprovalSoundEnabled] = useState(true);
   const refreshInFlight = useRef(false);
 
   const bridgeAvailable = typeof window !== "undefined" && Boolean(window.sharkBay);
@@ -541,7 +600,9 @@ export function App() {
         if (rootConfig.terminalFontFamily) setTerminalFontFamily(rootConfig.terminalFontFamily);
         if (rootConfig.terminalFontSize) setTerminalFontSize(rootConfig.terminalFontSize);
         if (rootConfig.terminalLineHeight) setTerminalLineHeight(rootConfig.terminalLineHeight);
-        setStatusChangeNotificationsEnabled(rootConfig.statusChangeNotificationsEnabled !== false);
+        const legacyStatusSoundsEnabled = rootConfig.statusChangeNotificationsEnabled !== false;
+        setAgentStatusCompletionSoundEnabled(rootConfig.agentStatusCompletionSoundEnabled ?? legacyStatusSoundsEnabled);
+        setAgentStatusApprovalSoundEnabled(rootConfig.agentStatusApprovalSoundEnabled ?? legacyStatusSoundsEnabled);
         setConfiguredProjects(rootConfig.configuredProjects ?? []);
         setProjectAliases(rootConfig.projectAliases ?? {});
       }
@@ -665,17 +726,23 @@ export function App() {
                 setToast={setToast}
                 onBack={() => setView("dashboard")}
                 onRemoveProject={async (path) => { await removeProject(path); await refreshProjects({ showToast: true }); }}
-                statusChangeNotificationsEnabled={statusChangeNotificationsEnabled}
-                onStatusChangeNotificationsChange={async (enabled) => {
-                  const previous = statusChangeNotificationsEnabled;
-                  setStatusChangeNotificationsEnabled(enabled);
+                agentStatusCompletionSoundEnabled={agentStatusCompletionSoundEnabled}
+                agentStatusApprovalSoundEnabled={agentStatusApprovalSoundEnabled}
+                onStatusChangeNotificationsChange={async (input) => {
+                  const previousCompletion = agentStatusCompletionSoundEnabled;
+                  const previousApproval = agentStatusApprovalSoundEnabled;
+                  if (typeof input.completionEnabled === "boolean") setAgentStatusCompletionSoundEnabled(input.completionEnabled);
+                  if (typeof input.approvalEnabled === "boolean") setAgentStatusApprovalSoundEnabled(input.approvalEnabled);
                   const handler = getBridge().config?.setStatusChangeNotifications;
                   try {
                     if (!handler) throw new Error("Status notification settings are not exposed by the preload API.");
-                    const config = await handler({ enabled });
-                    setStatusChangeNotificationsEnabled(config.statusChangeNotificationsEnabled !== false);
+                    const config = await handler(input);
+                    const legacyStatusSoundsEnabled = config.statusChangeNotificationsEnabled !== false;
+                    setAgentStatusCompletionSoundEnabled(config.agentStatusCompletionSoundEnabled ?? legacyStatusSoundsEnabled);
+                    setAgentStatusApprovalSoundEnabled(config.agentStatusApprovalSoundEnabled ?? legacyStatusSoundsEnabled);
                   } catch (error) {
-                    setStatusChangeNotificationsEnabled(previous);
+                    setAgentStatusCompletionSoundEnabled(previousCompletion);
+                    setAgentStatusApprovalSoundEnabled(previousApproval);
                     throw error;
                   }
                 }}
@@ -3644,11 +3711,12 @@ function removeExpandedProjectDirectory(paths: Set<string>, directoryPath: strin
   return next;
 }
 
-function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, candidates, scanErrors, initialSection, setToast, onBack, onRemoveProject, statusChangeNotificationsEnabled, onStatusChangeNotificationsChange, onThemeChange, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, onTerminalAppearanceChange }: {
+function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, candidates, scanErrors, initialSection, setToast, onBack, onRemoveProject, agentStatusCompletionSoundEnabled, agentStatusApprovalSoundEnabled, onStatusChangeNotificationsChange, onThemeChange, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, onTerminalAppearanceChange }: {
   appearanceTheme: AppearanceTheme; configuredProjects: string[];  bridgeAvailable: boolean; candidates: ProjectCandidate[]; scanErrors: string[]; initialSection?: SettingsSection; setToast: (toast: Toast) => void;
   onBack: () => void; onRemoveProject: (path: string) => Promise<void>;
-  statusChangeNotificationsEnabled: boolean;
-  onStatusChangeNotificationsChange: (enabled: boolean) => Promise<void>;
+  agentStatusCompletionSoundEnabled: boolean;
+  agentStatusApprovalSoundEnabled: boolean;
+  onStatusChangeNotificationsChange: (input: { completionEnabled?: boolean; approvalEnabled?: boolean }) => Promise<void>;
   onThemeChange: (theme: AppearanceTheme) => Promise<void>;
   terminalColorScheme: string | null; terminalFontFamily: string | null; terminalFontSize: number | null; terminalLineHeight: number | null;
   onTerminalAppearanceChange: (opts: { colorScheme?: string | null; fontFamily?: string | null; fontSize?: number | null; lineHeight?: number | null }) => Promise<void>;
@@ -3683,7 +3751,8 @@ function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, ca
           <div className="settings-section-panel" hidden={activeSection !== "general"}>
             <div className="settings-section-heading"><h4>General</h4><span>Application behavior</span></div>
             <GeneralSettingsPanel
-              statusChangeNotificationsEnabled={statusChangeNotificationsEnabled}
+              agentStatusCompletionSoundEnabled={agentStatusCompletionSoundEnabled}
+              agentStatusApprovalSoundEnabled={agentStatusApprovalSoundEnabled}
               setToast={setToast}
               onStatusChangeNotificationsChange={onStatusChangeNotificationsChange}
             />
@@ -3710,38 +3779,70 @@ function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, ca
   );
 }
 
-function GeneralSettingsPanel({ statusChangeNotificationsEnabled, setToast, onStatusChangeNotificationsChange }: {
-  statusChangeNotificationsEnabled: boolean;
+function GeneralSettingsPanel({ agentStatusCompletionSoundEnabled, agentStatusApprovalSoundEnabled, setToast, onStatusChangeNotificationsChange }: {
+  agentStatusCompletionSoundEnabled: boolean;
+  agentStatusApprovalSoundEnabled: boolean;
   setToast: (toast: Toast) => void;
-  onStatusChangeNotificationsChange: (enabled: boolean) => Promise<void>;
+  onStatusChangeNotificationsChange: (input: { completionEnabled?: boolean; approvalEnabled?: boolean }) => Promise<void>;
 }) {
-  const [saving, setSaving] = useState(false);
+  const [savingSound, setSavingSound] = useState<AgentStatusSoundKind | null>(null);
 
-  async function toggleNotifications() {
-    if (saving) return;
-    const next = !statusChangeNotificationsEnabled;
-    setSaving(true);
+  async function toggleSound(kind: AgentStatusSoundKind) {
+    if (savingSound) return;
+    const next = kind === "completion" ? !agentStatusCompletionSoundEnabled : !agentStatusApprovalSoundEnabled;
+    setSavingSound(kind);
     try {
-      await onStatusChangeNotificationsChange(next);
+      await onStatusChangeNotificationsChange(kind === "completion" ? { completionEnabled: next } : { approvalEnabled: next });
     } catch (error) {
       setToast({ tone: "error", message: asMessage(error) });
     } finally {
-      setSaving(false);
+      setSavingSound(null);
+    }
+  }
+
+  async function previewStatusSound(kind: AgentStatusSoundKind) {
+    try {
+      await playAgentStatusSoundPreview(kind);
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
     }
   }
 
   return (
     <section className="workflow-panel">
-      <label className="checkbox-row">
-        <input
-          type="checkbox"
-          checked={statusChangeNotificationsEnabled}
-          disabled={saving}
-          onChange={() => void toggleNotifications()}
-        />
-        <span>Play island status sounds</span>
-      </label>
-      <p className="form-note">Sounds play when an agent leaves working state or needs approval.</p>
+      <h5 className="settings-subsection-title">Sounds</h5>
+      <div className="settings-sound-controls">
+        <div className="settings-toggle-row">
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={agentStatusCompletionSoundEnabled}
+              disabled={savingSound !== null}
+              onChange={() => void toggleSound("completion")}
+            />
+            <span>Play agent completion sounds</span>
+          </label>
+          <button aria-label="Preview agent completion sounds" className="button secondary compact settings-sound-preview-button" title="Preview agent completion sounds" type="button" onClick={() => void previewStatusSound("completion")}>
+            <PlayIcon />
+            <span>Preview</span>
+          </button>
+        </div>
+        <div className="settings-toggle-row">
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={agentStatusApprovalSoundEnabled}
+              disabled={savingSound !== null}
+              onChange={() => void toggleSound("approval")}
+            />
+            <span>Play agent approval sounds</span>
+          </label>
+          <button aria-label="Preview agent approval sounds" className="button secondary compact settings-sound-preview-button" title="Preview agent approval sounds" type="button" onClick={() => void previewStatusSound("approval")}>
+            <PlayIcon />
+            <span>Preview</span>
+          </button>
+        </div>
+      </div>
     </section>
   );
 }
@@ -4602,6 +4703,10 @@ function ArrowRightIcon() {
 
 function PlusIcon() {
   return <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16"><path d="M12 5v14" /><path d="M5 12h14" /></svg>;
+}
+
+function PlayIcon() {
+  return <svg aria-hidden="true" fill="currentColor" height="16" viewBox="0 0 24 24" width="16"><path d="M8 5.14v13.72L18.8 12 8 5.14z" /></svg>;
 }
 
 function RefreshIcon() {

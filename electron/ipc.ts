@@ -105,7 +105,7 @@ export type IpcRuntime = {
 
 export type IpcCallbacks = {
   onAppearanceThemeChanged?: (theme: AppearanceTheme) => void;
-  onStatusChangeNotificationsChanged?: (enabled: boolean) => void;
+  onStatusChangeNotificationsChanged?: (config: Pick<AppConfig, "statusChangeNotificationsEnabled" | "agentStatusCompletionSoundEnabled" | "agentStatusApprovalSoundEnabled">) => void;
 };
 
 let core: CoreClient | null = null;
@@ -508,7 +508,7 @@ export async function registerIpcHandlers(
   );
   handle<StatusChangeNotificationsInput, AppConfig>(channels.setStatusChangeNotifications, (payload) =>
     setStatusChangeNotificationsEnabled(runtime, payload).then((config) => {
-      callbacks.onStatusChangeNotificationsChanged?.(config.statusChangeNotificationsEnabled !== false);
+      callbacks.onStatusChangeNotificationsChanged?.(config);
       return config;
     })
   );

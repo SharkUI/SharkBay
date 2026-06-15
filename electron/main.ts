@@ -164,7 +164,7 @@ function createMainWindow(): BrowserWindow {
   return window;
 }
 
-function createIslandWindow(config: Pick<AppConfig, "statusChangeNotificationsEnabled">): BrowserWindow {
+function createIslandWindow(config: Pick<AppConfig, "statusChangeNotificationsEnabled" | "agentStatusCompletionSoundEnabled" | "agentStatusApprovalSoundEnabled">): BrowserWindow {
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width: screenWidth } = primaryDisplay.size;
   // On notch Macs, workArea.y gives the menu bar / notch height.
@@ -220,6 +220,8 @@ function createIslandWindow(config: Pick<AppConfig, "statusChangeNotificationsEn
     window.setSize(panelWidth, menuBarHeight + 32);
     window.webContents.send("island:preferences", {
       statusChangeNotificationsEnabled: config.statusChangeNotificationsEnabled !== false,
+      agentStatusCompletionSoundEnabled: config.agentStatusCompletionSoundEnabled !== false,
+      agentStatusApprovalSoundEnabled: config.agentStatusApprovalSoundEnabled !== false,
     });
     window.show();
   });
@@ -256,10 +258,12 @@ app.whenReady().then(async () => {
 
   await registerIpcHandlers(runtime, {
     onAppearanceThemeChanged: setAppearanceTheme,
-    onStatusChangeNotificationsChanged: (enabled) => {
+    onStatusChangeNotificationsChanged: (preferences) => {
       if (!islandWindow || islandWindow.isDestroyed()) return;
       islandWindow.webContents.send("island:preferences", {
-        statusChangeNotificationsEnabled: enabled,
+        statusChangeNotificationsEnabled: preferences.statusChangeNotificationsEnabled !== false,
+        agentStatusCompletionSoundEnabled: preferences.agentStatusCompletionSoundEnabled !== false,
+        agentStatusApprovalSoundEnabled: preferences.agentStatusApprovalSoundEnabled !== false,
       });
     },
   });

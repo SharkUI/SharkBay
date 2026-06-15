@@ -1078,6 +1078,37 @@ body.is-resizing-columns * {
   font-size: 12px;
 }
 
+.settings-toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 12px;
+}
+
+.settings-subsection-title {
+  margin: 0;
+  color: #172528;
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.settings-sound-controls {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-sound-preview-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-sound-preview-button svg {
+  width: 13px;
+  height: 13px;
+}
+
 .protocol-cleanup-options {
   display: grid;
   min-height: 28px;

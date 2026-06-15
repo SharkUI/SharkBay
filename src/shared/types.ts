@@ -8,6 +8,8 @@ export type AppConfig = {
   disabledPluginIds: string[];
   appearanceTheme: AppearanceTheme;
   statusChangeNotificationsEnabled: boolean;
+  agentStatusCompletionSoundEnabled: boolean;
+  agentStatusApprovalSoundEnabled: boolean;
   terminalColorScheme?: string;
   terminalFontFamily?: string;
   terminalFontSize?: number;
@@ -57,7 +59,9 @@ export type AppearanceThemeInput = {
 };
 
 export type StatusChangeNotificationsInput = {
-  enabled: boolean;
+  enabled?: boolean;
+  completionEnabled?: boolean;
+  approvalEnabled?: boolean;
 };
 
 export type ExecutionTargetKind = "local" | "container" | "wsl";

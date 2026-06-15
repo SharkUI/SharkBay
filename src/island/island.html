@@ -256,9 +256,11 @@ const SPEED_FACTORS = {
 let finSpeed = 1.0;
 let lastStateBySessionId = new Map();
 let audioContext = null;
-// Persisted as `statusChangeNotificationsEnabled`; Settings writes the same
-// config field that can also be edited manually in ~/.sharkbay/config.json.
+// Persisted through Settings; the legacy statusChangeNotificationsEnabled value
+// remains as the default when the split sound fields are absent.
 let statusChangeNotificationsEnabled = true;
+let agentStatusCompletionSoundEnabled = true;
+let agentStatusApprovalSoundEnabled = true;
 
 function aggregateState(nextTabs) {
   if (!nextTabs.length) return "neutral";
@@ -314,7 +316,7 @@ function updatePreviousSessionStates(nextTabs) {
 }
 
 function notifySessionTransitions(nextTabs) {
-  if (!statusChangeNotificationsEnabled) {
+  if (!agentStatusCompletionSoundEnabled && !agentStatusApprovalSoundEnabled) {
     updatePreviousSessionStates(nextTabs);
     return;
   }
@@ -330,8 +332,8 @@ function notifySessionTransitions(nextTabs) {
     const previousState = lastStateBySessionId.get(tab.sessionId);
     const nextState = tab.state || "unknown";
     if (previousState === "working" && nextState !== "working") {
-      if (nextState === "approval") needsBuzz = true;
-      else needsCrisp = true;
+      if (nextState === "approval" && agentStatusApprovalSoundEnabled) needsBuzz = true;
+      else if (nextState !== "approval" && agentStatusCompletionSoundEnabled) needsCrisp = true;
     }
   }
 
@@ -466,6 +468,8 @@ function handleTabs(newTabs) {
 
 function handlePreferences(preferences) {
   statusChangeNotificationsEnabled = preferences?.statusChangeNotificationsEnabled !== false;
+  agentStatusCompletionSoundEnabled = preferences?.agentStatusCompletionSoundEnabled ?? statusChangeNotificationsEnabled;
+  agentStatusApprovalSoundEnabled = preferences?.agentStatusApprovalSoundEnabled ?? statusChangeNotificationsEnabled;
   updatePreviousSessionStates(tabs);
 }
 

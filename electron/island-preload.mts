@@ -11,7 +11,11 @@ const islandApi = {
   onTabs(callback: (tabs: Array<{ sessionId: string; title: string; projectName: string; agentId?: string }>) => void) {
     ipcRenderer.on("island:tabs", (_event, tabs) => callback(tabs));
   },
-  onPreferences(callback: (preferences: { statusChangeNotificationsEnabled?: boolean }) => void) {
+  onPreferences(callback: (preferences: {
+    statusChangeNotificationsEnabled?: boolean;
+    agentStatusCompletionSoundEnabled?: boolean;
+    agentStatusApprovalSoundEnabled?: boolean;
+  }) => void) {
     ipcRenderer.on("island:preferences", (_event, preferences) => callback(preferences));
   },
   getAllSessions(): Promise<AgentProjectStatusEvent[]> {

@@ -24,6 +24,8 @@ export function createDefaultConfig(): AppConfig {
     disabledPluginIds: [],
     appearanceTheme: "day",
     statusChangeNotificationsEnabled: true,
+    agentStatusCompletionSoundEnabled: true,
+    agentStatusApprovalSoundEnabled: true,
     updatedAt: today(),
   };
 }
@@ -157,7 +159,18 @@ export async function setAppearanceTheme(first: AppearanceTheme | IpcRuntimeLike
 export async function setStatusChangeNotificationsEnabled(runtime: IpcRuntimeLike, input: StatusChangeNotificationsInput): Promise<AppConfig> {
   const configPath = getRuntimeConfigPath(runtime);
   const config = await loadAppConfig(configPath);
-  config.statusChangeNotificationsEnabled = input.enabled !== false;
+  if (typeof input.enabled === "boolean") {
+    config.statusChangeNotificationsEnabled = input.enabled;
+    config.agentStatusCompletionSoundEnabled = input.enabled;
+    config.agentStatusApprovalSoundEnabled = input.enabled;
+  }
+  if (typeof input.completionEnabled === "boolean") {
+    config.agentStatusCompletionSoundEnabled = input.completionEnabled;
+  }
+  if (typeof input.approvalEnabled === "boolean") {
+    config.agentStatusApprovalSoundEnabled = input.approvalEnabled;
+  }
+  config.statusChangeNotificationsEnabled = config.agentStatusCompletionSoundEnabled || config.agentStatusApprovalSoundEnabled;
   config.updatedAt = today();
   await saveAppConfig(config, configPath);
   return config;
@@ -183,6 +196,7 @@ function projectFromInput(input: string | ProjectConfigInput | RemoveProjectInpu
 
 function normalizeAppConfig(value: unknown): AppConfig {
   if (!isRecord(value)) return createDefaultConfig();
+  const legacyStatusSoundsEnabled = value.statusChangeNotificationsEnabled !== false;
   return {
     schemaVersion: 1,
     configuredRoots: Array.isArray(value.configuredRoots)
@@ -196,7 +210,13 @@ function normalizeAppConfig(value: unknown): AppConfig {
       ? [...new Set(value.disabledPluginIds.filter((item): item is string => typeof item === "string" && item.trim().length > 0))]
       : [],
     appearanceTheme: normalizeAppearanceTheme(value.appearanceTheme),
-    statusChangeNotificationsEnabled: value.statusChangeNotificationsEnabled !== false,
+    statusChangeNotificationsEnabled: legacyStatusSoundsEnabled,
+    agentStatusCompletionSoundEnabled: typeof value.agentStatusCompletionSoundEnabled === "boolean"
+      ? value.agentStatusCompletionSoundEnabled
+      : legacyStatusSoundsEnabled,
+    agentStatusApprovalSoundEnabled: typeof value.agentStatusApprovalSoundEnabled === "boolean"
+      ? value.agentStatusApprovalSoundEnabled
+      : legacyStatusSoundsEnabled,
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : today(),
   };
 }
@@ -238,6 +258,8 @@ function shouldPersistMigratedConfig(raw: unknown, normalized: AppConfig): boole
   if (!Array.isArray(raw.disabledPluginIds)) return true;
   if (raw.appearanceTheme !== normalized.appearanceTheme) return true;
   if (raw.statusChangeNotificationsEnabled !== normalized.statusChangeNotificationsEnabled) return true;
+  if (raw.agentStatusCompletionSoundEnabled !== normalized.agentStatusCompletionSoundEnabled) return true;
+  if (raw.agentStatusApprovalSoundEnabled !== normalized.agentStatusApprovalSoundEnabled) return true;
   if (raw.updatedAt !== normalized.updatedAt) return true;
   return !sameStringArray(raw.configuredRoots, normalized.configuredRoots)
     || !sameStringArray(raw.configuredProjects, normalized.configuredProjects)
