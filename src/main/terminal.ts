@@ -64,6 +64,7 @@ export type TerminalTitleInput = {
 };
 
 export const terminalShellEnvironment = {
+  PROCESS_LAUNCHED_BY_Q: "1",
   SHELL_SESSIONS_DISABLE: "1",
   TERM_PROGRAM: "SharkBay",
 } as const;

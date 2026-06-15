@@ -18,6 +18,7 @@ describe("terminal cwd validation", () => {
     expect(terminalCommand("/bin/zsh")).toEqual({ file: "/bin/zsh", args: ["-l"] });
     expect(terminalCommand("/bin/zsh").args).not.toContain("-i");
     expect(terminalShellEnvironment).toMatchObject({
+      PROCESS_LAUNCHED_BY_Q: "1",
       SHELL_SESSIONS_DISABLE: "1",
       TERM_PROGRAM: "SharkBay",
     });
