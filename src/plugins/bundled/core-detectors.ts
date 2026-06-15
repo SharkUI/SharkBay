@@ -70,10 +70,10 @@ export function createCoreMachineDetector(): MachineDetector {
         ctx.run("uname -srm 2>/dev/null || true", { timeoutMs: 3000 }),
         ctx.run("printf '%s' \"${SHELL:-}\"", { timeoutMs: 3000 }),
       ]);
-      const unameParts = uname.stdout.trim().split(/\s+/u);
-      const shell = shellPath.stdout.trim();
+      const unameParts = stripShellControlSequences(uname.stdout).trim().split(/\s+/u);
+      const shell = stripShellControlSequences(shellPath.stdout).trim();
       return {
-        hostname: hostname.stdout.trim() || null,
+        hostname: stripShellControlSequences(hostname.stdout).trim() || null,
         os: {
           platform: platformFromUname(unameParts[0]),
           name: unameParts[0] || null,
@@ -125,6 +125,12 @@ export function createCoreProjectDetector(): ProjectDetector {
       };
     },
   };
+}
+
+function stripShellControlSequences(value: string): string {
+  return value
+    .replace(/\u001b\][\s\S]*?(?:\u0007|\u001b\\)/gu, "")
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/gu, "");
 }
 
 function platformFromUname(value: string | undefined): "darwin" | "linux" | "windows" | "unknown" {

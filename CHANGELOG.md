@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.2.5] — 2026-06-15
+
+### Added
+- Git panel now shows GitHub open pull requests, open issues, and latest release when `gh` is installed and authenticated
+- Island status-change sounds for agent completion and approval transitions
+- General settings for separate agent completion and approval sound toggles, including preview buttons
+
+### Changed
+- CodeGraph indexing is now maintained automatically: unindexed local Git projects initialize on selection, and dirty worktree changes sync after a 5-minute debounce
+- Repository details include the latest GitHub release tag when available
+
+### Fixed
+- Packaged app can find `gh` from GUI-launched PATHs and lets `gh` find `git`
+- Dock click restores the hidden main window while the island window is still visible
+- Clicking the island no longer surfaces the main window on macOS unless a session is explicitly selected
+- Restored/resumed agent sessions pick the latest matching status for island and tab indicators
+- Stopped agent state clears when the user interacts with the terminal or prompt input
+- SharkBay shells opt out of the Kiro wrapper by exporting `PROCESS_LAUNCHED_BY_Q=1`
+
 ## [0.2.4] — 2026-06-10
 
 ### Added
