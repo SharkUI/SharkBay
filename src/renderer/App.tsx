@@ -3972,7 +3972,7 @@ const agentLaunchOptions: Record<string, AgentLaunchOption[]> = {
     { flag: "--dangerously-skip-permissions", label: "Skip permissions", description: "Bypass all permission checks", type: "toggle" },
   ],
   codex: [
-    { flag: "--ask-for-approval never", label: "Skip approval", description: "Never ask for human approval", type: "toggle" },
+    { flag: "--yolo", label: "YOLO mode", description: "Bypass all approvals and the sandbox (use only in isolated environments)", type: "toggle" },
   ],
   cursor: [
     { flag: "--force", label: "Force allow", description: "Allow commands unless explicitly denied", type: "toggle" },
