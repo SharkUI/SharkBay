@@ -12,10 +12,11 @@ agent: Kiro Claude 4.8
 sessionId: e4c4c2c5-c535-4b9c-83af-9e88623923b7
 branch: main
 createdAt: 2026-06-16T01:34:12Z
-updatedAt: 2026-06-16T01:35:26Z
-completedAt: 2026-06-16T01:34:41Z
+updatedAt: 2026-06-16T01:38:40Z
+completedAt: 2026-06-16T01:38:40Z
 commits:
   - 47525474
+  - 1203d09c
 ---
 
 ## Summary
@@ -27,9 +28,10 @@ Replace Codex CLI's "Skip approval" launch toggle (`--ask-for-approval never`) w
 ## Work
 - Reason for change: `--ask-for-approval never` only stops approval prompts; the Codex sandbox still restricts commands, so it feels heavily limited. `--yolo` (alias for `--dangerously-bypass-approvals-and-sandbox`) disables both approval and sandbox.
 - Replace the `codex` entry in `agentLaunchOptions`: flag `--ask-for-approval never` -> `--yolo`, label "Skip approval" -> "YOLO mode", description updated with isolated-environment warning.
+- Follow-up fix (commit 1203d09c): after the switch, a previously enabled `--ask-for-approval never` stayed persisted in localStorage and was injected alongside the new `--yolo`, which Codex rejects (mutually exclusive). `getAgentLaunchFlags` now filters persisted flags to the agent's current `agentLaunchOptions`, so stale/orphaned flags are ignored everywhere (launch, restore, settings panel).
 
 ## Verification
-- `npm run typecheck` passed (tsc renderer + node, exit 0).
+- `npm run typecheck` passed after both changes (tsc renderer + node, exit 0).
 
 ## Notes
 - Launch options are wired end-to-end (team task W5K9L2): toggles persist to localStorage key `sharkbay:agent-launch-flags:<agentId>` and the flag string is injected into the launch command, so changing the flag string changes the actual command.
