@@ -4048,7 +4048,9 @@ function AgentClisSettingsPanel({ active, bridgeAvailable, setToast }: { active:
 function getAgentLaunchFlags(agentId: string): string[] {
   try {
     const value = JSON.parse(localStorage.getItem(`sharkbay:agent-launch-flags:${agentId}`) ?? "[]");
-    return Array.isArray(value) ? value.filter((flag): flag is string => typeof flag === "string" && flag.trim().length > 0) : [];
+    if (!Array.isArray(value)) return [];
+    const validFlags = new Set((agentLaunchOptions[agentId] ?? []).map((opt) => opt.flag));
+    return value.filter((flag): flag is string => typeof flag === "string" && flag.trim().length > 0 && validFlags.has(flag));
   } catch {
     return [];
   }
