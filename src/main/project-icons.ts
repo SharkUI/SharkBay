@@ -5,7 +5,7 @@ import type { ProjectIconSource } from "../shared/types.js";
 type UrlFields = { localUrl: string | null; testUrl: string | null; deploymentUrl: string | null };
 import { isRecord } from "../shared/schema.js";
 import { readJsonFile } from "./json-file.js";
-import { resolveReadableRepoFile } from "./path-safety.js";
+import { isPathInside, resolveReadableRepoFile, resolveRepoPath } from "./path-safety.js";
 
 const maxIconBytes = 1024 * 1024;
 
@@ -45,7 +45,11 @@ export async function resolveProjectIconSources(repoPath: string, configuredProj
 }
 
 async function resolveLocalIconSources(repoPath: string, configuredProjects: string[]): Promise<ProjectIconSource[]> {
-  const paths = [...await packageIconPaths(repoPath, configuredProjects), ...commonIconPaths];
+  const paths = [
+    ...await packageIconPaths(repoPath, configuredProjects),
+    ...commonIconPaths,
+    ...await workspaceIconPaths(repoPath, configuredProjects),
+  ];
   const sources: ProjectIconSource[] = [];
 
   for (const relativePath of dedupeStrings(paths)) {
@@ -76,6 +80,158 @@ async function packageIconPaths(repoPath: string, configuredProjects: string[]):
   ];
 
   return candidates.flatMap((candidate) => normalizeIconRelativePath(candidate));
+}
+
+// Icon candidates probed inside each discovered workspace package directory.
+// Ordered to prefer dedicated logo/app icons over favicons for a cleaner logo.
+const workspacePublicIconSuffixes = [
+  "public/project-icon.png",
+  "public/logo.png",
+  "public/icon.png",
+  "public/icon-512.png",
+  "public/apple-touch-icon.png",
+  "public/favicon.png",
+  "public/favicon.ico",
+];
+
+async function workspaceIconPaths(repoPath: string, configuredProjects: string[]): Promise<string[]> {
+  const packageDirs = await workspacePackageDirs(repoPath, configuredProjects);
+  return packageDirs.flatMap((dir) => workspacePublicIconSuffixes.map((suffix) => path.posix.join(dir, suffix)));
+}
+
+async function workspacePackageDirs(repoPath: string, configuredProjects: string[]): Promise<string[]> {
+  const patterns = [
+    ...await pnpmWorkspacePatterns(repoPath, configuredProjects),
+    ...await packageJsonWorkspacePatterns(repoPath, configuredProjects),
+  ];
+
+  const dirs = new Set<string>();
+  for (const pattern of dedupeStrings(patterns)) {
+    for (const dir of await expandWorkspacePattern(repoPath, configuredProjects, pattern)) {
+      dirs.add(dir);
+    }
+  }
+  return [...dirs];
+}
+
+async function pnpmWorkspacePatterns(repoPath: string, configuredProjects: string[]): Promise<string[]> {
+  let filePath: string;
+  try {
+    filePath = await resolveReadableRepoFile(repoPath, [], "pnpm-workspace.yaml", configuredProjects);
+  } catch {
+    return [];
+  }
+
+  let text: string;
+  try {
+    text = await fs.readFile(filePath, "utf8");
+  } catch {
+    return [];
+  }
+
+  return parsePnpmPackages(text);
+}
+
+// Minimal parser for the `packages:` list block of pnpm-workspace.yaml.
+// Avoids adding a YAML dependency for this single, well-defined need.
+function parsePnpmPackages(text: string): string[] {
+  const patterns: string[] = [];
+  let inPackages = false;
+
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.replace(/\t/g, "  ");
+    if (/^packages:\s*(#.*)?$/.test(line)) {
+      inPackages = true;
+      continue;
+    }
+    if (!inPackages) continue;
+
+    const item = /^\s+-\s*(.+?)\s*$/.exec(line);
+    if (item) {
+      const value = stripInlineYaml(item[1] ?? "");
+      if (value) patterns.push(value);
+      continue;
+    }
+    // A non-indented, non-comment line ends the packages block.
+    if (/^\S/.test(line)) inPackages = false;
+  }
+
+  return patterns;
+}
+
+function stripInlineYaml(value: string): string {
+  let result = value.trim();
+  const quote = result[0];
+  if ((quote === "\"" || quote === "'") && result.endsWith(quote) && result.length >= 2) {
+    return result.slice(1, -1);
+  }
+  const commentIndex = result.indexOf(" #");
+  if (commentIndex >= 0) result = result.slice(0, commentIndex).trim();
+  return result;
+}
+
+async function packageJsonWorkspacePatterns(repoPath: string, configuredProjects: string[]): Promise<string[]> {
+  let packageJsonPath: string;
+  try {
+    packageJsonPath = await resolveReadableRepoFile(repoPath, [], "package.json", configuredProjects);
+  } catch {
+    return [];
+  }
+
+  const result = await readJsonFile(packageJsonPath);
+  if (!result.ok || !isRecord(result.data)) return [];
+
+  const workspaces = result.data.workspaces;
+  const list = Array.isArray(workspaces)
+    ? workspaces
+    : isRecord(workspaces) && Array.isArray(workspaces.packages)
+      ? workspaces.packages
+      : [];
+
+  return list.filter((value): value is string => typeof value === "string");
+}
+
+async function expandWorkspacePattern(repoPath: string, configuredProjects: string[], pattern: string): Promise<string[]> {
+  if (!pattern || pattern.startsWith("!")) return [];
+
+  const normalized = path.posix.normalize(pattern.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+$/, ""));
+  if (!normalized || normalized === "." || normalized.startsWith("../") || path.posix.isAbsolute(normalized)) return [];
+
+  if (!normalized.includes("*")) return [normalized];
+
+  // Only expand a single trailing wildcard segment (e.g. `packages/*`, `apps/**`),
+  // which covers the common workspace layouts without a full glob engine.
+  const segments = normalized.split("/");
+  const wildcardIndex = segments.findIndex((segment) => segment.includes("*"));
+  if (wildcardIndex !== segments.length - 1) return [];
+  const last = segments[wildcardIndex];
+  if (last !== "*" && last !== "**") return [];
+
+  const parentRel = segments.slice(0, wildcardIndex).join("/");
+  return listSubdirectories(repoPath, configuredProjects, parentRel);
+}
+
+async function listSubdirectories(repoPath: string, configuredProjects: string[], relativeDir: string): Promise<string[]> {
+  let repoRoot: string;
+  try {
+    repoRoot = (await resolveRepoPath(repoPath, [], configuredProjects)).repoPath;
+  } catch {
+    return [];
+  }
+
+  const dirPath = relativeDir ? path.join(repoRoot, relativeDir) : repoRoot;
+  if (!isPathInside(repoRoot, dirPath)) return [];
+
+  let entries: import("node:fs").Dirent[];
+  try {
+    entries = await fs.readdir(dirPath, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  return entries
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+    .map((entry) => (relativeDir ? path.posix.join(relativeDir, entry.name) : entry.name));
 }
 
 async function localIconSource(repoPath: string, configuredProjects: string[], relativePath: string): Promise<ProjectIconSource | null> {
