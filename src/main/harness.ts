@@ -203,6 +203,81 @@ function localeLanguageSuffix(locale: string | undefined): string | null {
 
 export const BOOTSTRAP_PROMPT = bootstrapPrompt();
 
+export type ReviewPromptInput = {
+  taskId: string;
+  status: string;
+  sourcePath?: string;
+  reviewPath?: string;
+  agentLabel?: string;
+};
+
+export function reviewPrompt(review: ReviewPromptInput, options: BootstrapPromptOptions = {}): string {
+  const languageSuffix = localeLanguageSuffix(options.locale);
+  const recordRef = review.sourcePath
+    ? `\`${review.sourcePath}\``
+    : "its task record under `.sharkbay/tasks/` (the file whose name begins with the task id)";
+  const writeConstraint = review.reviewPath
+    ? `This is a review, not an implementation. Do NOT change the project: do not edit, create, or delete project files; do not stage, commit, or push. The ONLY file you may write is your review report at \`${review.reviewPath}\` (create the \`.sharkbay/reviews/\` directory if it does not exist). Do not create or modify any SharkBay task file.`
+    : "This is a review, not an implementation. Do NOT change anything: do not edit, create, or delete any file; do not stage, commit, or push. Report your findings in this chat only.";
+  const reportInstruction = review.reviewPath
+    ? `Write your review to \`${review.reviewPath}\` as Markdown — a one-line verdict, then strengths, then issues grouped by severity (blocker / major / minor), then concrete recommendations. When you are done, tell me the report path. Do not apply any change to the project itself.`
+    : "Report a concise, structured review: a one-line verdict, then strengths, then issues grouped by severity (blocker / major / minor), then concrete recommendations. Do not apply any change yourself — only describe what you would change and why.";
+  return [
+    "I'm starting a read-only review session.",
+    "This project tracks work as SharkBay task records under `.sharkbay/tasks/` (team records, read-only, under `.sharkbay/team-context/tasks/`).",
+    `You are reviewing task \`${review.taskId}\` (status: ${review.status}). Read ${recordRef} first to understand the goal, the work done, the files it touched, and its claimed verification.`,
+    ...(options.codeGraphEnabled ? [BOOTSTRAP_CODEGRAPH_PROMPT] : []),
+    writeConstraint,
+    reviewFocusLine(review.status),
+    reportInstruction,
+    ...(languageSuffix ? [languageSuffix] : []),
+  ].join(" ");
+}
+
+function reviewFocusLine(status: string): string {
+  switch (status.trim().toLowerCase()) {
+    case "completed":
+      return "This task is marked completed. Review completion quality: verify the implementation actually matches the task's Summary, Files, and Work; confirm the listed changes do what they claim; assess whether the Verification is adequate and trustworthy; and surface any bugs, regressions, gaps, or unfinished edges.";
+    case "blocked":
+      return "This task is blocked. Diagnose the blocker: is it real, what are the root causes, and what are concrete paths to unblock it?";
+    case "abandoned":
+      return "This task was abandoned. Assess whether abandonment was justified and what, if anything, is worth salvaging or revisiting.";
+    default:
+      return "This task is in progress. Inspect the task record to judge its stage: if it is still at the planning/spec/design stage (no or few changed files yet), review the plan — soundness, completeness, alignment with the stated goal, missing requirements or edge cases, and simpler alternatives; if implementation is already underway, review the code changes for correctness, quality, and regressions.";
+  }
+}
+
+/**
+ * Allocate a review report path for a task using the task tag (first taskId
+ * segment) plus a short random code, e.g. `.sharkbay/reviews/RVW7K2-N3T2AC.md`.
+ * Reviews are local-only, so the tag is unique enough; the random suffix plus an
+ * atomic `wx` create (retried on the rare collision) gives each launch its own
+ * file with no read-then-write race. Also ensures the reviews directory exists.
+ */
+export async function reserveReviewPath(repoPath: string, taskId: string): Promise<string> {
+  const dir = join(repoPath, ".sharkbay", "reviews");
+  await mkdir(dir, { recursive: true });
+  const tag = taskId.split("-")[0] || taskId;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const relativePath = `.sharkbay/reviews/${tag}-${shortReviewHash()}.md`;
+    try {
+      await writeFile(join(repoPath, relativePath), "", { flag: "wx" });
+      return relativePath;
+    } catch {
+      // Name already taken — try another random code.
+    }
+  }
+  throw new Error("Could not allocate a unique review report path.");
+}
+
+function shortReviewHash(): string {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const bytes = randomBytes(6);
+  let out = "";
+  for (let i = 0; i < 6; i++) out += alphabet[bytes[i]! % alphabet.length];
+  return out;
+}
+
 export type GitHubIdentity = {
   login: string;
   id: number;
@@ -526,9 +601,9 @@ export async function prepareAgentLaunch(
   repoPath: string,
   agentId: string,
   initialCommand: string,
-  options: BootstrapPromptOptions = {},
+  options: BootstrapPromptOptions & { reviewPrompt?: string } = {},
 ): Promise<AgentLaunchResult> {
-  const prompt = bootstrapPrompt(options);
+  const prompt = options.reviewPrompt ?? bootstrapPrompt(options);
   const bootstrapArgs = agentBootstrapArgs(agentId, prompt);
   if (!bootstrapArgs) {
     return { initialCommand, injected: false, skippedReason: "unsupported-agent" };

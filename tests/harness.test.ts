@@ -10,6 +10,8 @@ import {
   isHarnessInstalled,
   prepareAgentLaunch,
   bootstrapPrompt,
+  reviewPrompt,
+  reserveReviewPath,
   BOOTSTRAP_PROMPT,
   uninstallHarness,
   updateHarnessFiles,
@@ -278,6 +280,72 @@ describe("harness install", () => {
     await expect(fs.stat(path.join(repo, "QWEN.md")).catch(() => null)).resolves.toBeNull();
   });
 
+  it("builds a status-specific, read-only review prompt", () => {
+    const base = { taskId: "RVW7K2-u3960864-m81ae10", sourcePath: ".sharkbay/tasks/RVW7K2.md", reviewPath: ".sharkbay/reviews/RVW7K2-u3960864-m81ae10-abc.md" };
+
+    const completed = reviewPrompt({ ...base, status: "completed" }, { codeGraphEnabled: true, locale: "en" });
+    expect(completed).toContain("read-only review session");
+    expect(completed).toContain("`RVW7K2-u3960864-m81ae10` (status: completed)");
+    expect(completed).toContain(".sharkbay/tasks/RVW7K2.md");
+    expect(completed).toContain("marked completed");
+    expect(completed).toContain("CodeGraph is installed and configured");
+    expect(completed).toContain("This is a review, not an implementation");
+    // Writes its report to the review file, but nothing else.
+    expect(completed).toContain(".sharkbay/reviews/RVW7K2-u3960864-m81ae10-abc.md");
+    // Review must NOT pull the session into the harness/task protocol.
+    expect(completed).not.toContain("create or update the required task");
+    expect(completed).not.toContain(".sharkbay/harness/protocol.md");
+    expect(completed).not.toContain("AGENTS.md");
+
+    const active = reviewPrompt({ ...base, status: "active" }, { locale: "en" });
+    expect(active).toContain("This task is in progress");
+    expect(active).not.toContain("CodeGraph is installed and configured");
+
+    const blocked = reviewPrompt({ ...base, status: "blocked" }, { locale: "en" });
+    expect(blocked).toContain("This task is blocked");
+
+    const abandoned = reviewPrompt({ ...base, status: "abandoned" }, { locale: "en" });
+    expect(abandoned).toContain("This task was abandoned");
+
+    const noPath = reviewPrompt({ taskId: "X", status: "active" }, { locale: "en" });
+    expect(noPath).toContain("its task record under `.sharkbay/tasks/`");
+    expect(noPath).toContain("Report your findings in this chat only");
+
+    const zh = reviewPrompt({ ...base, status: "active" }, { locale: "zh-CN" });
+    expect(zh).toContain("Respond in");
+  });
+
+  it("injects a review prompt override instead of the bootstrap prompt", async () => {
+    const root = await makeTempRoot("harness-review");
+    const repo = await createRealGitRepoFixture(root);
+    await installHarness(repo, harnessOptions);
+
+    const prompt = reviewPrompt({ taskId: "RVW7K2-u3960864-m81ae10", status: "completed", sourcePath: ".sharkbay/tasks/RVW7K2.md" });
+    const result = await prepareAgentLaunch(repo, "codex", "codex", { reviewPrompt: prompt });
+
+    expect(result.injected).toBe(true);
+    expect(result.bootstrapPrompt).toBe(prompt);
+    expect(result.initialCommand).toContain("read-only review session");
+    expect(result.initialCommand).not.toContain("I'\\''m working in SharkBay Task Protocol mode");
+  });
+
+  it("reserves a short, unique review report path per task tag", async () => {
+    const repo = await makeTempRoot("harness-review-paths");
+    const taskId = "RVW7K2-u3960864-m81ae10";
+
+    const first = await reserveReviewPath(repo, taskId);
+    const second = await reserveReviewPath(repo, taskId);
+
+    // `<taskTag>-<6 char code>.md`, using only the first taskId segment.
+    expect(first).toMatch(/^\.sharkbay\/reviews\/RVW7K2-[A-Z0-9]{6}\.md$/);
+    expect(second).toMatch(/^\.sharkbay\/reviews\/RVW7K2-[A-Z0-9]{6}\.md$/);
+    expect(first).not.toBe(second);
+
+    // Each reserved path is created so launches do not collide and the dir exists.
+    await expect(fs.stat(path.join(repo, first)).then((s) => s.isFile())).resolves.toBe(true);
+    await expect(fs.stat(path.join(repo, second)).then((s) => s.isFile())).resolves.toBe(true);
+  });
+
   it("passes CodeGraph plugin enabled state into terminal bootstrap preparation", async () => {
     const runtime = await makeTestRuntime("harness-bootstrap-codegraph-enabled");
     const provider = new CaptureTerminalProvider();
@@ -296,6 +364,25 @@ describe("harness install", () => {
       protocolBootstrap: { codeGraphEnabled: true },
     });
     expect(provider.terminalInputs[1]?.protocolBootstrap?.codeGraphEnabled).toBe(false);
+  });
+
+  it("passes a review payload through to terminal creation", async () => {
+    const runtime = await makeTestRuntime("harness-review-passthrough");
+    const provider = new CaptureTerminalProvider();
+    const core = new SharkBayCoreService([provider], new PluginHost());
+
+    await core.createTerminal(runtime, {
+      cwdUri: "local:/tmp/project",
+      agentId: "codex",
+      initialCommand: "codex",
+      review: { taskId: "RVW7K2-u3960864-m81ae10", status: "completed", sourcePath: ".sharkbay/tasks/RVW7K2.md" },
+    });
+
+    expect(provider.terminalInputs[0]?.review).toEqual({
+      taskId: "RVW7K2-u3960864-m81ae10",
+      status: "completed",
+      sourcePath: ".sharkbay/tasks/RVW7K2.md",
+    });
   });
 
   it("keeps existing user entry files unchanged during bootstrap preparation", async () => {

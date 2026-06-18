@@ -729,6 +729,44 @@ body.is-resizing-columns * {
   background: #f7e7e4;
 }
 
+.project-context-menu-item:disabled {
+  color: #a7a195;
+  cursor: default;
+}
+
+.project-context-menu-item:disabled:hover {
+  background: transparent;
+}
+
+.project-context-submenu-anchor {
+  position: relative;
+}
+
+.project-context-menu-item--submenu {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.project-context-submenu-caret {
+  font-size: 10px;
+  color: #8a8478;
+}
+
+.project-context-submenu {
+  position: absolute;
+  left: calc(100% - 2px);
+  top: -5px;
+  width: 178px;
+  padding: 5px;
+  background: #fffdfa;
+  border: 1px solid #d7d2c8;
+  border-radius: 7px;
+  box-shadow: 0 16px 40px rgba(38, 48, 52, 0.18);
+  z-index: 31;
+}
+
 .button.is-danger {
   background: #c0392b;
   color: #fff;

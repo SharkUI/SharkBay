@@ -135,6 +135,7 @@ type TerminalPaneHandle = {
   openGitDiff: (projectUri: string, projectName: string, relativePath: string) => Promise<void>;
   openBrowserTab: (projectUri: string, projectName: string, initialUrl: string) => Promise<void>;
   openAgentSession: (projectUri: string, projectName: string, command: string, title: string, agentId?: string, hookSessionId?: string) => Promise<void>;
+  openReviewSession: (projectUri: string, projectName: string, agent: AgentCli, review: NonNullable<TerminalCreateInput["review"]>) => Promise<void>;
   focusTerminalSession: (terminalSessionId: string) => string | null;
 };
 
@@ -381,7 +382,7 @@ async function ensureCodeGraphStatus(projectUri: string): Promise<CodeGraphProje
 async function createTerminal(
   cwdUri: string,
   title?: string,
-  options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "initialCommandTitle" | "service"> = {},
+  options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "initialCommandTitle" | "service" | "review"> = {},
 ): Promise<TerminalSession> {
   const handler = getBridge().terminal?.create;
   if (!handler) throw new Error("Terminal sessions are not exposed by the preload API.");
@@ -461,6 +462,16 @@ function explainEarlyTerminalExit(tab: TerminalShellTab, event: TerminalExitEven
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function buildAgentLaunchCommand(agent: AgentCli): string {
+  const baseCommand = agent.executablePath || agent.command;
+  const flags = getAgentLaunchFlags(agent.id);
+  if (agent.id === "kiro" && getAgentHooksEnabled("kiro") && !flags.includes("--agent sharkbay")) {
+    flags.push("--agent sharkbay");
+  }
+  const base = agent.id === "kiro" ? `${shellQuote(baseCommand)} chat` : shellQuote(baseCommand);
+  return flags.length ? `${base} ${flags.join(" ")}` : base;
 }
 
 function cx(...names: Array<string | false | null | undefined>): string {
@@ -1114,6 +1125,9 @@ function DashboardView({
             onRestoreAgentSession={(restore) =>
               terminalPaneRef.current?.openAgentSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, restore.command, restore.title, restore.agentId, restore.hookSessionId) ?? Promise.resolve()
             }
+            onReviewTask={(agent, review) =>
+              terminalPaneRef.current?.openReviewSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, agent, review) ?? Promise.resolve()
+            }
           />
         ) : (
           <EmptyState title="No project selected" body="Select a project to get started." />
@@ -1424,13 +1438,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
 
   async function openAgentProjectTab(agent: AgentCli) {
     if (!candidate?.uri) return;
-    const baseCommand = agent.executablePath || agent.command;
-    const flags = getAgentLaunchFlags(agent.id);
-    if (agent.id === "kiro" && getAgentHooksEnabled("kiro") && !flags.includes("--agent sharkbay")) {
-      flags.push("--agent sharkbay");
-    }
-    const base = agent.id === "kiro" ? `${shellQuote(baseCommand)} chat` : shellQuote(baseCommand);
-    const launchCommand = flags.length ? `${base} ${flags.join(" ")}` : base;
+    const launchCommand = buildAgentLaunchCommand(agent);
     await openProjectTab(candidate.id, candidate.uri, displayProjectName ?? candidate.name, candidate.displayPath, false, { agentId: agent.id, initialCommand: launchCommand, initialCommandTitle: agent.label });
   }
 
@@ -1452,6 +1460,15 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     },
     openAgentSession: async (projectUri, projectName, command, title, agentId, hookSessionId) => {
       await openProjectTab(projectUri, projectUri, projectName, selectedSpace?.displayPath ?? projectUri, false, { agentId, initialCommand: command, initialCommandTitle: title, hookSessionId });
+    },
+    openReviewSession: async (projectUri, projectName, agent, review) => {
+      const launchCommand = buildAgentLaunchCommand(agent);
+      await openProjectTab(projectUri, projectUri, projectName, selectedSpace?.displayPath ?? projectUri, false, {
+        agentId: agent.id,
+        initialCommand: launchCommand,
+        initialCommandTitle: `Review ${review.taskId}`,
+        review,
+      });
     },
     focusTerminalSession: (terminalSessionId) => {
       const match = findTerminalTabWithSpace(spacesRef.current, terminalSessionId);
@@ -1550,7 +1567,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     }
   }
 
-  async function openProjectTab(projectId: string, cwdUri: string, projectName: string, displayPath: string, quiet = false, options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "initialCommandTitle" | "service"> & { hookSessionId?: string } = {}) {
+  async function openProjectTab(projectId: string, cwdUri: string, projectName: string, displayPath: string, quiet = false, options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "initialCommandTitle" | "service" | "review"> & { hookSessionId?: string } = {}) {
     try {
       const { hookSessionId, ...createOptions } = options;
       const session = await createTerminal(cwdUri, projectName, createOptions);
@@ -2604,7 +2621,7 @@ function EditorSurface({ active, appearanceTheme, tab, onChange, onSave }: {
   );
 }
 
-function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, onOpenFileInEditor, onOpenGitDiff, onOpenBrowserTab, onOpenTerminal, onRestoreAgentSession }: {
+function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, onOpenFileInEditor, onOpenGitDiff, onOpenBrowserTab, onOpenTerminal, onRestoreAgentSession, onReviewTask }: {
   agentClis: AgentCli[];
   detail: ProjectDetail | null;
   candidate: ProjectCandidate;
@@ -2615,6 +2632,7 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
   onOpenBrowserTab: (url: string) => Promise<void>;
   onOpenTerminal: (options: { title?: string; initialCommand?: string }) => Promise<void>;
   onRestoreAgentSession: (restore: AgentSessionRestoreCommand) => Promise<void>;
+  onReviewTask: (agent: AgentCli, review: NonNullable<TerminalCreateInput["review"]>) => Promise<void>;
 }) {
   const isLocal = candidate.providerKind === "local";
   const availableTabs = detailTabs.filter((tab) => !tab.localOnly || isLocal);
@@ -2740,6 +2758,7 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
             onOpenBrowserTab={onOpenBrowserTab}
             onRefresh={onRefresh}
             onRestoreAgentSession={onRestoreAgentSession}
+            onReviewTask={onReviewTask}
           />
         </div>
       ) : null}
@@ -2936,7 +2955,7 @@ function taskPill(task: TaskViewModel): { label: string; cls: string } {
   return { label: task.status, cls: "phase-waiting" };
 }
 
-function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserTab, onRefresh, onRestoreAgentSession }: {
+function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserTab, onRefresh, onRestoreAgentSession, onReviewTask }: {
   active: boolean;
   agentClis: AgentCli[];
   candidate: ProjectCandidate;
@@ -2944,11 +2963,14 @@ function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserT
   onOpenBrowserTab: (url: string) => Promise<void>;
   onRefresh: () => Promise<void>;
   onRestoreAgentSession: (restore: AgentSessionRestoreCommand) => Promise<void>;
+  onReviewTask: (agent: AgentCli, review: NonNullable<TerminalCreateInput["review"]>) => Promise<void>;
 }) {
   const repoPath = localPathFromCandidate(candidate);
   const [tasks, setTasks] = useState<TaskViewModel[]>([]);
   const [status, setStatus] = useState<ProtocolStatus | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [reviewMenu, setReviewMenu] = useState<{ taskId: string; x: number; y: number; withOpen: boolean } | null>(null);
+  const reviewMenuRef = useRef<HTMLDivElement | null>(null);
   const [busyAction, setBusyAction] = useState<"install" | "site" | "harness" | null>(null);
   const selected = useMemo(
     () => selectedTaskId ? tasks.find((task) => task.taskId === selectedTaskId) ?? null : null,
@@ -3058,6 +3080,25 @@ function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserT
     }
   }
 
+  useEffect(() => {
+    if (!reviewMenu) return;
+    const dismiss = (event: MouseEvent) => { if (reviewMenuRef.current && !reviewMenuRef.current.contains(event.target as Node)) setReviewMenu(null); };
+    const escape = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") setReviewMenu(null); };
+    document.addEventListener("mousedown", dismiss);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("mousedown", dismiss); document.removeEventListener("keydown", escape); };
+  }, [reviewMenu]);
+
+  async function launchReview(task: TaskViewModel, agent: AgentCli) {
+    setReviewMenu(null);
+    const review = { taskId: task.taskId, status: task.status, sourcePath: task.sourcePath, agentLabel: task.agent };
+    try {
+      await onReviewTask(agent, review);
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    }
+  }
+
   if (!repoPath) return <EmptyState title="Task Protocol unavailable" body="Task Protocol is available for local projects." />;
 
   if (selected) {
@@ -3140,7 +3181,16 @@ function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserT
           const restore = taskRestoreCommand(task, status, agentClis);
           return (
             <div className={cx("task-card-stack", restore && "has-restore-session")} key={task.taskId}>
-              <button className="queue-item" type="button" onClick={() => setSelectedTaskId(task.taskId)}>
+              <button
+                className="queue-item"
+                type="button"
+                onClick={() => setSelectedTaskId(task.taskId)}
+                onContextMenu={(event) => {
+                  if (!status?.installed) return;
+                  event.preventDefault();
+                  setReviewMenu({ taskId: task.taskId, x: event.clientX, y: event.clientY, withOpen: false });
+                }}
+              >
                 <span className="task-avatar">
                   {task.owner.avatarUrl ? <CachedAvatar url={task.owner.avatarUrl} /> : task.owner.githubLogin.slice(0, 2).toUpperCase()}
                 </span>
@@ -3155,6 +3205,56 @@ function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserT
           );
         })}
       </div>
+      {reviewMenu ? (() => {
+        const task = tasks.find((item) => item.taskId === reviewMenu.taskId);
+        if (!task) return null;
+        const inferredId = inferAgentSessionRestoreAgent(task.agent);
+        const defaultAgent = inferredId ? agentClis.find((agent) => agent.id === inferredId) : undefined;
+        return (
+          <div ref={reviewMenuRef} className="project-context-menu" style={{ top: reviewMenu.y, left: reviewMenu.x }}>
+            <button
+              className="project-context-menu-item"
+              type="button"
+              disabled={!defaultAgent}
+              title={defaultAgent ? undefined : "The agent this task used is not installed on this machine. Use \u201CReview with\u2026\u201D instead."}
+              onClick={() => { if (defaultAgent) void launchReview(task, defaultAgent); }}
+            >
+              Review
+            </button>
+            <div
+              className="project-context-submenu-anchor"
+              onMouseEnter={() => setReviewMenu((current) => current ? { ...current, withOpen: true } : current)}
+              onMouseLeave={() => setReviewMenu((current) => current ? { ...current, withOpen: false } : current)}
+            >
+              <button
+                className="project-context-menu-item project-context-menu-item--submenu"
+                type="button"
+                disabled={agentClis.length === 0}
+                aria-haspopup="menu"
+                aria-expanded={reviewMenu.withOpen}
+                onClick={() => setReviewMenu((current) => current ? { ...current, withOpen: !current.withOpen } : current)}
+              >
+                <span>Review with{"\u2026"}</span>
+                <span className="project-context-submenu-caret">{"\u25B8"}</span>
+              </button>
+              {reviewMenu.withOpen && agentClis.length ? (
+                <div className="project-context-submenu" role="menu">
+                  {agentClis.map((agent) => (
+                    <button
+                      key={agent.id}
+                      className="project-context-menu-item"
+                      type="button"
+                      onClick={() => void launchReview(task, agent)}
+                    >
+                      {agent.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        );
+      })() : null}
     </>
   );
 }

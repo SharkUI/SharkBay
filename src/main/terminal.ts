@@ -8,7 +8,7 @@ import * as pty from "./pty.js";
 import { getConfiguredRoots } from "./config.js";
 import { resolveProjectUri } from "./path-safety.js";
 import { prependPathDirectories, resolveCommandSearchPaths } from "./command-path.js";
-import { prepareAgentLaunch } from "./harness.js";
+import { prepareAgentLaunch, reserveReviewPath, reviewPrompt } from "./harness.js";
 import type {
   IpcRuntimeLike,
   TerminalCloseInput,
@@ -96,8 +96,15 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
     let delayedBootstrapPrompt: string | null = null;
     const isSessionRestore = initialCommand ? /--resume\b|--continue\b|\bresume\b/u.test(initialCommand) : false;
     if (input.agentId && initialCommand && !input.service && !isSessionRestore) {
+      const codeGraphEnabled = input.protocolBootstrap?.codeGraphEnabled ?? false;
+      let reviewPromptText: string | undefined;
+      if (input.review) {
+        const reviewPath = await reserveReviewPath(spec.projectRoot, input.review.taskId);
+        reviewPromptText = reviewPrompt({ ...input.review, reviewPath }, { codeGraphEnabled });
+      }
       const launch = await prepareAgentLaunch(spec.projectRoot, input.agentId, initialCommand, {
-        codeGraphEnabled: input.protocolBootstrap?.codeGraphEnabled ?? false,
+        codeGraphEnabled,
+        reviewPrompt: reviewPromptText,
       });
       if (launch.injected && (input.agentId === "codewhale" || input.agentId === "opencode") && launch.initialCommand === initialCommand) {
         delayedBootstrapPrompt = launch.bootstrapPrompt ?? null;

@@ -602,6 +602,7 @@ export type TerminalCreateInput = {
   agentId?: string;
   service?: { id: string; label: string; command: string };
   protocolBootstrap?: { codeGraphEnabled?: boolean };
+  review?: { taskId: string; status: string; sourcePath?: string; agentLabel?: string };
   cols?: number;
   rows?: number;
 };
