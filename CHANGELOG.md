@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.6] — 2026-06-18
+
+### Added
+- Read-only task review: right-click a task to launch a review agent session (using the task's own agent or another installed one) that writes its report to `.sharkbay/reviews/<taskTag>-<code>.md` without joining the task protocol
+
+### Changed
+- Codex launch option replaces the Skip approval toggle with YOLO mode (`--yolo`, bypassing approvals and sandbox) and warns to use an isolated environment
+
+### Fixed
+- Project icons resolve from monorepo workspace package directories (e.g. `web/public/icon.png`) instead of falling back to the default icon
+- Stale persisted launch flags no longer offered by an agent are filtered out, fixing Codex rejecting conflicting approval flags
+
 ## [0.2.5] — 2026-06-15
 
 ### Added
