@@ -105,6 +105,19 @@ export async function scanTasks(repoPath: string): Promise<TaskViewModel[]> {
       merged.set(t.taskId, t);
     }
   }
+  // Artifacts/Reviews are appended to the LOCAL task file after a task may have
+  // already synced. When the team-context copy wins the merge above it lacks
+  // those appended sections, so overlay them from the local copy when present.
+  const localById = new Map(localTasks.map((t) => [t.taskId, t]));
+  for (const [taskId, base] of merged) {
+    const local = localById.get(taskId);
+    if (!local || local === base) continue;
+    const artifacts = local.artifacts ?? base.artifacts;
+    const reviews = local.reviews ?? base.reviews;
+    if (artifacts !== base.artifacts || reviews !== base.reviews) {
+      merged.set(taskId, { ...base, artifacts, reviews });
+    }
+  }
   return [...merged.values()].sort(compareTasksByCreatedAtDesc);
 }
 

@@ -321,7 +321,7 @@ export type TerminalCreateInput = {
   service?: { id: string; label: string; command: string };
   protocolBootstrap?: { codeGraphEnabled?: boolean };
   review?: { taskId: string; status: string; sourcePath?: string; agentLabel?: string };
-  share?: { taskId: string; status: string; sourcePath?: string; agentLabel?: string };
+  artifact?: { taskId: string; status: string; sourcePath?: string; agentLabel?: string };
   cols?: number;
   rows?: number;
 };

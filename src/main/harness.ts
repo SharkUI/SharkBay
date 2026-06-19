@@ -161,16 +161,16 @@ const AGENT_SESSION_ID_SCRIPT = [
   "printf '%s\\n' \"$session_id\"",
 ].join("\n") + "\n";
 
-// Deployed to .sharkbay/harness/share-artifact.sh. Invoked by an agent when it
+// Deployed to .sharkbay/harness/open-artifact.sh. Invoked by an agent when it
 // finishes generating a task artifact, to ask SharkBay to open the resulting
 // HTML in its built-in browser. Sends the request over the existing hook socket
 // via the deployed `sharkbay-hook` CLI; fail-open (exit 0) if anything is
 // missing so it never blocks the agent.
-const SHARE_ARTIFACT_SCRIPT = [
+const OPEN_ARTIFACT_SCRIPT = [
   "#!/bin/sh",
   "set -eu",
   "",
-  "# Usage: .sharkbay/harness/share-artifact.sh <artifact-html-path>",
+  "# Usage: .sharkbay/harness/open-artifact.sh <artifact-html-path>",
   "input=\"${1:-}\"",
   "[ -n \"$input\" ] || exit 0",
   "",
@@ -195,7 +195,7 @@ const SHARE_ARTIFACT_SCRIPT = [
   "}",
   "",
   "payload=\"{\\\"type\\\":\\\"open_artifact\\\",\\\"path\\\":$(json_str \"$artifact\"),\\\"repo\\\":$(json_str \"$repo_root\")}\"",
-  "printf '%s' \"$payload\" | \"$hook_cli\" --source share",
+  "printf '%s' \"$payload\" | \"$hook_cli\" --source artifact",
   "exit 0",
 ].join("\n") + "\n";
 const BOOTSTRAP_INTRO = [
@@ -249,7 +249,7 @@ export type ReviewPromptInput = {
   agentLabel?: string;
 };
 
-export type SharePromptInput = {
+export type ArtifactPromptInput = {
   taskId: string;
   status: string;
   sourcePath?: string;
@@ -328,27 +328,27 @@ function shortReviewHash(): string {
   return out;
 }
 
-export function sharePrompt(share: SharePromptInput, options: BootstrapPromptOptions = {}): string {
+export function artifactPrompt(artifact: ArtifactPromptInput, options: BootstrapPromptOptions = {}): string {
   const languageSuffix = localeLanguageSuffix(options.locale);
-  const recordRef = share.sourcePath
-    ? `\`${share.sourcePath}\``
+  const recordRef = artifact.sourcePath
+    ? `\`${artifact.sourcePath}\``
     : "its task record under `.sharkbay/tasks/` (the file whose name begins with the task id)";
-  const outputInstruction = share.artifactPath
-    ? `SharkBay has already reserved an empty placeholder file for you at \`${share.artifactPath}\`. Write the finished page into that exact path (overwrite the placeholder); do not pick a different name or directory.`
+  const outputInstruction = artifact.artifactPath
+    ? `SharkBay has already reserved an empty placeholder file for you at \`${artifact.artifactPath}\`. Write the finished page into that exact path (overwrite the placeholder); do not pick a different name or directory.`
     : "Write the finished page to `.sharkbay/site/artifacts/<task-tag>/<name>.html` (create the directory if needed), where `<task-tag>` is the first segment of the task id.";
-  const writeConstraint = share.artifactPath
-    ? `The files you may create or modify are the artifact HTML at \`${share.artifactPath}\` and a single appended record in this task's local record file under \`.sharkbay/tasks/\` (see below). Do not edit other project files, never touch files under \`.sharkbay/team-context/\`, and do not stage, commit, or push.`
+  const writeConstraint = artifact.artifactPath
+    ? `The files you may create or modify are the artifact HTML at \`${artifact.artifactPath}\` and a single appended record in this task's local record file under \`.sharkbay/tasks/\` (see below). Do not edit other project files, never touch files under \`.sharkbay/team-context/\`, and do not stage, commit, or push.`
     : "Do not modify existing project source, do not modify any SharkBay task file, and do not stage, commit, or push. Only create the artifact HTML page.";
-  const recordInstruction = share.artifactPath
-    ? `Once the page is written, record it: append a one-line entry to this task's local record file under \`.sharkbay/tasks/\` (the file whose name begins with \`${share.taskId.split("-")[0]}\`) inside a \`## Artifacts\` section — create that section at the end of the file if it does not exist. Use the format \`- \\\`${share.artifactPath}\\\` — <one-line description of what the page shows> (<timestamp>)\`, where <timestamp> is the output of \`date -u +%Y-%m-%dT%H:%M:%SZ\`. Append only; do not edit other sections.`
+  const recordInstruction = artifact.artifactPath
+    ? `Once the page is written, record it: append a one-line entry to this task's local record file under \`.sharkbay/tasks/\` (the file whose name begins with \`${artifact.taskId.split("-")[0]}\`) inside a \`## Artifacts\` section — create that section at the end of the file if it does not exist. Use the format \`- \\\`${artifact.artifactPath}\\\` — <one-line description of what the page shows> (<timestamp>)\`, where <timestamp> is the output of \`date -u +%Y-%m-%dT%H:%M:%SZ\`. Append only; do not edit other sections.`
     : null;
-  const openInstruction = share.artifactPath
-    ? `As the very last step, after the page is written and recorded, run \`.sharkbay/harness/share-artifact.sh ${share.artifactPath}\` from the project root to open it in SharkBay's built-in browser, then tell me the artifact path.`
-    : "As the very last step, after the page is fully written, run `.sharkbay/harness/share-artifact.sh <path>` from the project root (passing the path you wrote) to open it in SharkBay's built-in browser, then tell me the artifact path.";
+  const openInstruction = artifact.artifactPath
+    ? `As the very last step, after the page is written and recorded, run \`.sharkbay/harness/open-artifact.sh ${artifact.artifactPath}\` from the project root to open it in SharkBay's built-in browser, then tell me the artifact path.`
+    : "As the very last step, after the page is fully written, run `.sharkbay/harness/open-artifact.sh <path>` from the project root (passing the path you wrote) to open it in SharkBay's built-in browser, then tell me the artifact path.";
   return [
-    "I'm starting a task-artifact session: your job is to produce a shareable web page that showcases this task's deliverable.",
+    "I'm starting a task-artifact session: your job is to produce a web page that showcases this task's deliverable.",
     "This project tracks work as SharkBay task records under `.sharkbay/tasks/` (team records, read-only, under `.sharkbay/team-context/tasks/`).",
-    `You are sharing task \`${share.taskId}\` (status: ${share.status}). Read ${recordRef} first, then analyze every relevant piece of information about this task — its goal, the work done, the files it touched, the actual code or content it produced, and its verification — so the page reflects the real deliverable, not just the task metadata.`,
+    `You are creating an artifact for task \`${artifact.taskId}\` (status: ${artifact.status}). Read ${recordRef} first, then analyze every relevant piece of information about this task — its goal, the work done, the files it touched, the actual code or content it produced, and its verification — so the page reflects the real deliverable, not just the task metadata.`,
     ...(options.codeGraphEnabled ? [BOOTSTRAP_CODEGRAPH_PROMPT] : []),
     "Generate a single self-contained static HTML page (interactive only if it genuinely helps) whose core purpose is to present this task's deliverable in the clearest, most readable way. Use whatever best fits the work and your capabilities: prose, headings, tables, code blocks, charts, inline SVG diagrams, embedded images or screenshots, and light animation. Inline all CSS and JS and avoid any external network dependencies so the page renders offline.",
     outputInstruction,
@@ -367,7 +367,7 @@ export function sharePrompt(share: SharePromptInput, options: BootstrapPromptOpt
  * each launch gets its own placeholder with no read-then-write race. Also
  * ensures the per-task artifact directory exists.
  */
-export async function reserveSharePath(repoPath: string, taskId: string): Promise<string> {
+export async function reserveArtifactPath(repoPath: string, taskId: string): Promise<string> {
   const tag = taskId.split("-")[0] || taskId;
   const dir = join(repoPath, ".sharkbay", "site", "artifacts", tag);
   await mkdir(dir, { recursive: true });
@@ -455,8 +455,8 @@ function managedHarnessFiles(options: ProtocolOptions): ManagedHarnessFile[] {
       executable: true,
     },
     {
-      path: ".sharkbay/harness/share-artifact.sh",
-      content: SHARE_ARTIFACT_SCRIPT,
+      path: ".sharkbay/harness/open-artifact.sh",
+      content: OPEN_ARTIFACT_SCRIPT,
       executable: true,
     },
   ];
@@ -711,9 +711,9 @@ export async function prepareAgentLaunch(
   repoPath: string,
   agentId: string,
   initialCommand: string,
-  options: BootstrapPromptOptions & { reviewPrompt?: string; sharePrompt?: string } = {},
+  options: BootstrapPromptOptions & { reviewPrompt?: string; artifactPrompt?: string } = {},
 ): Promise<AgentLaunchResult> {
-  const prompt = options.reviewPrompt ?? options.sharePrompt ?? bootstrapPrompt(options);
+  const prompt = options.reviewPrompt ?? options.artifactPrompt ?? bootstrapPrompt(options);
   const bootstrapArgs = agentBootstrapArgs(agentId, prompt);
   if (!bootstrapArgs) {
     return { initialCommand, injected: false, skippedReason: "unsupported-agent" };

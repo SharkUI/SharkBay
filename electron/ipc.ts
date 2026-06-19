@@ -178,8 +178,8 @@ function resolveTerminalForPid(agentPid: number): Promise<string | null> {
 }
 
 /**
- * Handle an `open_artifact` request forwarded from a Share session's
- * `share-artifact.sh` (via the hook socket). Broadcasts the artifact path to
+ * Handle an `open_artifact` request forwarded from an artifact session's
+ * `open-artifact.sh` (via the hook socket). Broadcasts the artifact path to
  * renderer windows so they can open it in the built-in browser. Returns true if
  * the message was an artifact request (and should not flow to the state
  * manager). Defensive: only `.html` files inside a project's

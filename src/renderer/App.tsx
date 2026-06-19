@@ -146,7 +146,7 @@ type TerminalPaneHandle = {
   openBrowserTab: (projectUri: string, projectName: string, initialUrl: string) => Promise<void>;
   openAgentSession: (projectUri: string, projectName: string, command: string, title: string, agentId?: string, hookSessionId?: string) => Promise<void>;
   openReviewSession: (projectUri: string, projectName: string, agent: AgentCli, review: NonNullable<TerminalCreateInput["review"]>) => Promise<void>;
-  openShareSession: (projectUri: string, projectName: string, agent: AgentCli, share: NonNullable<TerminalCreateInput["share"]>) => Promise<void>;
+  openArtifactSession: (projectUri: string, projectName: string, agent: AgentCli, artifact: NonNullable<TerminalCreateInput["artifact"]>) => Promise<void>;
   focusTerminalSession: (terminalSessionId: string) => string | null;
 };
 
@@ -393,7 +393,7 @@ async function ensureCodeGraphStatus(projectUri: string): Promise<CodeGraphProje
 async function createTerminal(
   cwdUri: string,
   title?: string,
-  options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "initialCommandTitle" | "service" | "review" | "share"> = {},
+  options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "initialCommandTitle" | "service" | "review" | "artifact"> = {},
 ): Promise<TerminalSession> {
   const handler = getBridge().terminal?.create;
   if (!handler) throw new Error("Terminal sessions are not exposed by the preload API.");
@@ -1141,8 +1141,8 @@ function DashboardView({
             onReviewTask={(agent, review) =>
               terminalPaneRef.current?.openReviewSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, agent, review) ?? Promise.resolve()
             }
-            onShareTask={(agent, share) =>
-              terminalPaneRef.current?.openShareSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, agent, share) ?? Promise.resolve()
+            onArtifactTask={(agent, artifact) =>
+              terminalPaneRef.current?.openArtifactSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, agent, artifact) ?? Promise.resolve()
             }
           />
         ) : (
@@ -1339,7 +1339,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const services = candidate?.services ?? [];
 
   useEffect(() => { spacesRef.current = spaces; }, [spaces]);
-  // A Share session's agent ran share-artifact.sh — open the generated HTML in
+  // An artifact session's agent ran open-artifact.sh — open the generated HTML in
   // the built-in browser, in the tab space of the project it belongs to.
   useEffect(() => {
     const subscribe = getBridge().terminal?.onArtifactReady;
@@ -1499,13 +1499,13 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
         review,
       });
     },
-    openShareSession: async (projectUri, projectName, agent, share) => {
+    openArtifactSession: async (projectUri, projectName, agent, artifact) => {
       const launchCommand = buildAgentLaunchCommand(agent);
       await openProjectTab(projectUri, projectUri, projectName, selectedSpace?.displayPath ?? projectUri, false, {
         agentId: agent.id,
         initialCommand: launchCommand,
-        initialCommandTitle: `Share ${share.taskId}`,
-        share,
+        initialCommandTitle: `Artifact ${artifact.taskId}`,
+        artifact,
       });
     },
     focusTerminalSession: (terminalSessionId) => {
@@ -1605,7 +1605,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     }
   }
 
-  async function openProjectTab(projectId: string, cwdUri: string, projectName: string, displayPath: string, quiet = false, options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "initialCommandTitle" | "service" | "review" | "share"> & { hookSessionId?: string } = {}) {
+  async function openProjectTab(projectId: string, cwdUri: string, projectName: string, displayPath: string, quiet = false, options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "initialCommandTitle" | "service" | "review" | "artifact"> & { hookSessionId?: string } = {}) {
     try {
       const { hookSessionId, ...createOptions } = options;
       const session = await createTerminal(cwdUri, projectName, createOptions);
@@ -2659,7 +2659,7 @@ function EditorSurface({ active, appearanceTheme, tab, onChange, onSave }: {
   );
 }
 
-function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, onOpenFileInEditor, onOpenGitDiff, onOpenBrowserTab, onOpenTerminal, onRestoreAgentSession, onReviewTask, onShareTask }: {
+function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, onOpenFileInEditor, onOpenGitDiff, onOpenBrowserTab, onOpenTerminal, onRestoreAgentSession, onReviewTask, onArtifactTask }: {
   agentClis: AgentCli[];
   detail: ProjectDetail | null;
   candidate: ProjectCandidate;
@@ -2671,7 +2671,7 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
   onOpenTerminal: (options: { title?: string; initialCommand?: string }) => Promise<void>;
   onRestoreAgentSession: (restore: AgentSessionRestoreCommand) => Promise<void>;
   onReviewTask: (agent: AgentCli, review: NonNullable<TerminalCreateInput["review"]>) => Promise<void>;
-  onShareTask: (agent: AgentCli, share: NonNullable<TerminalCreateInput["share"]>) => Promise<void>;
+  onArtifactTask: (agent: AgentCli, artifact: NonNullable<TerminalCreateInput["artifact"]>) => Promise<void>;
 }) {
   const isLocal = candidate.providerKind === "local";
   const availableTabs = detailTabs.filter((tab) => !tab.localOnly || isLocal);
@@ -2801,7 +2801,7 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
             onRefresh={onRefresh}
             onRestoreAgentSession={onRestoreAgentSession}
             onReviewTask={onReviewTask}
-            onShareTask={onShareTask}
+            onArtifactTask={onArtifactTask}
           />
         </div>
       ) : null}
@@ -2998,7 +2998,7 @@ function taskPill(task: TaskViewModel): { label: string; cls: string } {
   return { label: task.status, cls: "phase-waiting" };
 }
 
-function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpenFileInEditor, onOpenBrowserTab, onOpenGitDiff, onRefresh, onRestoreAgentSession, onReviewTask, onShareTask }: {
+function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpenFileInEditor, onOpenBrowserTab, onOpenGitDiff, onRefresh, onRestoreAgentSession, onReviewTask, onArtifactTask }: {
   active: boolean;
   agentClis: AgentCli[];
   candidate: ProjectCandidate;
@@ -3010,7 +3010,7 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
   onRefresh: () => Promise<void>;
   onRestoreAgentSession: (restore: AgentSessionRestoreCommand) => Promise<void>;
   onReviewTask: (agent: AgentCli, review: NonNullable<TerminalCreateInput["review"]>) => Promise<void>;
-  onShareTask: (agent: AgentCli, share: NonNullable<TerminalCreateInput["share"]>) => Promise<void>;
+  onArtifactTask: (agent: AgentCli, artifact: NonNullable<TerminalCreateInput["artifact"]>) => Promise<void>;
 }) {
   const repoPath = localPathFromCandidate(candidate);
   const [tasks, setTasks] = useState<TaskViewModel[]>([]);
@@ -3151,11 +3151,11 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
     }
   }
 
-  async function launchShare(task: TaskViewModel, agent: AgentCli) {
+  async function launchArtifact(task: TaskViewModel, agent: AgentCli) {
     setReviewMenu(null);
-    const share = { taskId: task.taskId, status: task.status, sourcePath: task.sourcePath, agentLabel: task.agent };
+    const artifact = { taskId: task.taskId, status: task.status, sourcePath: task.sourcePath, agentLabel: task.agent };
     try {
-      await onShareTask(agent, share);
+      await onArtifactTask(agent, artifact);
     } catch (error) {
       setToast({ tone: "error", message: asMessage(error) });
     }
@@ -3188,7 +3188,7 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
             agents={agentClis}
             defaultAgent={detailDefaultAgent}
             onReview={(agent) => void launchReview(selected, agent)}
-            onCreateArtifact={() => { if (detailDefaultAgent) void launchShare(selected, detailDefaultAgent); }}
+            onCreateArtifact={() => { if (detailDefaultAgent) void launchArtifact(selected, detailDefaultAgent); }}
           />
 
           <div className="task-detail-meta-grid">
@@ -3322,7 +3322,7 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
               type="button"
               disabled={!defaultAgent}
               title={defaultAgent ? undefined : "The agent this task used is not installed on this machine. Use \u201CReview with\u2026\u201D instead."}
-              onClick={() => { if (defaultAgent) void launchShare(task, defaultAgent); }}
+              onClick={() => { if (defaultAgent) void launchArtifact(task, defaultAgent); }}
             >
               Create artifact
             </button>

@@ -8,7 +8,7 @@ import * as pty from "./pty.js";
 import { getConfiguredRoots } from "./config.js";
 import { resolveProjectUri } from "./path-safety.js";
 import { prependPathDirectories, resolveCommandSearchPaths } from "./command-path.js";
-import { prepareAgentLaunch, reserveReviewPath, reserveSharePath, reviewPrompt, sharePrompt } from "./harness.js";
+import { prepareAgentLaunch, reserveReviewPath, reserveArtifactPath, reviewPrompt, artifactPrompt } from "./harness.js";
 import type {
   IpcRuntimeLike,
   TerminalCloseInput,
@@ -102,15 +102,15 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
         const reviewPath = await reserveReviewPath(spec.projectRoot, input.review.taskId);
         reviewPromptText = reviewPrompt({ ...input.review, reviewPath }, { codeGraphEnabled });
       }
-      let sharePromptText: string | undefined;
-      if (input.share) {
-        const artifactPath = await reserveSharePath(spec.projectRoot, input.share.taskId);
-        sharePromptText = sharePrompt({ ...input.share, artifactPath }, { codeGraphEnabled });
+      let artifactPromptText: string | undefined;
+      if (input.artifact) {
+        const artifactPath = await reserveArtifactPath(spec.projectRoot, input.artifact.taskId);
+        artifactPromptText = artifactPrompt({ ...input.artifact, artifactPath }, { codeGraphEnabled });
       }
       const launch = await prepareAgentLaunch(spec.projectRoot, input.agentId, initialCommand, {
         codeGraphEnabled,
         reviewPrompt: reviewPromptText,
-        sharePrompt: sharePromptText,
+        artifactPrompt: artifactPromptText,
       });
       if (launch.injected && (input.agentId === "codewhale" || input.agentId === "opencode") && launch.initialCommand === initialCommand) {
         delayedBootstrapPrompt = launch.bootstrapPrompt ?? null;

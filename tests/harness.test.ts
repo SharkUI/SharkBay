@@ -12,8 +12,8 @@ import {
   bootstrapPrompt,
   reviewPrompt,
   reserveReviewPath,
-  sharePrompt,
-  reserveSharePath,
+  artifactPrompt,
+  reserveArtifactPath,
   BOOTSTRAP_PROMPT,
   uninstallHarness,
   updateHarnessFiles,
@@ -93,12 +93,12 @@ describe("harness install", () => {
     expect(sessionHelperText).toContain("SHARKBAY_RESTORED_SESSION_ID");
     expect(sessionHelperText).toContain("*claude*|*gemini*|*qwen*)");
     expect(sessionHelperText).toContain("codex|claude|codewhale|gemini|kiro|opencode|qwen");
-    const shareHelper = await fs.stat(path.join(repo, ".sharkbay", "harness", "share-artifact.sh"));
-    expect(shareHelper.mode & 0o111).not.toBe(0);
-    const shareHelperText = await fs.readFile(path.join(repo, ".sharkbay", "harness", "share-artifact.sh"), "utf8");
-    expect(shareHelperText).toContain("open_artifact");
-    expect(shareHelperText).toContain("sharkbay-hook");
-    expect(shareHelperText).toContain("hook-socket-path");
+    const artifactHelper = await fs.stat(path.join(repo, ".sharkbay", "harness", "open-artifact.sh"));
+    expect(artifactHelper.mode & 0o111).not.toBe(0);
+    const artifactHelperText = await fs.readFile(path.join(repo, ".sharkbay", "harness", "open-artifact.sh"), "utf8");
+    expect(artifactHelperText).toContain("open_artifact");
+    expect(artifactHelperText).toContain("sharkbay-hook");
+    expect(artifactHelperText).toContain("hook-socket-path");
     const exclude = await fs.readFile(path.join(repo, ".git", "info", "exclude"), "utf8");
     expect(exclude).toContain("/.sharkbay/");
     expect(exclude).not.toContain("/AGENTS.md");
@@ -361,10 +361,10 @@ describe("harness install", () => {
     await expect(fs.stat(path.join(repo, second)).then((s) => s.isFile())).resolves.toBe(true);
   });
 
-  it("builds an artifact-generation share prompt", () => {
+  it("builds an artifact-generation prompt", () => {
     const base = { taskId: "SHR4K2-u3960864-m81ae10", sourcePath: ".sharkbay/tasks/SHR4K2.md", artifactPath: ".sharkbay/site/artifacts/SHR4K2/ABC123.html" };
 
-    const prompt = sharePrompt({ ...base, status: "completed" }, { codeGraphEnabled: true, locale: "en" });
+    const prompt = artifactPrompt({ ...base, status: "completed" }, { codeGraphEnabled: true, locale: "en" });
     expect(prompt).toContain("task-artifact session");
     expect(prompt).toContain("`SHR4K2-u3960864-m81ae10` (status: completed)");
     expect(prompt).toContain(".sharkbay/tasks/SHR4K2.md");
@@ -374,28 +374,28 @@ describe("harness install", () => {
     expect(prompt).toContain(".sharkbay/site/artifacts/SHR4K2/ABC123.html");
     expect(prompt).toContain("never touch files under `.sharkbay/team-context/`");
     // Final step: run the harness script to open the artifact in the built-in browser.
-    expect(prompt).toContain(".sharkbay/harness/share-artifact.sh .sharkbay/site/artifacts/SHR4K2/ABC123.html");
+    expect(prompt).toContain(".sharkbay/harness/open-artifact.sh .sharkbay/site/artifacts/SHR4K2/ABC123.html");
     expect(prompt).toContain("built-in browser");
     // Records the artifact back into the task file under an Artifacts section.
     expect(prompt).toContain("## Artifacts");
     expect(prompt).toContain("date -u +%Y-%m-%dT%H:%M:%SZ");
 
-    const noPath = sharePrompt({ taskId: "X", status: "active" }, { locale: "en" });
+    const noPath = artifactPrompt({ taskId: "X", status: "active" }, { locale: "en" });
     expect(noPath).toContain(".sharkbay/site/artifacts/<task-tag>/<name>.html");
-    expect(noPath).toContain(".sharkbay/harness/share-artifact.sh <path>");
+    expect(noPath).toContain(".sharkbay/harness/open-artifact.sh <path>");
     expect(noPath).not.toContain("CodeGraph is installed and configured");
 
-    const zh = sharePrompt({ ...base, status: "active" }, { locale: "zh-CN" });
+    const zh = artifactPrompt({ ...base, status: "active" }, { locale: "zh-CN" });
     expect(zh).toContain("Respond in");
   });
 
-  it("injects a share prompt override instead of the bootstrap prompt", async () => {
-    const root = await makeTempRoot("harness-share");
+  it("injects an artifact prompt override instead of the bootstrap prompt", async () => {
+    const root = await makeTempRoot("harness-artifact");
     const repo = await createRealGitRepoFixture(root);
     await installHarness(repo, harnessOptions);
 
-    const prompt = sharePrompt({ taskId: "SHR4K2-u3960864-m81ae10", status: "completed", sourcePath: ".sharkbay/tasks/SHR4K2.md" });
-    const result = await prepareAgentLaunch(repo, "codex", "codex", { sharePrompt: prompt });
+    const prompt = artifactPrompt({ taskId: "SHR4K2-u3960864-m81ae10", status: "completed", sourcePath: ".sharkbay/tasks/SHR4K2.md" });
+    const result = await prepareAgentLaunch(repo, "codex", "codex", { artifactPrompt: prompt });
 
     expect(result.injected).toBe(true);
     expect(result.bootstrapPrompt).toBe(prompt);
@@ -404,11 +404,11 @@ describe("harness install", () => {
   });
 
   it("reserves a short, unique artifact path under the task tag directory", async () => {
-    const repo = await makeTempRoot("harness-share-paths");
+    const repo = await makeTempRoot("harness-artifact-paths");
     const taskId = "SHR4K2-u3960864-m81ae10";
 
-    const first = await reserveSharePath(repo, taskId);
-    const second = await reserveSharePath(repo, taskId);
+    const first = await reserveArtifactPath(repo, taskId);
+    const second = await reserveArtifactPath(repo, taskId);
 
     // `.sharkbay/site/artifacts/<taskTag>/<6 char code>.html`, using only the first taskId segment.
     expect(first).toMatch(/^\.sharkbay\/site\/artifacts\/SHR4K2\/[A-Z0-9]{6}\.html$/);
@@ -420,8 +420,8 @@ describe("harness install", () => {
     await expect(fs.stat(path.join(repo, second)).then((s) => s.isFile())).resolves.toBe(true);
   });
 
-  it("passes a share payload through to terminal creation", async () => {
-    const runtime = await makeTestRuntime("harness-share-passthrough");
+  it("passes an artifact payload through to terminal creation", async () => {
+    const runtime = await makeTestRuntime("harness-artifact-passthrough");
     const provider = new CaptureTerminalProvider();
     const core = new SharkBayCoreService([provider], new PluginHost());
 
@@ -429,10 +429,10 @@ describe("harness install", () => {
       cwdUri: "local:/tmp/project",
       agentId: "codex",
       initialCommand: "codex",
-      share: { taskId: "SHR4K2-u3960864-m81ae10", status: "completed", sourcePath: ".sharkbay/tasks/SHR4K2.md" },
+      artifact: { taskId: "SHR4K2-u3960864-m81ae10", status: "completed", sourcePath: ".sharkbay/tasks/SHR4K2.md" },
     });
 
-    expect(provider.terminalInputs[0]?.share).toEqual({
+    expect(provider.terminalInputs[0]?.artifact).toEqual({
       taskId: "SHR4K2-u3960864-m81ae10",
       status: "completed",
       sourcePath: ".sharkbay/tasks/SHR4K2.md",

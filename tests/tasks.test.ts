@@ -148,6 +148,57 @@ describe("task scanning", () => {
     expect(task?.sourceKind).toBe("local-md");
     expect(task?.commits).toEqual(["8831eda2"]);
   });
+
+  it("overlays locally-appended Artifacts/Reviews onto an already-synced team task", async () => {
+    const repo = await makeTempRoot("tasks-artifact-overlay");
+    const taskPath = "R5V2K5-u3960864-m81ae10-release.md";
+    const base = [
+      "kind: sharkbay_task",
+      "taskId: R5V2K5-u3960864-m81ae10",
+      "taskTag: R5V2K5",
+      "mode: task",
+      "title: Release",
+      "status: completed",
+      "actor: SharkUI",
+      "githubUserId: 3960864",
+      "machine: 81ae10",
+      "agent: Codex",
+      "createdAt: 2026-06-16T01:00:00Z",
+      "updatedAt: 2026-06-16T01:00:00Z",
+      "commits:",
+      "  - b5a12eae",
+    ];
+    const summary = ["## Summary", "Released.", ""].join("\n");
+
+    // Team mirror was synced before the artifact existed (no Artifacts section).
+    await writeText(path.join(repo, ".sharkbay", "team-context", "tasks", "2026", "06", taskPath), [
+      "---",
+      ...base,
+      "---",
+      "",
+      summary,
+    ].join("\n"));
+    // Local copy gained an appended Artifacts/Reviews record afterwards.
+    await writeText(path.join(repo, ".sharkbay", "tasks", taskPath), [
+      "---",
+      ...base,
+      "---",
+      "",
+      summary,
+      "## Artifacts",
+      "- `.sharkbay/site/artifacts/R5V2K5/GJX6AN.html` — Release page (2026-06-19T13:20:57Z)",
+      "",
+      "## Reviews",
+      "- Looks good — `.sharkbay/reviews/R5V2K5-ABC123.md` (2026-06-19T13:25:00Z)",
+      "",
+    ].join("\n"));
+
+    const tasks = await scanTasks(repo);
+    const task = tasks.find((item) => item.taskId === "R5V2K5-u3960864-m81ae10");
+
+    expect(task?.artifacts).toBe("- `.sharkbay/site/artifacts/R5V2K5/GJX6AN.html` — Release page (2026-06-19T13:20:57Z)");
+    expect(task?.reviews).toBe("- Looks good — `.sharkbay/reviews/R5V2K5-ABC123.md` (2026-06-19T13:25:00Z)");
+  });
 });
 
 async function writeTask(
