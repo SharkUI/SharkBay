@@ -12,8 +12,8 @@ agent: Codex GPT-5
 sessionId: 019eddf4-0159-7690-ac93-b9460f14d3eb
 branch: main
 createdAt: 2026-06-19T07:28:45Z
-updatedAt: 2026-06-19T09:41:58Z
-completedAt: 2026-06-19T09:41:58Z
+updatedAt: 2026-06-19T09:44:02Z
+completedAt: 2026-06-19T09:44:02Z
 ---
 
 ## Summary
@@ -55,6 +55,8 @@ Improved the project detail task view so task records are easier to scan and rea
 - Fixed task detail commit selection to fall back from an empty `commits` array to the legacy single `commit` field.
 - Reopened task to speed up task list display when switching projects by decoupling task loading from status loading.
 - Decoupled task list state updates from protocol status loading so project switches can render tasks as soon as `getTasks` returns.
+- Reopened task to fix duplicate React keys in Git history rendering.
+- Made Git history row keys unique by appending the row index when selector/hash/date collide.
 
 ## Verification
 - Parsed `N5S8QA` locally and confirmed Files, Work, and Verification now return all recorded lines.
