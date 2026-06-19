@@ -12,8 +12,8 @@ agent: Codex GPT-5
 sessionId: 019ee069-6e90-7cf2-be9f-3853f631443c
 branch: main
 createdAt: 2026-06-19T15:26:31Z
-updatedAt: 2026-06-19T15:51:35Z
-completedAt: 2026-06-19T15:51:35Z
+updatedAt: 2026-06-19T16:02:49Z
+completedAt: 2026-06-19T16:02:49Z
 ---
 
 ## Summary
@@ -49,6 +49,10 @@ Task artifact storage now matches review storage: new artifacts are reserved und
 - Moved existing artifact files from `.sharkbay/site/artifacts/<taskTag>/<name>.html` into `.sharkbay/artifacts/<taskTag>-<code>.html`.
 - Renamed the remaining old review report file from `.sharkbay/reviews/RVW7K2-u3960864-m81ae10-001.md` to `.sharkbay/reviews/RVW7K2-000001.md`.
 - Updated local task records that pointed at migrated artifact files or described the old artifact directory convention.
+- Reopened to add missing `## Artifacts` records for migrated artifact files that were only listed in Files/Work/Verification sections.
+- Corrected the Knowledge Site source model: `.sharkbay/artifacts/*.html` and `.sharkbay/reviews/*.md` are now the source of truth, while task `## Artifacts` / `## Reviews` sections only enrich entries with descriptions and record text.
+- Kept taskTag-based enrichment by deriving the tag from `<taskTag>-<code>.<ext>` filenames and joining back to scanned task records.
+- Rebuilt the local Knowledge Site after the source model correction; the Artifacts page now lists all five files currently under `.sharkbay/artifacts/`.
 
 ## Verification
 - `codegraph affected src/main/harness.ts electron/ipc.ts src/main/knowledge-site.ts tests/harness.test.ts tests/knowledge-site.test.ts tests/task-detail-helpers.test.ts tests/tasks.test.ts` identified the four affected test files.
@@ -59,6 +63,11 @@ Task artifact storage now matches review storage: new artifacts are reserved und
 - `find .sharkbay/site -path '.sharkbay/site/artifacts*' -print` returned no paths after migration.
 - Artifact and review filename checks confirmed every file directly under `.sharkbay/artifacts/` and `.sharkbay/reviews/` matches the `<taskTag>-<6 chars>.<ext>` convention.
 - `rg -n "\\.sharkbay/site/artifacts|RVW7K2-u3960864-m81ae10-001" .sharkbay/tasks || true` now returns only this task's historical "changed from old to new" notes.
+- `npx vitest run tests/knowledge-site.test.ts tests/harness.test.ts tests/task-detail-helpers.test.ts tests/tasks.test.ts` passed after switching site discovery to directory-first artifact/review scanning.
+- `npm run typecheck` passed after the directory-first discovery change.
+- `npm run build` passed after the directory-first discovery change.
+- Regenerated the local Knowledge Site with `generateKnowledgeSite(process.cwd())`; it returned `generated: true`.
+- Checked `.sharkbay/site/tasks/artifacts.html` and confirmed it links all five files under `.sharkbay/artifacts/`: `R8A4SV-KV3KUB.html`, `H8Q4N2-NB513R.html`, `N5S8QA-INDEX0.html`, `R2X6Q4-PEB1XU.html`, and `R5V2K5-GJX6AN.html`.
 
 ## Notes
 - Related team context searched before starting; relevant records include `T9M4QA-u3960864-m81ae10`, `RVW7K2-u3960864-m81ae10`, `H8Q4N2-u3960864-m81ae10`, `K7S4N2-u3960864-m81ae10`, `D3N7QK-u3960864-m81ae10`, `R4W8N2-u3960864-m81ae10`, and `K9V2M4-u3960864-m81ae10`.
