@@ -3377,27 +3377,27 @@ button.project-file-toggle:focus-visible {
 }
 
 .add-project-dialog {
-  width: min(560px, 100%);
+  width: min(500px, 100%);
 }
 
 .add-project-body {
   display: grid;
   gap: 0;
-  padding: 0 16px 4px;
+  padding: 0 8px 2px;
 }
 
 .add-project-section {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
-  padding: 14px 0;
+  padding: 10px 0;
   border-top: 1px solid #e5e0d7;
 }
 
 .add-project-section:first-child {
   border-top: 0;
-  padding-top: 2px;
+  padding-top: 0;
 }
 
 .add-project-copy {
@@ -3410,14 +3410,15 @@ button.project-file-toggle:focus-visible {
   margin: 0;
   color: #172528;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 680;
+  line-height: 1.25;
 }
 
 .add-project-copy p {
   margin: 0;
   color: #697477;
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .add-project-remote {
@@ -3434,9 +3435,10 @@ button.project-file-toggle:focus-visible {
 .add-project-remote-row .text-input {
   width: 100%;
   min-width: 0;
-  height: 34px;
-  padding: 7px 9px;
+  height: 30px;
+  padding: 5px 8px;
   font: inherit;
+  font-size: 12px;
   color: #172528;
   background: #fff;
   border: 1px solid #d8d4ca;
@@ -3452,12 +3454,20 @@ button.project-file-toggle:focus-visible {
 .add-project-note {
   margin: 0;
   color: #697477;
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .add-project-dialog .modal-header h3 {
-  font-size: 16px;
+  font-size: 13px;
+  font-weight: 680;
+  line-height: 1.25;
+}
+
+.add-project-dialog .button {
+  min-height: 28px;
+  padding: 4px 9px;
+  font-size: 11px;
 }
 
 .sr-only {
