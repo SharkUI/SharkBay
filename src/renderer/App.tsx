@@ -163,7 +163,7 @@ const resizerColumnWidth = 12;
 const columnResizeStep = 40;
 const detailColumnStorageKey = "sharkbay.detailColumnWidth.v2";
 const projectColumnStorageKey = "sharkbay.projectColumnWidth.v2";
-const minBrowserColumnWidth = 952;
+const minBrowserColumnWidth = 360;
 const terminalColumnMinWidthFor = (detailHidden: boolean) => detailHidden ? minBrowserColumnWidth : minTerminalColumnWidth;
 const detailTabs: Array<{ id: DetailTab; label: string; localOnly?: boolean }> = [
   { id: "sessions", label: "Sessions", localOnly: true },
