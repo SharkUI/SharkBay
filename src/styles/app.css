@@ -540,6 +540,7 @@ body.is-resizing-columns * {
   border: 1px solid #25494f;
   border-radius: 6px;
   padding: 6px 11px;
+  font-size: 13px;
   font-weight: 650;
 }
 
@@ -3409,13 +3410,14 @@ button.project-file-toggle:focus-visible {
   margin: 0;
   color: #172528;
   font-size: 13px;
+  font-weight: 600;
 }
 
 .add-project-copy p {
   margin: 0;
   color: #697477;
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .add-project-remote {
@@ -3450,8 +3452,12 @@ button.project-file-toggle:focus-visible {
 .add-project-note {
   margin: 0;
   color: #697477;
-  font-size: 11px;
-  line-height: 1.35;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.add-project-dialog .modal-header h3 {
+  font-size: 16px;
 }
 
 .sr-only {

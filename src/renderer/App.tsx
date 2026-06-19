@@ -163,6 +163,8 @@ const resizerColumnWidth = 12;
 const columnResizeStep = 40;
 const detailColumnStorageKey = "sharkbay.detailColumnWidth.v2";
 const projectColumnStorageKey = "sharkbay.projectColumnWidth.v2";
+const minBrowserColumnWidth = 952;
+const terminalColumnMinWidthFor = (detailHidden: boolean) => detailHidden ? minBrowserColumnWidth : minTerminalColumnWidth;
 const detailTabs: Array<{ id: DetailTab; label: string; localOnly?: boolean }> = [
   { id: "sessions", label: "Sessions", localOnly: true },
   { id: "tasks", label: "Tasks", localOnly: true },
@@ -923,15 +925,17 @@ function DashboardView({
     storedColumnWidth(detailColumnStorageKey, defaultDetailColumnWidth, minDetailColumnWidth),
   );
   const detailPanelHidden = activeTerminalTabKind === "browser";
+  const terminalColumnMinWidth = terminalColumnMinWidthFor(detailPanelHidden);
 
   function normalizeColumnWidths(projectWidth: number, detailWidth: number, gridWidth: number, detailHidden = detailPanelHidden) {
+    const minimumTerminalWidth = terminalColumnMinWidthFor(detailHidden);
     const availableWidth = gridWidth - resizerColumnWidth * (detailHidden ? 1 : 2);
-    const minimumWidth = minProjectColumnWidth + minTerminalColumnWidth + (detailHidden ? 0 : minDetailColumnWidth);
+    const minimumWidth = minProjectColumnWidth + minimumTerminalWidth + (detailHidden ? 0 : minDetailColumnWidth);
     if (availableWidth <= minimumWidth) {
       return { projectWidth: minProjectColumnWidth, detailWidth: detailHidden ? detailWidth : minDetailColumnWidth };
     }
-    const nextProjectWidth = clamp(projectWidth, minProjectColumnWidth, availableWidth - minTerminalColumnWidth - (detailHidden ? 0 : minDetailColumnWidth));
-    const nextDetailWidth = detailHidden ? detailWidth : clamp(detailWidth, minDetailColumnWidth, availableWidth - nextProjectWidth - minTerminalColumnWidth);
+    const nextProjectWidth = clamp(projectWidth, minProjectColumnWidth, availableWidth - minimumTerminalWidth - (detailHidden ? 0 : minDetailColumnWidth));
+    const nextDetailWidth = detailHidden ? detailWidth : clamp(detailWidth, minDetailColumnWidth, availableWidth - nextProjectWidth - minimumTerminalWidth);
     return { projectWidth: Math.round(nextProjectWidth), detailWidth: Math.round(nextDetailWidth) };
   }
 
@@ -1085,9 +1089,10 @@ function DashboardView({
 
   const gridStyle = {
     gridTemplateColumns: detailPanelHidden
-      ? `${projectColumnWidth}px ${resizerColumnWidth}px minmax(${minTerminalColumnWidth}px, 1fr) 0px 0px`
-      : `${projectColumnWidth}px ${resizerColumnWidth}px minmax(${minTerminalColumnWidth}px, 1fr) ${resizerColumnWidth}px ${detailColumnWidth}px`,
+      ? `${projectColumnWidth}px ${resizerColumnWidth}px minmax(${terminalColumnMinWidth}px, 1fr) 0px 0px`
+      : `${projectColumnWidth}px ${resizerColumnWidth}px minmax(${terminalColumnMinWidth}px, 1fr) ${resizerColumnWidth}px ${detailColumnWidth}px`,
   } satisfies CSSProperties;
+  const browserLayoutKey = `${projectColumnWidth}:${detailPanelHidden ? "browser" : "panel"}`;
 
   return (
     <div className={cx("dashboard-grid", detailPanelHidden && "is-detail-hidden")} ref={gridRef} style={gridStyle}>
@@ -1139,6 +1144,7 @@ function DashboardView({
           ref={terminalPaneRef}
           appearanceTheme={appearanceTheme}
           agentClis={agentClis}
+          browserLayoutKey={browserLayoutKey}
           candidate={selectedCandidate}
           hookStateBySessionId={hookStateBySessionId}
           projectAliases={projectAliases}
@@ -1208,7 +1214,7 @@ function DashboardView({
               <div>
                 <h3 id="add-project-title">Add Project</h3>
               </div>
-              <button aria-label="Close" className="icon-button" disabled={Boolean(addingProject)} type="button" onClick={closeAddProjectModal}>x</button>
+              <button aria-label="Close" className="icon-button" disabled={Boolean(addingProject)} type="button" onClick={closeAddProjectModal}><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
             </div>
             <div className="add-project-body">
               <section className="add-project-section">
@@ -1258,6 +1264,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   hookStateBySessionId: Record<string, HookSessionStateEntry>;
   projectAliases: Record<string, string>;
   isVisible: boolean;
+  browserLayoutKey: string;
   terminalColorScheme: string | null;
   terminalFontFamily: string | null;
   terminalFontSize: number | null;
@@ -1268,7 +1275,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   onAgentSessionClear: (agentSessionId: string) => void;
   onRunningServiceProjectIdsChange: (projectIds: Set<string>) => void;
   onProjectActivityChange: (activityByProjectId: Record<string, ProjectActivityState>) => void;
-}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, candidate, hookStateBySessionId, projectAliases, isVisible, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onAgentSessionClear, onRunningServiceProjectIdsChange, onProjectActivityChange }, ref) {
+}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, browserLayoutKey, candidate, hookStateBySessionId, projectAliases, isVisible, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onAgentSessionClear, onRunningServiceProjectIdsChange, onProjectActivityChange }, ref) {
   const [spaces, setSpaces] = useState<Record<string, TerminalSpace>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const spacesRef = useRef<Record<string, TerminalSpace>>({});
@@ -2001,7 +2008,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                   return <XTermSurface active={active} focusRequest={focusRequest} key={tab.session.id} tab={tab} onResize={(cols, rows) => void resizeTerminal(tab.session.id, cols, rows).catch((error) => setToast({ tone: "error", message: asMessage(error) }))} />;
                 }
                 if (tab.kind === "browser") {
-                  return <BrowserSurface active={active} focusRequest={focusRequest} key={tab.browser.id} setToast={setToast} tab={tab} onAddressChange={(value) => updateBrowserAddress(tab.browser.id, value)} onBrowserUpdate={(browser) => updateBrowserSession(browser)} />;
+                  return <BrowserSurface active={active} focusRequest={focusRequest} key={tab.browser.id} layoutKey={browserLayoutKey} setToast={setToast} tab={tab} onAddressChange={(value) => updateBrowserAddress(tab.browser.id, value)} onBrowserUpdate={(browser) => updateBrowserSession(browser)} />;
                 }
                 return (
                   <EditorSurface
@@ -2050,6 +2057,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
 function BrowserSurface({
   active,
   focusRequest,
+  layoutKey,
   onAddressChange,
   onBrowserUpdate,
   setToast,
@@ -2057,6 +2065,7 @@ function BrowserSurface({
 }: {
   active: boolean;
   focusRequest: number;
+  layoutKey: string;
   onAddressChange: (value: string) => void;
   onBrowserUpdate: (browser: BrowserSession) => void;
   setToast: (toast: Toast) => void;
@@ -2090,7 +2099,7 @@ function BrowserSurface({
       window.removeEventListener("resize", scheduleResize);
       void resizeBrowser(tab.browser.id, hiddenBrowserBounds(), false).catch(() => undefined);
     };
-  }, [active, setToast, tab.browser.id]);
+  }, [active, layoutKey, setToast, tab.browser.id]);
 
   useEffect(() => {
     if (!active || !focusRequest) return;
@@ -2519,7 +2528,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
                 <h3 id="confirm-remove-project-title">Remove project?</h3>
                 <p>This removes <strong>{confirmRemove.name}</strong> from SharkBay. Files on disk are not deleted.</p>
               </div>
-              <button aria-label="Close" className="icon-button" disabled={removing} type="button" onClick={() => setConfirmRemove(null)}>x</button>
+              <button aria-label="Close" className="icon-button" disabled={removing} type="button" onClick={() => setConfirmRemove(null)}><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
             </div>
             <div className="modal-actions">
               <button className="button secondary" disabled={removing} type="button" onClick={() => setConfirmRemove(null)}>Cancel</button>
@@ -2545,7 +2554,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
                     : <>This removes the local protocol harness from <strong>{confirmUninstall.name}</strong>. Source files are not deleted.</>}
                 </p>
               </div>
-              <button aria-label="Close" className="icon-button" disabled={uninstalling} type="button" onClick={() => setConfirmUninstall(null)}>x</button>
+              <button aria-label="Close" className="icon-button" disabled={uninstalling} type="button" onClick={() => setConfirmUninstall(null)}><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
             </div>
             <div className="protocol-cleanup-options">
               {confirmUninstall.canCleanTeamContext ? (
@@ -2648,7 +2657,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
                 <h3 id="new-worktree-title">New Worktree</h3>
                 <p>Create a new Git worktree from <strong>{worktreeModal.name}</strong>.</p>
               </div>
-              <button aria-label="Close" className="icon-button" disabled={worktreeCreating} type="button" onClick={() => setWorktreeModal(null)}>x</button>
+              <button aria-label="Close" className="icon-button" disabled={worktreeCreating} type="button" onClick={() => setWorktreeModal(null)}><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
             </div>
             <div className="modal-body" style={{ padding: "0 16px 16px" }}>
               <label className="form-label" htmlFor="worktree-branch-input">Branch name</label>
@@ -5331,7 +5340,7 @@ function InstallAgentDialog({ targetId, targetLabel, installedAgentIds, onClose,
             <h3 id="install-agent-dialog-title">Install agent CLI</h3>
             <p>Target: {targetLabel}</p>
           </div>
-          <button aria-label="Close" className="icon-button" disabled={busy} type="button" onClick={onClose}>x</button>
+          <button aria-label="Close" className="icon-button" disabled={busy} type="button" onClick={onClose}><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
         </div>
         <div className="install-agent-body">
           <aside className="install-agent-sidebar">
