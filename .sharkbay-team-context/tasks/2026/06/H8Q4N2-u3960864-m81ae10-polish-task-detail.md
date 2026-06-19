@@ -12,8 +12,8 @@ agent: Codex GPT-5
 sessionId: 019eddf4-0159-7690-ac93-b9460f14d3eb
 branch: main
 createdAt: 2026-06-19T07:28:45Z
-updatedAt: 2026-06-19T08:00:09Z
-completedAt: 2026-06-19T08:00:09Z
+updatedAt: 2026-06-19T08:09:43Z
+completedAt: 2026-06-19T08:09:43Z
 ---
 
 ## Summary
@@ -43,6 +43,10 @@ Improved the project detail task view so task records are easier to scan and rea
 - Reopened task to simplify the fixed header and move task identity/status into metadata.
 - Reduced the fixed header to back button, smaller avatar, and full wrapping title.
 - Moved task ID, status, source, and mode into the metadata grid.
+- Reopened task to wire task files to git diff double-click behavior, remove unhelpful Work step labels, and fix horizontal overflow.
+- Changed Work timeline labels from `Step N` to compact numeric markers.
+- Wired task detail file rows to open Git diff on double-click via the existing `onOpenGitDiff` path.
+- Added width constraints to the task detail layout and rows to prevent horizontal overflow.
 
 ## Verification
 - Parsed `N5S8QA` locally and confirmed Files, Work, and Verification now return all recorded lines.
