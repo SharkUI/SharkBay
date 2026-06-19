@@ -12,20 +12,22 @@ agent: Codex GPT-5
 sessionId: 019eddf4-0159-7690-ac93-b9460f14d3eb
 branch: main
 createdAt: 2026-06-19T07:28:45Z
-updatedAt: 2026-06-19T10:59:13Z
-completedAt: 2026-06-19T10:59:13Z
+updatedAt: 2026-06-19T11:16:15Z
+completedAt: 2026-06-19T11:16:15Z
 ---
 
 ## Summary
-Improved the project detail task view so task records are easier to scan and read. The detail pane now shows structured metadata, Summary, Files, timeline-style Work, Verification, Commits, Notes, source details, and a collapsible raw record, with file rows opening the appropriate diff or editor target.
+Improved the project detail task view so task records are easier to scan and read. The detail pane now shows structured metadata, Summary, Files, timeline-style Work, Verification, Commits, Notes, source details, and a collapsible raw record, with file rows opening the appropriate diff or editor target including status-annotated paths.
 
 ## Files
 - .sharkbay/tasks/H8Q4N2-u3960864-m81ae10-polish-task-detail.md
 - src/main/tasks.ts
 - src/renderer/App.tsx
 - src/renderer/types.ts
+- src/shared/task-detail-helpers.ts
 - src/shared/types.ts
 - src/styles/app.css
+- tests/task-detail-helpers.test.ts
 - tests/tasks.test.ts
 
 ## Work
@@ -66,6 +68,9 @@ Improved the project detail task view so task records are easier to scan and rea
 - Updated task file double-click behavior: recorded commits open historical diff; dirty tracked files open working diff; new/untracked or no-diff files open in the editor.
 - Reopened task to fix task file rows whose recorded paths include trailing status annotations such as `(new)`.
 - Normalized task file action paths by stripping trailing status annotations before opening a diff or editor, and treated `(new)`/`(added)` rows as editor targets.
+- Reopened task to add pure helper tests for task detail file actions and support no-space status annotations such as `path(new)`.
+- Extracted task detail helper logic from `App.tsx` into a shared helper module for direct unit coverage.
+- Supported task file annotations with or without a separating space, such as `path (new)` and `path(new)`.
 
 ## Verification
 - Parsed `N5S8QA` locally and confirmed Files, Work, and Verification now return all recorded lines.
@@ -80,6 +85,10 @@ Improved the project detail task view so task records are easier to scan and rea
 - `npm run typecheck` passed after action-path normalization.
 - `npm run build` passed after action-path normalization.
 - `git diff --check -- src/renderer/App.tsx .sharkbay/tasks/H8Q4N2-u3960864-m81ae10-polish-task-detail.md` passed.
+- `npx vitest run tests/task-detail-helpers.test.ts tests/tasks.test.ts` passed.
+- `npm run typecheck` passed after extracting shared task detail helpers.
+- `npm run build` passed after extracting shared task detail helpers.
+- `git diff --check -- src/renderer/App.tsx src/shared/task-detail-helpers.ts tests/task-detail-helpers.test.ts .sharkbay/tasks/H8Q4N2-u3960864-m81ae10-polish-task-detail.md` passed.
 
 ## Notes
 - Related team context: `T5R8K2-u3960864-m81ae10` fixed task detail refresh; `R6T4W2-u3960864-m81ae10` cached task avatars; `RVW7K2-u3960864-m81ae10` added task review menu. Keep behavior unchanged.
