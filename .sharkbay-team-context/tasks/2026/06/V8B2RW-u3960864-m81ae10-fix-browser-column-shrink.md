@@ -12,8 +12,8 @@ agent: Codex GPT-5
 sessionId: 019ee044-0cf7-7711-ac45-8583e27af6e7
 branch: main
 createdAt: 2026-06-19T14:27:19Z
-updatedAt: 2026-06-19T14:29:29Z
-completedAt: 2026-06-19T14:28:48Z
+updatedAt: 2026-06-19T14:35:58Z
+completedAt: 2026-06-19T14:35:58Z
 ---
 
 ## Summary
@@ -27,6 +27,8 @@ Fixed the embedded browser layout so its content host can shrink with the availa
 - Related team context: B9R4K7-u3960864-m81ae10 and N5Q8V2-u3960864-m81ae10.
 - Identified the browser-active dashboard grid as the likely source of a stale BrowserView width because the terminal column retained the terminal-specific minimum width.
 - Split the terminal column minimum so browser-active layouts can shrink below the normal terminal minimum while terminal/editor layouts keep the existing 420px constraint.
+- User screenshot clarified the remaining issue: the native BrowserView content bounds can remain at the old middle-column position while the React browser toolbar has already adapted to the new column.
+- Added a browser layout key derived from dashboard column state so BrowserSurface recalculates native BrowserView bounds when the Projects column is resized, even if the host element's observed size does not change.
 
 ## Verification
 - `codegraph affected src/renderer/App.tsx`
