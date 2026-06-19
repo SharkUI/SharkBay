@@ -12,8 +12,8 @@ agent: Codex GPT-5
 sessionId: 019eddf4-0159-7690-ac93-b9460f14d3eb
 branch: main
 createdAt: 2026-06-19T07:28:45Z
-updatedAt: 2026-06-19T07:55:44Z
-completedAt: 2026-06-19T07:55:44Z
+updatedAt: 2026-06-19T08:00:09Z
+completedAt: 2026-06-19T08:00:09Z
 ---
 
 ## Summary
@@ -40,6 +40,9 @@ Improved the project detail task view so task records are easier to scan and rea
 - Reopened task to move Summary out of the fixed header and make Work read closer to the task artifact mockup.
 - Moved Summary into the scrollable detail body and changed the fixed header to an unboxed identity bar.
 - Reworked Work into a step timeline instead of a plain list, with night-theme colors adjusted.
+- Reopened task to simplify the fixed header and move task identity/status into metadata.
+- Reduced the fixed header to back button, smaller avatar, and full wrapping title.
+- Moved task ID, status, source, and mode into the metadata grid.
 
 ## Verification
 - Parsed `N5S8QA` locally and confirmed Files, Work, and Verification now return all recorded lines.
