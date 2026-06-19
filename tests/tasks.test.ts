@@ -79,7 +79,7 @@ describe("task scanning", () => {
       "- Second note.",
       "",
       "## Artifacts",
-      "- `.sharkbay/site/artifacts/MULTI1/ab12cd.html` — Overview (2026-05-16T01:00:00Z)",
+      "- `.sharkbay/artifacts/MULTI1-AB12CD.html` — Overview (2026-05-16T01:00:00Z)",
       "",
       "## Reviews",
       "- Looks solid — `.sharkbay/reviews/MULTI1-AB12CD.md` (2026-05-16T01:00:00Z)",
@@ -94,7 +94,7 @@ describe("task scanning", () => {
     expect(task?.verification).toBe("- `npm test` passed.\n- `npm run build` passed.");
     expect(task?.notes).toBe("- First note.\n- Second note.");
     expect(task?.commits).toEqual(["abc123", "def456"]);
-    expect(task?.artifacts).toBe("- `.sharkbay/site/artifacts/MULTI1/ab12cd.html` — Overview (2026-05-16T01:00:00Z)");
+    expect(task?.artifacts).toBe("- `.sharkbay/artifacts/MULTI1-AB12CD.html` — Overview (2026-05-16T01:00:00Z)");
     expect(task?.reviews).toBe("- Looks solid — `.sharkbay/reviews/MULTI1-AB12CD.md` (2026-05-16T01:00:00Z)");
   });
 
@@ -186,7 +186,7 @@ describe("task scanning", () => {
       "",
       summary,
       "## Artifacts",
-      "- `.sharkbay/site/artifacts/R5V2K5/GJX6AN.html` — Release page (2026-06-19T13:20:57Z)",
+      "- `.sharkbay/artifacts/R5V2K5-GJX6AN.html` — Release page (2026-06-19T13:20:57Z)",
       "",
       "## Reviews",
       "- Looks good — `.sharkbay/reviews/R5V2K5-ABC123.md` (2026-06-19T13:25:00Z)",
@@ -196,7 +196,7 @@ describe("task scanning", () => {
     const tasks = await scanTasks(repo);
     const task = tasks.find((item) => item.taskId === "R5V2K5-u3960864-m81ae10");
 
-    expect(task?.artifacts).toBe("- `.sharkbay/site/artifacts/R5V2K5/GJX6AN.html` — Release page (2026-06-19T13:20:57Z)");
+    expect(task?.artifacts).toBe("- `.sharkbay/artifacts/R5V2K5-GJX6AN.html` — Release page (2026-06-19T13:20:57Z)");
     expect(task?.reviews).toBe("- Looks good — `.sharkbay/reviews/R5V2K5-ABC123.md` (2026-06-19T13:25:00Z)");
   });
 });

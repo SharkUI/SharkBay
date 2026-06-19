@@ -35,8 +35,8 @@ describe("task detail helpers", () => {
   });
 
   it("extracts artifact and review paths from record lines", () => {
-    expect(extractArtifactPath("- `.sharkbay/site/artifacts/T1/ab12cd.html` shows the overview")).toBe(".sharkbay/site/artifacts/T1/ab12cd.html");
-    expect(extractArtifactPath("- .sharkbay/site/artifacts/T1/plain.html overview")).toBe(".sharkbay/site/artifacts/T1/plain.html");
+    expect(extractArtifactPath("- `.sharkbay/artifacts/T1-AB12CD.html` shows the overview")).toBe(".sharkbay/artifacts/T1-AB12CD.html");
+    expect(extractArtifactPath("- .sharkbay/artifacts/T1-PLAIN.html overview")).toBe(".sharkbay/artifacts/T1-PLAIN.html");
     expect(extractArtifactPath("- no artifact here")).toBeNull();
 
     expect(extractReviewPath("- Looks good `.sharkbay/reviews/T1-AB12CD.md` verdict")).toBe(".sharkbay/reviews/T1-AB12CD.md");

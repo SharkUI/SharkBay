@@ -185,8 +185,9 @@ function resolveTerminalForPid(agentPid: number): Promise<string | null> {
  * `open-artifact.sh` (via the hook socket). Broadcasts the artifact path to
  * renderer windows so they can open it in the built-in browser. Returns true if
  * the message was an artifact request (and should not flow to the state
- * manager). Defensive: only `.html` files inside a project's
- * `.sharkbay/site/artifacts/` directory are accepted.
+ * manager). Defensive: only `.html` files inside a project's `.sharkbay/artifacts/`
+ * directory are accepted. The old `.sharkbay/site/artifacts/` location remains
+ * accepted so previously generated artifact links can still open.
  */
 function tryHandleArtifactMessage(msg: { source: string; payload: unknown; pid?: number }): boolean {
   const payload = msg.payload;
@@ -195,7 +196,9 @@ function tryHandleArtifactMessage(msg: { source: string; payload: unknown; pid?:
   if (data.type !== "open_artifact") return false;
   const filePath = typeof data.path === "string" ? data.path : "";
   const repo = typeof data.repo === "string" ? data.repo : "";
-  if (filePath && repo && filePath.startsWith(`${repo}/.sharkbay/site/artifacts/`) && filePath.endsWith(".html")) {
+  const inArtifactDir = filePath.startsWith(`${repo}/.sharkbay/artifacts/`)
+    || filePath.startsWith(`${repo}/.sharkbay/site/artifacts/`);
+  if (filePath && repo && inArtifactDir && filePath.endsWith(".html")) {
     const event: ArtifactReadyEvent = { path: filePath, repo };
     BrowserWindow.getAllWindows().forEach((window) => {
       window.webContents.send(channels.openArtifact, event);

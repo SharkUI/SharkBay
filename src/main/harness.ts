@@ -335,7 +335,7 @@ export function artifactPrompt(artifact: ArtifactPromptInput, options: Bootstrap
     : "its task record under `.sharkbay/tasks/` (the file whose name begins with the task id)";
   const outputInstruction = artifact.artifactPath
     ? `SharkBay has already reserved an empty placeholder file for you at \`${artifact.artifactPath}\`. Write the finished page into that exact path (overwrite the placeholder); do not pick a different name or directory.`
-    : "Write the finished page to `.sharkbay/site/artifacts/<task-tag>/<name>.html` (create the directory if needed), where `<task-tag>` is the first segment of the task id.";
+    : "Write the finished page to `.sharkbay/artifacts/<task-tag>-<name>.html` (create the directory if needed), where `<task-tag>` is the first segment of the task id.";
   const writeConstraint = artifact.artifactPath
     ? `The files you may create or modify are the artifact HTML at \`${artifact.artifactPath}\` and a single appended record in this task's local record file under \`.sharkbay/tasks/\` (see below). Do not edit other project files, never touch files under \`.sharkbay/team-context/\`, and do not stage, commit, or push.`
     : "Do not modify existing project source, do not modify any SharkBay task file, and do not stage, commit, or push. Only create the artifact HTML page.";
@@ -361,18 +361,18 @@ export function artifactPrompt(artifact: ArtifactPromptInput, options: Bootstrap
 
 /**
  * Allocate an HTML artifact path for a task using the task tag (first taskId
- * segment) as the per-task directory plus a short random code, e.g.
- * `.sharkbay/site/artifacts/SHR4K2/N3T2AC.html`. Mirrors `reserveReviewPath`:
+ * segment) plus a short random code, e.g.
+ * `.sharkbay/artifacts/SHR4K2-N3T2AC.html`. Mirrors `reserveReviewPath`:
  * an atomic `wx` create (retried on the rare collision) reserves the file so
  * each launch gets its own placeholder with no read-then-write race. Also
- * ensures the per-task artifact directory exists.
+ * ensures the artifacts directory exists.
  */
 export async function reserveArtifactPath(repoPath: string, taskId: string): Promise<string> {
   const tag = taskId.split("-")[0] || taskId;
-  const dir = join(repoPath, ".sharkbay", "site", "artifacts", tag);
+  const dir = join(repoPath, ".sharkbay", "artifacts");
   await mkdir(dir, { recursive: true });
   for (let attempt = 0; attempt < 10; attempt++) {
-    const relativePath = `.sharkbay/site/artifacts/${tag}/${shortReviewHash()}.html`;
+    const relativePath = `.sharkbay/artifacts/${tag}-${shortReviewHash()}.html`;
     try {
       await writeFile(join(repoPath, relativePath), "", { flag: "wx" });
       return relativePath;

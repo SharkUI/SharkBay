@@ -362,7 +362,7 @@ describe("harness install", () => {
   });
 
   it("builds an artifact-generation prompt", () => {
-    const base = { taskId: "SHR4K2-u3960864-m81ae10", sourcePath: ".sharkbay/tasks/SHR4K2.md", artifactPath: ".sharkbay/site/artifacts/SHR4K2/ABC123.html" };
+    const base = { taskId: "SHR4K2-u3960864-m81ae10", sourcePath: ".sharkbay/tasks/SHR4K2.md", artifactPath: ".sharkbay/artifacts/SHR4K2-ABC123.html" };
 
     const prompt = artifactPrompt({ ...base, status: "completed" }, { codeGraphEnabled: true, locale: "en" });
     expect(prompt).toContain("task-artifact session");
@@ -371,17 +371,17 @@ describe("harness install", () => {
     expect(prompt).toContain("self-contained static HTML page");
     expect(prompt).toContain("CodeGraph is installed and configured");
     // Writes only to the reserved artifact path.
-    expect(prompt).toContain(".sharkbay/site/artifacts/SHR4K2/ABC123.html");
+    expect(prompt).toContain(".sharkbay/artifacts/SHR4K2-ABC123.html");
     expect(prompt).toContain("never touch files under `.sharkbay/team-context/`");
     // Final step: run the harness script to open the artifact in the built-in browser.
-    expect(prompt).toContain(".sharkbay/harness/open-artifact.sh .sharkbay/site/artifacts/SHR4K2/ABC123.html");
+    expect(prompt).toContain(".sharkbay/harness/open-artifact.sh .sharkbay/artifacts/SHR4K2-ABC123.html");
     expect(prompt).toContain("built-in browser");
     // Records the artifact back into the task file under an Artifacts section.
     expect(prompt).toContain("## Artifacts");
     expect(prompt).toContain("date -u +%Y-%m-%dT%H:%M:%SZ");
 
     const noPath = artifactPrompt({ taskId: "X", status: "active" }, { locale: "en" });
-    expect(noPath).toContain(".sharkbay/site/artifacts/<task-tag>/<name>.html");
+    expect(noPath).toContain(".sharkbay/artifacts/<task-tag>-<name>.html");
     expect(noPath).toContain(".sharkbay/harness/open-artifact.sh <path>");
     expect(noPath).not.toContain("CodeGraph is installed and configured");
 
@@ -403,16 +403,16 @@ describe("harness install", () => {
     expect(result.initialCommand).not.toContain("I'\\''m working in SharkBay Task Protocol mode");
   });
 
-  it("reserves a short, unique artifact path under the task tag directory", async () => {
+  it("reserves a short, unique artifact path per task tag", async () => {
     const repo = await makeTempRoot("harness-artifact-paths");
     const taskId = "SHR4K2-u3960864-m81ae10";
 
     const first = await reserveArtifactPath(repo, taskId);
     const second = await reserveArtifactPath(repo, taskId);
 
-    // `.sharkbay/site/artifacts/<taskTag>/<6 char code>.html`, using only the first taskId segment.
-    expect(first).toMatch(/^\.sharkbay\/site\/artifacts\/SHR4K2\/[A-Z0-9]{6}\.html$/);
-    expect(second).toMatch(/^\.sharkbay\/site\/artifacts\/SHR4K2\/[A-Z0-9]{6}\.html$/);
+    // `.sharkbay/artifacts/<taskTag>-<6 char code>.html`, using only the first taskId segment.
+    expect(first).toMatch(/^\.sharkbay\/artifacts\/SHR4K2-[A-Z0-9]{6}\.html$/);
+    expect(second).toMatch(/^\.sharkbay\/artifacts\/SHR4K2-[A-Z0-9]{6}\.html$/);
     expect(first).not.toBe(second);
 
     // Each reserved path is created so launches do not collide and the dir exists.

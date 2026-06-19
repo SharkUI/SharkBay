@@ -2,10 +2,13 @@ import { readFile, readdir, writeFile, mkdir, stat } from "node:fs/promises";
 import { dirname, join, relative, basename, extname } from "node:path";
 import { createHash } from "node:crypto";
 import { marked } from "marked";
+import { scanTasks } from "./tasks.js";
+import { extractArtifactPath, extractReviewPath, stripTaskBullet, taskDetailLines } from "../shared/task-detail-helpers.js";
+import type { TaskViewModel } from "../shared/types.js";
 
 const SITE_DIR = ".sharkbay/site";
 const HASH_FILE = ".sharkbay/site/.content-hash";
-const SITE_TEMPLATE_VERSION = "knowledge-site-ui-v4";
+const SITE_TEMPLATE_VERSION = "knowledge-site-ui-v5-task-artifacts-reviews";
 
 export type KnowledgeSiteResult = {
   generated: boolean;
@@ -32,6 +35,7 @@ export async function generateKnowledgeSite(repoPath: string): Promise<Knowledge
   await mkdir(sitePath, { recursive: true });
   await mkdir(join(sitePath, "docs"), { recursive: true });
   await mkdir(join(sitePath, "tasks"), { recursive: true });
+  await mkdir(join(sitePath, "tasks", "reviews"), { recursive: true });
   for (const sub of sources.docSubdirs) {
     await mkdir(join(sitePath, "docs", sub), { recursive: true });
   }
@@ -89,6 +93,12 @@ export async function generateKnowledgeSite(repoPath: string): Promise<Knowledge
 
   const tasksHtml = renderTasksPage(sources.tasks);
   await writeSiteFile(join(sitePath, "tasks", "index.html"), wrapPage("Team Tasks", tasksHtml, nav, "../"));
+  await writeSiteFile(join(sitePath, "tasks", "artifacts.html"), wrapPage("Task Artifacts", renderArtifactsPage(sources.artifacts), nav, "../"));
+  await writeSiteFile(join(sitePath, "tasks", "reviews.html"), wrapPage("Task Reviews", renderReviewsPage(sources.reviews), nav, "../"));
+  for (const review of sources.reviews) {
+    const html = renderMarkdown(review.content);
+    await writeSiteFile(join(sitePath, "tasks", "reviews", review.outputName), wrapPage(review.title, html, nav, "../../"));
+  }
 
   await writeSiteFile(join(sitePath, HASH_FILE.split("/").pop()!), currentHash);
 
@@ -105,8 +115,28 @@ export function getKnowledgeSitePath(repoPath: string): string {
 // --- Source discovery ---
 
 type SourceFile = { relativePath: string; title: string; content: string; kind: "md" | "txt" | "html" };
-type TaskSource = { taskId: string; title: string; status: string; owner: string; createdAt: string; summary: string; raw: string };
-type Sources = { readme: SourceFile | null; docs: SourceFile[]; docSubdirs: string[]; tasks: TaskSource[] };
+type TaskSource = {
+  taskId: string;
+  taskTag: string;
+  title: string;
+  status: string;
+  owner: string;
+  createdAt: string;
+  summary: string;
+  raw: string;
+  artifacts?: string;
+  reviews?: string;
+};
+type TaskArtifactSource = { task?: TaskSource; text: string; path: string; href: string };
+type TaskReviewSource = { task?: TaskSource; text: string; path: string; outputName: string; title: string; content: string };
+type Sources = {
+  readme: SourceFile | null;
+  docs: SourceFile[];
+  docSubdirs: string[];
+  tasks: TaskSource[];
+  artifacts: TaskArtifactSource[];
+  reviews: TaskReviewSource[];
+};
 
 function outputRelativePathForDoc(doc: SourceFile): string {
   const relFromDocs = doc.relativePath.replace(/^docs\//, "");
@@ -119,11 +149,13 @@ async function discoverSources(repoPath: string): Promise<Sources> {
   const readme = await readSourceFile(repoPath, "README.md");
   const docs = await discoverDocs(repoPath);
   const tasks = await discoverTasks(repoPath);
+  const artifacts = await discoverTaskArtifacts(repoPath, tasks);
+  const reviews = await discoverTaskReviews(repoPath, tasks);
   const docSubdirs = [...new Set(docs.map(d => {
     const parts = d.relativePath.replace(/^docs\//, "").split("/");
     return parts.length > 1 ? parts[0]! : null;
   }).filter((s): s is string => s !== null))].sort();
-  return { readme, docs, docSubdirs, tasks };
+  return { readme, docs, docSubdirs, tasks, artifacts, reviews };
 }
 
 async function readSourceFile(repoPath: string, relativePath: string): Promise<SourceFile | null> {
@@ -171,53 +203,113 @@ async function walkDocs(dir: string, repoPath: string, results: SourceFile[]): P
 }
 
 async function discoverTasks(repoPath: string): Promise<TaskSource[]> {
-  const teamDir = join(repoPath, ".sharkbay", "team-context", "tasks");
-  const results: TaskSource[] = [];
-  await walkTaskFiles(teamDir, results);
-  return results.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+  const tasks = await scanTasks(repoPath);
+  return tasks.map(taskSourceFromView).sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
 }
 
-async function walkTaskFiles(dir: string, results: TaskSource[]): Promise<void> {
-  let entries: string[];
-  try {
-    entries = await readdir(dir);
-  } catch {
-    return;
-  }
-  for (const name of entries) {
+function taskSourceFromView(task: TaskViewModel): TaskSource {
+  return {
+    taskId: task.taskId,
+    taskTag: task.taskTag || task.taskId.split("-")[0] || task.taskId,
+    title: task.title,
+    status: task.status,
+    owner: task.owner.githubLogin,
+    createdAt: task.createdAt ?? "",
+    summary: task.summary ?? "",
+    raw: task.bodyMarkdown,
+    artifacts: task.artifacts,
+    reviews: task.reviews,
+  };
+}
+
+async function discoverTaskArtifacts(repoPath: string, tasks: TaskSource[]): Promise<TaskArtifactSource[]> {
+  const artifacts: TaskArtifactSource[] = [];
+  const taskByTag = taskByTagMap(tasks);
+  const recordsByPath = taskRecordPathMap(tasks, "artifacts");
+  const dir = join(repoPath, ".sharkbay", "artifacts");
+  const names = await readdir(dir).catch(() => []);
+  for (const name of names.sort()) {
     const full = join(dir, name);
     const s = await stat(full).catch(() => null);
-    if (!s) continue;
-    if (s.isDirectory()) {
-      await walkTaskFiles(full, results);
-    } else if (name.endsWith(".md")) {
-      const content = await readFile(full, "utf-8");
-      const task = parseTaskFrontmatter(content);
-      if (task) results.push(task);
-    }
+    if (!s?.isFile() || extname(name).toLowerCase() !== ".html") continue;
+    const path = `.sharkbay/artifacts/${name}`;
+    const record = recordsByPath.get(path);
+    const task = record?.task ?? taskByTag.get(taskTagFromArtifactName(name));
+    const content = await readFile(full, "utf-8").catch(() => "");
+    const title = extractHtmlTitle(content) ?? task?.title ?? basename(name, extname(name));
+    artifacts.push({
+      task,
+      text: record ? stripTaskBullet(record.line) : `\`${path}\` — ${title}`,
+      path,
+      href: hrefFromTasksPageToProjectPath(path),
+    });
   }
+  return artifacts.sort(compareTaskRecords);
 }
 
-function parseTaskFrontmatter(raw: string): TaskSource | null {
-  const match = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
-  if (!match) return null;
-  const fm: Record<string, string> = {};
-  for (const line of match[1]!.split("\n")) {
-    const idx = line.indexOf(":");
-    if (idx > 0) fm[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+async function discoverTaskReviews(repoPath: string, tasks: TaskSource[]): Promise<TaskReviewSource[]> {
+  const reviews: TaskReviewSource[] = [];
+  const taskByTag = taskByTagMap(tasks);
+  const recordsByPath = taskRecordPathMap(tasks, "reviews");
+  const dir = join(repoPath, ".sharkbay", "reviews");
+  const names = await readdir(dir).catch(() => []);
+  for (const name of names.sort()) {
+    const full = join(dir, name);
+    const s = await stat(full).catch(() => null);
+    if (!s?.isFile() || extname(name).toLowerCase() !== ".md") continue;
+    const path = `.sharkbay/reviews/${name}`;
+    const record = recordsByPath.get(path);
+    const task = record?.task ?? taskByTag.get(taskTagFromArtifactName(name));
+    const content = await readFile(full, "utf-8").catch(() => "");
+    const title = extractTitle(content) ?? `${task?.taskTag ?? taskTagFromArtifactName(name)} review`;
+    const outputName = `${basename(path, extname(path))}.html`;
+    reviews.push({
+      task,
+      text: record ? stripTaskBullet(record.line) : `${title} — \`${path}\``,
+      path,
+      outputName,
+      title,
+      content: content || `# ${task?.taskTag ?? taskTagFromArtifactName(name)} Review\n\nReview source not found: \`${path}\`\n`,
+    });
   }
-  if (!fm["taskId"] || !fm["title"]) return null;
-  const body = match[2] ?? "";
-  const summaryMatch = body.match(/^##\s+Summary\s*\n([\s\S]*?)(?=^##\s|$)/m);
-  return {
-    taskId: fm["taskId"]!,
-    title: fm["title"]!,
-    status: fm["status"] ?? "unknown",
-    owner: fm["actor"] ?? "unknown",
-    createdAt: fm["createdAt"] ?? "",
-    summary: summaryMatch?.[1]?.trim() ?? "",
-    raw: body,
-  };
+  return reviews.sort(compareTaskRecords);
+}
+
+function taskByTagMap(tasks: TaskSource[]): Map<string, TaskSource> {
+  return new Map(tasks.map((task) => [task.taskTag, task]));
+}
+
+function taskRecordPathMap(tasks: TaskSource[], kind: "artifacts" | "reviews"): Map<string, { task: TaskSource; line: string }> {
+  const records = new Map<string, { task: TaskSource; line: string }>();
+  for (const task of tasks) {
+    const value = kind === "artifacts" ? task.artifacts : task.reviews;
+    for (const line of taskDetailLines(value)) {
+      const path = kind === "artifacts" ? extractArtifactPath(line) : extractReviewPath(line);
+      if (path) records.set(path, { task, line });
+    }
+  }
+  return records;
+}
+
+function taskTagFromArtifactName(name: string): string {
+  const base = basename(name, extname(name));
+  return base.split("-")[0] || base;
+}
+
+function compareTaskRecords(a: { task?: TaskSource; path: string }, b: { task?: TaskSource; path: string }): number {
+  const byDate = (b.task?.createdAt || "").localeCompare(a.task?.createdAt || "");
+  return byDate || a.path.localeCompare(b.path);
+}
+
+function resolveProjectPath(repoPath: string, path: string): string {
+  return path.startsWith("/") ? path : join(repoPath, path);
+}
+
+function hrefFromTasksPageToProjectPath(path: string): string {
+  const normalized = path.replace(/\\/g, "/");
+  if (normalized.startsWith(".sharkbay/")) return `../../${normalized.slice(".sharkbay/".length)}`;
+  if (normalized.startsWith("/")) return `file://${normalized}`;
+  return `../../${normalized}`;
 }
 
 // --- Rendering ---
@@ -227,7 +319,7 @@ function renderMarkdown(md: string): string {
 }
 
 function renderTasksPage(tasks: TaskSource[]): string {
-  if (tasks.length === 0) return "<p>No team tasks synced yet.</p>";
+  if (tasks.length === 0) return "<p>No tasks recorded yet.</p>";
 
   const groups: Record<string, TaskSource[]> = {};
   for (const t of tasks) {
@@ -265,6 +357,36 @@ function renderTasksPage(tasks: TaskSource[]): string {
   return html;
 }
 
+function renderArtifactsPage(artifacts: TaskArtifactSource[]): string {
+  if (artifacts.length === 0) return "<h1>Artifacts</h1><p>No task artifacts recorded yet.</p>";
+  let html = `<h1>Artifacts</h1><div class="record-list">`;
+  for (const artifact of artifacts) {
+    const meta = artifact.task
+      ? `${artifact.task.title} · ${artifact.task.taskTag} · ${artifact.path}`
+      : artifact.path;
+    html += `<a class="record-row" href="${escAttr(artifact.href)}">`;
+    html += `<span class="record-title">${esc(artifact.text)}</span>`;
+    html += `<span class="record-meta">${esc(meta)}</span>`;
+    html += `</a>`;
+  }
+  return `${html}</div>`;
+}
+
+function renderReviewsPage(reviews: TaskReviewSource[]): string {
+  if (reviews.length === 0) return "<h1>Reviews</h1><p>No task reviews recorded yet.</p>";
+  let html = `<h1>Reviews</h1><div class="record-list">`;
+  for (const review of reviews) {
+    const meta = review.task
+      ? `${review.task.title} · ${review.task.taskTag} · ${review.path}`
+      : review.path;
+    html += `<a class="record-row" href="reviews/${escAttr(review.outputName)}">`;
+    html += `<span class="record-title">${esc(review.text)}</span>`;
+    html += `<span class="record-meta">${esc(meta)}</span>`;
+    html += `</a>`;
+  }
+  return `${html}</div>`;
+}
+
 function formatDate(iso: string): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
@@ -284,6 +406,8 @@ function buildNav(sources: Sources): string {
     nav += `<a class="nav-link" href="{base}docs/index.html">Docs</a>`;
   }
   nav += `<a class="nav-link" href="{base}tasks/index.html">Tasks</a>`;
+  nav += `<a class="nav-link nav-sub-link" href="{base}tasks/artifacts.html">Artifacts</a>`;
+  nav += `<a class="nav-link nav-sub-link" href="{base}tasks/reviews.html">Reviews</a>`;
   return nav;
 }
 
@@ -449,6 +573,13 @@ body {
   color: var(--ink);
 }
 
+.nav-sub-link {
+  margin-left: 12px;
+  padding-left: 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .nav-link:focus-visible,
 a:focus-visible {
   outline: 2px solid var(--primary);
@@ -583,6 +714,40 @@ li + li {
   flex: 0 0 auto;
   color: var(--muted);
   font-size: 12px;
+}
+
+.record-list {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.record-row {
+  display: grid;
+  gap: 4px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--hairline);
+  text-decoration: none;
+}
+
+.record-row:hover {
+  background: var(--canvas-soft);
+  border-bottom-color: var(--hairline);
+}
+
+.record-title {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.record-meta {
+  color: var(--muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 blockquote {
@@ -825,7 +990,20 @@ function computeSourcesHash(sources: Sources): string {
   h.update(SITE_TEMPLATE_VERSION);
   if (sources.readme) h.update(sources.readme.content);
   for (const doc of sources.docs) h.update(doc.content);
-  for (const task of sources.tasks) h.update(task.raw);
+  for (const task of sources.tasks) {
+    h.update(task.raw);
+    h.update(task.artifacts ?? "");
+    h.update(task.reviews ?? "");
+  }
+  for (const artifact of sources.artifacts) {
+    h.update(artifact.path);
+    h.update(artifact.text);
+  }
+  for (const review of sources.reviews) {
+    h.update(review.path);
+    h.update(review.text);
+    h.update(review.content);
+  }
   return h.digest("hex").slice(0, 16);
 }
 
@@ -854,4 +1032,8 @@ function extractHtmlTitle(html: string): string | null {
 
 function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function escAttr(s: string): string {
+  return esc(s);
 }
