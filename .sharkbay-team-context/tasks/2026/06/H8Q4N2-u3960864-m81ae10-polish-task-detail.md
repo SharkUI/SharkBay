@@ -12,12 +12,12 @@ agent: Codex GPT-5
 sessionId: 019eddf4-0159-7690-ac93-b9460f14d3eb
 branch: main
 createdAt: 2026-06-19T07:28:45Z
-updatedAt: 2026-06-19T07:42:52Z
-completedAt: 2026-06-19T07:42:52Z
+updatedAt: 2026-06-19T07:55:44Z
+completedAt: 2026-06-19T07:55:44Z
 ---
 
 ## Summary
-Improved the project detail task view so task records are easier to scan and read. The detail pane now shows structured metadata, Files, Work, Verification, Commits, Notes, source details, and a collapsible raw record instead of only a raw markdown block.
+Improved the project detail task view so task records are easier to scan and read. The detail pane now shows structured metadata, Summary, Files, timeline-style Work, Verification, Commits, Notes, source details, and a collapsible raw record instead of only a raw markdown block.
 
 ## Files
 - .sharkbay/tasks/H8Q4N2-u3960864-m81ae10-polish-task-detail.md
@@ -37,6 +37,9 @@ Improved the project detail task view so task records are easier to scan and rea
 - Fixed task section extraction so multi-line Files, Work, Verification, and Notes sections no longer truncate after the first line.
 - Kept the detail header fixed above the scrollable body, removed section item counts and decorative red dots, and made metadata labels regular weight.
 - Added renderer `commits` typing so commit lists can render in task detail.
+- Reopened task to move Summary out of the fixed header and make Work read closer to the task artifact mockup.
+- Moved Summary into the scrollable detail body and changed the fixed header to an unboxed identity bar.
+- Reworked Work into a step timeline instead of a plain list, with night-theme colors adjusted.
 
 ## Verification
 - Parsed `N5S8QA` locally and confirmed Files, Work, and Verification now return all recorded lines.
