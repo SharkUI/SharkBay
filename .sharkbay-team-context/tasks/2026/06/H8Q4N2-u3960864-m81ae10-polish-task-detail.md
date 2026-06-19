@@ -12,8 +12,8 @@ agent: Codex GPT-5
 sessionId: 019eddf4-0159-7690-ac93-b9460f14d3eb
 branch: main
 createdAt: 2026-06-19T07:28:45Z
-updatedAt: 2026-06-19T09:52:06Z
-completedAt: 2026-06-19T09:52:06Z
+updatedAt: 2026-06-19T09:56:41Z
+completedAt: 2026-06-19T09:56:41Z
 ---
 
 ## Summary
@@ -59,11 +59,15 @@ Improved the project detail task view so task records are easier to scan and rea
 - Reopened task to fix duplicate React keys in Git history rendering.
 - Made Git history row keys unique by appending the row index when selector/hash/date collide.
 - Added `commits` to shared task view typing and added renderer fallback parsing from raw task markdown so tasks with only a `commits:` frontmatter list can still open historical diffs.
+- Reopened task to preserve local commit metadata when a synced team-context task lacks commits.
+- Changed task merge logic to prefer a local completed task over its team-context mirror when the local record has commit metadata and the mirror does not.
+- Added a regression test using the Veridia `X4K7R2` shape: team mirror without commits plus local task with `commits: 8831eda2`.
 
 ## Verification
 - Parsed `N5S8QA` locally and confirmed Files, Work, and Verification now return all recorded lines.
 - Verified `git show --stat --patch` outputs for local tasks using legacy `commit:`, `commits:` list, short hashes, and full hashes.
 - Confirmed `X4R7M2` raw task markdown resolves commit `7335eae8`, and `git show --stat --patch 7335eae8 -- src/island/island.html` outputs the expected diff.
+- Confirmed Veridia `X4K7R2` local task has `commits: 8831eda2`, the team-context mirror lacks commits, and `git show --stat --patch 8831eda2 -- packages/server/src/routes/social.ts packages/web/src/pages/PostDetailPage.tsx` outputs the expected diff.
 - `npm test -- tests/tasks.test.ts` passed.
 - `npm run typecheck` passed.
 - `npm run build` passed.
