@@ -12,8 +12,8 @@ agent: Codex GPT-5
 sessionId: 019eddf4-0159-7690-ac93-b9460f14d3eb
 branch: main
 createdAt: 2026-06-19T07:28:45Z
-updatedAt: 2026-06-19T08:20:28Z
-completedAt: 2026-06-19T08:20:28Z
+updatedAt: 2026-06-19T09:41:58Z
+completedAt: 2026-06-19T09:41:58Z
 ---
 
 ## Summary
@@ -51,9 +51,14 @@ Improved the project detail task view so task records are easier to scan and rea
 - Tightened Work timeline number spacing from a wide step label to a compact numeric column.
 - Changed task file diff opening to use recorded task commits when present, so team-context completed tasks can open historical file diffs with `git show`.
 - Replaced repeated task section regex extraction with one linear body section parse to reduce task scan work after fixing multi-line sections.
+- Reopened task to fix old local tasks that record `commit:` while `commits` is an empty array.
+- Fixed task detail commit selection to fall back from an empty `commits` array to the legacy single `commit` field.
+- Reopened task to speed up task list display when switching projects by decoupling task loading from status loading.
+- Decoupled task list state updates from protocol status loading so project switches can render tasks as soon as `getTasks` returns.
 
 ## Verification
 - Parsed `N5S8QA` locally and confirmed Files, Work, and Verification now return all recorded lines.
+- Verified `git show --stat --patch` outputs for local tasks using legacy `commit:`, `commits:` list, short hashes, and full hashes.
 - `npm test -- tests/tasks.test.ts` passed.
 - `npm run typecheck` passed.
 - `npm run build` passed.
