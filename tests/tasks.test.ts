@@ -78,6 +78,12 @@ describe("task scanning", () => {
       "- First note.",
       "- Second note.",
       "",
+      "## Artifacts",
+      "- `.sharkbay/site/artifacts/MULTI1/ab12cd.html` — Overview (2026-05-16T01:00:00Z)",
+      "",
+      "## Reviews",
+      "- Looks solid — `.sharkbay/reviews/MULTI1-AB12CD.md` (2026-05-16T01:00:00Z)",
+      "",
     ].join("\n"));
 
     const tasks = await scanTasks(repo);
@@ -88,6 +94,8 @@ describe("task scanning", () => {
     expect(task?.verification).toBe("- `npm test` passed.\n- `npm run build` passed.");
     expect(task?.notes).toBe("- First note.\n- Second note.");
     expect(task?.commits).toEqual(["abc123", "def456"]);
+    expect(task?.artifacts).toBe("- `.sharkbay/site/artifacts/MULTI1/ab12cd.html` — Overview (2026-05-16T01:00:00Z)");
+    expect(task?.reviews).toBe("- Looks solid — `.sharkbay/reviews/MULTI1-AB12CD.md` (2026-05-16T01:00:00Z)");
   });
 
   it("keeps local completed task when it has commit metadata missing from team mirror", async () => {

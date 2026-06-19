@@ -1740,6 +1740,64 @@ button.project-file-toggle:focus-visible {
   font-size: 13px;
   line-height: 1.5;
 }
+.task-detail-summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.split-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  background: #ebe7de;
+  border: 1px solid #d6d0c4;
+  border-radius: 6px;
+  overflow: visible;
+}
+.split-pill-main,
+.split-pill-caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  color: #263235;
+  background: transparent;
+  border: 0;
+  font-weight: 650;
+}
+.split-pill-main {
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 5px 0 0 5px;
+}
+.split-pill-caret {
+  padding: 0 7px;
+  color: #5c6b6f;
+  border-left: 1px solid #d0c9bb;
+  border-radius: 0 5px 5px 0;
+}
+.split-pill-main:hover:not(:disabled),
+.split-pill-caret:hover:not(:disabled) {
+  background: #e1dbcf;
+}
+.split-pill-main:disabled,
+.split-pill-caret:disabled {
+  color: #a7a195;
+  cursor: default;
+}
+.split-pill-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 160px;
+  padding: 5px;
+  background: #fffdfa;
+  border: 1px solid #d7d2c8;
+  border-radius: 7px;
+  box-shadow: 0 16px 40px rgba(38, 48, 52, 0.18);
+  z-index: 31;
+}
 .task-detail-section-heading span {
   color: var(--muted);
   font-size: 10px;
@@ -4437,6 +4495,31 @@ body.is-resizing-columns .app-shell[data-theme="night"] .column-resizer::before 
 .app-shell[data-theme="night"] .project-context-menu-item:hover,
 .app-shell[data-theme="night"] .project-context-menu-item:focus-visible {
   background: #223235;
+}
+
+.app-shell[data-theme="night"] .split-pill {
+  background: #1d2c2f;
+  border-color: #32474b;
+}
+.app-shell[data-theme="night"] .split-pill-main {
+  color: #d9e5df;
+}
+.app-shell[data-theme="night"] .split-pill-caret {
+  color: #9fb1ad;
+  border-left-color: #32474b;
+}
+.app-shell[data-theme="night"] .split-pill-main:hover:not(:disabled),
+.app-shell[data-theme="night"] .split-pill-caret:hover:not(:disabled) {
+  background: #223235;
+}
+.app-shell[data-theme="night"] .split-pill-main:disabled,
+.app-shell[data-theme="night"] .split-pill-caret:disabled {
+  color: #5f6f6c;
+}
+.app-shell[data-theme="night"] .split-pill-menu {
+  background: #182426;
+  border-color: #32474b;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.32);
 }
 
 .app-shell[data-theme="night"] .project-context-menu-item.is-danger {

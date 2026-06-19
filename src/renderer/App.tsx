@@ -34,6 +34,7 @@ import type {
   ProtocolStatus,
   TerminalDataEvent,
   TerminalExitEvent,
+  ArtifactReadyEvent,
   TerminalCreateInput,
   TerminalSession,
   TerminalUpdateEvent,
@@ -57,6 +58,8 @@ import {
   taskDetailCommits,
   taskDetailLines,
   taskFileActionPath,
+  extractArtifactPath,
+  extractReviewPath,
 } from "../shared/task-detail-helpers";
 
 type View = "dashboard" | "settings";
@@ -143,6 +146,7 @@ type TerminalPaneHandle = {
   openBrowserTab: (projectUri: string, projectName: string, initialUrl: string) => Promise<void>;
   openAgentSession: (projectUri: string, projectName: string, command: string, title: string, agentId?: string, hookSessionId?: string) => Promise<void>;
   openReviewSession: (projectUri: string, projectName: string, agent: AgentCli, review: NonNullable<TerminalCreateInput["review"]>) => Promise<void>;
+  openShareSession: (projectUri: string, projectName: string, agent: AgentCli, share: NonNullable<TerminalCreateInput["share"]>) => Promise<void>;
   focusTerminalSession: (terminalSessionId: string) => string | null;
 };
 
@@ -389,7 +393,7 @@ async function ensureCodeGraphStatus(projectUri: string): Promise<CodeGraphProje
 async function createTerminal(
   cwdUri: string,
   title?: string,
-  options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "initialCommandTitle" | "service" | "review"> = {},
+  options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "initialCommandTitle" | "service" | "review" | "share"> = {},
 ): Promise<TerminalSession> {
   const handler = getBridge().terminal?.create;
   if (!handler) throw new Error("Terminal sessions are not exposed by the preload API.");
@@ -1137,6 +1141,9 @@ function DashboardView({
             onReviewTask={(agent, review) =>
               terminalPaneRef.current?.openReviewSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, agent, review) ?? Promise.resolve()
             }
+            onShareTask={(agent, share) =>
+              terminalPaneRef.current?.openShareSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, agent, share) ?? Promise.resolve()
+            }
           />
         ) : (
           <EmptyState title="No project selected" body="Select a project to get started." />
@@ -1332,6 +1339,19 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const services = candidate?.services ?? [];
 
   useEffect(() => { spacesRef.current = spaces; }, [spaces]);
+  // A Share session's agent ran share-artifact.sh — open the generated HTML in
+  // the built-in browser, in the tab space of the project it belongs to.
+  useEffect(() => {
+    const subscribe = getBridge().terminal?.onArtifactReady;
+    if (!subscribe) return;
+    return subscribe((event: ArtifactReadyEvent) => {
+      const target = Object.values(spacesRef.current).find(
+        (space) => space.uri.startsWith("local:") && decodeURI(space.uri.slice("local:".length)) === event.repo,
+      );
+      if (!target) return;
+      void openBrowserTab(target.projectId, target.uri, target.projectName, target.displayPath, `file://${event.path}`);
+    });
+  }, []);
   useEffect(() => {
     const tabs: Array<{ sessionId: string; title: string; projectName: string; agentId?: string; state: string; lastPrompt?: string }> = [];
     for (const space of Object.values(spaces)) {
@@ -1479,6 +1499,15 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
         review,
       });
     },
+    openShareSession: async (projectUri, projectName, agent, share) => {
+      const launchCommand = buildAgentLaunchCommand(agent);
+      await openProjectTab(projectUri, projectUri, projectName, selectedSpace?.displayPath ?? projectUri, false, {
+        agentId: agent.id,
+        initialCommand: launchCommand,
+        initialCommandTitle: `Share ${share.taskId}`,
+        share,
+      });
+    },
     focusTerminalSession: (terminalSessionId) => {
       const match = findTerminalTabWithSpace(spacesRef.current, terminalSessionId);
       if (match) {
@@ -1576,7 +1605,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     }
   }
 
-  async function openProjectTab(projectId: string, cwdUri: string, projectName: string, displayPath: string, quiet = false, options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "initialCommandTitle" | "service" | "review"> & { hookSessionId?: string } = {}) {
+  async function openProjectTab(projectId: string, cwdUri: string, projectName: string, displayPath: string, quiet = false, options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "initialCommandTitle" | "service" | "review" | "share"> & { hookSessionId?: string } = {}) {
     try {
       const { hookSessionId, ...createOptions } = options;
       const session = await createTerminal(cwdUri, projectName, createOptions);
@@ -2630,7 +2659,7 @@ function EditorSurface({ active, appearanceTheme, tab, onChange, onSave }: {
   );
 }
 
-function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, onOpenFileInEditor, onOpenGitDiff, onOpenBrowserTab, onOpenTerminal, onRestoreAgentSession, onReviewTask }: {
+function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, onOpenFileInEditor, onOpenGitDiff, onOpenBrowserTab, onOpenTerminal, onRestoreAgentSession, onReviewTask, onShareTask }: {
   agentClis: AgentCli[];
   detail: ProjectDetail | null;
   candidate: ProjectCandidate;
@@ -2642,6 +2671,7 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
   onOpenTerminal: (options: { title?: string; initialCommand?: string }) => Promise<void>;
   onRestoreAgentSession: (restore: AgentSessionRestoreCommand) => Promise<void>;
   onReviewTask: (agent: AgentCli, review: NonNullable<TerminalCreateInput["review"]>) => Promise<void>;
+  onShareTask: (agent: AgentCli, share: NonNullable<TerminalCreateInput["share"]>) => Promise<void>;
 }) {
   const isLocal = candidate.providerKind === "local";
   const availableTabs = detailTabs.filter((tab) => !tab.localOnly || isLocal);
@@ -2771,6 +2801,7 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
             onRefresh={onRefresh}
             onRestoreAgentSession={onRestoreAgentSession}
             onReviewTask={onReviewTask}
+            onShareTask={onShareTask}
           />
         </div>
       ) : null}
@@ -2967,7 +2998,7 @@ function taskPill(task: TaskViewModel): { label: string; cls: string } {
   return { label: task.status, cls: "phase-waiting" };
 }
 
-function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpenFileInEditor, onOpenBrowserTab, onOpenGitDiff, onRefresh, onRestoreAgentSession, onReviewTask }: {
+function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpenFileInEditor, onOpenBrowserTab, onOpenGitDiff, onRefresh, onRestoreAgentSession, onReviewTask, onShareTask }: {
   active: boolean;
   agentClis: AgentCli[];
   candidate: ProjectCandidate;
@@ -2979,6 +3010,7 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
   onRefresh: () => Promise<void>;
   onRestoreAgentSession: (restore: AgentSessionRestoreCommand) => Promise<void>;
   onReviewTask: (agent: AgentCli, review: NonNullable<TerminalCreateInput["review"]>) => Promise<void>;
+  onShareTask: (agent: AgentCli, share: NonNullable<TerminalCreateInput["share"]>) => Promise<void>;
 }) {
   const repoPath = localPathFromCandidate(candidate);
   const [tasks, setTasks] = useState<TaskViewModel[]>([]);
@@ -3119,11 +3151,23 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
     }
   }
 
+  async function launchShare(task: TaskViewModel, agent: AgentCli) {
+    setReviewMenu(null);
+    const share = { taskId: task.taskId, status: task.status, sourcePath: task.sourcePath, agentLabel: task.agent };
+    try {
+      await onShareTask(agent, share);
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    }
+  }
+
   if (!repoPath) return <EmptyState title="Task Protocol unavailable" body="Task Protocol is available for local projects." />;
 
   if (selected) {
     const pill = taskPill(selected);
     const commits = taskDetailCommits(selected);
+    const inferredAgentId = inferAgentSessionRestoreAgent(selected.agent);
+    const detailDefaultAgent = inferredAgentId ? agentClis.find((agent) => agent.id === inferredAgentId) : undefined;
     return (
       <div className="mock-task-detail task-detail-page">
         <div className="task-detail-hero">
@@ -3138,7 +3182,14 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
           </div>
         </div>
         <div className="task-detail-scroll">
-          <TaskDetailSummarySection summary={selected.summary} />
+          <TaskDetailSummarySection
+            summary={selected.summary}
+            showActions={Boolean(status?.installed) && agentClis.length > 0}
+            agents={agentClis}
+            defaultAgent={detailDefaultAgent}
+            onReview={(agent) => void launchReview(selected, agent)}
+            onCreateArtifact={() => { if (detailDefaultAgent) void launchShare(selected, detailDefaultAgent); }}
+          />
 
           <div className="task-detail-meta-grid">
             <TaskDetailFact label="Task ID" value={selected.taskId} />
@@ -3158,6 +3209,8 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
           <TaskDetailFilesSection files={selected.files} commits={commits} dirtyFiles={detail?.gitDirtyFiles} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} />
           <TaskDetailWorkSection value={selected.work} />
           <TaskDetailListSection title="Verification" value={selected.verification} empty="No verification recorded." />
+          <TaskDetailArtifactsSection value={selected.artifacts} onOpenArtifact={(rel) => void onOpenBrowserTab(`file://${rel.startsWith("/") ? rel : `${repoPath}/${rel}`}`).catch((error) => setToast({ tone: "error", message: asMessage(error) }))} />
+          <TaskDetailReviewsSection value={selected.reviews} onOpenReview={(rel) => void onOpenFileInEditor(rel).catch((error) => setToast({ tone: "error", message: asMessage(error) }))} />
           <TaskDetailListSection title={commits.length === 1 ? "Commit" : "Commits"} value={commits.join("\n")} empty="No commit recorded." monospace />
           <TaskDetailListSection title="Notes" value={selected.notes} empty="No notes recorded." />
 
@@ -3269,6 +3322,15 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
               type="button"
               disabled={!defaultAgent}
               title={defaultAgent ? undefined : "The agent this task used is not installed on this machine. Use \u201CReview with\u2026\u201D instead."}
+              onClick={() => { if (defaultAgent) void launchShare(task, defaultAgent); }}
+            >
+              Create artifact
+            </button>
+            <button
+              className="project-context-menu-item"
+              type="button"
+              disabled={!defaultAgent}
+              title={defaultAgent ? undefined : "The agent this task used is not installed on this machine. Use \u201CReview with\u2026\u201D instead."}
               onClick={() => { if (defaultAgent) void launchReview(task, defaultAgent); }}
             >
               Review
@@ -3365,11 +3427,80 @@ function TaskDetailFilesSection({ files, commits, dirtyFiles, setToast, onOpenFi
   );
 }
 
-function TaskDetailSummarySection({ summary }: { summary?: string }) {
+function TaskDetailSummarySection({ summary, showActions, agents, defaultAgent, onReview, onCreateArtifact }: {
+  summary?: string;
+  showActions: boolean;
+  agents: AgentCli[];
+  defaultAgent?: AgentCli;
+  onReview: (agent: AgentCli) => void;
+  onCreateArtifact: () => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const dismiss = (event: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(event.target as Node)) setMenuOpen(false); };
+    const escape = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") setMenuOpen(false); };
+    document.addEventListener("mousedown", dismiss);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("mousedown", dismiss); document.removeEventListener("keydown", escape); };
+  }, [menuOpen]);
+
+  const missingAgentTitle = "The agent this task used is not installed on this machine.";
   return (
     <section className="task-detail-section task-detail-summary-section">
       <h4>Summary</h4>
       <p>{summary || "No summary recorded."}</p>
+      {showActions ? (
+        <div className="task-detail-summary-actions">
+          <button
+            className="button compact secondary"
+            type="button"
+            disabled={!defaultAgent}
+            title={defaultAgent ? undefined : missingAgentTitle}
+            onClick={onCreateArtifact}
+          >
+            Create artifact
+          </button>
+          <div className="split-pill" ref={menuRef}>
+            <button
+              className="split-pill-main"
+              type="button"
+              disabled={!defaultAgent}
+              title={defaultAgent ? undefined : `${missingAgentTitle} Use the dropdown to review with another agent.`}
+              onClick={() => { if (defaultAgent) onReview(defaultAgent); }}
+            >
+              Review
+            </button>
+            <button
+              className="split-pill-caret"
+              type="button"
+              disabled={agents.length === 0}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              aria-label="Review with another agent"
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            {menuOpen && agents.length ? (
+              <div className="split-pill-menu" role="menu">
+                {agents.map((agent) => (
+                  <button
+                    key={agent.id}
+                    className="project-context-menu-item"
+                    type="button"
+                    role="menuitem"
+                    onClick={() => { setMenuOpen(false); onReview(agent); }}
+                  >
+                    {agent.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
     </section>
   );
 }
@@ -3409,6 +3540,66 @@ function TaskDetailListSection({ title, value, empty, monospace = false }: { tit
       ) : (
         <p className="task-detail-empty">{empty}</p>
       )}
+    </section>
+  );
+}
+
+function TaskDetailArtifactsSection({ value, onOpenArtifact }: { value?: string; onOpenArtifact: (relativePath: string) => void }) {
+  const lines = taskDetailLines(value);
+  if (!lines.length) return null;
+  return (
+    <section className="task-detail-section">
+      <div className="task-detail-section-heading">
+        <h4>Artifacts</h4>
+      </div>
+      <div className="task-detail-file-list">
+        {lines.map((line, index) => {
+          const text = stripTaskBullet(line);
+          const path = extractArtifactPath(line);
+          return (
+            <button
+              className="task-detail-file-row"
+              key={`artifact-${index}`}
+              type="button"
+              disabled={!path}
+              title={path ? `Open ${path} in the built-in browser` : undefined}
+              onClick={() => { if (path) onOpenArtifact(path); }}
+            >
+              <code>{text}</code>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function TaskDetailReviewsSection({ value, onOpenReview }: { value?: string; onOpenReview: (relativePath: string) => void }) {
+  const lines = taskDetailLines(value);
+  if (!lines.length) return null;
+  return (
+    <section className="task-detail-section">
+      <div className="task-detail-section-heading">
+        <h4>Reviews</h4>
+      </div>
+      <div className="task-detail-file-list">
+        {lines.map((line, index) => {
+          const text = stripTaskBullet(line);
+          const path = extractReviewPath(line);
+          return (
+            <button
+              className="task-detail-file-row"
+              key={`review-${index}`}
+              type="button"
+              disabled={!path}
+              title={path ? `Open ${path} in the editor` : undefined}
+              onClick={() => { if (path) onOpenReview(path); }}
+            >
+              <code>{text}</code>
+            </button>
+          );
+        })}
+      </div>
     </section>
   );
 }

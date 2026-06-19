@@ -12,6 +12,7 @@ import { createWorktree } from "../src/main/worktree.js";
 import type {
   AgentCli,
   AgentProjectStatusEvent,
+  ArtifactReadyEvent,
   AppConfig,
   AppearanceTheme,
   AppearanceThemeInput,
@@ -174,6 +175,30 @@ function resolveTerminalForPid(agentPid: number): Promise<string | null> {
     };
     walk();
   });
+}
+
+/**
+ * Handle an `open_artifact` request forwarded from a Share session's
+ * `share-artifact.sh` (via the hook socket). Broadcasts the artifact path to
+ * renderer windows so they can open it in the built-in browser. Returns true if
+ * the message was an artifact request (and should not flow to the state
+ * manager). Defensive: only `.html` files inside a project's
+ * `.sharkbay/site/artifacts/` directory are accepted.
+ */
+function tryHandleArtifactMessage(msg: { source: string; payload: unknown; pid?: number }): boolean {
+  const payload = msg.payload;
+  if (!payload || typeof payload !== "object") return false;
+  const data = payload as { type?: unknown; path?: unknown; repo?: unknown };
+  if (data.type !== "open_artifact") return false;
+  const filePath = typeof data.path === "string" ? data.path : "";
+  const repo = typeof data.repo === "string" ? data.repo : "";
+  if (filePath && repo && filePath.startsWith(`${repo}/.sharkbay/site/artifacts/`) && filePath.endsWith(".html")) {
+    const event: ArtifactReadyEvent = { path: filePath, repo };
+    BrowserWindow.getAllWindows().forEach((window) => {
+      window.webContents.send(channels.openArtifact, event);
+    });
+  }
+  return true;
 }
 
 function requireCore(): CoreClient {
@@ -424,7 +449,10 @@ export async function registerIpcHandlers(
 
   // Hook-based agent status system
   hookBridge.removeAllListeners("event");
-  hookBridge.on("event", (msg) => hookStateManager.handleMessage(msg));
+  hookBridge.on("event", (msg) => {
+    if (tryHandleArtifactMessage(msg)) return;
+    hookStateManager.handleMessage(msg);
+  });
   hookStateManager.removeAllListeners("stateChange");
   hookStateManager.on("stateChange", (event) => {
     if (event.lastPrompt && promptStore?.get(event.sessionId) !== event.lastPrompt) {

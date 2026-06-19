@@ -321,6 +321,7 @@ export type TerminalCreateInput = {
   service?: { id: string; label: string; command: string };
   protocolBootstrap?: { codeGraphEnabled?: boolean };
   review?: { taskId: string; status: string; sourcePath?: string; agentLabel?: string };
+  share?: { taskId: string; status: string; sourcePath?: string; agentLabel?: string };
   cols?: number;
   rows?: number;
 };
@@ -362,6 +363,11 @@ export type TerminalExitEvent = {
   sessionId: string;
   exitCode: number | null;
   signal: string | null;
+};
+
+export type ArtifactReadyEvent = {
+  path: string;
+  repo: string;
 };
 
 export type TerminalUpdateEvent = {
@@ -466,6 +472,8 @@ export type TaskViewModel = {
   verification?: string;
   work?: string;
   notes?: string;
+  artifacts?: string;
+  reviews?: string;
   sourcePath: string;
   frontmatter: Record<string, string>;
   bodyMarkdown: string;
@@ -574,6 +582,7 @@ export type SharkBayBridge = {
     onData?: (callback: (event: TerminalDataEvent) => void) => () => void;
     onExit?: (callback: (event: TerminalExitEvent) => void) => () => void;
     onUpdate?: (callback: (event: TerminalUpdateEvent) => void) => () => void;
+    onArtifactReady?: (callback: (event: ArtifactReadyEvent) => void) => () => void;
   };
   browser?: {
     create?: (input: BrowserCreateInput) => Promise<BrowserSession>;

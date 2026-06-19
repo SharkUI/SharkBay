@@ -53,6 +53,7 @@ import type {
   TerminalResizeInput,
   TerminalSession,
   TerminalUpdateEvent,
+  ArtifactReadyEvent,
   TasksGetInput,
   ProtocolInstallInput,
   ProtocolStatus,
@@ -155,6 +156,11 @@ const sharkBayApi = {
       const listener = (_event: Electron.IpcRendererEvent, payload: TerminalUpdateEvent) => callback(payload);
       ipcRenderer.on(channels.terminalUpdate, listener);
       return () => ipcRenderer.removeListener(channels.terminalUpdate, listener);
+    },
+    onArtifactReady: (callback: (event: ArtifactReadyEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: ArtifactReadyEvent) => callback(payload);
+      ipcRenderer.on(channels.openArtifact, listener);
+      return () => ipcRenderer.removeListener(channels.openArtifact, listener);
     }
   },
   browser: {

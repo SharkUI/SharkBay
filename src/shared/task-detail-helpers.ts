@@ -18,6 +18,18 @@ export function stripTaskBullet(line: string): string {
   return line.replace(/^[-*]\s+/, "");
 }
 
+/** Extract the first `.html` path token from an Artifacts record line, if any. */
+export function extractArtifactPath(line: string): string | null {
+  const match = line.match(/[^\s`'"]+\.html/);
+  return match ? match[0] : null;
+}
+
+/** Extract the first `.md` path token from a Reviews record line, if any. */
+export function extractReviewPath(line: string): string | null {
+  const match = line.match(/[^\s`'"]+\.md/);
+  return match ? match[0] : null;
+}
+
 export function taskFileActionPath(file: string): string {
   return file.replace(TASK_FILE_STATUS_ANNOTATION, "").trim();
 }

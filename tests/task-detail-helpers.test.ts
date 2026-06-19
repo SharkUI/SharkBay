@@ -4,6 +4,8 @@ import {
   shouldOpenTaskFileDiff,
   taskDetailCommits,
   taskFileActionPath,
+  extractArtifactPath,
+  extractReviewPath,
 } from "../src/shared/task-detail-helpers.js";
 import type { TaskViewModel } from "../src/shared/types.js";
 
@@ -30,6 +32,16 @@ describe("task detail helpers", () => {
     expect(shouldOpenTaskFileDiff("src/changed.ts", "src/changed.ts", [], "M")).toBe(true);
     expect(shouldOpenTaskFileDiff("src/untracked.ts", "src/untracked.ts", [], "??")).toBe(false);
     expect(shouldOpenTaskFileDiff("src/clean.ts", "src/clean.ts", [])).toBe(false);
+  });
+
+  it("extracts artifact and review paths from record lines", () => {
+    expect(extractArtifactPath("- `.sharkbay/site/artifacts/T1/ab12cd.html` shows the overview")).toBe(".sharkbay/site/artifacts/T1/ab12cd.html");
+    expect(extractArtifactPath("- .sharkbay/site/artifacts/T1/plain.html overview")).toBe(".sharkbay/site/artifacts/T1/plain.html");
+    expect(extractArtifactPath("- no artifact here")).toBeNull();
+
+    expect(extractReviewPath("- Looks good `.sharkbay/reviews/T1-AB12CD.md` verdict")).toBe(".sharkbay/reviews/T1-AB12CD.md");
+    expect(extractReviewPath("- Blocker in .sharkbay/reviews/T1-XY.md today")).toBe(".sharkbay/reviews/T1-XY.md");
+    expect(extractReviewPath("- verdict only")).toBeNull();
   });
 
   it("falls back from structured commits to legacy commit and raw frontmatter commits", () => {

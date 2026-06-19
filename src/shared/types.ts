@@ -603,6 +603,7 @@ export type TerminalCreateInput = {
   service?: { id: string; label: string; command: string };
   protocolBootstrap?: { codeGraphEnabled?: boolean };
   review?: { taskId: string; status: string; sourcePath?: string; agentLabel?: string };
+  share?: { taskId: string; status: string; sourcePath?: string; agentLabel?: string };
   cols?: number;
   rows?: number;
 };
@@ -644,6 +645,14 @@ export type TerminalExitEvent = {
   sessionId: string;
   exitCode: number | null;
   signal: string | null;
+};
+
+/** Emitted when a Share session's agent requests its generated artifact be opened. */
+export type ArtifactReadyEvent = {
+  /** Absolute path of the generated artifact HTML file. */
+  path: string;
+  /** Absolute path of the project root the artifact belongs to. */
+  repo: string;
 };
 
 export type TerminalUpdateEvent = {
@@ -748,6 +757,8 @@ export type TaskViewModel = {
   verification?: string;
   work?: string;
   notes?: string;
+  artifacts?: string;
+  reviews?: string;
   sourcePath: string;
   frontmatter: Record<string, string>;
   bodyMarkdown: string;

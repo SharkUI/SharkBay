@@ -160,6 +160,44 @@ const AGENT_SESSION_ID_SCRIPT = [
   "",
   "printf '%s\\n' \"$session_id\"",
 ].join("\n") + "\n";
+
+// Deployed to .sharkbay/harness/share-artifact.sh. Invoked by an agent when it
+// finishes generating a task artifact, to ask SharkBay to open the resulting
+// HTML in its built-in browser. Sends the request over the existing hook socket
+// via the deployed `sharkbay-hook` CLI; fail-open (exit 0) if anything is
+// missing so it never blocks the agent.
+const SHARE_ARTIFACT_SCRIPT = [
+  "#!/bin/sh",
+  "set -eu",
+  "",
+  "# Usage: .sharkbay/harness/share-artifact.sh <artifact-html-path>",
+  "input=\"${1:-}\"",
+  "[ -n \"$input\" ] || exit 0",
+  "",
+  "script_dir=\"$(cd \"$(dirname \"$0\")\" && pwd)\"",
+  "repo_root=\"$(cd \"$script_dir/../..\" && pwd)\"",
+  "",
+  "case \"$input\" in",
+  "  /*) artifact=\"$input\" ;;",
+  "  *)  artifact=\"$repo_root/$input\" ;;",
+  "esac",
+  "",
+  "[ -f \"$artifact\" ] || exit 0",
+  "",
+  "support_dir=\"$HOME/Library/Application Support/SharkBay\"",
+  "hook_cli=\"$support_dir/bin/sharkbay-hook\"",
+  "[ -f \"$support_dir/hook-socket-path\" ] || exit 0",
+  "[ -x \"$hook_cli\" ] || exit 0",
+  "",
+  "# Minimal JSON string escaping (backslash and double-quote).",
+  "json_str() {",
+  "  printf '\"%s\"' \"$(printf '%s' \"$1\" | sed 's/\\\\/\\\\\\\\/g; s/\"/\\\\\"/g')\"",
+  "}",
+  "",
+  "payload=\"{\\\"type\\\":\\\"open_artifact\\\",\\\"path\\\":$(json_str \"$artifact\"),\\\"repo\\\":$(json_str \"$repo_root\")}\"",
+  "printf '%s' \"$payload\" | \"$hook_cli\" --source share",
+  "exit 0",
+].join("\n") + "\n";
 const BOOTSTRAP_INTRO = [
   "I'm working in SharkBay Task Protocol mode for this project.",
   "Please read `.sharkbay/harness/protocol.md` first and follow it for the rest of this session.",
@@ -211,17 +249,28 @@ export type ReviewPromptInput = {
   agentLabel?: string;
 };
 
+export type SharePromptInput = {
+  taskId: string;
+  status: string;
+  sourcePath?: string;
+  artifactPath?: string;
+  agentLabel?: string;
+};
+
 export function reviewPrompt(review: ReviewPromptInput, options: BootstrapPromptOptions = {}): string {
   const languageSuffix = localeLanguageSuffix(options.locale);
   const recordRef = review.sourcePath
     ? `\`${review.sourcePath}\``
     : "its task record under `.sharkbay/tasks/` (the file whose name begins with the task id)";
   const writeConstraint = review.reviewPath
-    ? `This is a review, not an implementation. Do NOT change the project: do not edit, create, or delete project files; do not stage, commit, or push. The ONLY file you may write is your review report at \`${review.reviewPath}\` (create the \`.sharkbay/reviews/\` directory if it does not exist). Do not create or modify any SharkBay task file.`
+    ? `This is a review, not an implementation. Do NOT change the project: do not edit, create, or delete project files; do not stage, commit, or push. The only files you may write are your review report at \`${review.reviewPath}\` (create the \`.sharkbay/reviews/\` directory if it does not exist) and a single appended record in this task's local record file under \`.sharkbay/tasks/\` (see below). Do not modify any other SharkBay task file and never touch files under \`.sharkbay/team-context/\`.`
     : "This is a review, not an implementation. Do NOT change anything: do not edit, create, or delete any file; do not stage, commit, or push. Report your findings in this chat only.";
   const reportInstruction = review.reviewPath
-    ? `Write your review to \`${review.reviewPath}\` as Markdown — a one-line verdict, then strengths, then issues grouped by severity (blocker / major / minor), then concrete recommendations. When you are done, tell me the report path. Do not apply any change to the project itself.`
+    ? `Write your review to \`${review.reviewPath}\` as Markdown — a one-line verdict, then strengths, then issues grouped by severity (blocker / major / minor), then concrete recommendations. Do not apply any change to the project itself.`
     : "Report a concise, structured review: a one-line verdict, then strengths, then issues grouped by severity (blocker / major / minor), then concrete recommendations. Do not apply any change yourself — only describe what you would change and why.";
+  const recordInstruction = review.reviewPath
+    ? `Then record it: append a one-line entry to this task's local record file under \`.sharkbay/tasks/\` (the file whose name begins with \`${review.taskId.split("-")[0]}\`) inside a \`## Reviews\` section — create that section at the end of the file if it does not exist. Use the format \`- <one-line verdict> — \\\`${review.reviewPath}\\\` (<timestamp>)\`, where <timestamp> is the output of \`date -u +%Y-%m-%dT%H:%M:%SZ\`. Append only; do not edit other sections. When you are done, tell me the report path.`
+    : null;
   return [
     "I'm starting a read-only review session.",
     "This project tracks work as SharkBay task records under `.sharkbay/tasks/` (team records, read-only, under `.sharkbay/team-context/tasks/`).",
@@ -230,6 +279,7 @@ export function reviewPrompt(review: ReviewPromptInput, options: BootstrapPrompt
     writeConstraint,
     reviewFocusLine(review.status),
     reportInstruction,
+    ...(recordInstruction ? [recordInstruction] : []),
     ...(languageSuffix ? [languageSuffix] : []),
   ].join(" ");
 }
@@ -276,6 +326,61 @@ function shortReviewHash(): string {
   let out = "";
   for (let i = 0; i < 6; i++) out += alphabet[bytes[i]! % alphabet.length];
   return out;
+}
+
+export function sharePrompt(share: SharePromptInput, options: BootstrapPromptOptions = {}): string {
+  const languageSuffix = localeLanguageSuffix(options.locale);
+  const recordRef = share.sourcePath
+    ? `\`${share.sourcePath}\``
+    : "its task record under `.sharkbay/tasks/` (the file whose name begins with the task id)";
+  const outputInstruction = share.artifactPath
+    ? `SharkBay has already reserved an empty placeholder file for you at \`${share.artifactPath}\`. Write the finished page into that exact path (overwrite the placeholder); do not pick a different name or directory.`
+    : "Write the finished page to `.sharkbay/site/artifacts/<task-tag>/<name>.html` (create the directory if needed), where `<task-tag>` is the first segment of the task id.";
+  const writeConstraint = share.artifactPath
+    ? `The files you may create or modify are the artifact HTML at \`${share.artifactPath}\` and a single appended record in this task's local record file under \`.sharkbay/tasks/\` (see below). Do not edit other project files, never touch files under \`.sharkbay/team-context/\`, and do not stage, commit, or push.`
+    : "Do not modify existing project source, do not modify any SharkBay task file, and do not stage, commit, or push. Only create the artifact HTML page.";
+  const recordInstruction = share.artifactPath
+    ? `Once the page is written, record it: append a one-line entry to this task's local record file under \`.sharkbay/tasks/\` (the file whose name begins with \`${share.taskId.split("-")[0]}\`) inside a \`## Artifacts\` section — create that section at the end of the file if it does not exist. Use the format \`- \\\`${share.artifactPath}\\\` — <one-line description of what the page shows> (<timestamp>)\`, where <timestamp> is the output of \`date -u +%Y-%m-%dT%H:%M:%SZ\`. Append only; do not edit other sections.`
+    : null;
+  const openInstruction = share.artifactPath
+    ? `As the very last step, after the page is written and recorded, run \`.sharkbay/harness/share-artifact.sh ${share.artifactPath}\` from the project root to open it in SharkBay's built-in browser, then tell me the artifact path.`
+    : "As the very last step, after the page is fully written, run `.sharkbay/harness/share-artifact.sh <path>` from the project root (passing the path you wrote) to open it in SharkBay's built-in browser, then tell me the artifact path.";
+  return [
+    "I'm starting a task-artifact session: your job is to produce a shareable web page that showcases this task's deliverable.",
+    "This project tracks work as SharkBay task records under `.sharkbay/tasks/` (team records, read-only, under `.sharkbay/team-context/tasks/`).",
+    `You are sharing task \`${share.taskId}\` (status: ${share.status}). Read ${recordRef} first, then analyze every relevant piece of information about this task — its goal, the work done, the files it touched, the actual code or content it produced, and its verification — so the page reflects the real deliverable, not just the task metadata.`,
+    ...(options.codeGraphEnabled ? [BOOTSTRAP_CODEGRAPH_PROMPT] : []),
+    "Generate a single self-contained static HTML page (interactive only if it genuinely helps) whose core purpose is to present this task's deliverable in the clearest, most readable way. Use whatever best fits the work and your capabilities: prose, headings, tables, code blocks, charts, inline SVG diagrams, embedded images or screenshots, and light animation. Inline all CSS and JS and avoid any external network dependencies so the page renders offline.",
+    outputInstruction,
+    writeConstraint,
+    ...(recordInstruction ? [recordInstruction] : []),
+    openInstruction,
+    ...(languageSuffix ? [languageSuffix] : []),
+  ].join(" ");
+}
+
+/**
+ * Allocate an HTML artifact path for a task using the task tag (first taskId
+ * segment) as the per-task directory plus a short random code, e.g.
+ * `.sharkbay/site/artifacts/SHR4K2/N3T2AC.html`. Mirrors `reserveReviewPath`:
+ * an atomic `wx` create (retried on the rare collision) reserves the file so
+ * each launch gets its own placeholder with no read-then-write race. Also
+ * ensures the per-task artifact directory exists.
+ */
+export async function reserveSharePath(repoPath: string, taskId: string): Promise<string> {
+  const tag = taskId.split("-")[0] || taskId;
+  const dir = join(repoPath, ".sharkbay", "site", "artifacts", tag);
+  await mkdir(dir, { recursive: true });
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const relativePath = `.sharkbay/site/artifacts/${tag}/${shortReviewHash()}.html`;
+    try {
+      await writeFile(join(repoPath, relativePath), "", { flag: "wx" });
+      return relativePath;
+    } catch {
+      // Name already taken — try another random code.
+    }
+  }
+  throw new Error("Could not allocate a unique artifact path.");
 }
 
 export type GitHubIdentity = {
@@ -347,6 +452,11 @@ function managedHarnessFiles(options: ProtocolOptions): ManagedHarnessFile[] {
     {
       path: ".sharkbay/harness/agent-session-id.sh",
       content: AGENT_SESSION_ID_SCRIPT,
+      executable: true,
+    },
+    {
+      path: ".sharkbay/harness/share-artifact.sh",
+      content: SHARE_ARTIFACT_SCRIPT,
       executable: true,
     },
   ];
@@ -601,9 +711,9 @@ export async function prepareAgentLaunch(
   repoPath: string,
   agentId: string,
   initialCommand: string,
-  options: BootstrapPromptOptions & { reviewPrompt?: string } = {},
+  options: BootstrapPromptOptions & { reviewPrompt?: string; sharePrompt?: string } = {},
 ): Promise<AgentLaunchResult> {
-  const prompt = options.reviewPrompt ?? bootstrapPrompt(options);
+  const prompt = options.reviewPrompt ?? options.sharePrompt ?? bootstrapPrompt(options);
   const bootstrapArgs = agentBootstrapArgs(agentId, prompt);
   if (!bootstrapArgs) {
     return { initialCommand, injected: false, skippedReason: "unsupported-agent" };

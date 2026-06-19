@@ -23,6 +23,8 @@ export type TaskViewModel = {
   verification?: string;
   work?: string;
   notes?: string;
+  artifacts?: string;
+  reviews?: string;
   sourcePath: string;
   frontmatter: Record<string, string>;
   bodyMarkdown: string;
@@ -75,6 +77,8 @@ export async function parseTaskFile(filePath: string): Promise<TaskViewModel | n
     verification: sections.get("Verification"),
     work: sections.get("Work"),
     notes: sections.get("Notes"),
+    artifacts: sections.get("Artifacts"),
+    reviews: sections.get("Reviews"),
     sourcePath: filePath,
     frontmatter: fm,
     bodyMarkdown: body.trim(),

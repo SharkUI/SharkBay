@@ -28,6 +28,7 @@ describe("IPC channels", () => {
       terminalData: "terminal:data",
       terminalUpdate: "terminal:update",
       terminalExit: "terminal:exit",
+      openArtifact: "terminal:openArtifact",
       createBrowser: "browser:create",
       browserNavigate: "browser:navigate",
       browserResize: "browser:resize",
