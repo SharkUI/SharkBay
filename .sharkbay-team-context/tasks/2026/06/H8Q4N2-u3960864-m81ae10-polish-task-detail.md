@@ -12,12 +12,12 @@ agent: Codex GPT-5
 sessionId: 019eddf4-0159-7690-ac93-b9460f14d3eb
 branch: main
 createdAt: 2026-06-19T07:28:45Z
-updatedAt: 2026-06-19T10:20:43Z
-completedAt: 2026-06-19T10:20:43Z
+updatedAt: 2026-06-19T10:59:13Z
+completedAt: 2026-06-19T10:59:13Z
 ---
 
 ## Summary
-Improved the project detail task view so task records are easier to scan and read. The detail pane now shows structured metadata, Summary, Files, timeline-style Work, Verification, Commits, Notes, source details, and a collapsible raw record instead of only a raw markdown block.
+Improved the project detail task view so task records are easier to scan and read. The detail pane now shows structured metadata, Summary, Files, timeline-style Work, Verification, Commits, Notes, source details, and a collapsible raw record, with file rows opening the appropriate diff or editor target.
 
 ## Files
 - .sharkbay/tasks/H8Q4N2-u3960864-m81ae10-polish-task-detail.md
@@ -64,6 +64,8 @@ Improved the project detail task view so task records are easier to scan and rea
 - Added a regression test using the Veridia `X4K7R2` shape: team mirror without commits plus local task with `commits: 8831eda2`.
 - Reopened task to open new/untracked task files in the editor instead of an empty diff.
 - Updated task file double-click behavior: recorded commits open historical diff; dirty tracked files open working diff; new/untracked or no-diff files open in the editor.
+- Reopened task to fix task file rows whose recorded paths include trailing status annotations such as `(new)`.
+- Normalized task file action paths by stripping trailing status annotations before opening a diff or editor, and treated `(new)`/`(added)` rows as editor targets.
 
 ## Verification
 - Parsed `N5S8QA` locally and confirmed Files, Work, and Verification now return all recorded lines.
@@ -74,6 +76,10 @@ Improved the project detail task view so task records are easier to scan and rea
 - `npm run typecheck` passed.
 - `npm run build` passed.
 - `git diff --check -- src/main/tasks.ts tests/tasks.test.ts src/shared/types.ts src/renderer/types.ts src/renderer/App.tsx src/styles/app.css .sharkbay/tasks/H8Q4N2-u3960864-m81ae10-polish-task-detail.md` passed.
+- Confirmed `packages/server/src/middleware/proxy-secret.ts (new)` normalizes to `packages/server/src/middleware/proxy-secret.ts` and that the Veridia file exists.
+- `npm run typecheck` passed after action-path normalization.
+- `npm run build` passed after action-path normalization.
+- `git diff --check -- src/renderer/App.tsx .sharkbay/tasks/H8Q4N2-u3960864-m81ae10-polish-task-detail.md` passed.
 
 ## Notes
 - Related team context: `T5R8K2-u3960864-m81ae10` fixed task detail refresh; `R6T4W2-u3960864-m81ae10` cached task avatars; `RVW7K2-u3960864-m81ae10` added task review menu. Keep behavior unchanged.
