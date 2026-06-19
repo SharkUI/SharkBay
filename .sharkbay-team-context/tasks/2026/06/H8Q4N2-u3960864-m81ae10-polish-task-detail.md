@@ -12,8 +12,8 @@ agent: Codex GPT-5
 sessionId: 019eddf4-0159-7690-ac93-b9460f14d3eb
 branch: main
 createdAt: 2026-06-19T07:28:45Z
-updatedAt: 2026-06-19T09:44:02Z
-completedAt: 2026-06-19T09:44:02Z
+updatedAt: 2026-06-19T09:52:06Z
+completedAt: 2026-06-19T09:52:06Z
 ---
 
 ## Summary
@@ -24,6 +24,7 @@ Improved the project detail task view so task records are easier to scan and rea
 - src/main/tasks.ts
 - src/renderer/App.tsx
 - src/renderer/types.ts
+- src/shared/types.ts
 - src/styles/app.css
 - tests/tasks.test.ts
 
@@ -57,14 +58,16 @@ Improved the project detail task view so task records are easier to scan and rea
 - Decoupled task list state updates from protocol status loading so project switches can render tasks as soon as `getTasks` returns.
 - Reopened task to fix duplicate React keys in Git history rendering.
 - Made Git history row keys unique by appending the row index when selector/hash/date collide.
+- Added `commits` to shared task view typing and added renderer fallback parsing from raw task markdown so tasks with only a `commits:` frontmatter list can still open historical diffs.
 
 ## Verification
 - Parsed `N5S8QA` locally and confirmed Files, Work, and Verification now return all recorded lines.
 - Verified `git show --stat --patch` outputs for local tasks using legacy `commit:`, `commits:` list, short hashes, and full hashes.
+- Confirmed `X4R7M2` raw task markdown resolves commit `7335eae8`, and `git show --stat --patch 7335eae8 -- src/island/island.html` outputs the expected diff.
 - `npm test -- tests/tasks.test.ts` passed.
 - `npm run typecheck` passed.
 - `npm run build` passed.
-- `git diff --check -- src/main/tasks.ts tests/tasks.test.ts src/renderer/types.ts src/renderer/App.tsx src/styles/app.css .sharkbay/tasks/H8Q4N2-u3960864-m81ae10-polish-task-detail.md` passed.
+- `git diff --check -- src/main/tasks.ts tests/tasks.test.ts src/shared/types.ts src/renderer/types.ts src/renderer/App.tsx src/styles/app.css .sharkbay/tasks/H8Q4N2-u3960864-m81ae10-polish-task-detail.md` passed.
 
 ## Notes
 - Related team context: `T5R8K2-u3960864-m81ae10` fixed task detail refresh; `R6T4W2-u3960864-m81ae10` cached task avatars; `RVW7K2-u3960864-m81ae10` added task review menu. Keep behavior unchanged.
