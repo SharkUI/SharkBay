@@ -12,8 +12,8 @@ agent: Codex GPT-5
 sessionId: 019ee044-0cf7-7711-ac45-8583e27af6e7
 branch: main
 createdAt: 2026-06-19T14:27:19Z
-updatedAt: 2026-06-19T14:43:19Z
-completedAt: 2026-06-19T14:43:19Z
+updatedAt: 2026-06-19T14:49:25Z
+completedAt: 2026-06-19T14:49:25Z
 ---
 
 ## Summary
@@ -32,6 +32,8 @@ Fixed the embedded browser layout so its content host can shrink with the availa
 - Follow-up screenshot showed the BrowserView can still overrun the right edge at very narrow widths.
 - User clarified the desired behavior is to align the middle column to the web content's minimum width instead of letting the column shrink below it.
 - Replaced the too-small browser column minimum with a 952px browser-active minimum, preserving a 216px Projects column plus 12px resizer inside the app's 1180px minimum width.
+- User requested the browser minimum width be 360px instead.
+- Changed the browser-active middle column minimum to 360px.
 
 ## Verification
 - `codegraph affected src/renderer/App.tsx`
