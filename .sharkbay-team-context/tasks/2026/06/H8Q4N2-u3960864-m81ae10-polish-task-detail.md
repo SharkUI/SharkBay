@@ -12,8 +12,8 @@ agent: Codex GPT-5
 sessionId: 019eddf4-0159-7690-ac93-b9460f14d3eb
 branch: main
 createdAt: 2026-06-19T07:28:45Z
-updatedAt: 2026-06-19T09:56:41Z
-completedAt: 2026-06-19T09:56:41Z
+updatedAt: 2026-06-19T10:20:43Z
+completedAt: 2026-06-19T10:20:43Z
 ---
 
 ## Summary
@@ -62,6 +62,8 @@ Improved the project detail task view so task records are easier to scan and rea
 - Reopened task to preserve local commit metadata when a synced team-context task lacks commits.
 - Changed task merge logic to prefer a local completed task over its team-context mirror when the local record has commit metadata and the mirror does not.
 - Added a regression test using the Veridia `X4K7R2` shape: team mirror without commits plus local task with `commits: 8831eda2`.
+- Reopened task to open new/untracked task files in the editor instead of an empty diff.
+- Updated task file double-click behavior: recorded commits open historical diff; dirty tracked files open working diff; new/untracked or no-diff files open in the editor.
 
 ## Verification
 - Parsed `N5S8QA` locally and confirmed Files, Work, and Verification now return all recorded lines.
