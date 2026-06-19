@@ -44,6 +44,7 @@ export async function parseTaskFile(filePath: string): Promise<TaskViewModel | n
 
   const fm = parseFrontmatter(match[1]!);
   const body = match[2] ?? "";
+  const sections = parseBodySections(body);
 
   if (!fm["taskId"] || !fm["title"]) return null;
 
@@ -69,11 +70,11 @@ export async function parseTaskFile(filePath: string): Promise<TaskViewModel | n
     completedAt: fm["completedAt"],
     commit: fm["commit"],
     commits: extractCommitsList(raw, fm),
-    files: extractFilesList(body),
-    summary: extractSection(body, "Summary"),
-    verification: extractSection(body, "Verification"),
-    work: extractSection(body, "Work"),
-    notes: extractSection(body, "Notes"),
+    files: extractFilesList(sections),
+    summary: sections.get("Summary"),
+    verification: sections.get("Verification"),
+    work: sections.get("Work"),
+    notes: sections.get("Notes"),
     sourcePath: filePath,
     frontmatter: fm,
     bodyMarkdown: body.trim(),
@@ -95,7 +96,8 @@ export async function scanTasks(repoPath: string): Promise<TaskViewModel[]> {
   const merged = new Map<string, TaskViewModel>();
   for (const t of teamTasks) merged.set(t.taskId, t);
   for (const t of localTasks) {
-    if (t.status === "active" || t.sync === "pending" || !merged.has(t.taskId)) {
+    const existing = merged.get(t.taskId);
+    if (t.status === "active" || t.sync === "pending" || !existing || (hasCommitInfo(t) && !hasCommitInfo(existing))) {
       merged.set(t.taskId, t);
     }
   }
@@ -162,10 +164,30 @@ function parseFrontmatter(raw: string): Record<string, string> {
   return result;
 }
 
-function extractSection(body: string, heading: string): string | undefined {
-  const re = new RegExp(`^##\\s+${heading}\\s*\\n([\\s\\S]*?)(?=^##\\s|$)`, "m");
-  const m = body.match(re);
-  return m?.[1]?.trim() || undefined;
+function parseBodySections(body: string): Map<string, string> {
+  const sections = new Map<string, string>();
+  let currentHeading: string | null = null;
+  let currentLines: string[] = [];
+
+  const flush = () => {
+    if (!currentHeading) return;
+    const value = currentLines.join("\n").trim();
+    if (value) sections.set(currentHeading, value);
+  };
+
+  for (const line of body.split("\n")) {
+    const heading = line.match(/^##\s+(.+?)\s*$/)?.[1]?.trim();
+    if (heading) {
+      flush();
+      currentHeading = heading;
+      currentLines = [];
+    } else if (currentHeading) {
+      currentLines.push(line);
+    }
+  }
+  flush();
+
+  return sections;
 }
 
 function extractCommitsList(raw: string, fm: Record<string, string>): string[] | undefined {
@@ -177,11 +199,15 @@ function extractCommitsList(raw: string, fm: Record<string, string>): string[] |
   return items.length > 0 ? items : undefined;
 }
 
-function extractFilesList(body: string): string[] | undefined {
-  const section = extractSection(body, "Files");
+function extractFilesList(sections: Map<string, string>): string[] | undefined {
+  const section = sections.get("Files");
   if (!section) return undefined;
   const files = section.split("\n").map((l) => l.replace(/^-\s*/, "").trim()).filter(Boolean);
   return files.length > 0 ? files : undefined;
+}
+
+function hasCommitInfo(task: TaskViewModel): boolean {
+  return Boolean(task.commit || task.commits?.length);
 }
 
 function githubAvatarUrl(githubLogin: string, githubUserId?: number): string | undefined {

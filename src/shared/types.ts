@@ -742,6 +742,7 @@ export type TaskViewModel = {
   updatedAt?: string;
   completedAt?: string;
   commit?: string;
+  commits?: string[];
   files?: string[];
   summary?: string;
   verification?: string;

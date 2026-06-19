@@ -51,6 +51,13 @@ import {
   validTerminalResizeDimensions,
 } from "./workflow";
 import type { WorkflowProjectActivityState } from "./workflow";
+import {
+  shouldOpenTaskFileDiff,
+  stripTaskBullet,
+  taskDetailCommits,
+  taskDetailLines,
+  taskFileActionPath,
+} from "../shared/task-detail-helpers";
 
 type View = "dashboard" | "settings";
 type DetailTab = "sessions" | "tasks" | "git" | "files";
@@ -132,7 +139,7 @@ type TerminalSpace = {
 
 type TerminalPaneHandle = {
   openFileInEditor: (projectUri: string, projectName: string, relativePath: string) => Promise<void>;
-  openGitDiff: (projectUri: string, projectName: string, relativePath: string) => Promise<void>;
+  openGitDiff: (projectUri: string, projectName: string, relativePath: string, commits?: string[]) => Promise<void>;
   openBrowserTab: (projectUri: string, projectName: string, initialUrl: string) => Promise<void>;
   openAgentSession: (projectUri: string, projectName: string, command: string, title: string, agentId?: string, hookSessionId?: string) => Promise<void>;
   openReviewSession: (projectUri: string, projectName: string, agent: AgentCli, review: NonNullable<TerminalCreateInput["review"]>) => Promise<void>;
@@ -443,8 +450,10 @@ function editorCommandFor(relativePath: string): string {
   return `if command -v vim >/dev/null 2>&1; then vim -- ${quotedPath}; else nano -- ${quotedPath}; fi`;
 }
 
-function gitDiffCommandFor(relativePath: string): string {
+function gitDiffCommandFor(relativePath: string, commits: string[] = []): string {
   const quotedPath = shellQuote(relativePath);
+  const quotedCommits = commits.map((commit) => shellQuote(commit));
+  if (quotedCommits.length) return `git --no-pager show --stat --patch ${quotedCommits.join(" ")} -- ${quotedPath}`;
   return `git --no-pager diff -- ${quotedPath}`;
 }
 
@@ -1113,8 +1122,8 @@ function DashboardView({
             onOpenFileInEditor={(relativePath) =>
               terminalPaneRef.current?.openFileInEditor(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, relativePath) ?? Promise.resolve()
             }
-            onOpenGitDiff={(relativePath) =>
-              terminalPaneRef.current?.openGitDiff(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, relativePath) ?? Promise.resolve()
+            onOpenGitDiff={(relativePath, commits) =>
+              terminalPaneRef.current?.openGitDiff(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, relativePath, commits) ?? Promise.resolve()
             }
             onOpenBrowserTab={(url) =>
               terminalPaneRef.current?.openBrowserTab(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, url) ?? Promise.resolve()
@@ -1452,8 +1461,8 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     openFileInEditor: async (projectUri, projectName, relativePath) => {
       await openEditorTab(projectUri, projectName, selectedSpace?.displayPath ?? projectUri, relativePath);
     },
-    openGitDiff: async (projectUri, projectName, relativePath) => {
-      await openProjectTab(projectUri, projectUri, projectName, selectedSpace?.displayPath ?? projectUri, false, { initialCommand: gitDiffCommandFor(relativePath) });
+    openGitDiff: async (projectUri, projectName, relativePath, commits) => {
+      await openProjectTab(projectUri, projectUri, projectName, selectedSpace?.displayPath ?? projectUri, false, { initialCommand: gitDiffCommandFor(relativePath, commits) });
     },
     openBrowserTab: async (projectUri, projectName, initialUrl) => {
       await openBrowserTab(projectUri, projectUri, projectName, selectedSpace?.displayPath ?? projectUri, initialUrl);
@@ -2628,7 +2637,7 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
   setToast: (toast: Toast) => void;
   onRefresh: () => Promise<void>;
   onOpenFileInEditor: (relativePath: string) => Promise<void>;
-  onOpenGitDiff: (relativePath: string) => Promise<void>;
+  onOpenGitDiff: (relativePath: string, commits?: string[]) => Promise<void>;
   onOpenBrowserTab: (url: string) => Promise<void>;
   onOpenTerminal: (options: { title?: string; initialCommand?: string }) => Promise<void>;
   onRestoreAgentSession: (restore: AgentSessionRestoreCommand) => Promise<void>;
@@ -2754,8 +2763,11 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
             active={visibleDetailTab === "tasks"}
             agentClis={agentClis}
             candidate={candidate}
+            detail={currentDetail}
             setToast={setToast}
+            onOpenFileInEditor={onOpenFileInEditor}
             onOpenBrowserTab={onOpenBrowserTab}
+            onOpenGitDiff={onOpenGitDiff}
             onRefresh={onRefresh}
             onRestoreAgentSession={onRestoreAgentSession}
             onReviewTask={onReviewTask}
@@ -2769,7 +2781,7 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
   );
 }
 
-function GitDetailTab({ detail, candidate, setToast, onOpenFileInEditor, onOpenGitDiff, onOpenTerminal, onOpenBrowserTab }: { detail: ProjectDetail | null; candidate: ProjectCandidate; setToast: (toast: Toast) => void; onOpenFileInEditor: (relativePath: string) => Promise<void>; onOpenGitDiff: (relativePath: string) => Promise<void>; onOpenTerminal: (options: { title?: string; initialCommand?: string }) => Promise<void>; onOpenBrowserTab: (url: string) => Promise<void> }) {
+function GitDetailTab({ detail, candidate, setToast, onOpenFileInEditor, onOpenGitDiff, onOpenTerminal, onOpenBrowserTab }: { detail: ProjectDetail | null; candidate: ProjectCandidate; setToast: (toast: Toast) => void; onOpenFileInEditor: (relativePath: string) => Promise<void>; onOpenGitDiff: (relativePath: string, commits?: string[]) => Promise<void>; onOpenTerminal: (options: { title?: string; initialCommand?: string }) => Promise<void>; onOpenBrowserTab: (url: string) => Promise<void> }) {
   const isGitManaged = detail ? detail.dirtyWorktree !== null : null;
   const [showCloneInput, setShowCloneInput] = useState(false);
   const [cloneUrl, setCloneUrl] = useState("");
@@ -2955,12 +2967,15 @@ function taskPill(task: TaskViewModel): { label: string; cls: string } {
   return { label: task.status, cls: "phase-waiting" };
 }
 
-function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserTab, onRefresh, onRestoreAgentSession, onReviewTask }: {
+function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpenFileInEditor, onOpenBrowserTab, onOpenGitDiff, onRefresh, onRestoreAgentSession, onReviewTask }: {
   active: boolean;
   agentClis: AgentCli[];
   candidate: ProjectCandidate;
+  detail: ProjectDetail | null;
   setToast: (toast: Toast) => void;
+  onOpenFileInEditor: (relativePath: string) => Promise<void>;
   onOpenBrowserTab: (url: string) => Promise<void>;
+  onOpenGitDiff: (relativePath: string, commits?: string[]) => Promise<void>;
   onRefresh: () => Promise<void>;
   onRestoreAgentSession: (restore: AgentSessionRestoreCommand) => Promise<void>;
   onReviewTask: (agent: AgentCli, review: NonNullable<TerminalCreateInput["review"]>) => Promise<void>;
@@ -2991,19 +3006,24 @@ function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserT
     const getStatusHandler: NonNullable<NonNullable<SharkBayBridge["protocol"]>["getStatus"]> = getStatus;
 
     async function refresh(showToast: boolean) {
-      try {
-        const [nextTasks, nextStatus] = await Promise.all([
-          getTasksHandler({ repoPath: activeRepoPath }),
-          getStatusHandler({ repoPath: activeRepoPath }),
-        ]);
+      let firstError: unknown = null;
+      const loadTasks = getTasksHandler({ repoPath: activeRepoPath })
+        .then((nextTasks) => {
+          if (cancelled) return;
+          setTasks(nextTasks);
+          setSelectedTaskId((current) => current && nextTasks.some((task) => task.taskId === current) ? current : null);
+        })
+        .catch((error: unknown) => { firstError ??= error; });
+      const loadStatus = getStatusHandler({ repoPath: activeRepoPath })
+        .then((nextStatus) => {
+          if (!cancelled) setStatus(nextStatus);
+        })
+        .catch((error: unknown) => { firstError ??= error; });
+
+      await Promise.all([loadTasks, loadStatus]);
+      if (firstError) {
         if (cancelled) return;
-        setTasks(nextTasks);
-        setStatus(nextStatus);
-        setSelectedTaskId((current) => current && nextTasks.some((task) => task.taskId === current) ? current : null);
-      } catch (error) {
-        if (cancelled) return;
-        const message = asMessage(error);
-        if (showToast) setToast({ tone: "error", message });
+        if (showToast) setToast({ tone: "error", message: asMessage(firstError) });
       }
     }
 
@@ -3103,9 +3123,10 @@ function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserT
 
   if (selected) {
     const pill = taskPill(selected);
+    const commits = taskDetailCommits(selected);
     return (
-      <div className="mock-task-detail">
-        <div className="task-detail-header">
+      <div className="mock-task-detail task-detail-page">
+        <div className="task-detail-hero">
           <button className="icon-button" type="button" onClick={() => setSelectedTaskId(null)} aria-label="Back to task list">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
@@ -3114,12 +3135,43 @@ function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserT
           </span>
           <div className="task-detail-title">
             <h3>{selected.title}</h3>
-            <span>{selected.taskTag} · {selected.owner.githubLogin}</span>
           </div>
-          <strong className={cx("phase-pill", pill.cls)}>{pill.label}</strong>
         </div>
-        <div className="task-detail-compact">
-          <pre className="task-detail-pre">{selected.rawMarkdown}</pre>
+        <div className="task-detail-scroll">
+          <TaskDetailSummarySection summary={selected.summary} />
+
+          <div className="task-detail-meta-grid">
+            <TaskDetailFact label="Task ID" value={selected.taskId} />
+            <TaskDetailFact label="Status" value={pill.label} />
+            <TaskDetailFact label="Source" value={selected.sourceKind === "team-md" ? "Team context" : "Local task"} />
+            <TaskDetailFact label="Mode" value={selected.mode} />
+            <TaskDetailFact label="Owner" value={selected.owner.githubLogin} />
+            <TaskDetailFact label="Agent" value={selected.agent} />
+            <TaskDetailFact label="Created" value={formatTaskDetailTime(selected.createdAt)} />
+            <TaskDetailFact label="Updated" value={formatTaskDetailTime(selected.updatedAt)} />
+            <TaskDetailFact label="Completed" value={formatTaskDetailTime(selected.completedAt)} />
+            <TaskDetailFact label="Branch" value={selected.frontmatter.branch} />
+            <TaskDetailFact label="Machine" value={selected.machine} />
+            <TaskDetailFact label="Sync" value={selected.sync} />
+          </div>
+
+          <TaskDetailFilesSection files={selected.files} commits={commits} dirtyFiles={detail?.gitDirtyFiles} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} />
+          <TaskDetailWorkSection value={selected.work} />
+          <TaskDetailListSection title="Verification" value={selected.verification} empty="No verification recorded." />
+          <TaskDetailListSection title={commits.length === 1 ? "Commit" : "Commits"} value={commits.join("\n")} empty="No commit recorded." monospace />
+          <TaskDetailListSection title="Notes" value={selected.notes} empty="No notes recorded." />
+
+          <section className="task-detail-section">
+            <h4>Record</h4>
+            <div className="task-detail-record-grid">
+              <TaskDetailFact label="Source" value={selected.readOnly ? "Read-only team context" : "Local task file"} />
+              <TaskDetailFact label="Path" value={selected.sourcePath} />
+            </div>
+            <details className="task-raw-record">
+              <summary>Raw task record</summary>
+              <pre className="task-detail-pre">{selected.rawMarkdown}</pre>
+            </details>
+          </section>
         </div>
       </div>
     );
@@ -3259,6 +3311,108 @@ function TasksDetailTab({ active, agentClis, candidate, setToast, onOpenBrowserT
   );
 }
 
+function formatTaskDetailTime(value?: string): string | undefined {
+  return value ? formatHistoryTime(value) : undefined;
+}
+
+function TaskDetailFact({ label, value }: { label: string; value?: string }) {
+  return (
+    <div className="task-detail-fact">
+      <span>{label}</span>
+      <strong>{value || "Not recorded"}</strong>
+    </div>
+  );
+}
+
+function TaskDetailFilesSection({ files, commits, dirtyFiles, setToast, onOpenFileInEditor, onOpenGitDiff }: { files?: string[]; commits: string[]; dirtyFiles?: ProjectDetail["gitDirtyFiles"]; setToast: (toast: Toast) => void; onOpenFileInEditor: (relativePath: string) => Promise<void>; onOpenGitDiff: (relativePath: string, commits?: string[]) => Promise<void> }) {
+  const dirtyByPath = new Map((dirtyFiles ?? []).map((file) => [file.path, file]));
+  const shouldOpenDiff = (file: string, actionPath: string) => {
+    const dirty = dirtyByPath.get(actionPath);
+    return shouldOpenTaskFileDiff(file, actionPath, commits, dirty?.status);
+  };
+  const openFile = (file: string) => {
+    const actionPath = taskFileActionPath(file);
+    const action = shouldOpenDiff(file, actionPath) ? onOpenGitDiff(actionPath, commits) : onOpenFileInEditor(actionPath);
+    void action.catch((error) => setToast({ tone: "error", message: asMessage(error) }));
+  };
+  return (
+    <section className="task-detail-section">
+      <div className="task-detail-section-heading">
+        <h4>Files</h4>
+      </div>
+      {files?.length ? (
+        <div className="task-detail-file-list">
+          {files.map((file) => {
+            const actionPath = taskFileActionPath(file);
+            const opensDiff = shouldOpenDiff(file, actionPath);
+            return (
+              <button
+                className="task-detail-file-row"
+                key={file}
+                title={opensDiff ? `Double-click to open diff for ${actionPath}` : `Double-click to edit ${actionPath}`}
+                type="button"
+                onDoubleClick={() => openFile(file)}
+              >
+                <code>{file}</code>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="task-detail-empty">No files recorded.</p>
+      )}
+    </section>
+  );
+}
+
+function TaskDetailSummarySection({ summary }: { summary?: string }) {
+  return (
+    <section className="task-detail-section task-detail-summary-section">
+      <h4>Summary</h4>
+      <p>{summary || "No summary recorded."}</p>
+    </section>
+  );
+}
+
+function TaskDetailWorkSection({ value }: { value?: string }) {
+  const lines = taskDetailLines(value);
+  return (
+    <section className="task-detail-section task-detail-work-section">
+      <h4>Work</h4>
+      {lines.length ? (
+        <ol className="task-detail-timeline">
+          {lines.map((line, index) => (
+            <li key={`work-${index}`}>
+              <span className="task-detail-step">{String(index + 1).padStart(2, "0")}</span>
+              <p>{stripTaskBullet(line)}</p>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="task-detail-empty">No work log recorded.</p>
+      )}
+    </section>
+  );
+}
+
+function TaskDetailListSection({ title, value, empty, monospace = false }: { title: string; value?: string; empty: string; monospace?: boolean }) {
+  const lines = taskDetailLines(value);
+  return (
+    <section className="task-detail-section">
+      <div className="task-detail-section-heading">
+        <h4>{title}</h4>
+      </div>
+      {lines.length ? (
+        <ul className={cx("task-detail-list", monospace && "is-monospace")}>
+          {lines.map((line, index) => <li key={`${title}-${index}`}>{stripTaskBullet(line)}</li>)}
+        </ul>
+      ) : (
+        <p className="task-detail-empty">{empty}</p>
+      )}
+    </section>
+  );
+}
+
 function taskRestoreCommand(task: TaskViewModel, status: ProtocolStatus | null, agentClis: AgentCli[]): AgentSessionRestoreCommand | null {
   if (!status?.githubUserId || !status.machineId) return null;
   if (task.owner.githubUserId !== status.githubUserId) return null;
@@ -3326,7 +3480,7 @@ function ProjectFactsCard({ detail, candidate, latestRelease = null }: { detail:
   );
 }
 
-function DirtyFilesPanel({ detail, setToast, onOpenFileInEditor, onOpenGitDiff }: { detail: ProjectDetail | null; setToast: (toast: Toast) => void; onOpenFileInEditor: (relativePath: string) => Promise<void>; onOpenGitDiff: (relativePath: string) => Promise<void> }) {
+function DirtyFilesPanel({ detail, setToast, onOpenFileInEditor, onOpenGitDiff }: { detail: ProjectDetail | null; setToast: (toast: Toast) => void; onOpenFileInEditor: (relativePath: string) => Promise<void>; onOpenGitDiff: (relativePath: string, commits?: string[]) => Promise<void> }) {
   const files = detail?.gitDirtyFiles ?? [];
   if (!files.length) return null;
   return (
@@ -3428,10 +3582,10 @@ function GitHistoryItems({ events }: { events: NonNullable<ProjectDetail["gitHis
   const visible = events ?? [];
   return (
     <div className="decision-list">
-      {visible.map((event) => {
+      {visible.map((event, index) => {
         const actionMatch = /^([^:]+:)(?:\s*(.*))?$/u.exec(event.action);
         return (
-          <div className="decision-item" key={`${event.selector}-${event.hash}-${event.date}`}>
+          <div className="decision-item" key={`${event.selector}-${event.hash}-${event.date}-${index}`}>
             <div className="decision-action">
               {actionMatch ? (
                 <>
@@ -3460,7 +3614,7 @@ function FilesDetailTab({ active, candidate, codeGraphStatus, detail, setToast, 
   detail: ProjectDetail | null;
   setToast: (toast: Toast) => void;
   onOpenFileInEditor: (relativePath: string) => Promise<void>;
-  onOpenGitDiff: (relativePath: string) => Promise<void>;
+  onOpenGitDiff: (relativePath: string, commits?: string[]) => Promise<void>;
   onOpenTerminal: (options: { title?: string; initialCommand?: string }) => Promise<void>;
 }) {
   const [state, setState] = useState<{ loading: boolean; error: string | null; files: ProjectFileTreeItem[] }>({ loading: false, error: null, files: [] });

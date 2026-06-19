@@ -36,6 +36,110 @@ describe("task scanning", () => {
     expect(tasks[0]?.rawMarkdown).toContain("kind: sharkbay_task");
     expect(tasks[0]?.sourcePath).toContain("NEW001-u123456-mabc123-new-task.md");
   });
+
+  it("extracts all lines from multi-line task sections", async () => {
+    const repo = await makeTempRoot("tasks-sections");
+    await writeText(path.join(repo, ".sharkbay/tasks/MULTI1-u3960864-mjl25uj-multi-section.md"), [
+      "---",
+      "kind: sharkbay_task",
+      "taskId: MULTI1-u3960864-mjl25uj",
+      "taskTag: MULTI1",
+      "mode: quick",
+      "title: Multi section task",
+      "status: completed",
+      "actor: SharkUI",
+      "githubUserId: 3960864",
+      "machine: jl25uj",
+      "agent: codex",
+      "createdAt: 2026-05-16T01:00:00Z",
+      "updatedAt: 2026-05-16T01:00:00Z",
+      "completedAt: 2026-05-16T01:00:00Z",
+      "commits:",
+      "  - abc123",
+      "  - def456",
+      "---",
+      "",
+      "## Summary",
+      "Fixture task.",
+      "",
+      "## Files",
+      "- src/one.ts",
+      "- src/two.ts",
+      "",
+      "## Work",
+      "- First step.",
+      "- Second step.",
+      "",
+      "## Verification",
+      "- `npm test` passed.",
+      "- `npm run build` passed.",
+      "",
+      "## Notes",
+      "- First note.",
+      "- Second note.",
+      "",
+    ].join("\n"));
+
+    const tasks = await scanTasks(repo);
+    const task = tasks[0];
+
+    expect(task?.files).toEqual(["src/one.ts", "src/two.ts"]);
+    expect(task?.work).toBe("- First step.\n- Second step.");
+    expect(task?.verification).toBe("- `npm test` passed.\n- `npm run build` passed.");
+    expect(task?.notes).toBe("- First note.\n- Second note.");
+    expect(task?.commits).toEqual(["abc123", "def456"]);
+  });
+
+  it("keeps local completed task when it has commit metadata missing from team mirror", async () => {
+    const repo = await makeTempRoot("tasks-commit-merge");
+    const taskPath = "X4K7R2-u3960864-m0dae87-admin-delete-post.md";
+    const base = [
+      "kind: sharkbay_task",
+      "taskId: X4K7R2-u3960864-m0dae87",
+      "taskTag: X4K7R2",
+      "mode: task",
+      "title: Admin delete social post",
+      "status: completed",
+      "actor: SharkUI",
+      "githubUserId: 3960864",
+      "machine: m0dae87",
+      "agent: Kiro Claude 4.6",
+      "createdAt: 2026-06-11T02:02:01Z",
+      "updatedAt: 2026-06-11T02:04:24Z",
+    ];
+    const body = [
+      "## Summary",
+      "Allow superAdmin users to delete any social post.",
+      "",
+      "## Files",
+      "- packages/server/src/routes/social.ts",
+      "- packages/web/src/pages/PostDetailPage.tsx",
+      "",
+    ].join("\n");
+
+    await writeText(path.join(repo, ".sharkbay", "team-context", "tasks", "2026", "06", taskPath), [
+      "---",
+      ...base,
+      "---",
+      "",
+      body,
+    ].join("\n"));
+    await writeText(path.join(repo, ".sharkbay", "tasks", taskPath), [
+      "---",
+      ...base,
+      "commits:",
+      "  - 8831eda2",
+      "---",
+      "",
+      body,
+    ].join("\n"));
+
+    const tasks = await scanTasks(repo);
+    const task = tasks.find((item) => item.taskId === "X4K7R2-u3960864-m0dae87");
+
+    expect(task?.sourceKind).toBe("local-md");
+    expect(task?.commits).toEqual(["8831eda2"]);
+  });
 });
 
 async function writeTask(
