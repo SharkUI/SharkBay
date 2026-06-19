@@ -27,6 +27,8 @@ import type {
   InstallLogEvent,
   PathExistsInput,
   PathExistsResult,
+  CloneProjectInput,
+  CloneProjectResult,
   ProjectConfigInput,
   ProjectScanInput,
   ProjectDetail,
@@ -112,6 +114,7 @@ const sharkBayApi = {
   config: {
     listRoots: () => invoke<AppConfig>(channels.listRoots),
     addProject: (input: ProjectConfigInput) => invoke<AppConfig>(channels.addProject, input),
+    cloneProject: (input: CloneProjectInput) => invoke<CloneProjectResult>(channels.cloneProject, input),
     removeProject: (input: RemoveProjectInput) => invoke<AppConfig>(channels.removeProject, input),
     renameProject: (input: RenameProjectInput) => invoke<AppConfig>(channels.renameProject, input),
     pickProjectFolder: () => invoke<{ cancelled: boolean; paths: string[] }>(channels.pickProjectFolder),

@@ -317,12 +317,6 @@ async function updateAppearanceTheme(theme: AppearanceTheme): Promise<AppConfig>
   return handler({ theme });
 }
 
-async function addProject(path: string): Promise<void> {
-  const handler = getBridge().config?.addProject;
-  if (!handler) throw new Error("Project add is not exposed by the preload API.");
-  await handler({ path });
-}
-
 async function removeProject(pathOrUri: string): Promise<void> {
   const handler = getBridge().config?.removeProject;
   if (!handler) throw new Error("Project remove is not exposed by the preload API.");
@@ -346,6 +340,13 @@ async function pickAndAddProjects(): Promise<string[]> {
   if (!addHandler) throw new Error("Project add is not exposed by the preload API.");
   await addHandler({ path: projectPath });
   return [projectPath];
+}
+
+async function cloneRemoteProject(url: string): Promise<string | null> {
+  const handler = getBridge().config?.cloneProject;
+  if (!handler) throw new Error("Remote project cloning is not exposed by the preload API.");
+  const result = await handler({ url });
+  return result.cancelled ? null : result.path;
 }
 
 async function uninstallProtocol(repoPath: string, cleanTeamContext = false): Promise<void> {
@@ -722,13 +723,20 @@ export function App() {
               setToast={setToast}
               onRefresh={refreshWorkspace}
               onOpenSettings={() => setView("settings")}
-              onAddProject={async (pathOrUri) => { await addProject(pathOrUri); await refreshProjects({ showToast: true }); }}
               onPickProject={async () => {
                 const paths = await pickAndAddProjects();
                 if (paths.length) {
                   setToast({ tone: "success", message: "Project added." });
                   await refreshProjects({ showToast: false });
                 }
+              }}
+              onCloneProject={async (url) => {
+                const projectPath = await cloneRemoteProject(url);
+                if (projectPath) {
+                  setToast({ tone: "success", message: "Project cloned." });
+                  await refreshProjects({ showToast: false });
+                }
+                return projectPath;
               }}
               onRemoveProject={async (uri) => { await removeProject(uri); await refreshProjects({ showToast: true }); }}
               onRenameProject={async (uri, name) => { await renameProjectAlias(uri, name); await refreshProjects({ showToast: false }); }}
@@ -851,8 +859,8 @@ function DashboardView({
   setToast,
   onRefresh,
   onOpenSettings,
-  onAddProject,
   onPickProject,
+  onCloneProject,
   onRemoveProject,
   onRenameProject,
   onUninstallProtocol,
@@ -875,8 +883,8 @@ function DashboardView({
   setToast: (toast: Toast) => void;
   onRefresh: () => Promise<void>;
   onOpenSettings: () => void;
-  onAddProject: (pathOrUri: string) => Promise<void>;
   onPickProject: () => Promise<void>;
+  onCloneProject: (url: string) => Promise<string | null>;
   onRemoveProject: (uri: string) => Promise<void>;
   onRenameProject: (uri: string, name: string) => Promise<void>;
   onUninstallProtocol: (repoPath: string, cleanTeamContext?: boolean) => Promise<void>;
@@ -904,6 +912,9 @@ function DashboardView({
   const [agentListVersion, setAgentListVersion] = useState(0);
   const [agentStatusByProjectPath, setAgentStatusByProjectPath] = useState<AgentStatusByProjectPath>({});
   const [activeTerminalTabKind, setActiveTerminalTabKind] = useState<ActiveTerminalTabKind>(null);
+  const [addProjectModalOpen, setAddProjectModalOpen] = useState(false);
+  const [remoteProjectUrl, setRemoteProjectUrl] = useState("");
+  const [addingProject, setAddingProject] = useState<"local" | "remote" | null>(null);
   const agentClisByTargetRef = useRef<Record<string, AgentCli[]>>({});
   const [projectColumnWidth, setProjectColumnWidth] = useState(() =>
     storedColumnWidth(projectColumnStorageKey, defaultProjectColumnWidth, minProjectColumnWidth),
@@ -961,6 +972,47 @@ function DashboardView({
     const delta = event.key === "ArrowRight" ? columnResizeStep : -columnResizeStep;
     if (target === "project") persistColumnWidths(projectColumnWidth + delta, detailColumnWidth);
     else persistColumnWidths(projectColumnWidth, detailColumnWidth + (event.key === "ArrowLeft" ? columnResizeStep : -columnResizeStep));
+  }
+
+  function openAddProjectModal() {
+    setRemoteProjectUrl("");
+    setAddProjectModalOpen(true);
+  }
+
+  function closeAddProjectModal() {
+    if (addingProject) return;
+    setAddProjectModalOpen(false);
+    setRemoteProjectUrl("");
+  }
+
+  async function addLocalProjectFromModal() {
+    setAddingProject("local");
+    try {
+      await onPickProject();
+      setAddProjectModalOpen(false);
+      setRemoteProjectUrl("");
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      setAddingProject(null);
+    }
+  }
+
+  async function cloneRemoteProjectFromModal() {
+    const url = remoteProjectUrl.trim();
+    if (!url) return;
+    setAddingProject("remote");
+    try {
+      const projectPath = await onCloneProject(url);
+      if (projectPath) {
+        setAddProjectModalOpen(false);
+        setRemoteProjectUrl("");
+      }
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      setAddingProject(null);
+    }
   }
 
   useEffect(() => {
@@ -1043,7 +1095,7 @@ function DashboardView({
         <div className="project-window-drag-strip" aria-hidden="true" />
         <div className="project-panel-header">
           <span className="project-panel-title">Projects</span>
-          <button aria-label="Add project" className="icon-button" title="Add project" type="button" onClick={() => void onPickProject()}>
+          <button aria-label="Add project" className="icon-button" title="Add project" type="button" onClick={openAddProjectModal}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
           </button>
         </div>
@@ -1071,7 +1123,7 @@ function DashboardView({
             <div className="empty-state compact-title-row" style={{ padding: "24px 16px" }}>
               <strong>No projects</strong>
               <span>Add a project directory to get started.</span>
-              <button className="button" type="button" style={{ marginTop: "12px" }} onClick={() => void onPickProject()}>Add Project</button>
+              <button className="button" type="button" style={{ marginTop: "12px" }} onClick={openAddProjectModal}>Add Project</button>
             </div>
           )}
         </div>
@@ -1149,6 +1201,51 @@ function DashboardView({
           <EmptyState title="No project selected" body="Select a project to get started." />
         )}
       </section>
+      {addProjectModalOpen ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeAddProjectModal(); }}>
+          <section aria-modal="true" className="modal-panel add-project-dialog" role="dialog" aria-labelledby="add-project-title">
+            <div className="modal-header">
+              <div>
+                <h3 id="add-project-title">Add Project</h3>
+              </div>
+              <button aria-label="Close" className="icon-button" disabled={Boolean(addingProject)} type="button" onClick={closeAddProjectModal}>x</button>
+            </div>
+            <div className="add-project-body">
+              <section className="add-project-section">
+                <div className="add-project-copy">
+                  <h4>Local Directory</h4>
+                  <p>Select an existing folder on this computer.</p>
+                </div>
+                <button className="button secondary" disabled={Boolean(addingProject)} type="button" onClick={() => void addLocalProjectFromModal()}>
+                  {addingProject === "local" ? "Opening..." : "Choose Folder"}
+                </button>
+              </section>
+              <form className="add-project-section add-project-remote" onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); void cloneRemoteProjectFromModal(); }}>
+                <div className="add-project-copy">
+                  <h4>Remote Repo</h4>
+                </div>
+                <div className="add-project-remote-row">
+                  <label className="sr-only" htmlFor="remote-project-url">Remote repository URL</label>
+                  <input
+                    id="remote-project-url"
+                    className="text-input"
+                    type="text"
+                    placeholder="https://github.com/user/repo.git"
+                    value={remoteProjectUrl}
+                    autoFocus
+                    disabled={Boolean(addingProject)}
+                    onChange={(event) => setRemoteProjectUrl(event.target.value)}
+                  />
+                  <button className="button primary" disabled={Boolean(addingProject) || !remoteProjectUrl.trim()} type="submit">
+                    {addingProject === "remote" ? "Cloning..." : "Clone"}
+                  </button>
+                </div>
+                <p className="add-project-note">Clone into a parent folder you choose, then add the cloned project.</p>
+              </form>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2814,8 +2911,6 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
 
 function GitDetailTab({ detail, candidate, setToast, onOpenFileInEditor, onOpenGitDiff, onOpenTerminal, onOpenBrowserTab }: { detail: ProjectDetail | null; candidate: ProjectCandidate; setToast: (toast: Toast) => void; onOpenFileInEditor: (relativePath: string) => Promise<void>; onOpenGitDiff: (relativePath: string, commits?: string[]) => Promise<void>; onOpenTerminal: (options: { title?: string; initialCommand?: string }) => Promise<void>; onOpenBrowserTab: (url: string) => Promise<void> }) {
   const isGitManaged = detail ? detail.dirtyWorktree !== null : null;
-  const [showCloneInput, setShowCloneInput] = useState(false);
-  const [cloneUrl, setCloneUrl] = useState("");
   const [gitHub, setGitHub] = useState<GitHubInfo | null>(null);
 
   useEffect(() => {
@@ -2838,42 +2933,13 @@ function GitDetailTab({ detail, candidate, setToast, onOpenFileInEditor, onOpenG
         <section className="subpanel confirm-panel protocol-action-card">
           <div>
             <h4>Initialize Repository</h4>
-            <p className="summary-text">This project is not under version control. Initialize a local Git repository or clone an existing remote.</p>
+            <p className="summary-text">This project is not under version control. Initialize a local Git repository.</p>
           </div>
-          {showCloneInput ? (
-            <div className="git-clone-row">
-              <input
-                className="git-clone-input"
-                type="text"
-                placeholder="https://github.com/user/repo.git"
-                value={cloneUrl}
-                autoFocus
-                onChange={(e) => setCloneUrl(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && cloneUrl.trim()) {
-                    void onOpenTerminal({ title: "git clone", initialCommand: `git clone ${cloneUrl.trim()} .` });
-                    setShowCloneInput(false);
-                    setCloneUrl("");
-                  } else if (e.key === "Escape") {
-                    setShowCloneInput(false);
-                    setCloneUrl("");
-                  }
-                }}
-              />
-              <button className="button compact" type="button" disabled={!cloneUrl.trim()} onClick={() => {
-                void onOpenTerminal({ title: "git clone", initialCommand: `git clone ${cloneUrl.trim()} .` });
-                setShowCloneInput(false);
-                setCloneUrl("");
-              }}>Clone</button>
-            </div>
-          ) : (
-            <div className="button-row">
-              <button className="button compact" type="button" onClick={() => {
-                void onOpenTerminal({ title: "git init", initialCommand: "git init" });
-              }}>git init</button>
-              <button className="button compact" type="button" onClick={() => setShowCloneInput(true)}>Clone Remote</button>
-            </div>
-          )}
+          <div className="button-row">
+            <button className="button compact" type="button" onClick={() => {
+              void onOpenTerminal({ title: "git init", initialCommand: "git init" });
+            }}>git init</button>
+          </div>
         </section>
       </>
     );

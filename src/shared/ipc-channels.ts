@@ -2,6 +2,7 @@ export const ipcChannels = {
   listRoots: "config:listRoots",
   pickProjectFolder: "config:pickProjectFolder",
   addProject: "config:addProject",
+  cloneProject: "config:cloneProject",
   removeProject: "config:removeProject",
   renameProject: "config:renameProject",
   setAppearanceTheme: "config:setAppearanceTheme",

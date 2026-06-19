@@ -8,6 +8,7 @@ import {
   setAppearanceTheme,
   setStatusChangeNotificationsEnabled,
 } from "../src/main/config.js";
+import { cloneProject } from "../src/main/project-clone.js";
 import { createWorktree } from "../src/main/worktree.js";
 import type {
   AgentCli,
@@ -41,6 +42,8 @@ import type {
   GitHubInfo,
   PathExistsInput,
   PathExistsResult,
+  CloneProjectInput,
+  CloneProjectResult,
   ProjectConfigInput,
   ProjectScanInput,
   ProjectDetail,
@@ -514,6 +517,22 @@ export async function registerIpcHandlers(
 
   handle<void, AppConfig>(channels.listRoots, () => getConfiguredRoots(runtime));
   handle<ProjectConfigInput, AppConfig>(channels.addProject, (payload) => addConfiguredProject(runtime, payload));
+  ipcMain.removeHandler(channels.cloneProject);
+  ipcMain.handle(channels.cloneProject, async (event, payload: CloneProjectInput): Promise<CloneProjectResult> => {
+    let parentPath = payload.parentPath?.trim();
+    if (!parentPath) {
+      const window = BrowserWindow.fromWebContents(event.sender);
+      if (!window) return { cancelled: true };
+      const result = await dialog.showOpenDialog(window, {
+        title: "Select clone destination",
+        properties: ["openDirectory"],
+        message: "Choose where to clone the remote repository",
+      });
+      if (result.canceled || !result.filePaths[0]) return { cancelled: true };
+      parentPath = result.filePaths[0];
+    }
+    return cloneProject(runtime, { ...payload, parentPath });
+  });
   handle<RemoveProjectInput, AppConfig>(channels.removeProject, (payload) => removeConfiguredProject(runtime, payload));
   handle<RenameProjectInput, AppConfig>(channels.renameProject, (payload) => renameProject(runtime, payload));
   handle<CreateWorktreeInput, CreateWorktreeResult>(channels.createWorktree, (payload) => createWorktree(runtime, payload));

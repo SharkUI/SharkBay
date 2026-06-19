@@ -24,6 +24,15 @@ export type AppConfig = {
   updatedAt?: string;
 };
 
+export type CloneProjectInput = {
+  url?: string;
+  parentPath?: string;
+};
+
+export type CloneProjectResult =
+  | { cancelled: true }
+  | { cancelled: false; path: string };
+
 export type InstallToolInput = {
   targetId: string;
   recipeId: string;
@@ -548,6 +557,7 @@ export type SharkBayBridge = {
   config?: {
     listRoots?: () => Promise<AppConfig | RootRecord[] | string[]>;
     addProject?: (input: { path?: string; uri?: string }) => Promise<AppConfig | void>;
+    cloneProject?: (input: CloneProjectInput) => Promise<CloneProjectResult>;
     removeProject?: (input: { path?: string; uri?: string }) => Promise<AppConfig | void>;
     renameProject?: (input: { uri: string; name: string }) => Promise<AppConfig | void>;
     pickProjectFolder?: () => Promise<{ cancelled: boolean; paths: string[] }>;

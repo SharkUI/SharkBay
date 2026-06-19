@@ -34,6 +34,15 @@ export type ProjectConfigInput = {
   uri?: string;
 };
 
+export type CloneProjectInput = {
+  url?: string;
+  parentPath?: string;
+};
+
+export type CloneProjectResult =
+  | { cancelled: true }
+  | { cancelled: false; path: string };
+
 export type RemoveProjectInput = {
   path?: string;
   uri?: string;
