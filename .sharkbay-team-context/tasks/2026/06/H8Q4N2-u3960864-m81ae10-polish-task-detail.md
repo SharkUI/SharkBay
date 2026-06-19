@@ -12,8 +12,8 @@ agent: Codex GPT-5
 sessionId: 019eddf4-0159-7690-ac93-b9460f14d3eb
 branch: main
 createdAt: 2026-06-19T07:28:45Z
-updatedAt: 2026-06-19T08:09:43Z
-completedAt: 2026-06-19T08:09:43Z
+updatedAt: 2026-06-19T08:20:28Z
+completedAt: 2026-06-19T08:20:28Z
 ---
 
 ## Summary
@@ -47,6 +47,10 @@ Improved the project detail task view so task records are easier to scan and rea
 - Changed Work timeline labels from `Step N` to compact numeric markers.
 - Wired task detail file rows to open Git diff on double-click via the existing `onOpenGitDiff` path.
 - Added width constraints to the task detail layout and rows to prevent horizontal overflow.
+- Reopened task to tighten Work number spacing, support team task file diff opening, and investigate slower task list loading.
+- Tightened Work timeline number spacing from a wide step label to a compact numeric column.
+- Changed task file diff opening to use recorded task commits when present, so team-context completed tasks can open historical file diffs with `git show`.
+- Replaced repeated task section regex extraction with one linear body section parse to reduce task scan work after fixing multi-line sections.
 
 ## Verification
 - Parsed `N5S8QA` locally and confirmed Files, Work, and Verification now return all recorded lines.
