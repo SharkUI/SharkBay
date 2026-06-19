@@ -12,8 +12,8 @@ agent: Codex GPT-5
 sessionId: 019ee044-0cf7-7711-ac45-8583e27af6e7
 branch: main
 createdAt: 2026-06-19T14:27:19Z
-updatedAt: 2026-06-19T14:39:03Z
-completedAt: 2026-06-19T14:39:03Z
+updatedAt: 2026-06-19T14:43:19Z
+completedAt: 2026-06-19T14:43:19Z
 ---
 
 ## Summary
@@ -30,7 +30,8 @@ Fixed the embedded browser layout so its content host can shrink with the availa
 - User screenshot clarified the remaining issue: the native BrowserView content bounds can remain at the old middle-column position while the React browser toolbar has already adapted to the new column.
 - Added a browser layout key derived from dashboard column state so BrowserSurface recalculates native BrowserView bounds when the Projects column is resized, even if the host element's observed size does not change.
 - Follow-up screenshot showed the BrowserView can still overrun the right edge at very narrow widths.
-- Clamped BrowserView bounds to the renderer viewport so native content cannot extend beyond the visible window edge when the host rect is wider than the visible middle column.
+- User clarified the desired behavior is to align the middle column to the web content's minimum width instead of letting the column shrink below it.
+- Replaced the too-small browser column minimum with a 952px browser-active minimum, preserving a 216px Projects column plus 12px resizer inside the app's 1180px minimum width.
 
 ## Verification
 - `codegraph affected src/renderer/App.tsx`
