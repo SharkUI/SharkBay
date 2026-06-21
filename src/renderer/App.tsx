@@ -2081,8 +2081,11 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
 
 function ShareIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M11 5.5a1.8 1.8 0 1 0-1.7-2.4L6.4 4.6a1.8 1.8 0 1 0 0 2.8l2.9 1.5A1.8 1.8 0 1 0 11 7.4l-2.9-1.5a1.8 1.8 0 0 0 0-0.6L11 3.9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M6.1 7 9.9 4.6M6.1 9 9.9 11.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+      <circle cx="11.5" cy="3.6" r="2.1" fill="currentColor"/>
+      <circle cx="11.5" cy="12.4" r="2.1" fill="currentColor"/>
+      <circle cx="4.3" cy="8" r="2.1" fill="currentColor"/>
     </svg>
   );
 }
