@@ -22,7 +22,7 @@ export function createDefaultConfig(): AppConfig {
     configuredProjects: [],
     projectAliases: {},
     disabledPluginIds: [],
-    appearanceTheme: "day",
+    appearanceTheme: "morning",
     statusChangeNotificationsEnabled: true,
     agentStatusCompletionSoundEnabled: true,
     agentStatusApprovalSoundEnabled: true,

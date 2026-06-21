@@ -14,7 +14,7 @@ const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? "http://127.0.0.1:5173";
 
 let mainWindow: BrowserWindow | null = null;
 let islandWindow: BrowserWindow | null = null;
-let appearanceTheme: AppearanceTheme = "day";
+let appearanceTheme: AppearanceTheme = "morning";
 let isQuitting = false;
 
 app.setName("SharkBay");
