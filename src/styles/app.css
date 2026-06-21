@@ -4289,7 +4289,7 @@ button.project-file-toggle:focus-visible {
 
 .browser-toolbar {
   display: grid;
-  grid-template-columns: auto auto auto minmax(0, 1fr);
+  grid-template-columns: auto auto auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
   padding: 8px;
@@ -4322,6 +4322,45 @@ button.project-file-toggle:focus-visible {
 .browser-address-input:focus {
   border-color: #8aa0a6;
   outline: none;
+}
+
+.browser-share {
+  position: relative;
+  display: flex;
+}
+
+.browser-share-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #25424a;
+  background: #e8e0d2;
+  border: 1px solid #d5ccbc;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.browser-share-button:hover {
+  background: #ddd3c2;
+}
+
+.browser-share-button svg {
+  flex: none;
+}
+
+.app-shell[data-theme="night"] .browser-share-button {
+  color: #d9e5df;
+  background: #223235;
+  border-color: #32474b;
+}
+
+.app-shell[data-theme="night"] .browser-share-button:hover {
+  background: #2b3f43;
 }
 
 .browser-view-host {

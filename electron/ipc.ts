@@ -86,6 +86,8 @@ import { checkRepoPermission, ensureLocalExclude, generateMachineId, getHarnessU
 import { deleteTeamContextBranch, hasLocalContextBranch, TeamworkSync } from "../src/main/teamwork-sync.js";
 import { scanTasks, watchTasks } from "../src/main/tasks.js";
 import { generateKnowledgeSite, getKnowledgeSitePath } from "../src/main/knowledge-site.js";
+import { shareLocalArtifact, type ShareArtifactInput, type ShareArtifactResult } from "../src/main/share-artifact.js";
+import { showSharePopover, type ShowSharePopoverInput } from "../src/main/share-popover.js";
 import { spawnCoreClient, type CoreClient } from "./core-client.js";
 import { setPluginEnabledConfig } from "../src/main/config.js";
 import type { PluginSummary } from "../src/plugins/plugin-host.js";
@@ -777,6 +779,16 @@ export async function registerIpcHandlers(
 
   handle<{ url: string }, void>(channels.openExternal, async (payload) => {
     await shell.openExternal(payload.url);
+  });
+
+  handle<ShareArtifactInput, ShareArtifactResult>(channels.shareArtifact, async (payload) => {
+    return shareLocalArtifact(payload);
+  });
+
+  ipcMain.removeHandler(channels.sharePopover);
+  ipcMain.handle(channels.sharePopover, (event, payload: ShowSharePopoverInput) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (window) showSharePopover(window, payload);
   });
 
   ipcMain.handle(channels.islandGetAllSessions, () => {

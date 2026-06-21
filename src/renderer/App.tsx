@@ -1457,6 +1457,18 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       void openBrowserTab(target.projectId, target.uri, target.projectName, target.displayPath, `file://${event.path}`);
     });
   }, []);
+  const selectedSpaceRef = useRef(selectedSpace);
+  useEffect(() => { selectedSpaceRef.current = selectedSpace; }, [selectedSpace]);
+  // "Open" in the share popover opens the shareable URL in the built-in browser.
+  useEffect(() => {
+    const subscribe = getBridge().share?.onOpenUrl;
+    if (!subscribe) return;
+    return subscribe((url: string) => {
+      const target = selectedSpaceRef.current ?? Object.values(spacesRef.current)[0];
+      if (!target) return;
+      void openBrowserTab(target.projectId, target.uri, target.projectName, target.displayPath, url);
+    });
+  }, []);
   useEffect(() => {
     const tabs: Array<{ sessionId: string; title: string; projectName: string; agentId?: string; state: string; lastPrompt?: string }> = [];
     for (const space of Object.values(spaces)) {
@@ -2067,6 +2079,23 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   );
 });
 
+function ShareIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M11 5.5a1.8 1.8 0 1 0-1.7-2.4L6.4 4.6a1.8 1.8 0 1 0 0 2.8l2.9 1.5A1.8 1.8 0 1 0 11 7.4l-2.9-1.5a1.8 1.8 0 0 0 0-0.6L11 3.9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+function isShareableLocalHtml(url: string): boolean {
+  if (!url.startsWith("file://")) return false;
+  try {
+    return /\.html?$/i.test(decodeURIComponent(new URL(url).pathname));
+  } catch {
+    return false;
+  }
+}
+
 function BrowserSurface({
   active,
   focusRequest,
@@ -2085,6 +2114,8 @@ function BrowserSurface({
   tab: BrowserTab;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const shareButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [sharing, setSharing] = useState(false);
 
   useEffect(() => {
     let frame = 0;
@@ -2131,6 +2162,42 @@ function BrowserSurface({
     };
   }, [active, focusRequest, setToast, tab.browser.id]);
 
+  const shareableUrl = isShareableLocalHtml(tab.browser.url) ? tab.browser.url : null;
+
+  function shareAnchorRect() {
+    const el = shareButtonRef.current;
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    // Convert to screen coordinates so the native popover window can anchor to it.
+    return {
+      x: Math.round(window.screenX + r.left),
+      y: Math.round(window.screenY + r.top),
+      width: Math.round(r.width),
+      height: Math.round(r.height),
+    };
+  }
+
+  async function runShare() {
+    const create = getBridge().share?.create;
+    const popover = getBridge().share?.popover;
+    if (!create || !shareableUrl) return;
+    const anchor = shareAnchorRect();
+    const theme = document.querySelector(".app-shell")?.getAttribute("data-theme") ?? "day";
+    setSharing(true);
+    if (anchor && popover) void popover({ anchor, theme, state: { status: "loading" } });
+    try {
+      const { url } = await create({ fileUrl: shareableUrl });
+      if (anchor && popover) void popover({ anchor, theme, state: { status: "done", url } });
+      else setToast({ tone: "success", message: "Share link created." });
+    } catch (error) {
+      const message = asMessage(error);
+      if (anchor && popover) void popover({ anchor, theme, state: { status: "error", message } });
+      else setToast({ tone: "error", message });
+    } finally {
+      setSharing(false);
+    }
+  }
+
   async function submitAddress(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     try {
@@ -2150,6 +2217,22 @@ function BrowserSurface({
         <form className="browser-address-form" onSubmit={(event) => void submitAddress(event)}>
           <input aria-label="Browser address" className="browser-address-input" placeholder="about:blank" value={tab.addressValue} onChange={(event) => onAddressChange(event.target.value)} />
         </form>
+        {shareableUrl ? (
+          <div className="browser-share">
+            <button
+              ref={shareButtonRef}
+              aria-label="Get share link"
+              className="browser-share-button"
+              disabled={sharing}
+              title="Get share link"
+              type="button"
+              onClick={() => void runShare()}
+            >
+              <ShareIcon />
+              <span>Share</span>
+            </button>
+          </div>
+        ) : null}
       </div>
       <div className="browser-view-host" ref={hostRef} />
     </div>

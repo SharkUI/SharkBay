@@ -239,6 +239,19 @@ const sharkBayApi = {
   },
   shell: {
     openExternal: (input: { url: string }) => invoke<void>(channels.openExternal, input),
+  },
+  share: {
+    create: (input: { fileUrl: string }) => invoke<{ url: string }>(channels.shareArtifact, input),
+    popover: (input: {
+      anchor: { x: number; y: number; width: number; height: number };
+      state: { status: "loading" } | { status: "done"; url: string } | { status: "error"; message: string };
+      theme?: string;
+    }) => invoke<void>(channels.sharePopover, input),
+    onOpenUrl: (callback: (url: string) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, url: string) => callback(url);
+      ipcRenderer.on(channels.shareOpenUrl, listener);
+      return () => ipcRenderer.removeListener(channels.shareOpenUrl, listener);
+    },
   }
 };
 

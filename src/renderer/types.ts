@@ -652,6 +652,15 @@ export type SharkBayBridge = {
   shell?: {
     openExternal?: (input: { url: string }) => Promise<void>;
   };
+  share?: {
+    create?: (input: { fileUrl: string }) => Promise<{ url: string }>;
+    popover?: (input: {
+      anchor: { x: number; y: number; width: number; height: number };
+      state: { status: "loading" } | { status: "done"; url: string } | { status: "error"; message: string };
+      theme?: string;
+    }) => Promise<void>;
+    onOpenUrl?: (callback: (url: string) => void) => () => void;
+  };
 };
 
 export type UsageSummaryView = {
