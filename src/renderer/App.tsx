@@ -1281,6 +1281,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const spacesRef = useRef<Record<string, TerminalSpace>>({});
   const creatingProjects = useRef(new Set<string>());
   const pendingTerminalOutput = useRef(new Map<string, string>());
+  const followBottomUntil = useRef(new Map<string, number>());
   const focusRequestNonce = useRef(0);
   const [tabFocusRequest, setTabFocusRequest] = useState<{ projectId: string; nonce: number } | null>(null);
   const hookPromptFocusNonce = useRef(0);
@@ -1756,8 +1757,19 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   }
 
   function writeTerminalOutputToTab(sessionId: string, tab: TerminalShellTab, data: string) {
-    tab.terminal.write(data);
+    const until = followBottomUntil.current.get(sessionId);
+    if (until !== undefined && Date.now() <= until) {
+      tab.terminal.write(data, () => tab.terminal.scrollToBottom());
+    } else {
+      if (until !== undefined) followBottomUntil.current.delete(sessionId);
+      tab.terminal.write(data);
+    }
     if (isRunningServiceTab(tab)) recordServiceUrl(sessionId, data);
+  }
+
+  function pinTerminalToBottom(sessionId: string) {
+    followBottomUntil.current.set(sessionId, Date.now() + 1000);
+    findTerminalTab(spacesRef.current, sessionId)?.terminal.scrollToBottom();
   }
 
   function bufferPendingTerminalOutput(event: TerminalDataEvent) {
@@ -2049,6 +2061,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
         onTerminalFocusRequest={() => selectedActiveTerminal?.terminal.focus()}
         onInteraction={acknowledgeActiveStoppedSession}
         onInput={immediatelyClearActiveTab}
+        onSubmit={pinTerminalToBottom}
       />
     </div>
   );
@@ -5634,6 +5647,7 @@ function PromptInputBar({
   onTerminalFocusRequest,
   onInteraction: onInteractionCallback,
   onInput: onInputCallback,
+  onSubmit: onSubmitCallback,
 }: {
   projectId: string | null;
   sessionId: string | null;
@@ -5644,6 +5658,7 @@ function PromptInputBar({
   onTerminalFocusRequest: () => void;
   onInteraction?: () => void;
   onInput?: () => void;
+  onSubmit?: (sessionId: string) => void;
 }) {
   const [value, setValue] = useState("");
   const [isComposing, setIsComposing] = useState(false);
@@ -5737,6 +5752,7 @@ function PromptInputBar({
     }
     send(text);
     setTimeout(() => send("\r"), 30);
+    onSubmitCallback?.(sessionId);
     setValue("");
     setHistoryCursor(null);
     if (textareaRef.current) textareaRef.current.style.height = "";
