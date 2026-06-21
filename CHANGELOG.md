@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.2.7] — 2026-06-21
+
+### Added
+- Task Artifact action: generate self-contained HTML artifacts from tasks and record them back into task files
+- Task artifact and review indexes in the local knowledge site
+- Remote repository cloning from the Add Project modal
+- In-app Share button for local artifact and site HTML pages
+
+### Changed
+- Default appearance now uses the Morning theme and macOS packaging uses the Morning app icon
+- Add Project and task detail views have tighter typography, layout, and dialog controls
+- Browser column minimum width is now 360px for more stable embedded page layouts
+- Task Share terminology has been renamed to Artifact, with synced task artifacts shown alongside local task records
+- README now links to the SharkBay website
+
+### Fixed
+- Agent terminals stay pinned to the bottom briefly after prompt submission while CLI output redraws
+- Share button icon is clearer and more legible
+
 ## [0.2.6] — 2026-06-18
 
 ### Added
