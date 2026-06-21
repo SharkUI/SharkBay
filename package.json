@@ -95,13 +95,14 @@
       "extendInfo": {
         "NSAppleEventsUsageDescription": "SharkBay needs Automation access so project terminals can run local tools that inspect and control apps at your request."
       },
-      "icon": "resources/shark-day.icns",
+      "icon": "resources/shark-morning.icns",
       "target": [
         "dmg",
         "zip"
       ]
     },
     "dmg": {
+      "icon": "resources/shark-morning.icns",
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     }
   }
