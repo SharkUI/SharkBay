@@ -12,16 +12,19 @@ agent: Codex GPT-5
 sessionId: 019eedf3-dd71-7dd3-8cb3-6b34baf8b812
 branch: main
 createdAt: 2026-06-22T10:52:32Z
-updatedAt: 2026-06-22T13:33:02Z
-completedAt: 2026-06-22T13:33:02Z
+updatedAt: 2026-06-22T13:45:15Z
+completedAt: 2026-06-22T13:45:15Z
 commits:
   - 771f089a
   - 54e2159a
+  - 84526ce9
+  - 84ee49ee
 ---
 
 ## Summary
 Open terminal, agent, browser, and editor tabs now persist in the renderer and are restored after app restart. Browser tabs reuse the existing persistent Electron browser partition, agent restore tabs use normal agent titles, and shell tabs restore cwd plus a bounded terminal output snapshot.
 Review/Artifact agent tabs now persist the real hook session id once it is observed and only restore via agent CLI resume; agent tabs without a resumable session id are no longer silently relaunched as new sessions.
+Restored agent tabs also keep their persisted tab title, so Review/Artifact tabs continue to show their original `Review ...` or `Artifact ...` title after restart.
 
 ## Files
 - .sharkbay/tasks/T6R9P4-u3960864-m81ae10-restore-open-tabs.md
@@ -71,6 +74,10 @@ Review/Artifact agent tabs now persist the real hook session id once it is obser
 - Persisted terminal spaces now fill missing `hookSessionId` from the current terminal-to-hook snapshot before writing localStorage.
 - Hook snapshot changes now trigger the same debounced terminal-space persistence so newly discovered agent session ids are saved before restart.
 - Agent tab restore now requires a valid `buildAgentSessionRestoreCommand`; tabs without a resumable hook session id are skipped instead of launching a fresh agent.
+- Committed Review/Artifact session-id restore fix in `84526ce9`.
+- Reopened task after user reported restored Review/Artifact tab titles do not match their original titles.
+- Added persisted agent tab `title` metadata and used it as the restored resume command title, falling back to the normal agent label only when no title was saved.
+- Committed Review/Artifact restored title fix in `84ee49ee`.
 
 ## Verification
 - `codegraph affected src/renderer/App.tsx src/main/terminal.ts src/shared/types.ts src/renderer/types.ts src/shared/agent-session-restore.ts`
@@ -126,6 +133,10 @@ Review/Artifact agent tabs now persist the real hook session id once it is obser
 - Follow-up verification after Review/Artifact restore fix: `npm test -- tests/renderer-workflow.test.ts tests/agent-session-restore.test.ts`
 - Follow-up verification after Review/Artifact restore fix: `git diff --check -- src/renderer/App.tsx .sharkbay/tasks/T6R9P4-u3960864-m81ae10-restore-open-tabs.md`
 - Follow-up verification after Review/Artifact restore fix: `npm run build`
+- Follow-up verification after Review/Artifact title restore fix: `npm run typecheck`
+- Follow-up verification after Review/Artifact title restore fix: `npm test -- tests/renderer-workflow.test.ts tests/agent-session-restore.test.ts`
+- Follow-up verification after Review/Artifact title restore fix: `git diff --check -- src/renderer/App.tsx .sharkbay/tasks/T6R9P4-u3960864-m81ae10-restore-open-tabs.md`
+- Follow-up verification after Review/Artifact title restore fix: `npm run build`
 
 ## Notes
 - Relevant team context includes agent session restore/session id handoff, per-session prompt history, shell history scoping, island tab restore behavior, and app exit cleanup ordering.
@@ -140,6 +151,8 @@ Review/Artifact agent tabs now persist the real hook session id once it is obser
 - Review/Artifact tabs that never produce a hook session id before persistence cannot be safely restored and should not be recreated automatically.
 - Commit produced: `771f089a`.
 - Follow-up commit produced: `54e2159a`.
+- Follow-up commit produced: `84526ce9`.
+- Follow-up commit produced: `84ee49ee`.
 
 ## Reviews
 - 通过（Approve）：实现与 Summary/Files/Work 一致，typecheck 与定向测试通过，无阻塞项；仅少量边缘情况与测试覆盖建议 — `.sharkbay/reviews/T6R9P4-XA5G69.md` (2026-06-22T11:13:58Z)
