@@ -295,7 +295,7 @@ function compactTerminalOutput(value: string): string {
 
 function snapshotTerminalBuffer(terminal: XTerm): string {
   try {
-    const buffer = terminal.buffer.active;
+    const buffer = terminal.buffer.normal ?? terminal.buffer.active;
     const lines: string[] = [];
     for (let index = 0; index < buffer.length; index += 1) {
       lines.push(buffer.getLine(index)?.translateToString(true) ?? "");
