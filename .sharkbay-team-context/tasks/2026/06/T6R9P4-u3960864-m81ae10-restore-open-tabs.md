@@ -12,8 +12,8 @@ agent: Codex GPT-5
 sessionId: 019eedf3-dd71-7dd3-8cb3-6b34baf8b812
 branch: main
 createdAt: 2026-06-22T10:52:32Z
-updatedAt: 2026-06-22T13:45:15Z
-completedAt: 2026-06-22T13:45:15Z
+updatedAt: 2026-06-22T14:00:35Z
+completedAt: 2026-06-22T14:00:35Z
 commits:
   - 771f089a
   - 54e2159a
@@ -25,6 +25,7 @@ commits:
 Open terminal, agent, browser, and editor tabs now persist in the renderer and are restored after app restart. Browser tabs reuse the existing persistent Electron browser partition, agent restore tabs use normal agent titles, and shell tabs restore cwd plus a bounded terminal output snapshot.
 Review/Artifact agent tabs now persist the real hook session id once it is observed and only restore via agent CLI resume; agent tabs without a resumable session id are no longer silently relaunched as new sessions.
 Restored agent tabs also keep their persisted tab title, so Review/Artifact tabs continue to show their original `Review ...` or `Artifact ...` title after restart.
+Restored agent tabs now remain visually `unknown` until new working or approval activity is observed, preventing Kiro resume startup/idle events from immediately marking restored tabs as `stopped`.
 
 ## Files
 - .sharkbay/tasks/T6R9P4-u3960864-m81ae10-restore-open-tabs.md
@@ -78,6 +79,8 @@ Restored agent tabs also keep their persisted tab title, so Review/Artifact tabs
 - Reopened task after user reported restored Review/Artifact tab titles do not match their original titles.
 - Added persisted agent tab `title` metadata and used it as the restored resume command title, falling back to the normal agent label only when no title was saved.
 - Committed Review/Artifact restored title fix in `84ee49ee`.
+- Reopened task after user reported restored Kiro tabs show `stopped` immediately after app restart, while restored tabs without fresh hook state should show `unknown`.
+- Added a restored-agent pending-activity guard so `stopped` hook state is ignored for restored sessions until the session emits fresh `working` or `approval` activity.
 
 ## Verification
 - `codegraph affected src/renderer/App.tsx src/main/terminal.ts src/shared/types.ts src/renderer/types.ts src/shared/agent-session-restore.ts`
@@ -137,6 +140,10 @@ Restored agent tabs also keep their persisted tab title, so Review/Artifact tabs
 - Follow-up verification after Review/Artifact title restore fix: `npm test -- tests/renderer-workflow.test.ts tests/agent-session-restore.test.ts`
 - Follow-up verification after Review/Artifact title restore fix: `git diff --check -- src/renderer/App.tsx .sharkbay/tasks/T6R9P4-u3960864-m81ae10-restore-open-tabs.md`
 - Follow-up verification after Review/Artifact title restore fix: `npm run build`
+- Follow-up verification after restored Kiro unknown-state fix: `npm run typecheck`
+- Follow-up verification after restored Kiro unknown-state fix: `npm test -- tests/renderer-workflow.test.ts tests/agent-session-restore.test.ts`
+- Follow-up verification after restored Kiro unknown-state fix: `git diff --check -- src/renderer/App.tsx .sharkbay/tasks/T6R9P4-u3960864-m81ae10-restore-open-tabs.md`
+- Follow-up verification after restored Kiro unknown-state fix: `npm run build`
 
 ## Notes
 - Relevant team context includes agent session restore/session id handoff, per-session prompt history, shell history scoping, island tab restore behavior, and app exit cleanup ordering.
