@@ -148,6 +148,7 @@ type PersistedTerminalTab =
       key: string;
       cwdUri: string;
       output?: string;
+      title?: string;
       agentId?: string;
       hookSessionId?: string;
       service?: { id: string; label: string; command: string };
@@ -359,6 +360,7 @@ function writePersistedTerminalSpaces(spaces: Record<string, TerminalSpace>, hoo
               key,
               cwdUri: tab.session.currentCwdUri ?? tab.session.cwdUri,
               output: tab.session.agentId ? undefined : snapshotTerminalBuffer(tab.terminal),
+              title: tab.session.agentId ? tab.session.title : undefined,
               agentId: tab.session.agentId,
               hookSessionId,
               service: tab.session.service,
@@ -1813,7 +1815,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
               terminalId = await openProjectTab(space.projectId, space.uri, space.projectName, space.displayPath, true, {
                 agentId: tab.agentId,
                 initialCommand: restore.command,
-                initialCommandTitle: restore.title,
+                initialCommandTitle: tab.title ?? restore.title,
                 hookSessionId: tab.hookSessionId,
                 activate: false,
               });
