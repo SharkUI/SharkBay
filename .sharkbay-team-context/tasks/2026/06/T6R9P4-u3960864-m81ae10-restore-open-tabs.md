@@ -12,8 +12,8 @@ agent: Codex GPT-5
 sessionId: 019eedf3-dd71-7dd3-8cb3-6b34baf8b812
 branch: main
 createdAt: 2026-06-22T10:52:32Z
-updatedAt: 2026-06-22T13:16:12Z
-completedAt: 2026-06-22T13:16:12Z
+updatedAt: 2026-06-22T13:33:02Z
+completedAt: 2026-06-22T13:33:02Z
 commits:
   - 771f089a
   - 54e2159a
@@ -21,6 +21,7 @@ commits:
 
 ## Summary
 Open terminal, agent, browser, and editor tabs now persist in the renderer and are restored after app restart. Browser tabs reuse the existing persistent Electron browser partition, agent restore tabs use normal agent titles, and shell tabs restore cwd plus a bounded terminal output snapshot.
+Review/Artifact agent tabs now persist the real hook session id once it is observed and only restore via agent CLI resume; agent tabs without a resumable session id are no longer silently relaunched as new sessions.
 
 ## Files
 - .sharkbay/tasks/T6R9P4-u3960864-m81ae10-restore-open-tabs.md
@@ -65,6 +66,11 @@ Open terminal, agent, browser, and editor tabs now persist in the renderer and a
 - Changed terminal buffer snapshot collection to prefer xterm's normal buffer, falling back to active buffer only if normal is unavailable.
 - Preparing a follow-up commit for the normal-buffer snapshot change.
 - Committed normal-buffer snapshot follow-up in `54e2159a`.
+- Reopened task after user reported Review/Artifact tabs are relaunched as new sessions after app restart instead of restoring the original agent session.
+- Investigating and fixing persisted agent tab session id capture so restore uses existing hook sessions and never silently starts a replacement Review/Artifact session.
+- Persisted terminal spaces now fill missing `hookSessionId` from the current terminal-to-hook snapshot before writing localStorage.
+- Hook snapshot changes now trigger the same debounced terminal-space persistence so newly discovered agent session ids are saved before restart.
+- Agent tab restore now requires a valid `buildAgentSessionRestoreCommand`; tabs without a resumable hook session id are skipped instead of launching a fresh agent.
 
 ## Verification
 - `codegraph affected src/renderer/App.tsx src/main/terminal.ts src/shared/types.ts src/renderer/types.ts src/shared/agent-session-restore.ts`
@@ -116,6 +122,10 @@ Open terminal, agent, browser, and editor tabs now persist in the renderer and a
 - Follow-up verification after normal-buffer snapshot change: `npm test -- tests/agent-session-restore.test.ts tests/renderer-workflow.test.ts`
 - Follow-up verification after normal-buffer snapshot change: `git diff --check -- src/renderer/App.tsx .sharkbay/tasks/T6R9P4-u3960864-m81ae10-restore-open-tabs.md`
 - Follow-up verification after normal-buffer snapshot change: `npm run build`
+- Follow-up verification after Review/Artifact restore fix: `npm run typecheck`
+- Follow-up verification after Review/Artifact restore fix: `npm test -- tests/renderer-workflow.test.ts tests/agent-session-restore.test.ts`
+- Follow-up verification after Review/Artifact restore fix: `git diff --check -- src/renderer/App.tsx .sharkbay/tasks/T6R9P4-u3960864-m81ae10-restore-open-tabs.md`
+- Follow-up verification after Review/Artifact restore fix: `npm run build`
 
 ## Notes
 - Relevant team context includes agent session restore/session id handoff, per-session prompt history, shell history scoping, island tab restore behavior, and app exit cleanup ordering.
@@ -127,6 +137,7 @@ Open terminal, agent, browser, and editor tabs now persist in the renderer and a
 - Persisted shell snapshots should not churn on long-running full-screen terminal programs like `top`.
 - User clarified expected model: record the shell tab's displayed content at persistence/quit time, not all historical shell I/O.
 - Agent tabs restore through agent CLI resume/restore commands; terminal buffer snapshots are only for non-agent terminal tabs.
+- Review/Artifact tabs that never produce a hook session id before persistence cannot be safely restored and should not be recreated automatically.
 - Commit produced: `771f089a`.
 - Follow-up commit produced: `54e2159a`.
 
