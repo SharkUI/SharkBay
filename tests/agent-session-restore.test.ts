@@ -40,7 +40,7 @@ describe("agent session restore commands", () => {
     expect(restore).toMatchObject({
       agentId: "claude",
       command: "SHARKBAY_RESTORED_SESSION_ID='22222222-2222-4222-8222-222222222222' '/Users/test/bin/claude' --resume '22222222-2222-4222-8222-222222222222'",
-      title: "Restore Claude Code",
+      title: "Claude Code",
     });
   });
 

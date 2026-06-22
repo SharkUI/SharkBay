@@ -51,13 +51,14 @@ export function buildAgentSessionRestoreCommand(input: {
 
   const detectedAgent = input.availableAgents?.find((agent) => agent.id === definition.id);
   const executable = detectedAgent?.executablePath || detectedAgent?.command || definition.defaultCommand;
+  const label = detectedAgent?.label || definition.label;
   return {
     agentId: definition.id,
     hookSessionId: sessionId,
-    label: detectedAgent?.label || definition.label,
+    label,
     shortLabel: detectedAgent?.shortLabel || definition.shortLabel,
     command: restoreCommand(definition.id, executable, sessionId, input.launchFlags),
-    title: `Restore ${detectedAgent?.label || definition.label}`,
+    title: label,
   };
 }
 

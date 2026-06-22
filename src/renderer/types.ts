@@ -338,6 +338,7 @@ export type TerminalCreateInput = {
 export type TerminalSession = {
   id: string;
   cwdUri: string;
+  currentCwdUri?: string;
   title: string;
   shell: string;
   pid: number | null;

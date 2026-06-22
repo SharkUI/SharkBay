@@ -140,6 +140,34 @@ type TerminalSpace = {
   serviceUrl: string | null;
 };
 
+type PersistedTerminalTab =
+  | {
+      kind: "terminal";
+      key: string;
+      cwdUri: string;
+      output?: string;
+      agentId?: string;
+      hookSessionId?: string;
+      service?: { id: string; label: string; command: string };
+    }
+  | { kind: "browser"; key: string; url: string }
+  | { kind: "editor"; key: string; relativePath: string };
+
+type PersistedTerminalSpace = {
+  projectId: string;
+  projectName: string;
+  uri: string;
+  displayPath: string;
+  activeKey: string | null;
+  serviceUrl: string | null;
+  tabs: PersistedTerminalTab[];
+};
+
+type PersistedTerminalSpaces = {
+  version: 1;
+  spaces: PersistedTerminalSpace[];
+};
+
 type TerminalPaneHandle = {
   openFileInEditor: (projectUri: string, projectName: string, relativePath: string) => Promise<void>;
   openGitDiff: (projectUri: string, projectName: string, relativePath: string, commits?: string[]) => Promise<void>;
@@ -163,7 +191,10 @@ const resizerColumnWidth = 12;
 const columnResizeStep = 40;
 const detailColumnStorageKey = "sharkbay.detailColumnWidth.v2";
 const projectColumnStorageKey = "sharkbay.projectColumnWidth.v2";
+const selectedProjectStorageKey = "sharkbay:selected-project:v1";
 const minBrowserColumnWidth = 360;
+const terminalSpacesStorageKey = "sharkbay:terminal-spaces:v1";
+const persistedTerminalOutputMaxChars = 120_000;
 const terminalColumnMinWidthFor = (detailHidden: boolean) => detailHidden ? minBrowserColumnWidth : minTerminalColumnWidth;
 const detailTabs: Array<{ id: DetailTab; label: string; localOnly?: boolean }> = [
   { id: "sessions", label: "Sessions", localOnly: true },
@@ -239,6 +270,110 @@ function getBridge(): SharkBayBridge {
 
 function asMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function readStoredSelectedProjectId(): string | null {
+  try {
+    const value = window.localStorage.getItem(selectedProjectStorageKey)?.trim();
+    return value || null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredSelectedProjectId(projectId: string): void {
+  try {
+    window.localStorage.setItem(selectedProjectStorageKey, projectId);
+  } catch {
+    // Best-effort UI state persistence.
+  }
+}
+
+function compactTerminalOutput(value: string): string {
+  return value.length > persistedTerminalOutputMaxChars ? value.slice(-persistedTerminalOutputMaxChars) : value;
+}
+
+function snapshotTerminalBuffer(terminal: XTerm): string {
+  try {
+    const buffer = terminal.buffer.active;
+    const lines: string[] = [];
+    for (let index = 0; index < buffer.length; index += 1) {
+      lines.push(buffer.getLine(index)?.translateToString(true) ?? "");
+    }
+    return compactTerminalOutput(lines.join("\r\n").trimEnd());
+  } catch {
+    return "";
+  }
+}
+
+function stripAlternateScreenBlocks(value: string): string {
+  return value.replace(/\u001b\[\?(?:47|1047|1049)h[\s\S]*?(?:\u001b\[\?(?:47|1047|1049)l|$)/g, "");
+}
+
+function cleanRestoredTerminalOutput(value: string): string {
+  const lines = stripAlternateScreenBlocks(value)
+    .replace(/\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g, "")
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/\u001b[()][0-2AB]/g, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .filter((line) => line.trim() !== "%");
+  while (lines.length && !lines[lines.length - 1]?.trim()) lines.pop();
+  const lastLine = lines[lines.length - 1]?.trimEnd() ?? "";
+  if (/\s[%#$>]\s*$/u.test(lastLine)) lines.pop();
+  return compactTerminalOutput(lines.join("\r\n").trimEnd());
+}
+
+function readPersistedTerminalSpaces(): PersistedTerminalSpaces | null {
+  try {
+    const raw = window.localStorage.getItem(terminalSpacesStorageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PersistedTerminalSpaces> | null;
+    if (parsed?.version !== 1 || !Array.isArray(parsed.spaces)) return null;
+    return parsed as PersistedTerminalSpaces;
+  } catch {
+    return null;
+  }
+}
+
+function writePersistedTerminalSpaces(spaces: Record<string, TerminalSpace>): void {
+  const payload: PersistedTerminalSpaces = {
+    version: 1,
+    spaces: Object.values(spaces)
+      .map((space) => ({
+        projectId: space.projectId,
+        projectName: space.projectName,
+        uri: space.uri,
+        displayPath: space.displayPath,
+        activeKey: space.activeId,
+        serviceUrl: space.serviceUrl,
+        tabs: space.tabs.map((tab): PersistedTerminalTab | null => {
+          const key = tabIdForTab(tab);
+          if (tab.kind === "terminal") {
+            return {
+              kind: "terminal",
+              key,
+              cwdUri: tab.session.currentCwdUri ?? tab.session.cwdUri,
+              output: tab.session.agentId ? undefined : snapshotTerminalBuffer(tab.terminal),
+              agentId: tab.session.agentId,
+              hookSessionId: tab.hookSessionId,
+              service: tab.session.service,
+            };
+          }
+          if (tab.kind === "browser") {
+            return { kind: "browser", key, url: tab.browser.url };
+          }
+          return { kind: "editor", key, relativePath: tab.relativePath };
+        }).filter((tab): tab is PersistedTerminalTab => Boolean(tab)),
+      }))
+      .filter((space) => space.tabs.length > 0),
+  };
+  try {
+    window.localStorage.setItem(terminalSpacesStorageKey, JSON.stringify(payload));
+  } catch {
+    // Best-effort UI state persistence; never block terminal output or tab actions.
+  }
 }
 
 type AudioContextConstructor = new (contextOptions?: AudioContextOptions) => AudioContext;
@@ -490,6 +625,14 @@ function buildAgentLaunchCommand(agent: AgentCli): string {
   return flags.length ? `${base} ${flags.join(" ")}` : base;
 }
 
+function getAgentLaunchFlagsForRestore(agentId: string): string[] {
+  const launchFlags = getAgentLaunchFlags(agentId);
+  if (agentId === "kiro" && getAgentHooksEnabled("kiro") && !launchFlags.includes("--agent sharkbay")) {
+    launchFlags.push("--agent sharkbay");
+  }
+  return launchFlags;
+}
+
 function cx(...names: Array<string | false | null | undefined>): string {
   return names.filter(Boolean).join(" ");
 }
@@ -593,7 +736,7 @@ export function App() {
   const [configuredProjects, setConfiguredProjects] = useState<string[]>([]);
   const [projectAliases, setProjectAliases] = useState<Record<string, string>>({});
   const [candidates, setCandidates] = useState<ProjectCandidate[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() => readStoredSelectedProjectId());
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -610,6 +753,9 @@ export function App() {
   const bridgeAvailable = typeof window !== "undefined" && Boolean(window.sharkBay);
 
   const selectedCandidate = useMemo(() => resolveSelectedCandidate(candidates, selectedId), [candidates, selectedId]);
+  useEffect(() => {
+    if (selectedCandidate) writeStoredSelectedProjectId(selectedCandidate.id);
+  }, [selectedCandidate?.id]);
 
   async function refreshProjects(options: RefreshOptions = {}): Promise<{ candidates: ProjectCandidate[] }> {
     const setBusy = options.setBusy ?? true;
@@ -911,6 +1057,7 @@ function DashboardView({
   const [hookActivityByProjectId, setHookActivityByProjectId] = useState<Record<string, ProjectActivityState>>({});
   const [hookStateBySessionId, setHookStateBySessionId] = useState<Record<string, HookSessionStateEntry>>({});
   const [agentClis, setAgentClis] = useState<AgentCli[]>([]);
+  const [agentClisReady, setAgentClisReady] = useState(false);
   const [agentListVersion, setAgentListVersion] = useState(0);
   const [agentStatusByProjectPath, setAgentStatusByProjectPath] = useState<AgentStatusByProjectPath>({});
   const [activeTerminalTabKind, setActiveTerminalTabKind] = useState<ActiveTerminalTabKind>(null);
@@ -1033,18 +1180,30 @@ function DashboardView({
   useEffect(() => {
     if (!bridgeAvailable) return;
     let cancelled = false;
+    setAgentClisReady(false);
     const listClis = getBridge().agents?.listClis;
-    if (!listClis) return;
+    if (!listClis) {
+      setAgentClisReady(true);
+      return;
+    }
     const targetId = selectedCandidate?.providerId ?? "local";
     const cached = agentClisByTargetRef.current[targetId];
-    if (cached) setAgentClis(cached);
+    if (cached) {
+      setAgentClis(cached);
+      setAgentClisReady(true);
+    }
     void listClis({ cwdUri: selectedCandidate?.uri })
       .then((clis) => {
         if (cancelled) return;
         agentClisByTargetRef.current[targetId] = clis;
         setAgentClis(clis);
+        setAgentClisReady(true);
       })
-      .catch((error) => { if (!cancelled) setToast({ tone: "error", message: asMessage(error) }); });
+      .catch((error) => {
+        if (cancelled) return;
+        setAgentClisReady(true);
+        setToast({ tone: "error", message: asMessage(error) });
+      });
     return () => { cancelled = true; };
   }, [bridgeAvailable, selectedCandidate?.providerId, selectedCandidate?.uri, setToast, agentListVersion]);
 
@@ -1144,6 +1303,7 @@ function DashboardView({
           ref={terminalPaneRef}
           appearanceTheme={appearanceTheme}
           agentClis={agentClis}
+          agentClisReady={agentClisReady}
           browserLayoutKey={browserLayoutKey}
           candidate={selectedCandidate}
           hookStateBySessionId={hookStateBySessionId}
@@ -1259,6 +1419,7 @@ function DashboardView({
 const TerminalPane = forwardRef<TerminalPaneHandle, {
   appearanceTheme: AppearanceTheme;
   agentClis: AgentCli[];
+  agentClisReady: boolean;
   bridgeAvailable: boolean;
   candidate: ProjectCandidate | null;
   hookStateBySessionId: Record<string, HookSessionStateEntry>;
@@ -1275,12 +1436,15 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   onAgentSessionClear: (agentSessionId: string) => void;
   onRunningServiceProjectIdsChange: (projectIds: Set<string>) => void;
   onProjectActivityChange: (activityByProjectId: Record<string, ProjectActivityState>) => void;
-}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, browserLayoutKey, candidate, hookStateBySessionId, projectAliases, isVisible, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onAgentSessionClear, onRunningServiceProjectIdsChange, onProjectActivityChange }, ref) {
+}>(function TerminalPane({ appearanceTheme, agentClis, agentClisReady, bridgeAvailable, browserLayoutKey, candidate, hookStateBySessionId, projectAliases, isVisible, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onAgentSessionClear, onRunningServiceProjectIdsChange, onProjectActivityChange }, ref) {
   const [spaces, setSpaces] = useState<Record<string, TerminalSpace>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [terminalSpacesRestored, setTerminalSpacesRestored] = useState(false);
   const spacesRef = useRef<Record<string, TerminalSpace>>({});
   const creatingProjects = useRef(new Set<string>());
   const pendingTerminalOutput = useRef(new Map<string, string>());
+  const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const restoredSpaces = useRef(false);
   const followBottomUntil = useRef(new Map<string, number>());
   const focusRequestNonce = useRef(0);
   const [tabFocusRequest, setTabFocusRequest] = useState<{ projectId: string; nonce: number } | null>(null);
@@ -1341,6 +1505,17 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       onAgentSessionClear(sid);
     }
   }, [onAgentSessionClear]);
+  const flushTerminalSpacesSnapshot = useCallback(() => {
+    if (persistTimer.current) {
+      clearTimeout(persistTimer.current);
+      persistTimer.current = null;
+    }
+    writePersistedTerminalSpaces(spacesRef.current);
+  }, []);
+  const scheduleTerminalSpacesSnapshot = useCallback(() => {
+    if (persistTimer.current) clearTimeout(persistTimer.current);
+    persistTimer.current = setTimeout(flushTerminalSpacesSnapshot, 500);
+  }, [flushTerminalSpacesSnapshot]);
 
   // Auto-focus based on hookState: approval → terminal, working/stopped → prompt input bar
   const prevHookFocusState = useRef<string | undefined>(undefined);
@@ -1443,7 +1618,22 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const canCreate = bridgeAvailable && Boolean(candidate?.uri) && (candidate?.providerKind === "local");
   const services = candidate?.services ?? [];
 
-  useEffect(() => { spacesRef.current = spaces; }, [spaces]);
+  useEffect(() => {
+    spacesRef.current = spaces;
+    if (restoredSpaces.current) scheduleTerminalSpacesSnapshot();
+  }, [scheduleTerminalSpacesSnapshot, spaces]);
+  useEffect(() => {
+    const flush = () => { if (restoredSpaces.current) writePersistedTerminalSpaces(spacesRef.current); };
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      window.removeEventListener("beforeunload", flush);
+      if (persistTimer.current) {
+        clearTimeout(persistTimer.current);
+        persistTimer.current = null;
+      }
+      flush();
+    };
+  }, []);
   // An artifact session's agent ran open-artifact.sh — open the generated HTML in
   // the built-in browser, in the tab space of the project it belongs to.
   useEffect(() => {
@@ -1554,6 +1744,114 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   }, [bridgeAvailable]);
 
   useEffect(() => {
+    if (!bridgeAvailable || !agentClisReady || restoredSpaces.current) return;
+    const persisted = readPersistedTerminalSpaces();
+    if (!persisted?.spaces.length) {
+      restoredSpaces.current = true;
+      setTerminalSpacesRestored(true);
+      return;
+    }
+    const snapshot = persisted;
+    restoredSpaces.current = true;
+
+    let cancelled = false;
+    async function restoreSpaces() {
+      for (const space of snapshot.spaces) {
+        if (cancelled) return;
+        setSpaces((current) => {
+          if (current[space.projectId]) return current;
+          return {
+            ...current,
+            [space.projectId]: {
+              projectId: space.projectId,
+              projectName: space.projectName,
+              uri: space.uri,
+              displayPath: space.displayPath,
+              tabs: [],
+              activeId: null,
+              serviceUrl: space.serviceUrl,
+            },
+          };
+        });
+
+        const restoredIds = new Map<string, string>();
+        for (const tab of space.tabs) {
+          if (cancelled) return;
+          if (tab.kind === "browser") {
+            const browserId = await openBrowserTab(space.projectId, space.uri, space.projectName, space.displayPath, tab.url, false);
+            if (browserId) restoredIds.set(tab.key, browserId);
+            continue;
+          }
+          if (tab.kind === "editor") {
+            await openEditorTab(space.uri, space.projectName, space.displayPath, tab.relativePath, false);
+            restoredIds.set(tab.key, `editor:${space.uri}:${tab.relativePath}`);
+            continue;
+          }
+
+          let terminalId: string | null = null;
+          if (tab.service) {
+            terminalId = await openProjectTab(space.projectId, tab.cwdUri, space.projectName, space.displayPath, true, {
+              initialCommand: tab.service.command,
+              service: tab.service,
+              restoredOutput: tab.output,
+              activate: false,
+            });
+          } else if (tab.agentId) {
+            const restore = tab.hookSessionId ? buildAgentSessionRestoreCommand({
+              agentName: tab.agentId,
+              sessionId: tab.hookSessionId,
+              availableAgents: agentClis,
+              launchFlags: getAgentLaunchFlagsForRestore(tab.agentId),
+            }) : null;
+            const agent = agentClis.find((item) => item.id === tab.agentId);
+            const initialCommand = restore?.command ?? (agent ? buildAgentLaunchCommand(agent) : null);
+            const initialCommandTitle = restore?.title ?? agent?.label;
+            if (initialCommand) {
+              terminalId = await openProjectTab(space.projectId, space.uri, space.projectName, space.displayPath, true, {
+                agentId: tab.agentId,
+                initialCommand,
+                initialCommandTitle,
+                hookSessionId: tab.hookSessionId,
+                activate: false,
+              });
+            }
+          } else {
+            terminalId = await openProjectTab(space.projectId, tab.cwdUri, space.projectName, space.displayPath, true, {
+              restoredOutput: tab.output,
+              activate: false,
+            });
+            if (!terminalId && tab.cwdUri !== space.uri) {
+              terminalId = await openProjectTab(space.projectId, space.uri, space.projectName, space.displayPath, true, {
+                restoredOutput: tab.output,
+                activate: false,
+              });
+            }
+          }
+          if (terminalId) restoredIds.set(tab.key, terminalId);
+        }
+
+        const activeId = (space.activeKey ? restoredIds.get(space.activeKey) : null) ?? restoredIds.values().next().value ?? null;
+        if (activeId) {
+          setSpaces((current) => {
+            const existing = current[space.projectId];
+            if (!existing) return current;
+            return { ...current, [space.projectId]: { ...existing, activeId, serviceUrl: space.serviceUrl } };
+          });
+          setActiveProjectId((current) => current ?? space.projectId);
+        }
+      }
+      flushTerminalSpacesSnapshot();
+      if (!cancelled) {
+        setActiveProjectId(candidate?.id ?? snapshot.spaces[0]?.projectId ?? null);
+        setTerminalSpacesRestored(true);
+      }
+    }
+
+    void restoreSpaces();
+    return () => { cancelled = true; };
+  }, [agentClis, agentClisReady, bridgeAvailable, candidate?.id, flushTerminalSpacesSnapshot]);
+
+  useEffect(() => {
     if (!candidate?.uri || !bridgeAvailable) { if (!candidate) setActiveProjectId(null); return; }
     setActiveProjectId(candidate.id);
     setSpaces((current) => {
@@ -1561,13 +1859,14 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       return { ...current, [candidate.id]: { projectId: candidate.id, projectName: displayProjectName ?? candidate.name, uri: candidate.uri, displayPath: candidate.displayPath, tabs: [], activeId: null, serviceUrl: null } };
     });
     if (isVisible) requestProjectTabFocus(candidate.id);
+    if (!terminalSpacesRestored) return;
     const existing = spacesRef.current[candidate.id];
     if (!isVisible) return;
     if (existing?.tabs.length) return;
     if (creatingProjects.current.has(candidate.id)) return;
     creatingProjects.current.add(candidate.id);
     void openProjectTab(candidate.id, candidate.uri, displayProjectName ?? candidate.name, candidate.displayPath, true).finally(() => { creatingProjects.current.delete(candidate.id); });
-  }, [bridgeAvailable, candidate?.id, candidate?.uri, isVisible]);
+  }, [bridgeAvailable, candidate?.id, candidate?.uri, isVisible, terminalSpacesRestored]);
 
   async function openCurrentProjectTab() {
     if (!candidate?.uri) return;
@@ -1635,14 +1934,16 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     },
   }));
 
-  async function openEditorTab(projectUri: string, projectName: string, displayPath: string, relativePath: string) {
+  async function openEditorTab(projectUri: string, projectName: string, displayPath: string, relativePath: string, activate = true) {
     const editorTabId = `editor:${projectUri}:${relativePath}`;
     const existingSpace = spacesRef.current[projectUri];
     const existingTab = existingSpace?.tabs.find((tab): tab is EditorTab => tab.kind === "editor" && tab.id === editorTabId);
     if (existingTab) {
-      setActiveTab(projectUri, editorTabId);
-      setActiveProjectId(projectUri);
-      onActiveTabKindChange("editor");
+      if (activate) {
+        setActiveTab(projectUri, editorTabId);
+        setActiveProjectId(projectUri);
+        onActiveTabKindChange("editor");
+      }
       return;
     }
     const baseName = relativePath.split("/").pop() ?? relativePath;
@@ -1659,12 +1960,12 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       error: null,
       readOnly: false,
     };
-    onActiveTabKindChange("editor");
+    if (activate) onActiveTabKindChange("editor");
     setSpaces((current) => {
       const existing = current[projectUri] ?? { projectId: projectUri, projectName, uri: projectUri, displayPath, tabs: [], activeId: null, serviceUrl: null };
-      return { ...current, [projectUri]: { ...existing, projectName, uri: projectUri, displayPath, tabs: [...existing.tabs, tab], activeId: editorTabId } };
+      return { ...current, [projectUri]: { ...existing, projectName, uri: projectUri, displayPath, tabs: [...existing.tabs, tab], activeId: activate ? editorTabId : existing.activeId } };
     });
-    setActiveProjectId(projectUri);
+    if (activate) setActiveProjectId(projectUri);
 
     const reader = getBridge().projects?.readFile;
     if (!reader) {
@@ -1722,33 +2023,46 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     }
   }
 
-  async function openProjectTab(projectId: string, cwdUri: string, projectName: string, displayPath: string, quiet = false, options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "initialCommandTitle" | "service" | "review" | "artifact"> & { hookSessionId?: string } = {}) {
+  async function openProjectTab(projectId: string, cwdUri: string, projectName: string, displayPath: string, quiet = false, options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "initialCommandTitle" | "service" | "review" | "artifact"> & { hookSessionId?: string; restoredOutput?: string; activate?: boolean } = {}): Promise<string | null> {
     try {
-      const { hookSessionId, ...createOptions } = options;
+      const { hookSessionId, restoredOutput, activate = true, ...createOptions } = options;
       const session = await createTerminal(cwdUri, projectName, createOptions);
       const terminal = createXTerm(session.id, appearanceTheme, setToast, (url) => void openBrowserTab(projectId, cwdUri, projectName, displayPath, url), () => clearStoppedTerminalSession(session.id), { colorScheme: terminalColorScheme, fontFamily: terminalFontFamily, fontSize: terminalFontSize, lineHeight: terminalLineHeight });
+      if (restoredOutput) {
+        const restored = cleanRestoredTerminalOutput(restoredOutput);
+        if (restored) {
+          const output = compactTerminalOutput(`${restored}\r\n`);
+          terminal.instance.write(output);
+        }
+      }
       const tab: TerminalTab = { kind: "terminal", session, hookSessionId, terminal: terminal.instance, fitAddon: terminal.fitAddon, hoveredLink: terminal.hoveredLink, disposables: terminal.disposables };
-      onActiveTabKindChange("terminal");
+      if (activate) onActiveTabKindChange("terminal");
       setSpaces((current) => {
         const existing = current[projectId] ?? { projectId, projectName, uri: cwdUri, displayPath, tabs: [], activeId: null, serviceUrl: null };
-        return { ...current, [projectId]: { ...existing, projectName, uri: cwdUri, displayPath, tabs: [...existing.tabs, tab], activeId: session.id } };
+        return { ...current, [projectId]: { ...existing, projectName, uri: cwdUri, displayPath, tabs: [...existing.tabs, tab], activeId: activate ? session.id : existing.activeId } };
       });
-      setActiveProjectId(projectId);
-    } catch (error) { if (!quiet) setToast({ tone: "error", message: asMessage(error) }); }
+      if (activate) setActiveProjectId(projectId);
+      return session.id;
+    } catch (error) {
+      if (!quiet) setToast({ tone: "error", message: asMessage(error) });
+      return null;
+    }
   }
 
-  async function openBrowserTab(projectId: string, uri: string, projectName: string, displayPath: string, initialUrl: string) {
+  async function openBrowserTab(projectId: string, uri: string, projectName: string, displayPath: string, initialUrl: string, activate = true): Promise<string | null> {
     try {
       const browser = await createBrowser(initialUrl);
       const tab: TerminalTab = { kind: "browser", browser, addressValue: browser.url === "about:blank" ? "" : browser.url };
-      onActiveTabKindChange("browser");
+      if (activate) onActiveTabKindChange("browser");
       setSpaces((current) => {
         const existing = current[projectId] ?? { projectId, projectName, uri, displayPath, tabs: [], activeId: null, serviceUrl: null };
-        return { ...current, [projectId]: { ...existing, projectName, uri, displayPath, tabs: [...existing.tabs, tab], activeId: browser.id } };
+        return { ...current, [projectId]: { ...existing, projectName, uri, displayPath, tabs: [...existing.tabs, tab], activeId: activate ? browser.id : existing.activeId } };
       });
-      setActiveProjectId(projectId);
+      if (activate) setActiveProjectId(projectId);
+      return browser.id;
     } catch (error) {
       setToast({ tone: "error", message: asMessage(error) });
+      return null;
     }
   }
 
@@ -3788,15 +4102,11 @@ function taskRestoreCommand(task: TaskViewModel, status: ProtocolStatus | null, 
   if (task.owner.githubUserId !== status.githubUserId) return null;
   if (task.machine !== status.machineId) return null;
   const agentId = inferAgentSessionRestoreAgent(task.agent);
-  const launchFlags = agentId ? getAgentLaunchFlags(agentId) : [];
-  if (agentId === "kiro" && getAgentHooksEnabled("kiro") && !launchFlags.includes("--agent sharkbay")) {
-    launchFlags.push("--agent sharkbay");
-  }
   return buildAgentSessionRestoreCommand({
     agentName: task.agent,
     sessionId: task.sessionId,
     availableAgents: agentClis,
-    launchFlags,
+    launchFlags: agentId ? getAgentLaunchFlagsForRestore(agentId) : [],
   });
 }
 

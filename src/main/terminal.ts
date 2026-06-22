@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import * as pty from "./pty.js";
 import { getConfiguredRoots } from "./config.js";
 import { resolveProjectUri } from "./path-safety.js";
+import { toLocalProjectUri } from "../core/project-uri.js";
 import { prependPathDirectories, resolveCommandSearchPaths } from "./command-path.js";
 import { prepareAgentLaunch, reserveReviewPath, reserveArtifactPath, reviewPrompt, artifactPrompt } from "./harness.js";
 import type {
@@ -640,9 +641,11 @@ function skipEscapeSequence(value: string, startIndex: number): number {
 }
 
 function publicSession(session: TerminalRecord | TerminalSession): TerminalSession {
+  const currentCwdUri = "currentCwd" in session ? toLocalProjectUri(session.currentCwd) : session.currentCwdUri;
   return {
     id: session.id,
     cwdUri: session.cwdUri,
+    currentCwdUri,
     title: session.title,
     shell: session.shell,
     pid: session.pid,
