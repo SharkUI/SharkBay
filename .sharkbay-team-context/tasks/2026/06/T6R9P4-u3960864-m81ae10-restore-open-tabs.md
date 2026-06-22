@@ -12,13 +12,14 @@ agent: Codex GPT-5
 sessionId: 019eedf3-dd71-7dd3-8cb3-6b34baf8b812
 branch: main
 createdAt: 2026-06-22T10:52:32Z
-updatedAt: 2026-06-22T14:00:35Z
-completedAt: 2026-06-22T14:00:35Z
+updatedAt: 2026-06-22T14:04:32Z
+completedAt: 2026-06-22T14:04:32Z
 commits:
   - 771f089a
   - 54e2159a
   - 84526ce9
   - 84ee49ee
+  - 750b5e15
 ---
 
 ## Summary
@@ -81,6 +82,7 @@ Restored agent tabs now remain visually `unknown` until new working or approval 
 - Committed Review/Artifact restored title fix in `84ee49ee`.
 - Reopened task after user reported restored Kiro tabs show `stopped` immediately after app restart, while restored tabs without fresh hook state should show `unknown`.
 - Added a restored-agent pending-activity guard so `stopped` hook state is ignored for restored sessions until the session emits fresh `working` or `approval` activity.
+- Committed restored-agent unknown-state fix in `750b5e15`.
 
 ## Verification
 - `codegraph affected src/renderer/App.tsx src/main/terminal.ts src/shared/types.ts src/renderer/types.ts src/shared/agent-session-restore.ts`
@@ -160,6 +162,7 @@ Restored agent tabs now remain visually `unknown` until new working or approval 
 - Follow-up commit produced: `54e2159a`.
 - Follow-up commit produced: `84526ce9`.
 - Follow-up commit produced: `84ee49ee`.
+- Follow-up commit produced: `750b5e15`.
 
 ## Reviews
 - 通过（Approve）：实现与 Summary/Files/Work 一致，typecheck 与定向测试通过，无阻塞项；仅少量边缘情况与测试覆盖建议 — `.sharkbay/reviews/T6R9P4-XA5G69.md` (2026-06-22T11:13:58Z)
