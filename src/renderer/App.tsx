@@ -1450,6 +1450,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const pendingTerminalOutput = useRef(new Map<string, string>());
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoredSpaces = useRef(false);
+  const restoredAgentSessionsAwaitingActivityRef = useRef<Set<string>>(new Set());
   const followBottomUntil = useRef(new Map<string, number>());
   const focusRequestNonce = useRef(0);
   const [tabFocusRequest, setTabFocusRequest] = useState<{ projectId: string; nonce: number } | null>(null);
@@ -1475,6 +1476,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     }
     const result: Record<string, { sessionId: string; state: ProjectActivityState; timestampMs: number; lastPrompt?: string }> = {};
     for (const [sid, entry] of Object.entries(hookStateBySessionId)) {
+      if (entry.state === "stopped" && restoredAgentSessionsAwaitingActivityRef.current.has(sid)) continue;
       let termId = map[sid];
       if (!termId && entry.state === "working") {
         const candidates = runningTabsByProjectAgent.get(`${entry.projectId}\0${entry.agentId}`);
@@ -1489,6 +1491,13 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     }
     return result;
   }, [hookStateBySessionId, spaces]);
+  useEffect(() => {
+    for (const [sid, entry] of Object.entries(hookStateBySessionId)) {
+      if (entry.state === "working" || entry.state === "approval") {
+        restoredAgentSessionsAwaitingActivityRef.current.delete(sid);
+      }
+    }
+  }, [hookStateBySessionId]);
   const hookStateByTerminalId = useMemo(() => {
     const result: Record<string, ProjectActivityState> = {};
     for (const [terminalId, snapshot] of Object.entries(hookSnapshotByTerminalId)) {
@@ -1812,6 +1821,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
               launchFlags: getAgentLaunchFlagsForRestore(tab.agentId),
             }) : null;
             if (restore) {
+              restoredAgentSessionsAwaitingActivityRef.current.add(restore.hookSessionId);
               terminalId = await openProjectTab(space.projectId, space.uri, space.projectName, space.displayPath, true, {
                 agentId: tab.agentId,
                 initialCommand: restore.command,
