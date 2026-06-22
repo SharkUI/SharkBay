@@ -12,8 +12,8 @@ agent: Codex GPT-5
 sessionId: 019eedf3-dd71-7dd3-8cb3-6b34baf8b812
 branch: main
 createdAt: 2026-06-22T10:52:32Z
-updatedAt: 2026-06-22T11:00:49Z
-completedAt: 2026-06-22T11:00:49Z
+updatedAt: 2026-06-22T11:02:13Z
+completedAt: 2026-06-22T11:02:13Z
 ---
 
 ## Summary
@@ -34,6 +34,7 @@ Open terminal, agent, browser, and editor tabs now persist in the renderer and a
 - Exposed `currentCwdUri` on terminal sessions so shell tabs can restart in the last observed working directory when it remains inside the configured project boundary.
 - Changed agent restore command titles to the normal agent label instead of `Restore ...`.
 - Confirmed browser cookies and storage already use `partition: "persist:sharkbay-browser"` in `BrowserManager`.
+- Kept localStorage parsing minimal because SharkBay owns the snapshot key.
 
 ## Verification
 - `codegraph affected src/renderer/App.tsx src/main/terminal.ts src/shared/types.ts src/renderer/types.ts src/shared/agent-session-restore.ts`
