@@ -3489,8 +3489,13 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
         if (!task) return null;
         const inferredId = inferAgentSessionRestoreAgent(task.agent);
         const defaultAgent = inferredId ? agentClis.find((agent) => agent.id === inferredId) : undefined;
+        // Menu and submenu are each 178px wide (see app.css). Clamp the menu's left so it
+        // never overflows the right edge, and flip the right-side flyout left when the
+        // submenu would still not fit beside the (clamped) menu.
+        const menuLeft = Math.max(8, Math.min(reviewMenu.x, window.innerWidth - 178 - 8));
+        const flipSubmenuLeft = menuLeft + 178 * 2 > window.innerWidth;
         return (
-          <div ref={reviewMenuRef} className="project-context-menu" style={{ top: reviewMenu.y, left: reviewMenu.x }}>
+          <div ref={reviewMenuRef} className="project-context-menu" style={{ top: reviewMenu.y, left: menuLeft }}>
             <button
               className="project-context-menu-item"
               type="button"
@@ -3526,7 +3531,7 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
                 <span className="project-context-submenu-caret">{"\u25B8"}</span>
               </button>
               {reviewMenu.withOpen && agentClis.length ? (
-                <div className="project-context-submenu" role="menu">
+                <div className={cx("project-context-submenu", flipSubmenuLeft && "project-context-submenu--left")} role="menu">
                   {agentClis.map((agent) => (
                     <button
                       key={agent.id}

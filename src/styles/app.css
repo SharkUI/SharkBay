@@ -768,6 +768,11 @@ body.is-resizing-columns * {
   z-index: 31;
 }
 
+.project-context-submenu--left {
+  left: auto;
+  right: calc(100% - 2px);
+}
+
 .button.is-danger {
   background: #c0392b;
   color: #fff;
