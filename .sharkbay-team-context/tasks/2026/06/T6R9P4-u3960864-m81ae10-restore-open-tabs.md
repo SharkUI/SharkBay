@@ -12,8 +12,8 @@ agent: Codex GPT-5
 sessionId: 019eedf3-dd71-7dd3-8cb3-6b34baf8b812
 branch: main
 createdAt: 2026-06-22T10:52:32Z
-updatedAt: 2026-06-22T13:03:01Z
-completedAt: 2026-06-22T13:03:01Z
+updatedAt: 2026-06-22T13:14:29Z
+completedAt: 2026-06-22T13:14:29Z
 commits:
   - 771f089a
 ---
@@ -60,6 +60,8 @@ Open terminal, agent, browser, and editor tabs now persist in the renderer and a
 - Stopped saving terminal buffer output for agent tabs; agent tabs now persist only the metadata needed for CLI resume.
 - Preparing a commit for the verified restore behavior changes.
 - Committed restore behavior changes in `771f089a`.
+- Reopened task after audit follow-up to snapshot xterm normal buffer instead of active buffer when full-screen programs are running.
+- Changed terminal buffer snapshot collection to prefer xterm's normal buffer, falling back to active buffer only if normal is unavailable.
 
 ## Verification
 - `codegraph affected src/renderer/App.tsx src/main/terminal.ts src/shared/types.ts src/renderer/types.ts src/shared/agent-session-restore.ts`
@@ -107,6 +109,10 @@ Open terminal, agent, browser, and editor tabs now persist in the renderer and a
 - Follow-up verification after agent restore metadata-only persistence: `npm test -- tests/agent-session-restore.test.ts tests/renderer-workflow.test.ts`
 - Follow-up verification after agent restore metadata-only persistence: `git diff --check -- src/renderer/App.tsx .sharkbay/tasks/T6R9P4-u3960864-m81ae10-restore-open-tabs.md`
 - Follow-up verification after agent restore metadata-only persistence: `npm run build`
+- Follow-up verification after normal-buffer snapshot change: `npm run typecheck`
+- Follow-up verification after normal-buffer snapshot change: `npm test -- tests/agent-session-restore.test.ts tests/renderer-workflow.test.ts`
+- Follow-up verification after normal-buffer snapshot change: `git diff --check -- src/renderer/App.tsx .sharkbay/tasks/T6R9P4-u3960864-m81ae10-restore-open-tabs.md`
+- Follow-up verification after normal-buffer snapshot change: `npm run build`
 
 ## Notes
 - Relevant team context includes agent session restore/session id handoff, per-session prompt history, shell history scoping, island tab restore behavior, and app exit cleanup ordering.
@@ -119,6 +125,11 @@ Open terminal, agent, browser, and editor tabs now persist in the renderer and a
 - User clarified expected model: record the shell tab's displayed content at persistence/quit time, not all historical shell I/O.
 - Agent tabs restore through agent CLI resume/restore commands; terminal buffer snapshots are only for non-agent terminal tabs.
 - Commit produced: `771f089a`.
+- Normal-buffer snapshot follow-up is currently uncommitted.
 
 ## Reviews
 - 通过（Approve）：实现与 Summary/Files/Work 一致，typecheck 与定向测试通过，无阻塞项；仅少量边缘情况与测试覆盖建议 — `.sharkbay/reviews/T6R9P4-XA5G69.md` (2026-06-22T11:13:58Z)
+
+## Artifacts
+- `.sharkbay/artifacts/T6R9P4-VV0DBR.html` — 展示重启后恢复 terminal、agent、browser、editor 标签页的最终交付、关键代码证据和验证记录 (2026-06-22T13:09:08Z)
+- 通过（Approve）：提交 771f089a 工作树干净，改动与 Summary/Files/Work 一致，typecheck 与 12 个定向测试全部通过，边界/分区/agent 元数据声明均经复核；无阻塞项，仅核心新逻辑缺单测与 alternate-screen 快照等次要建议 — `.sharkbay/reviews/T6R9P4-3F2MHQ.md` (2026-06-22T13:06:53Z)
