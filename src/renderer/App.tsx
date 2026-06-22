@@ -97,6 +97,8 @@ type HookSessionStateEntry = {
   lastPrompt?: string;
 };
 
+type HookSnapshotByTerminalId = Record<string, { sessionId: string; state: ProjectActivityState; timestampMs: number; lastPrompt?: string }>;
+
 type TerminalShellTab = {
   kind: "terminal";
   session: TerminalSession;
@@ -337,7 +339,7 @@ function readPersistedTerminalSpaces(): PersistedTerminalSpaces | null {
   }
 }
 
-function writePersistedTerminalSpaces(spaces: Record<string, TerminalSpace>): void {
+function writePersistedTerminalSpaces(spaces: Record<string, TerminalSpace>, hookSnapshotByTerminalId: HookSnapshotByTerminalId = {}): void {
   const payload: PersistedTerminalSpaces = {
     version: 1,
     spaces: Object.values(spaces)
@@ -351,13 +353,14 @@ function writePersistedTerminalSpaces(spaces: Record<string, TerminalSpace>): vo
         tabs: space.tabs.map((tab): PersistedTerminalTab | null => {
           const key = tabIdForTab(tab);
           if (tab.kind === "terminal") {
+            const hookSessionId = tab.hookSessionId ?? hookSnapshotByTerminalId[tab.session.id]?.sessionId;
             return {
               kind: "terminal",
               key,
               cwdUri: tab.session.currentCwdUri ?? tab.session.cwdUri,
               output: tab.session.agentId ? undefined : snapshotTerminalBuffer(tab.terminal),
               agentId: tab.session.agentId,
-              hookSessionId: tab.hookSessionId,
+              hookSessionId,
               service: tab.session.service,
             };
           }
@@ -1510,7 +1513,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       clearTimeout(persistTimer.current);
       persistTimer.current = null;
     }
-    writePersistedTerminalSpaces(spacesRef.current);
+    writePersistedTerminalSpaces(spacesRef.current, hookSnapshotByTerminalIdRef.current);
   }, []);
   const scheduleTerminalSpacesSnapshot = useCallback(() => {
     if (persistTimer.current) clearTimeout(persistTimer.current);
@@ -1623,7 +1626,10 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     if (restoredSpaces.current) scheduleTerminalSpacesSnapshot();
   }, [scheduleTerminalSpacesSnapshot, spaces]);
   useEffect(() => {
-    const flush = () => { if (restoredSpaces.current) writePersistedTerminalSpaces(spacesRef.current); };
+    if (restoredSpaces.current) scheduleTerminalSpacesSnapshot();
+  }, [hookSnapshotByTerminalId, scheduleTerminalSpacesSnapshot]);
+  useEffect(() => {
+    const flush = () => { if (restoredSpaces.current) writePersistedTerminalSpaces(spacesRef.current, hookSnapshotByTerminalIdRef.current); };
     window.addEventListener("beforeunload", flush);
     return () => {
       window.removeEventListener("beforeunload", flush);
@@ -1803,14 +1809,11 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
               availableAgents: agentClis,
               launchFlags: getAgentLaunchFlagsForRestore(tab.agentId),
             }) : null;
-            const agent = agentClis.find((item) => item.id === tab.agentId);
-            const initialCommand = restore?.command ?? (agent ? buildAgentLaunchCommand(agent) : null);
-            const initialCommandTitle = restore?.title ?? agent?.label;
-            if (initialCommand) {
+            if (restore) {
               terminalId = await openProjectTab(space.projectId, space.uri, space.projectName, space.displayPath, true, {
                 agentId: tab.agentId,
-                initialCommand,
-                initialCommandTitle,
+                initialCommand: restore.command,
+                initialCommandTitle: restore.title,
                 hookSessionId: tab.hookSessionId,
                 activate: false,
               });
