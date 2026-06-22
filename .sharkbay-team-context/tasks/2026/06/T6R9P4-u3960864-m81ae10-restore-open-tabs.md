@@ -12,10 +12,11 @@ agent: Codex GPT-5
 sessionId: 019eedf3-dd71-7dd3-8cb3-6b34baf8b812
 branch: main
 createdAt: 2026-06-22T10:52:32Z
-updatedAt: 2026-06-22T13:14:29Z
-completedAt: 2026-06-22T13:14:29Z
+updatedAt: 2026-06-22T13:16:12Z
+completedAt: 2026-06-22T13:16:12Z
 commits:
   - 771f089a
+  - 54e2159a
 ---
 
 ## Summary
@@ -62,6 +63,8 @@ Open terminal, agent, browser, and editor tabs now persist in the renderer and a
 - Committed restore behavior changes in `771f089a`.
 - Reopened task after audit follow-up to snapshot xterm normal buffer instead of active buffer when full-screen programs are running.
 - Changed terminal buffer snapshot collection to prefer xterm's normal buffer, falling back to active buffer only if normal is unavailable.
+- Preparing a follow-up commit for the normal-buffer snapshot change.
+- Committed normal-buffer snapshot follow-up in `54e2159a`.
 
 ## Verification
 - `codegraph affected src/renderer/App.tsx src/main/terminal.ts src/shared/types.ts src/renderer/types.ts src/shared/agent-session-restore.ts`
@@ -125,7 +128,7 @@ Open terminal, agent, browser, and editor tabs now persist in the renderer and a
 - User clarified expected model: record the shell tab's displayed content at persistence/quit time, not all historical shell I/O.
 - Agent tabs restore through agent CLI resume/restore commands; terminal buffer snapshots are only for non-agent terminal tabs.
 - Commit produced: `771f089a`.
-- Normal-buffer snapshot follow-up is currently uncommitted.
+- Follow-up commit produced: `54e2159a`.
 
 ## Reviews
 - 通过（Approve）：实现与 Summary/Files/Work 一致，typecheck 与定向测试通过，无阻塞项；仅少量边缘情况与测试覆盖建议 — `.sharkbay/reviews/T6R9P4-XA5G69.md` (2026-06-22T11:13:58Z)
