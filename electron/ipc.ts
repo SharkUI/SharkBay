@@ -25,9 +25,12 @@ import type {
   BrowserActionInput,
   BrowserCloseInput,
   BrowserCreateInput,
+  BrowserFindInput,
+  BrowserFoundInPageEvent,
   BrowserNavigateInput,
   BrowserResizeInput,
   BrowserSession,
+  BrowserStopFindInput,
   BrowserUpdateEvent,
   InstallToolInput,
   InstallToolResult,
@@ -380,6 +383,7 @@ export async function registerIpcHandlers(
   }
   agentSessionWatcher.removeAllListeners("status");
   browserManager.removeAllListeners("update");
+  browserManager.removeAllListeners("foundInPage");
   core.on("terminalData", (event) => {
     terminalApprovalDetector.feed(event.sessionId, event.data);
     BrowserWindow.getAllWindows().forEach((window) => {
@@ -517,6 +521,11 @@ export async function registerIpcHandlers(
   browserManager.on("update", (event: BrowserUpdateEvent) => {
     BrowserWindow.getAllWindows().forEach((window) => {
       window.webContents.send(channels.browserUpdate, event);
+    });
+  });
+  browserManager.on("foundInPage", (event: BrowserFoundInPageEvent) => {
+    BrowserWindow.getAllWindows().forEach((window) => {
+      window.webContents.send(channels.browserFoundInPage, event);
     });
   });
 
@@ -661,6 +670,14 @@ export async function registerIpcHandlers(
   handle<BrowserActionInput, BrowserSession>(channels.browserReload, (payload) =>
     Promise.resolve(browserManager.reload(payload))
   );
+  handle<BrowserFindInput, void>(channels.browserFind, (payload) => {
+    browserManager.find(payload);
+    return Promise.resolve();
+  });
+  handle<BrowserStopFindInput, void>(channels.browserStopFind, (payload) => {
+    browserManager.stopFind(payload);
+    return Promise.resolve();
+  });
   handle<TerminalCreateInput, TerminalSession>(channels.createTerminal, async (payload) => {
     const session = await requireCore().call("createTerminal", [runtime, payload]);
     if (session.pid != null && session.agentId) {

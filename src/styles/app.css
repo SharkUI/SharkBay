@@ -4158,6 +4158,70 @@ button.project-file-toggle:focus-visible {
   visibility: visible;
 }
 
+.search-overlay {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: min(360px, calc(100% - 16px));
+  padding: 5px 8px;
+  background: #fffdfa;
+  border: 1px solid #d7d2c8;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(38, 48, 52, 0.18);
+}
+
+.search-overlay-input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  color: #263034;
+  background: #f7f1e4;
+  border: 1px solid #d7d2c8;
+  border-radius: 6px;
+  font-size: 12px;
+  outline: none;
+}
+
+.search-overlay-input:focus {
+  border-color: #8aa6a0;
+}
+
+.search-overlay-count {
+  min-width: 44px;
+  text-align: right;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: #6b7378;
+}
+
+.search-overlay-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  color: #263034;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.search-overlay-button:hover:not(:disabled),
+.search-overlay-button:focus-visible {
+  background: #eef5f3;
+}
+
+.search-overlay-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .xterm-surface-stack {
   position: relative;
   overflow: hidden;
@@ -4369,6 +4433,7 @@ button.project-file-toggle:focus-visible {
 }
 
 .browser-view-host {
+  position: relative;
   min-height: 0;
   min-width: 0;
   background: #fffdfa;
@@ -5123,6 +5188,34 @@ body.is-resizing-columns .app-shell[data-theme="night"] .column-resizer::before 
   background: #0d1213;
 }
 
+.app-shell[data-theme="night"] .search-overlay {
+  background: #0d1213;
+  border-color: #2c3c3f;
+}
+
+.app-shell[data-theme="night"] .search-overlay-input {
+  border-color: #2c3c3f;
+  background: #1a2325;
+  color: #d9e5df;
+}
+
+.app-shell[data-theme="night"] .search-overlay-input:focus {
+  border-color: #93d7a4;
+}
+
+.app-shell[data-theme="night"] .search-overlay-count {
+  color: #6b7f78;
+}
+
+.app-shell[data-theme="night"] .search-overlay-button {
+  color: #d9e5df;
+}
+
+.app-shell[data-theme="night"] .search-overlay-button:hover:not(:disabled),
+.app-shell[data-theme="night"] .search-overlay-button:focus-visible {
+  background: #1a2325;
+}
+
 .app-shell[data-theme="night"] .prompt-input-textarea {
   border-color: #2c3c3f;
   background: #1a2325;
@@ -5321,6 +5414,34 @@ body.is-resizing-columns .app-shell[data-theme="morning"] .column-resizer::befor
 .app-shell[data-theme="morning"] .prompt-input-bar {
   border-top-color: #2b3f42;
   background: #0d1213;
+}
+
+.app-shell[data-theme="morning"] .search-overlay {
+  background: #0d1213;
+  border-color: #2b3f42;
+}
+
+.app-shell[data-theme="morning"] .search-overlay-input {
+  border-color: #2b3f42;
+  background: #1a2325;
+  color: #d9e5df;
+}
+
+.app-shell[data-theme="morning"] .search-overlay-input:focus {
+  border-color: #93d7a4;
+}
+
+.app-shell[data-theme="morning"] .search-overlay-count {
+  color: #8fa09c;
+}
+
+.app-shell[data-theme="morning"] .search-overlay-button {
+  color: #d9e5df;
+}
+
+.app-shell[data-theme="morning"] .search-overlay-button:hover:not(:disabled),
+.app-shell[data-theme="morning"] .search-overlay-button:focus-visible {
+  background: #1a2325;
 }
 
 .app-shell[data-theme="morning"] .prompt-input-textarea {

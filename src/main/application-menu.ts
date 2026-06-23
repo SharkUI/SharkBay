@@ -5,6 +5,7 @@ export type ApplicationMenuOptions = {
   isMac: boolean;
   openSettings: () => void;
   newTerminalTab: () => void;
+  openFind: () => void;
 };
 
 function createNewTerminalTabItem(newTerminalTab: () => void): MenuItemConstructorOptions {
@@ -12,6 +13,14 @@ function createNewTerminalTabItem(newTerminalTab: () => void): MenuItemConstruct
     label: "New Terminal Tab",
     accelerator: "CmdOrCtrl+T",
     click: newTerminalTab,
+  };
+}
+
+function createFindItem(openFind: () => void): MenuItemConstructorOptions {
+  return {
+    label: "Find",
+    accelerator: "CmdOrCtrl+F",
+    click: openFind,
   };
 }
 
@@ -23,7 +32,7 @@ function createSettingsItem(openSettings: () => void): MenuItemConstructorOption
   };
 }
 
-function createSharedMenus(newTerminalTab: () => void): MenuItemConstructorOptions[] {
+function createSharedMenus(newTerminalTab: () => void, openFind: () => void): MenuItemConstructorOptions[] {
   const fileMenu: MenuItemConstructorOptions = {
     label: "File",
     submenu: [createNewTerminalTabItem(newTerminalTab)],
@@ -41,6 +50,8 @@ function createSharedMenus(newTerminalTab: () => void): MenuItemConstructorOptio
       { role: "delete" },
       { type: "separator" },
       { role: "selectAll" },
+      { type: "separator" },
+      createFindItem(openFind),
     ],
   };
 
@@ -77,6 +88,7 @@ export function createApplicationMenuTemplate({
   isMac,
   openSettings,
   newTerminalTab,
+  openFind,
 }: ApplicationMenuOptions): MenuItemConstructorOptions[] {
   const settingsItem = createSettingsItem(openSettings);
   const newTerminalTabItem = createNewTerminalTabItem(newTerminalTab);
@@ -99,7 +111,7 @@ export function createApplicationMenuTemplate({
           { role: "quit" },
         ],
       },
-      ...createSharedMenus(newTerminalTab),
+      ...createSharedMenus(newTerminalTab, openFind),
     ];
   }
 
@@ -108,6 +120,6 @@ export function createApplicationMenuTemplate({
       label: "File",
       submenu: [newTerminalTabItem, { type: "separator" }, settingsItem, { type: "separator" }, { role: "quit" }],
     },
-    ...createSharedMenus(newTerminalTab).slice(1),
+    ...createSharedMenus(newTerminalTab, openFind).slice(1),
   ];
 }

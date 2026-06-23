@@ -732,6 +732,26 @@ export type BrowserActionInput = {
   browserId: string;
 };
 
+export type BrowserFindInput = {
+  browserId: string;
+  text: string;
+  forward?: boolean;
+  findNext?: boolean;
+  matchCase?: boolean;
+};
+
+export type BrowserStopFindInput = {
+  browserId: string;
+};
+
+export type BrowserFoundInPageEvent = {
+  browserId: string;
+  requestId: number;
+  activeMatchOrdinal: number;
+  matches: number;
+  finalUpdate: boolean;
+};
+
 export type BrowserSession = {
   id: string;
   title: string;

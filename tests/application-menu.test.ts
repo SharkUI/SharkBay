@@ -15,6 +15,7 @@ describe("application menu", () => {
       isMac: true,
       openSettings,
       newTerminalTab,
+      openFind: vi.fn(),
     });
 
     expect(template[0]?.label).toBe("SharkBay");
@@ -32,6 +33,7 @@ describe("application menu", () => {
       isMac: true,
       openSettings: vi.fn(),
       newTerminalTab,
+      openFind: vi.fn(),
     });
 
     const fileMenu = template.find((item) => item.label === "File");
@@ -48,6 +50,7 @@ describe("application menu", () => {
       isMac: false,
       openSettings: vi.fn(),
       newTerminalTab: vi.fn(),
+      openFind: vi.fn(),
     });
 
     expect(template[0]?.label).toBe("File");
@@ -66,6 +69,7 @@ describe("application menu", () => {
       isMac: false,
       openSettings: vi.fn(),
       newTerminalTab,
+      openFind: vi.fn(),
     });
 
     const newTerminal = submenu(template[0] ?? {})[0];
@@ -73,5 +77,23 @@ describe("application menu", () => {
     expect(newTerminal).toEqual(expect.objectContaining({ label: "New Terminal Tab", accelerator: "CmdOrCtrl+T" }));
     newTerminal?.click?.({} as never, undefined, {} as never);
     expect(newTerminalTab).toHaveBeenCalledTimes(1);
+  });
+
+  it("puts Find with CmdOrCtrl+F in the Edit menu", () => {
+    const openFind = vi.fn();
+    const template = createApplicationMenuTemplate({
+      appName: "SharkBay",
+      isMac: true,
+      openSettings: vi.fn(),
+      newTerminalTab: vi.fn(),
+      openFind,
+    });
+
+    const editMenu = template.find((item) => item.label === "Edit");
+    const find = submenu(editMenu ?? {}).find((item) => item.label === "Find");
+
+    expect(find).toEqual(expect.objectContaining({ accelerator: "CmdOrCtrl+F" }));
+    find?.click?.({} as never, undefined, {} as never);
+    expect(openFind).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,6 +1,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { CSSProperties, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal as XTerm } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
@@ -105,6 +106,7 @@ type TerminalShellTab = {
   hookSessionId?: string;
   terminal: XTerm;
   fitAddon: FitAddon;
+  searchAddon: SearchAddon;
   hoveredLink: { current: string | null };
   disposables: Disposable[];
 };
@@ -830,7 +832,7 @@ export function App() {
 
   useEffect(() => {
     if (!bridgeAvailable) return;
-    const unsubscribe = getBridge().app?.onOpenSettings?.(() => setView("settings"));
+    const unsubscribe = getBridge().app?.onOpenSettings?.(() => setView((current) => (current === "settings" ? "dashboard" : "settings")));
     return () => unsubscribe?.();
   }, [bridgeAvailable]);
 
@@ -1896,6 +1898,12 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     return () => unsubscribe?.();
   }, [canCreate, candidate?.displayPath, candidate?.id, candidate?.name, candidate?.uri, isVisible, projectAliases]);
 
+  const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    const unsubscribe = getBridge().app?.onOpenFind?.(() => setSearchOpen((open) => !open));
+    return () => unsubscribe?.();
+  }, []);
+
   async function openAgentProjectTab(agent: AgentCli) {
     if (!candidate?.uri) return;
     const launchCommand = buildAgentLaunchCommand(agent);
@@ -2050,7 +2058,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
           terminal.instance.write(output);
         }
       }
-      const tab: TerminalTab = { kind: "terminal", session, hookSessionId, terminal: terminal.instance, fitAddon: terminal.fitAddon, hoveredLink: terminal.hoveredLink, disposables: terminal.disposables };
+      const tab: TerminalTab = { kind: "terminal", session, hookSessionId, terminal: terminal.instance, fitAddon: terminal.fitAddon, searchAddon: terminal.searchAddon, hoveredLink: terminal.hoveredLink, disposables: terminal.disposables };
       if (activate) onActiveTabKindChange("terminal");
       setSpaces((current) => {
         const existing = current[projectId] ?? { projectId, projectName, uri: cwdUri, displayPath, tabs: [], activeId: null, serviceUrl: null };
@@ -2358,10 +2366,10 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                 const active = isVisible && space.projectId === activeProjectId && tabIdForTab(tab) === space.activeId;
                 const focusRequest = active && tabFocusRequest?.projectId === space.projectId ? tabFocusRequest.nonce : 0;
                 if (tab.kind === "terminal") {
-                  return <XTermSurface active={active} focusRequest={focusRequest} key={tab.session.id} tab={tab} onResize={(cols, rows) => void resizeTerminal(tab.session.id, cols, rows).catch((error) => setToast({ tone: "error", message: asMessage(error) }))} />;
+                  return <XTermSurface active={active} focusRequest={focusRequest} key={tab.session.id} showSearch={active && searchOpen} tab={tab} onCloseSearch={() => setSearchOpen(false)} onResize={(cols, rows) => void resizeTerminal(tab.session.id, cols, rows).catch((error) => setToast({ tone: "error", message: asMessage(error) }))} />;
                 }
                 if (tab.kind === "browser") {
-                  return <BrowserSurface active={active} focusRequest={focusRequest} key={tab.browser.id} layoutKey={browserLayoutKey} setToast={setToast} tab={tab} onAddressChange={(value) => updateBrowserAddress(tab.browser.id, value)} onBrowserUpdate={(browser) => updateBrowserSession(browser)} />;
+                  return <BrowserSurface active={active} focusRequest={focusRequest} key={tab.browser.id} layoutKey={browserLayoutKey} setToast={setToast} showSearch={active && searchOpen} tab={tab} onAddressChange={(value) => updateBrowserAddress(tab.browser.id, value)} onBrowserUpdate={(browser) => updateBrowserSession(browser)} onCloseSearch={() => setSearchOpen(false)} />;
                 }
                 return (
                   <EditorSurface
@@ -2434,7 +2442,9 @@ function BrowserSurface({
   layoutKey,
   onAddressChange,
   onBrowserUpdate,
+  onCloseSearch,
   setToast,
+  showSearch,
   tab,
 }: {
   active: boolean;
@@ -2442,12 +2452,17 @@ function BrowserSurface({
   layoutKey: string;
   onAddressChange: (value: string) => void;
   onBrowserUpdate: (browser: BrowserSession) => void;
+  onCloseSearch: () => void;
   setToast: (toast: Toast) => void;
+  showSearch: boolean;
   tab: BrowserTab;
 }) {
+  const searchInsetTop = active && showSearch ? searchOverlayInsetTop : 0;
   const hostRef = useRef<HTMLDivElement | null>(null);
   const shareButtonRef = useRef<HTMLButtonElement | null>(null);
   const [sharing, setSharing] = useState(false);
+  const searchInsetTopRef = useRef(searchInsetTop);
+  searchInsetTopRef.current = searchInsetTop;
 
   useEffect(() => {
     let frame = 0;
@@ -2455,6 +2470,11 @@ function BrowserSurface({
     const resize = () => {
       const bounds = active && hostRef.current ? browserBoundsForElement(hostRef.current) : hiddenBrowserBounds();
       if (active && (!bounds.width || !bounds.height)) return;
+      const inset = searchInsetTopRef.current;
+      if (active && inset > 0) {
+        bounds.y += inset;
+        bounds.height = Math.max(1, bounds.height - inset);
+      }
       void resizeBrowser(tab.browser.id, bounds, active).catch((error) => setToast({ tone: "error", message: asMessage(error) }));
     };
     const scheduleResize = () => {
@@ -2478,6 +2498,20 @@ function BrowserSurface({
   }, [active, layoutKey, setToast, tab.browser.id]);
 
   useEffect(() => {
+    if (!active) return;
+    const host = hostRef.current;
+    if (!host) return;
+    const bounds = browserBoundsForElement(host);
+    if (!bounds.width || !bounds.height) return;
+    const inset = searchInsetTopRef.current;
+    if (inset > 0) {
+      bounds.y += inset;
+      bounds.height = Math.max(1, bounds.height - inset);
+    }
+    void resizeBrowser(tab.browser.id, bounds, true).catch((error) => setToast({ tone: "error", message: asMessage(error) }));
+  }, [active, searchInsetTop, setToast, tab.browser.id]);
+
+  useEffect(() => {
     if (!active || !focusRequest) return;
     let frame = 0;
     let secondFrame = 0;
@@ -2485,6 +2519,11 @@ function BrowserSurface({
       secondFrame = window.requestAnimationFrame(() => {
         const bounds = hostRef.current ? browserBoundsForElement(hostRef.current) : hiddenBrowserBounds();
         if (!bounds.width || !bounds.height) return;
+        const inset = searchInsetTopRef.current;
+        if (inset > 0) {
+          bounds.y += inset;
+          bounds.height = Math.max(1, bounds.height - inset);
+        }
         void resizeBrowser(tab.browser.id, bounds, true).catch((error) => setToast({ tone: "error", message: asMessage(error) }));
       });
     });
@@ -2566,12 +2605,16 @@ function BrowserSurface({
           </div>
         ) : null}
       </div>
-      <div className="browser-view-host" ref={hostRef} />
+      <div className="browser-view-host" ref={hostRef}>
+        {showSearch ? (
+          <SearchOverlay target={{ kind: "browser", tabId: tab.browser.id, browserId: tab.browser.id }} onClose={onCloseSearch} />
+        ) : null}
+      </div>
     </div>
   );
 }
 
-function XTermSurface({ active, focusRequest, onResize, tab }: { active: boolean; focusRequest: number; onResize: (cols: number, rows: number) => void; tab: TerminalShellTab }) {
+function XTermSurface({ active, focusRequest, onResize, onCloseSearch, showSearch, tab }: { active: boolean; focusRequest: number; onResize: (cols: number, rows: number) => void; onCloseSearch: () => void; showSearch: boolean; tab: TerminalShellTab }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const openedRef = useRef(false);
   const onResizeRef = useRef(onResize);
@@ -2623,6 +2666,136 @@ function XTermSurface({ active, focusRequest, onResize, tab }: { active: boolean
           <button className="terminal-link-context-menu-item" type="button" onClick={() => { void navigator.clipboard.writeText(linkMenu.url); setLinkMenu(null); }}>Copy URL</button>
         </div>
       ) : null}
+      {showSearch ? (
+        <SearchOverlay target={{ kind: "terminal", tabId: tab.session.id, searchAddon: tab.searchAddon }} onClose={onCloseSearch} />
+      ) : null}
+    </div>
+  );
+}
+
+type SearchTarget =
+  | { kind: "terminal"; tabId: string; searchAddon: SearchAddon }
+  | { kind: "browser"; tabId: string; browserId: string };
+
+const terminalSearchDecorations = {
+  matchBackground: "#5c4a00",
+  matchOverviewRuler: "#d2a106",
+  activeMatchBackground: "#b07e00",
+  activeMatchColorOverviewRuler: "#ffcc00",
+};
+
+// Height reserved at the top of a browser view so the floating search overlay
+// (which a BrowserView would otherwise paint over) stays visible.
+const searchOverlayInsetTop = 48;
+
+function SearchOverlay({ target, onClose }: { target: SearchTarget; onClose: () => void }) {
+  const [query, setQuery] = useState("");
+  const [count, setCount] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const composingRef = useRef(false);
+
+  useEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    input.focus();
+    input.select();
+  }, [target.kind, target.tabId]);
+
+  useEffect(() => {
+    if (target.kind !== "terminal") return;
+    const subscription = target.searchAddon.onDidChangeResults(({ resultIndex, resultCount }) => {
+      setCount({ current: resultCount === 0 ? 0 : resultIndex + 1, total: resultCount });
+    });
+    return () => {
+      subscription.dispose();
+      target.searchAddon.clearDecorations();
+    };
+  }, [target.kind, target.tabId]);
+
+  useEffect(() => {
+    if (target.kind !== "browser") return;
+    const unsubscribe = getBridge().browser?.onFoundInPage?.((event) => {
+      if (event.browserId !== target.browserId) return;
+      setCount({ current: event.matches === 0 ? 0 : event.activeMatchOrdinal, total: event.matches });
+    });
+    return () => {
+      unsubscribe?.();
+      void getBridge().browser?.stopFind?.({ browserId: target.browserId });
+    };
+  }, [target.kind, target.tabId]);
+
+  const searchOptions = { decorations: terminalSearchDecorations, incremental: true };
+
+  function runSearch(nextQuery: string) {
+    if (target.kind === "terminal") {
+      if (!nextQuery) { target.searchAddon.clearDecorations(); setCount({ current: 0, total: 0 }); return; }
+      target.searchAddon.findNext(nextQuery, searchOptions);
+      return;
+    }
+    if (!nextQuery) { void getBridge().browser?.stopFind?.({ browserId: target.browserId }); setCount({ current: 0, total: 0 }); return; }
+    void getBridge().browser?.find?.({ browserId: target.browserId, text: nextQuery, findNext: false });
+  }
+
+  function findNext() {
+    if (!query) return;
+    if (target.kind === "terminal") target.searchAddon.findNext(query, searchOptions);
+    else void getBridge().browser?.find?.({ browserId: target.browserId, text: query, findNext: true, forward: true });
+  }
+
+  function findPrevious() {
+    if (!query) return;
+    if (target.kind === "terminal") target.searchAddon.findPrevious(query, searchOptions);
+    else void getBridge().browser?.find?.({ browserId: target.browserId, text: query, findNext: true, forward: false });
+  }
+
+  function handleChange(nextQuery: string) {
+    setQuery(nextQuery);
+    if (composingRef.current) return;
+    runSearch(nextQuery);
+  }
+
+  function handleCompositionEnd(value: string) {
+    composingRef.current = false;
+    setQuery(value);
+    runSearch(value);
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    const nativeEvent = event.nativeEvent as { isComposing?: boolean; keyCode?: number };
+    if (composingRef.current || nativeEvent.isComposing || event.keyCode === 229 || nativeEvent.keyCode === 229) return;
+    if (event.key === "Escape") { event.preventDefault(); onClose(); return; }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (event.shiftKey) findPrevious();
+      else findNext();
+    }
+  }
+
+  const countLabel = count.total ? `${count.current}/${count.total}` : query ? "0/0" : "";
+
+  return (
+    <div className="search-overlay">
+      <input
+        ref={inputRef}
+        className="search-overlay-input"
+        placeholder="Find"
+        spellCheck={false}
+        value={query}
+        onChange={(event) => handleChange(event.target.value)}
+        onCompositionStart={() => { composingRef.current = true; }}
+        onCompositionEnd={(event) => handleCompositionEnd(event.currentTarget.value)}
+        onKeyDown={handleKeyDown}
+      />
+      <span className="search-overlay-count">{countLabel}</span>
+      <button aria-label="Previous match" className="search-overlay-button" disabled={!query} title="Previous (Shift+Enter)" type="button" onClick={findPrevious}>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 10l4-4 4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </button>
+      <button aria-label="Next match" className="search-overlay-button" disabled={!query} title="Next (Enter)" type="button" onClick={findNext}>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </button>
+      <button aria-label="Close search" className="search-overlay-button" title="Close (Esc)" type="button" onClick={onClose}>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+      </button>
     </div>
   );
 }
@@ -2641,12 +2814,14 @@ function createXTerm(sessionId: string, appearanceTheme: AppearanceTheme, setToa
   const fontSize = termOpts?.fontSize || 12;
   const lineHeight = termOpts?.lineHeight || 1.2;
   const hoveredLink: { current: string | null } = { current: null };
-  const instance = new XTerm({ allowTransparency: false, cursorBlink: true, fontFamily, fontSize, lineHeight, scrollback: 5000, theme, linkHandler: { activate: (event, text) => { if (event.button === 0) onLinkClick?.(text); }, hover: (_event, text) => { hoveredLink.current = text; }, leave: () => { hoveredLink.current = null; } } });
+  const instance = new XTerm({ allowProposedApi: true, allowTransparency: false, cursorBlink: true, fontFamily, fontSize, lineHeight, scrollback: 5000, theme, linkHandler: { activate: (event, text) => { if (event.button === 0) onLinkClick?.(text); }, hover: (_event, text) => { hoveredLink.current = text; }, leave: () => { hoveredLink.current = null; } } });
   const fitAddon = new FitAddon();
   instance.loadAddon(fitAddon);
+  const searchAddon = new SearchAddon();
+  instance.loadAddon(searchAddon);
   instance.loadAddon(new WebLinksAddon((event, uri) => { if (event.button === 0) onLinkClick?.(uri); }, { hover: (_event, text) => { hoveredLink.current = text; }, leave: () => { hoveredLink.current = null; } }));
   const inputDisposable = instance.onData((data) => { onUserInput?.(); const fire = getBridge().terminal?.inputFire; if (fire) { fire({ sessionId, data }); } else { void sendTerminalInput(sessionId, data).catch((error) => setToast({ tone: "error", message: asMessage(error) })); } });
-  return { instance, fitAddon, hoveredLink, disposables: [inputDisposable] };
+  return { instance, fitAddon, searchAddon, hoveredLink, disposables: [inputDisposable] };
 }
 
 function findTerminalTab(spaces: Record<string, TerminalSpace>, sessionId: string): TerminalShellTab | null {

@@ -69,6 +69,10 @@ function sendNewTerminalTab(window: BrowserWindow): void {
   sendAppEvent(window, appChannels.newTerminalTab);
 }
 
+function sendOpenFind(window: BrowserWindow): void {
+  sendAppEvent(window, appChannels.openFind);
+}
+
 function openSettingsFromApplicationMenu(): void {
   if (!mainWindow || mainWindow.isDestroyed()) {
     mainWindow = createMainWindow();
@@ -97,12 +101,23 @@ function newTerminalTabFromApplicationMenu(): void {
   sendNewTerminalTab(mainWindow);
 }
 
+function openFindFromApplicationMenu(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  mainWindow.show();
+  mainWindow.focus();
+  sendOpenFind(mainWindow);
+}
+
 function installApplicationMenu(): void {
   const template = createApplicationMenuTemplate({
     appName: "SharkBay",
     isMac: process.platform === "darwin",
     openSettings: openSettingsFromApplicationMenu,
     newTerminalTab: newTerminalTabFromApplicationMenu,
+    openFind: openFindFromApplicationMenu,
   });
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));

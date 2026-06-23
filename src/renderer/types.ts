@@ -461,6 +461,26 @@ export type BrowserUpdateEvent = {
   browser: BrowserSession;
 };
 
+export type BrowserFindInput = {
+  browserId: string;
+  text: string;
+  forward?: boolean;
+  findNext?: boolean;
+  matchCase?: boolean;
+};
+
+export type BrowserStopFindInput = {
+  browserId: string;
+};
+
+export type BrowserFoundInPageEvent = {
+  browserId: string;
+  requestId: number;
+  activeMatchOrdinal: number;
+  matches: number;
+  finalUpdate: boolean;
+};
+
 export type TaskViewModel = {
   taskId: string;
   taskTag: string;
@@ -554,6 +574,7 @@ export type SharkBayBridge = {
     onOpenSettings?: (callback: () => void) => () => void;
     onNewTerminalTab?: (callback: () => void) => () => void;
     onFocusTerminalSession?: (callback: (id: string) => void) => () => void;
+    onOpenFind?: (callback: () => void) => () => void;
   };
   config?: {
     listRoots?: () => Promise<AppConfig | RootRecord[] | string[]>;
@@ -603,7 +624,10 @@ export type SharkBayBridge = {
     goBack?: (input: BrowserActionInput) => Promise<BrowserSession>;
     goForward?: (input: BrowserActionInput) => Promise<BrowserSession>;
     reload?: (input: BrowserActionInput) => Promise<BrowserSession>;
+    find?: (input: BrowserFindInput) => Promise<void>;
+    stopFind?: (input: BrowserStopFindInput) => Promise<void>;
     onUpdate?: (callback: (event: BrowserUpdateEvent) => void) => () => void;
+    onFoundInPage?: (callback: (event: BrowserFoundInPageEvent) => void) => () => void;
   };
   agents?: {
     listClis?: (input?: { cwdUri?: string }) => Promise<AgentCli[]>;

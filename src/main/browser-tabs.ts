@@ -6,9 +6,12 @@ import type {
   BrowserBounds,
   BrowserCloseInput,
   BrowserCreateInput,
+  BrowserFindInput,
+  BrowserFoundInPageEvent,
   BrowserNavigateInput,
   BrowserResizeInput,
   BrowserSession,
+  BrowserStopFindInput,
   BrowserUpdateEvent,
 } from "../shared/types.js";
 
@@ -25,6 +28,7 @@ type BrowserRecord = {
 
 type BrowserManagerEvents = {
   update: [BrowserUpdateEvent];
+  foundInPage: [BrowserFoundInPageEvent];
 };
 
 const blankUrl = "about:blank";
@@ -86,6 +90,15 @@ export class BrowserManager extends EventEmitter<BrowserManagerEvents> {
       record.url = normalizeBrowserUrl(url);
       record.title = view.webContents.getTitle().trim() || titleForUrl(record.url);
       this.emitUpdate(record);
+    });
+    view.webContents.on("found-in-page", (_event, result) => {
+      this.emit("foundInPage", {
+        browserId: record.id,
+        requestId: result.requestId,
+        activeMatchOrdinal: result.activeMatchOrdinal,
+        matches: result.matches,
+        finalUpdate: result.finalUpdate,
+      });
     });
 
     void view.webContents.loadURL(record.url);
@@ -163,6 +176,22 @@ export class BrowserManager extends EventEmitter<BrowserManagerEvents> {
     const record = this.requireRecord(input.browserId);
     record.view.webContents.reload();
     return publicBrowserSession(record);
+  }
+
+  find(input: BrowserFindInput): void {
+    const record = this.records.get(input.browserId);
+    if (!record || record.view.webContents.isDestroyed() || !input.text) return;
+    record.view.webContents.findInPage(input.text, {
+      forward: input.forward ?? true,
+      findNext: input.findNext ?? false,
+      matchCase: input.matchCase ?? false,
+    });
+  }
+
+  stopFind(input: BrowserStopFindInput): void {
+    const record = this.records.get(input.browserId);
+    if (!record || record.view.webContents.isDestroyed()) return;
+    record.view.webContents.stopFindInPage("clearSelection");
   }
 
   closeAll(): void {

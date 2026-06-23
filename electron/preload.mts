@@ -11,9 +11,12 @@ import type {
   BrowserActionInput,
   BrowserCloseInput,
   BrowserCreateInput,
+  BrowserFindInput,
+  BrowserFoundInPageEvent,
   BrowserNavigateInput,
   BrowserResizeInput,
   BrowserSession,
+  BrowserStopFindInput,
   BrowserUpdateEvent,
   CodeGraphProjectStatus,
   DeleteFileInput,
@@ -91,6 +94,7 @@ function createAppEventSubscription(channel: string) {
 
 const onOpenSettings = createAppEventSubscription(appChannels.openSettings);
 const onNewTerminalTab = createAppEventSubscription(appChannels.newTerminalTab);
+const onOpenFind = createAppEventSubscription(appChannels.openFind);
 
 const focusTerminalSessionListeners = new Set<(id: string) => void>();
 ipcRenderer.on(appChannels.focusTerminalSession, (_ev, id: string) => {
@@ -110,6 +114,7 @@ const sharkBayApi = {
     onOpenSettings,
     onNewTerminalTab,
     onFocusTerminalSession,
+    onOpenFind,
   },
   config: {
     listRoots: () => invoke<AppConfig>(channels.listRoots),
@@ -174,10 +179,17 @@ const sharkBayApi = {
     goBack: (input: BrowserActionInput) => invoke<BrowserSession>(channels.browserGoBack, input),
     goForward: (input: BrowserActionInput) => invoke<BrowserSession>(channels.browserGoForward, input),
     reload: (input: BrowserActionInput) => invoke<BrowserSession>(channels.browserReload, input),
+    find: (input: BrowserFindInput) => invoke<void>(channels.browserFind, input),
+    stopFind: (input: BrowserStopFindInput) => invoke<void>(channels.browserStopFind, input),
     onUpdate: (callback: (event: BrowserUpdateEvent) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: BrowserUpdateEvent) => callback(payload);
       ipcRenderer.on(channels.browserUpdate, listener);
       return () => ipcRenderer.removeListener(channels.browserUpdate, listener);
+    },
+    onFoundInPage: (callback: (event: BrowserFoundInPageEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: BrowserFoundInPageEvent) => callback(payload);
+      ipcRenderer.on(channels.browserFoundInPage, listener);
+      return () => ipcRenderer.removeListener(channels.browserFoundInPage, listener);
     }
   },
   agents: {
