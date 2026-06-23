@@ -33,6 +33,12 @@ const islandApi = {
   onCollapse(callback: () => void): void {
     ipcRenderer.on("island:collapse", () => callback());
   },
+  beginAutoCollapse(): void {
+    ipcRenderer.send("island:beginAutoCollapse");
+  },
+  cancelAutoCollapse(): void {
+    ipcRenderer.send("island:cancelAutoCollapse");
+  },
 };
 
 contextBridge.exposeInMainWorld("island", islandApi);

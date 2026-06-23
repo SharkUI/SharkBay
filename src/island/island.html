@@ -140,9 +140,9 @@ body.glow-on #glowRing { opacity: 1; }
 
 .session-list {
   flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; min-height: 0;
+  scrollbar-width: none; /* Firefox: hide scrollbar */
 }
-.session-list::-webkit-scrollbar { width: 4px; }
-.session-list::-webkit-scrollbar-thumb { background: rgba(241,234,217,0.15); border-radius: 2px; }
+.session-list::-webkit-scrollbar { display: none; } /* hide vertical scrollbar, keep scrollable */
 
 .session-row {
   display: flex; align-items: center; gap: 10px;
@@ -457,13 +457,31 @@ sessionList.addEventListener("click", (e) => {
   if (row && row.dataset.tid) window.island.focusSession(row.dataset.tid);
 });
 
+// Mirror the sound-notification trigger: auto-expand when any session leaves
+// the "working" state (working -> stopped/approval/unknown), so the same
+// moments that play a sound also surface the panel.
+function hasNewAttentionTransition(nextTabs) {
+  // Skip the first snapshot so pre-existing state on startup doesn't expand,
+  // mirroring notifySessionTransitions' gating.
+  if (!lastStateBySessionId.size) return false;
+  for (const tab of nextTabs) {
+    const previousState = lastStateBySessionId.get(tab.sessionId);
+    const nextState = tab.state || "unknown";
+    if (previousState === "working" && nextState !== "working") return true;
+  }
+  return false;
+}
+
 function handleTabs(newTabs) {
   const nextKey = aggregateState(newTabs);
+  // Capture before notifySessionTransitions updates the state snapshot.
+  const shouldAutoExpand = hasNewAttentionTransition(newTabs);
   notifySessionTransitions(newTabs);
   tabs = newTabs;
   renderPillTiles();
   updateMarkState(nextKey);
-  if (isOpen()) renderSessionList();
+  if (shouldAutoExpand && !isOpen()) open(true);
+  else if (isOpen()) renderSessionList();
 }
 
 function handlePreferences(preferences) {
@@ -483,7 +501,7 @@ function panelHeight() {
   return Math.min(content, MAX_PANEL_HEIGHT);
 }
 
-function open() {
+function open(auto = false) {
   const h = panelHeight();
   islandEl.style.height = (NOTCH_HEIGHT + h) + "px";
   window.island.setExpanded(true, NOTCH_HEIGHT + h);
@@ -491,6 +509,8 @@ function open() {
   islandEl.classList.add("opened");
   renderSessionList();
   updateMarkState();
+  // Only auto-expands arm the activity-based auto-collapse watch.
+  if (auto) window.island.beginAutoCollapse?.();
 }
 
 function close() {
@@ -498,6 +518,7 @@ function close() {
   islandEl.classList.add("closed");
   islandEl.style.height = "";
   updateMarkState();
+  window.island.cancelAutoCollapse?.();
   setTimeout(() => window.island.setExpanded(false, 0), 450);
 }
 
@@ -512,7 +533,9 @@ document.addEventListener("click", (e) => {
 let hoverTimer = null;
 islandEl.addEventListener("mouseenter", () => {
   window.island.setIgnoreMouseEvents(false);
-  if (islandEl.classList.contains("closed")) hoverTimer = setTimeout(open, 300);
+  // Hovering means the user is attending to the island: cancel auto-collapse.
+  window.island.cancelAutoCollapse?.();
+  if (islandEl.classList.contains("closed")) hoverTimer = setTimeout(() => open(false), 300);
 });
 islandEl.addEventListener("mouseleave", () => {
   window.island.setIgnoreMouseEvents(true);

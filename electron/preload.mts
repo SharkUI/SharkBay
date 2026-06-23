@@ -248,6 +248,7 @@ const sharkBayApi = {
     updateBadge: (count: number) => { ipcRenderer.send(channels.dockBadgeUpdate, count); },
     contentReady: () => { ipcRenderer.send(channels.contentReady); },
     syncIslandTabs: (tabs: Array<{ sessionId: string; title: string; projectName: string; agentId?: string; state: string; lastPrompt?: string }>) => { ipcRenderer.send(channels.islandTabsSync, tabs); },
+    notifyIslandKeyboardActivity: () => { ipcRenderer.send(channels.islandUserKeyboardActivity); },
   },
   shell: {
     openExternal: (input: { url: string }) => invoke<void>(channels.openExternal, input),

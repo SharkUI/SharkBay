@@ -1691,6 +1691,19 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     }
     getBridge().dock?.syncIslandTabs?.(tabs);
   }, [spaces, hookStateByTerminalId, hookSnapshotByTerminalId]);
+  // Forward main-window keyboard activity so the island can auto-collapse an
+  // auto-expanded panel while the user is typing (throttled to ~2/sec).
+  useEffect(() => {
+    let lastSent = 0;
+    const onKeyDown = () => {
+      const now = Date.now();
+      if (now - lastSent < 500) return;
+      lastSent = now;
+      getBridge().dock?.notifyIslandKeyboardActivity?.();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, []);
   useEffect(() => {
     const pending = pendingTerminalOutput.current;
     for (const [sessionId, data] of [...pending]) {

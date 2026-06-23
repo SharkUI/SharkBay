@@ -673,6 +673,7 @@ export type SharkBayBridge = {
     updateBadge?: (count: number) => void;
     contentReady?: () => void;
     syncIslandTabs?: (tabs: Array<{ sessionId: string; title: string; projectName: string; agentId?: string; state: string; lastPrompt?: string }>) => void;
+    notifyIslandKeyboardActivity?: () => void;
   };
   shell?: {
     openExternal?: (input: { url: string }) => Promise<void>;

@@ -70,6 +70,7 @@ export const ipcChannels = {
   islandGetAllSessions: "island:getAllSessions",
   islandFocusSession: "island:focusSession",
   islandTabsSync: "island:tabsSync",
+  islandUserKeyboardActivity: "island:userKeyboardActivity",
   recordSessionPrompt: "session:recordPrompt",
   recordPromptHistoryEntry: "session:recordPromptEntry",
   loadSessionPromptHistory: "session:loadPromptHistory",

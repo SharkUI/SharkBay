@@ -256,6 +256,72 @@ function createIslandWindow(config: Pick<AppConfig, "statusChangeNotificationsEn
     }
   });
 
+  // --- Auto-collapse after an auto-expand --------------------------------
+  // When the island auto-expands on an attention state, collapse it again if
+  // the user is active but ignores it: a mouse move without hovering the island
+  // -> 3s; any keyboard input in the main window -> 1s. Hovering the island (or
+  // a manual collapse) cancels the pending auto-collapse. Only auto-expands arm
+  // this; hover/click opens do not.
+  let autoCollapseActive = false;
+  let cursorPollTimer: NodeJS.Timeout | null = null;
+  let collapseTimer: NodeJS.Timeout | null = null;
+  let collapseDelay = Number.POSITIVE_INFINITY;
+  let lastCursorPoint: { x: number; y: number } | null = null;
+
+  function stopAutoCollapse(): void {
+    autoCollapseActive = false;
+    if (cursorPollTimer) { clearInterval(cursorPollTimer); cursorPollTimer = null; }
+    if (collapseTimer) { clearTimeout(collapseTimer); collapseTimer = null; }
+    collapseDelay = Number.POSITIVE_INFINITY;
+    lastCursorPoint = null;
+  }
+
+  function requestCollapse(delay: number): void {
+    if (!autoCollapseActive) return;
+    // Keep the soonest pending collapse; ignore later/equal requests.
+    if (collapseTimer && delay >= collapseDelay) return;
+    if (collapseTimer) clearTimeout(collapseTimer);
+    collapseDelay = delay;
+    collapseTimer = setTimeout(() => {
+      stopAutoCollapse();
+      if (!window.isDestroyed()) window.webContents.send("island:collapse");
+    }, delay);
+  }
+
+  function startAutoCollapse(): void {
+    stopAutoCollapse();
+    autoCollapseActive = true;
+    lastCursorPoint = screen.getCursorScreenPoint();
+    cursorPollTimer = setInterval(() => {
+      if (!autoCollapseActive || window.isDestroyed()) return;
+      const point = screen.getCursorScreenPoint();
+      const b = window.getBounds();
+      const insideIsland =
+        point.x >= b.x && point.x <= b.x + b.width &&
+        point.y >= b.y && point.y <= b.y + b.height;
+      if (insideIsland) {
+        // Cursor over the island counts as hovering: user is attending, cancel.
+        stopAutoCollapse();
+        return;
+      }
+      const moved = !lastCursorPoint || point.x !== lastCursorPoint.x || point.y !== lastCursorPoint.y;
+      lastCursorPoint = point;
+      if (moved) requestCollapse(3000);
+    }, 250);
+  }
+
+  ipcMain.on("island:beginAutoCollapse", () => {
+    if (window.isDestroyed()) return;
+    startAutoCollapse();
+  });
+  ipcMain.on("island:cancelAutoCollapse", () => {
+    stopAutoCollapse();
+  });
+  ipcMain.on(channels.islandUserKeyboardActivity, () => {
+    if (autoCollapseActive) requestCollapse(1000);
+  });
+  window.on("closed", () => stopAutoCollapse());
+
   window.setIgnoreMouseEvents(true, { forward: true });
 
   return window;
