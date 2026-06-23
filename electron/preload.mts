@@ -18,6 +18,7 @@ import type {
   BrowserSession,
   BrowserStopFindInput,
   BrowserUpdateEvent,
+  FindPopoverOpenInput,
   CodeGraphProjectStatus,
   DeleteFileInput,
   DeleteFileResult,
@@ -95,6 +96,7 @@ function createAppEventSubscription(channel: string) {
 const onOpenSettings = createAppEventSubscription(appChannels.openSettings);
 const onNewTerminalTab = createAppEventSubscription(appChannels.newTerminalTab);
 const onOpenFind = createAppEventSubscription(appChannels.openFind);
+const onFindClosed = createAppEventSubscription(appChannels.findClosed);
 
 const focusTerminalSessionListeners = new Set<(id: string) => void>();
 ipcRenderer.on(appChannels.focusTerminalSession, (_ev, id: string) => {
@@ -115,6 +117,7 @@ const sharkBayApi = {
     onNewTerminalTab,
     onFocusTerminalSession,
     onOpenFind,
+    onFindClosed,
   },
   config: {
     listRoots: () => invoke<AppConfig>(channels.listRoots),
@@ -181,6 +184,8 @@ const sharkBayApi = {
     reload: (input: BrowserActionInput) => invoke<BrowserSession>(channels.browserReload, input),
     find: (input: BrowserFindInput) => invoke<void>(channels.browserFind, input),
     stopFind: (input: BrowserStopFindInput) => invoke<void>(channels.browserStopFind, input),
+    openFindPopover: (input: FindPopoverOpenInput) => invoke<void>(channels.findPopoverOpen, input),
+    closeFindPopover: () => invoke<void>(channels.findPopoverClose),
     onUpdate: (callback: (event: BrowserUpdateEvent) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: BrowserUpdateEvent) => callback(payload);
       ipcRenderer.on(channels.browserUpdate, listener);

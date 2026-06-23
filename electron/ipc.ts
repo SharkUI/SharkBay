@@ -32,6 +32,7 @@ import type {
   BrowserSession,
   BrowserStopFindInput,
   BrowserUpdateEvent,
+  FindPopoverOpenInput,
   InstallToolInput,
   InstallToolResult,
   InstallRecipe,
@@ -77,6 +78,8 @@ import type {
   TerminalUpdateEvent
 } from "../src/shared/types.js";
 import { ipcChannels as channels } from "../src/shared/ipc-channels.js";
+import { appChannels } from "../src/shared/app-events.js";
+import { closeFindPopover, isFindPopoverOpen, sendFindResult, showFindPopover } from "./find-popover.js";
 import { toLocalProjectUri } from "../src/core/project-uri.js";
 import { CODEGRAPH_PLUGIN_ID } from "../src/plugins/bundled/codegraph-detector.js";
 import { AgentSessionWatcher } from "../src/main/agent-clis.js";
@@ -121,6 +124,8 @@ let core: CoreClient | null = null;
 let tokenUsageDb: TokenUsageDb | null = null;
 const agentSessionWatcher = new AgentSessionWatcher();
 const browserManager = new BrowserManager();
+let activeFindBrowserId: string | null = null;
+let lastFindQuery = "";
 
 const hookBridge = new HookBridge();
 const hookStateManager = new AgentHookStateManager();
@@ -226,6 +231,7 @@ function requireCore(): CoreClient {
 export async function shutdownCore(): Promise<void> {
   await core?.dispose();
   browserManager.closeAll();
+  closeFindPopover();
   for (const sync of syncInstances.values()) sync.stop();
   syncInstances.clear();
   for (const cleanup of taskWatcherCleanups.values()) cleanup();
@@ -527,6 +533,9 @@ export async function registerIpcHandlers(
     BrowserWindow.getAllWindows().forEach((window) => {
       window.webContents.send(channels.browserFoundInPage, event);
     });
+    if (isFindPopoverOpen() && event.browserId === activeFindBrowserId) {
+      sendFindResult({ current: event.matches === 0 ? 0 : event.activeMatchOrdinal, total: event.matches });
+    }
   });
 
   handle<void, AppConfig>(channels.listRoots, () => getConfiguredRoots(runtime));
@@ -677,6 +686,45 @@ export async function registerIpcHandlers(
   handle<BrowserStopFindInput, void>(channels.browserStopFind, (payload) => {
     browserManager.stopFind(payload);
     return Promise.resolve();
+  });
+  ipcMain.removeHandler(channels.findPopoverOpen);
+  ipcMain.handle(channels.findPopoverOpen, (event, payload: FindPopoverOpenInput) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window) return;
+    activeFindBrowserId = payload.browserId;
+    lastFindQuery = "";
+    browserManager.stopFind({ browserId: payload.browserId });
+    showFindPopover(window, { anchor: payload.anchor, theme: payload.theme });
+  });
+  handle<void, void>(channels.findPopoverClose, () => {
+    closeFindPopover();
+    if (activeFindBrowserId) browserManager.stopFind({ browserId: activeFindBrowserId });
+    activeFindBrowserId = null;
+    lastFindQuery = "";
+    return Promise.resolve();
+  });
+  ipcMain.on(channels.findPopoverQuery, (_event, text: string) => {
+    if (!activeFindBrowserId) return;
+    lastFindQuery = typeof text === "string" ? text : "";
+    if (!lastFindQuery) {
+      browserManager.stopFind({ browserId: activeFindBrowserId });
+      sendFindResult({ current: 0, total: 0 });
+      return;
+    }
+    browserManager.find({ browserId: activeFindBrowserId, text: lastFindQuery, findNext: false });
+  });
+  ipcMain.on(channels.findPopoverStep, (_event, forward: boolean) => {
+    if (!activeFindBrowserId || !lastFindQuery) return;
+    browserManager.find({ browserId: activeFindBrowserId, text: lastFindQuery, findNext: true, forward: forward !== false });
+  });
+  ipcMain.on(channels.findPopoverDismiss, () => {
+    closeFindPopover();
+    if (activeFindBrowserId) browserManager.stopFind({ browserId: activeFindBrowserId });
+    activeFindBrowserId = null;
+    lastFindQuery = "";
+    BrowserWindow.getAllWindows().forEach((window) => {
+      if (!window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send(appChannels.findClosed);
+    });
   });
   handle<TerminalCreateInput, TerminalSession>(channels.createTerminal, async (payload) => {
     const session = await requireCore().call("createTerminal", [runtime, payload]);

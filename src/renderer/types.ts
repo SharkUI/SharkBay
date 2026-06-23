@@ -481,6 +481,14 @@ export type BrowserFoundInPageEvent = {
   finalUpdate: boolean;
 };
 
+export type FindPopoverAnchor = { x: number; y: number; width: number; height: number };
+
+export type FindPopoverOpenInput = {
+  browserId: string;
+  anchor: FindPopoverAnchor;
+  theme?: string;
+};
+
 export type TaskViewModel = {
   taskId: string;
   taskTag: string;
@@ -575,6 +583,7 @@ export type SharkBayBridge = {
     onNewTerminalTab?: (callback: () => void) => () => void;
     onFocusTerminalSession?: (callback: (id: string) => void) => () => void;
     onOpenFind?: (callback: () => void) => () => void;
+    onFindClosed?: (callback: () => void) => () => void;
   };
   config?: {
     listRoots?: () => Promise<AppConfig | RootRecord[] | string[]>;
@@ -626,6 +635,8 @@ export type SharkBayBridge = {
     reload?: (input: BrowserActionInput) => Promise<BrowserSession>;
     find?: (input: BrowserFindInput) => Promise<void>;
     stopFind?: (input: BrowserStopFindInput) => Promise<void>;
+    openFindPopover?: (input: FindPopoverOpenInput) => Promise<void>;
+    closeFindPopover?: () => Promise<void>;
     onUpdate?: (callback: (event: BrowserUpdateEvent) => void) => () => void;
     onFoundInPage?: (callback: (event: BrowserFoundInPageEvent) => void) => () => void;
   };

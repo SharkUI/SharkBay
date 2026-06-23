@@ -752,6 +752,16 @@ export type BrowserFoundInPageEvent = {
   finalUpdate: boolean;
 };
 
+export type FindPopoverAnchor = { x: number; y: number; width: number; height: number };
+
+export type FindPopoverOpenInput = {
+  browserId: string;
+  anchor: FindPopoverAnchor;
+  theme?: string;
+};
+
+export type FindPopoverResult = { current: number; total: number };
+
 export type BrowserSession = {
   id: string;
   title: string;

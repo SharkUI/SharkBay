@@ -3,4 +3,5 @@ export const appChannels = {
   newTerminalTab: "app:newTerminalTab",
   focusTerminalSession: "app:focusTerminalSession",
   openFind: "app:openFind",
+  findClosed: "app:findClosed",
 } as const;
