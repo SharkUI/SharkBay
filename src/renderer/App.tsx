@@ -1509,6 +1509,17 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   }, [hookSnapshotByTerminalId]);
   const hookSnapshotByTerminalIdRef = useRef(hookSnapshotByTerminalId);
   useEffect(() => { hookSnapshotByTerminalIdRef.current = hookSnapshotByTerminalId; }, [hookSnapshotByTerminalId]);
+  // Let the async tab-restore loop read the latest agentClis/candidate without listing them
+  // as effect deps; otherwise a benign re-render (e.g. the startup agent-CLI re-scan once the
+  // selected project loads) would re-run the restore effect and abort an in-flight restore.
+  const agentClisRef = useRef(agentClis);
+  useEffect(() => { agentClisRef.current = agentClis; }, [agentClis]);
+  const candidateRef = useRef(candidate);
+  useEffect(() => { candidateRef.current = candidate; }, [candidate]);
+  // True for the component's lifetime; set false only on a real unmount so restore aborts on
+  // unmount but survives benign re-renders.
+  const restoreMountedRef = useRef(true);
+  useEffect(() => { restoreMountedRef.current = true; return () => { restoreMountedRef.current = false; }; }, []);
   const clearAgentSessionsForTerminal = useCallback((terminalId: string) => {
     const sessionIds = new Set<string>();
     for (const [sid, tid] of Object.entries(agentSessionToTerminalRef.current)) {
@@ -1571,6 +1582,16 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const clearStoppedTerminalSession = useCallback((terminalId: string): boolean => {
     if (hookSnapshotByTerminalIdRef.current[terminalId]?.state !== "stopped") return false;
     clearAgentSessionsForTerminal(terminalId);
+    return true;
+  }, [clearAgentSessionsForTerminal]);
+
+  // Clicking a session in the island acknowledges it: clear stopped OR approval
+  // for that terminal immediately and cancel any pending delayed auto-clear.
+  const clearAttentionTerminalSession = useCallback((terminalId: string): boolean => {
+    const state = hookSnapshotByTerminalIdRef.current[terminalId]?.state;
+    if (state !== "stopped" && state !== "approval") return false;
+    clearAgentSessionsForTerminal(terminalId);
+    if (clearTimerRef.current) { clearTimeout(clearTimerRef.current); clearTimerRef.current = null; }
     return true;
   }, [clearAgentSessionsForTerminal]);
 
@@ -1786,10 +1807,9 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     const snapshot = persisted;
     restoredSpaces.current = true;
 
-    let cancelled = false;
     async function restoreSpaces() {
       for (const space of snapshot.spaces) {
-        if (cancelled) return;
+        if (!restoreMountedRef.current) return;
         setSpaces((current) => {
           if (current[space.projectId]) return current;
           return {
@@ -1808,7 +1828,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
 
         const restoredIds = new Map<string, string>();
         for (const tab of space.tabs) {
-          if (cancelled) return;
+          if (!restoreMountedRef.current) return;
           if (tab.kind === "browser") {
             const browserId = await openBrowserTab(space.projectId, space.uri, space.projectName, space.displayPath, tab.url, false);
             if (browserId) restoredIds.set(tab.key, browserId);
@@ -1832,7 +1852,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
             const restore = tab.hookSessionId ? buildAgentSessionRestoreCommand({
               agentName: tab.agentId,
               sessionId: tab.hookSessionId,
-              availableAgents: agentClis,
+              availableAgents: agentClisRef.current,
               launchFlags: getAgentLaunchFlagsForRestore(tab.agentId),
             }) : null;
             if (restore) {
@@ -1871,15 +1891,14 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
         }
       }
       flushTerminalSpacesSnapshot();
-      if (!cancelled) {
-        setActiveProjectId(candidate?.id ?? snapshot.spaces[0]?.projectId ?? null);
+      if (restoreMountedRef.current) {
+        setActiveProjectId(candidateRef.current?.id ?? snapshot.spaces[0]?.projectId ?? null);
         setTerminalSpacesRestored(true);
       }
     }
 
     void restoreSpaces();
-    return () => { cancelled = true; };
-  }, [agentClis, agentClisReady, bridgeAvailable, candidate?.id, flushTerminalSpacesSnapshot]);
+  }, [agentClisReady, bridgeAvailable, flushTerminalSpacesSnapshot]);
 
   useEffect(() => {
     if (!candidate?.uri || !bridgeAvailable) { if (!candidate) setActiveProjectId(null); return; }
@@ -1964,6 +1983,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       const match = findTerminalTabWithSpace(spacesRef.current, terminalSessionId);
       if (match) {
         setActiveTab(match.space.projectId, match.tab.session.id);
+        clearAttentionTerminalSession(match.tab.session.id);
         return match.space.projectId;
       }
       return null;
