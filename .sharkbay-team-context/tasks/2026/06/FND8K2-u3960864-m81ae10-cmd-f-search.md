@@ -12,10 +12,11 @@ agent: Kiro Claude Opus 4.8
 sessionId: 6e6d3878-d19c-4c90-84f7-a01416b75adb
 branch: main
 createdAt: 2026-06-23T08:52:23Z
-updatedAt: 2026-06-23T12:46:24Z
-completedAt: 2026-06-23T12:46:24Z
+updatedAt: 2026-06-23T15:12:05Z
+completedAt: 2026-06-23T15:12:05Z
 commits:
   - 88951968
+  - 646db6d3
 ---
 
 ## Summary
@@ -98,3 +99,27 @@ application-menu accelerator. Requirement 1 only; history-locate (req 2) deferre
   every render, so any parent re-render re-ran them and re-focused the input (and
   re-ran clearDecorations/stopFind). Changed deps to stable primitives
   [target.kind, target.tabId] so they only run on tab change / first open.
+- Follow-up (post-commit 88951968, uncommitted): added 1s debounce so search runs
+  after a pause or on Enter instead of on every keystroke (SearchOverlay:
+  scheduleSearch + clearPending; Enter/next/prev cancel pending and run now;
+  IME composition still respected). Reopened task (status active).
+- Note: tests/ipc-channels.test.ts was broken by an unrelated teammate commit
+  67680959 (island auto-expand) which added channel islandUserKeyboardActivity to
+  src/shared/ipc-channels.ts without updating the snapshot test. Added the missing
+  channel to the test so the suite is green again.
+- PENDING (request from user): make the browser find bar a compact native popover
+  window (like share-popover) instead of the full-width BrowserView top-inset strip,
+  and unify the find UI form. Design tradeoff to confirm: terminal search runs in
+  the renderer (xterm SearchAddon) while browser is a native BrowserView, so a single
+  native window for BOTH requires cross-window relay; simplest is a native popover
+  for the browser (main-driven via existing findInPage) + keep the terminal's
+  in-window bar styled identically. Awaiting confirmation before building.
+- DONE (Option A, uncommitted): browser find bar is now a native popover window
+  (electron/find-popover.ts + find-popover-preload.mts), styled like the terminal
+  bar, floating top-right over the BrowserView (no more full-width inset strip).
+  Driven by main via the existing browserManager.findInPage; popover has its own 1s
+  debounce + IME handling + Enter/Shift+Enter/Esc. Renderer drives open/close from
+  TerminalWorkspace; main relays found-in-page counts to the popover and a findClosed
+  app event resets searchOpen. Terminal keeps its in-window SearchOverlay (styled the
+  same). BrowserSurface inset logic reverted. typecheck/build/212 tests pass.
+  NOT runtime-verified (multi-window IPC + data-URL popover); needs a manual smoke test.
