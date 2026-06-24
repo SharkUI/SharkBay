@@ -1947,12 +1947,12 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     setSearchOpen(false);
   }, [selectedSpace?.activeId, activeProjectId]);
 
-  const activeBrowserFindId = (() => {
+  const activeBrowserFindId = useMemo(() => {
     const space = selectedSpace;
     if (!space || !isVisible || space.projectId !== activeProjectId) return null;
     const activeTab = space.tabs.find((tab) => tabIdForTab(tab) === space.activeId);
     return activeTab && activeTab.kind === "browser" ? activeTab.browser.id : null;
-  })();
+  }, [selectedSpace, isVisible, activeProjectId]);
 
   useEffect(() => {
     if (searchOpen && activeBrowserFindId) {
@@ -2698,15 +2698,11 @@ function XTermSurface({ active, focusRequest, onResize, onCloseSearch, showSearc
         </div>
       ) : null}
       {showSearch ? (
-        <SearchOverlay target={{ kind: "terminal", tabId: tab.session.id, searchAddon: tab.searchAddon }} onClose={onCloseSearch} />
+        <SearchOverlay searchAddon={tab.searchAddon} tabId={tab.session.id} onClose={onCloseSearch} />
       ) : null}
     </div>
   );
 }
-
-type SearchTarget =
-  | { kind: "terminal"; tabId: string; searchAddon: SearchAddon }
-  | { kind: "browser"; tabId: string; browserId: string };
 
 const terminalSearchDecorations = {
   matchBackground: "#5c4a00",
@@ -2715,7 +2711,7 @@ const terminalSearchDecorations = {
   activeMatchColorOverviewRuler: "#ffcc00",
 };
 
-function SearchOverlay({ target, onClose }: { target: SearchTarget; onClose: () => void }) {
+function SearchOverlay({ searchAddon, tabId, onClose }: { searchAddon: SearchAddon; tabId: string; onClose: () => void }) {
   const [query, setQuery] = useState("");
   const [count, setCount] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -2728,30 +2724,17 @@ function SearchOverlay({ target, onClose }: { target: SearchTarget; onClose: () 
     if (!input) return;
     input.focus();
     input.select();
-  }, [target.kind, target.tabId]);
+  }, [tabId]);
 
   useEffect(() => {
-    if (target.kind !== "terminal") return;
-    const subscription = target.searchAddon.onDidChangeResults(({ resultIndex, resultCount }) => {
+    const subscription = searchAddon.onDidChangeResults(({ resultIndex, resultCount }) => {
       setCount({ current: resultCount === 0 ? 0 : resultIndex + 1, total: resultCount });
     });
     return () => {
       subscription.dispose();
-      target.searchAddon.clearDecorations();
+      searchAddon.clearDecorations();
     };
-  }, [target.kind, target.tabId]);
-
-  useEffect(() => {
-    if (target.kind !== "browser") return;
-    const unsubscribe = getBridge().browser?.onFoundInPage?.((event) => {
-      if (event.browserId !== target.browserId) return;
-      setCount({ current: event.matches === 0 ? 0 : event.activeMatchOrdinal, total: event.matches });
-    });
-    return () => {
-      unsubscribe?.();
-      void getBridge().browser?.stopFind?.({ browserId: target.browserId });
-    };
-  }, [target.kind, target.tabId]);
+  }, [tabId]);
 
   const searchOptions = { decorations: terminalSearchDecorations, incremental: true };
 
@@ -2766,27 +2749,18 @@ function SearchOverlay({ target, onClose }: { target: SearchTarget; onClose: () 
   }
 
   function runSearch(nextQuery: string) {
-    if (target.kind === "terminal") {
-      if (!nextQuery) { target.searchAddon.clearDecorations(); setCount({ current: 0, total: 0 }); return; }
-      target.searchAddon.findNext(nextQuery, searchOptions);
-      return;
-    }
-    if (!nextQuery) { void getBridge().browser?.stopFind?.({ browserId: target.browserId }); setCount({ current: 0, total: 0 }); return; }
-    void getBridge().browser?.find?.({ browserId: target.browserId, text: nextQuery, findNext: false });
+    if (!nextQuery) { searchAddon.clearDecorations(); setCount({ current: 0, total: 0 }); return; }
+    searchAddon.findNext(nextQuery, searchOptions);
   }
 
   function findNext() {
     clearPending();
-    if (!query) return;
-    if (target.kind === "terminal") target.searchAddon.findNext(query, searchOptions);
-    else void getBridge().browser?.find?.({ browserId: target.browserId, text: query, findNext: true, forward: true });
+    if (query) searchAddon.findNext(query, searchOptions);
   }
 
   function findPrevious() {
     clearPending();
-    if (!query) return;
-    if (target.kind === "terminal") target.searchAddon.findPrevious(query, searchOptions);
-    else void getBridge().browser?.find?.({ browserId: target.browserId, text: query, findNext: true, forward: false });
+    if (query) searchAddon.findPrevious(query, searchOptions);
   }
 
   function handleChange(nextQuery: string) {

@@ -71,7 +71,7 @@
         if (d && (d.theme === "night" || d.theme === "morning")) {
           var s = document.documentElement.style;
           s.setProperty("--bg", "#0d1213");
-          s.setProperty("--border", "#2c3c3f");
+          s.setProperty("--border", d.theme === "morning" ? "#2b3f42" : "#2c3c3f");
           s.setProperty("--text", "#d9e5df");
           s.setProperty("--input-bg", "#1a2325");
           s.setProperty("--muted", "#8fa09c");
