@@ -12,11 +12,12 @@ agent: Kiro Claude Opus 4.8
 sessionId: 6e6d3878-d19c-4c90-84f7-a01416b75adb
 branch: main
 createdAt: 2026-06-23T08:52:23Z
-updatedAt: 2026-06-23T15:12:05Z
-completedAt: 2026-06-23T15:12:05Z
+updatedAt: 2026-06-24T06:22:42Z
+completedAt: 2026-06-24T06:22:42Z
 commits:
   - 88951968
   - 646db6d3
+  - d7f19d4a
 ---
 
 ## Summary
@@ -123,3 +124,23 @@ application-menu accelerator. Requirement 1 only; history-locate (req 2) deferre
   app event resets searchOpen. Terminal keeps its in-window SearchOverlay (styled the
   same). BrowserSurface inset logic reverted. typecheck/build/212 tests pass.
   NOT runtime-verified (multi-window IPC + data-URL popover); needs a manual smoke test.
+- Committed as 646db6d3 (debounce + browser find popover + ipc-channels test fix).
+  Note: the intermediate refinements from this task (allowProposedApi fix, IME fix,
+  theme overrides, anti-flicker floating overlay, focus-dep fix, Cmd+F/Cmd+, toggle)
+  were inadvertently swept into the concurrent island commits 67680959 and 6d51cf01
+  (they landed on main between this task's two explicit commits), so they are not
+  listed under `commits` but are part of this task's change set.
+- Follow-up (uncommitted): user reports the browser popover match count (e.g. "1/3")
+  never appears even though search works; terminal count is fine. Converted the
+  popover from a data: URL to a real HTML file (src/find-popover/find-popover.html)
+  via loadFile (proven island pattern) and added src/find-popover/** to the
+  electron-builder files list. typecheck/build/212 tests pass; needs a runtime smoke
+  test to confirm the count now shows.
+- ROOT CAUSE FOUND (runtime logs): the popover count was blank because findInPage
+  emitted no `found-in-page` event — Electron only fires it when the page's
+  webContents is focused, and the find UI is a separate popover window that holds OS
+  focus. Fix: BrowserManager.find() calls record.view.webContents.focus() before
+  findInPage. Confirmed via logs: found-in-page then fires (matches=3) and
+  sendFindResult {current:1,total:3} reaches the popover. On macOS this focus() does
+  NOT pull keyboard focus off the popover (user typed sequential queries fine).
+  Diagnostic logging removed afterwards. typecheck/build/212 tests pass.
