@@ -1941,6 +1941,12 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     return () => unsubscribe?.();
   }, []);
 
+  // Find belongs to the tab that opened it: close it when the active tab (or
+  // project) changes so it doesn't follow the user to another tab.
+  useEffect(() => {
+    setSearchOpen(false);
+  }, [selectedSpace?.activeId, activeProjectId]);
+
   const activeBrowserFindId = (() => {
     const space = selectedSpace;
     if (!space || !isVisible || space.projectId !== activeProjectId) return null;

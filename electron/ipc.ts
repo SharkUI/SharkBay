@@ -79,7 +79,7 @@ import type {
 } from "../src/shared/types.js";
 import { ipcChannels as channels } from "../src/shared/ipc-channels.js";
 import { appChannels } from "../src/shared/app-events.js";
-import { closeFindPopover, isFindPopoverOpen, sendFindResult, showFindPopover } from "./find-popover.js";
+import { closeFindPopover, focusFindPopover, isFindPopoverOpen, sendFindResult, showFindPopover } from "./find-popover.js";
 import { toLocalProjectUri } from "../src/core/project-uri.js";
 import { CODEGRAPH_PLUGIN_ID } from "../src/plugins/bundled/codegraph-detector.js";
 import { AgentSessionWatcher } from "../src/main/agent-clis.js";
@@ -126,6 +126,7 @@ const agentSessionWatcher = new AgentSessionWatcher();
 const browserManager = new BrowserManager();
 let activeFindBrowserId: string | null = null;
 let lastFindQuery = "";
+let refocusPopoverOnResult = false;
 
 const hookBridge = new HookBridge();
 const hookStateManager = new AgentHookStateManager();
@@ -533,8 +534,12 @@ export async function registerIpcHandlers(
     BrowserWindow.getAllWindows().forEach((window) => {
       window.webContents.send(channels.browserFoundInPage, event);
     });
-    if (isFindPopoverOpen() && event.browserId === activeFindBrowserId) {
+    if (isFindPopoverOpen() && activeFindBrowserId) {
       sendFindResult({ current: event.matches === 0 ? 0 : event.activeMatchOrdinal, total: event.matches });
+      if (refocusPopoverOnResult) {
+        refocusPopoverOnResult = false;
+        focusFindPopover();
+      }
     }
   });
 
@@ -711,10 +716,16 @@ export async function registerIpcHandlers(
       sendFindResult({ current: 0, total: 0 });
       return;
     }
-    browserManager.find({ browserId: activeFindBrowserId, text: lastFindQuery, findNext: false });
+    // Use findNext:true even for the initial search: Electron reliably emits
+    // `found-in-page` (with the match count) for findNext:true, whereas a
+    // findNext:false request often does not. For a freshly-changed term this
+    // still starts a new search and selects the first match.
+    refocusPopoverOnResult = true;
+    browserManager.find({ browserId: activeFindBrowserId, text: lastFindQuery, findNext: true, forward: true });
   });
   ipcMain.on(channels.findPopoverStep, (_event, forward: boolean) => {
     if (!activeFindBrowserId || !lastFindQuery) return;
+    refocusPopoverOnResult = true;
     browserManager.find({ browserId: activeFindBrowserId, text: lastFindQuery, findNext: true, forward: forward !== false });
   });
   ipcMain.on(channels.findPopoverDismiss, () => {

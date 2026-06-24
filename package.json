@@ -76,6 +76,7 @@
       "dist/renderer/**/*",
       "dist-electron/**/*",
       "src/island/**/*",
+      "src/find-popover/**/*",
       "package.json"
     ],
     "extraResources": [

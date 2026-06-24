@@ -19,6 +19,21 @@ let isQuitting = false;
 
 app.setName("SharkBay");
 
+// In development `concurrently -k` sends SIGTERM (and Ctrl+C sends SIGINT) to the
+// Electron process. The normal before-quit path defers quitting until CodeGraph /
+// core cleanup finishes, which can hang and leave an orphaned Electron process that
+// must be killed with `kill -9`. On a terminal signal, exit immediately so dev
+// restarts never strand a process.
+function forceQuitOnSignal(): void {
+  try {
+    app.exit(0);
+  } catch {
+    process.exit(0);
+  }
+}
+process.once("SIGTERM", forceQuitOnSignal);
+process.once("SIGINT", forceQuitOnSignal);
+
 function getResourcePath(fileName: string): string {
   return app.isPackaged
     ? join(process.resourcesPath, "resources", fileName)
@@ -402,12 +417,12 @@ app.on("before-quit", (event) => {
   // core utility process has been shut down cleanly, so no codegraph process
   // group is orphaned (issue #15).
   event.preventDefault();
-  void shutdownCore()
-    .catch(() => {
-      // Best-effort: fall through to quit even if cleanup failed.
-    })
-    .finally(() => {
-      cleanupComplete = true;
-      app.quit();
-    });
+  const cleanupDone = shutdownCore().catch(() => {
+    // Best-effort: fall through to quit even if cleanup failed.
+  });
+  const cleanupTimeout = new Promise<void>((resolve) => setTimeout(resolve, 4000));
+  void Promise.race([cleanupDone, cleanupTimeout]).finally(() => {
+    cleanupComplete = true;
+    app.quit();
+  });
 });

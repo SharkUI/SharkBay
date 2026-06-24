@@ -181,6 +181,10 @@ export class BrowserManager extends EventEmitter<BrowserManagerEvents> {
   find(input: BrowserFindInput): void {
     const record = this.records.get(input.browserId);
     if (!record || record.view.webContents.isDestroyed() || !input.text) return;
+    // findInPage only emits `found-in-page` when the page's webContents is
+    // focused. The find UI lives in a separate popover window, so focus the
+    // view here; on macOS this does not pull keyboard focus off the popover.
+    try { record.view.webContents.focus(); } catch { /* noop */ }
     record.view.webContents.findInPage(input.text, {
       forward: input.forward ?? true,
       findNext: input.findNext ?? false,
