@@ -524,6 +524,13 @@ function createTelegramService(runtime: IpcRuntime): TelegramService {
       },
       supports: (agentId) => agentId.toLowerCase() === "kiro",
     },
+    listSessionTasks: async (projectPath, hookSessionId) => {
+      if (!projectPath) return [];
+      const tasks = await scanTasks(projectPath).catch(() => []);
+      return tasks
+        .filter((task) => task.sessionId === hookSessionId)
+        .map((task) => ({ taskId: task.taskId, title: task.title, raw: task.rawMarkdown }));
+    },
     onStatusChanged: broadcastTelegramStatus,
   };
   return new TelegramService(deps);

@@ -20,6 +20,7 @@ import { BotApi, type BotCommandSpec, type FetchLike, type ReplyMarkup } from ".
 import { dispatchMessage } from "./dispatch.js";
 import { PairStore } from "./pairing.js";
 import { stripAnsi } from "./ansi.js";
+import { formatForTelegram } from "./format.js";
 import {
   HELP_TEXT,
   NOT_IN_CHAT_TEXT,
@@ -45,6 +46,7 @@ const FINAL_MAX_CHARS = 6000;
 const BOT_COMMAND_MENU: BotCommandSpec[] = [
   { command: "sessions", description: "已打开的会话" },
   { command: "resume", description: "恢复未打开的历史会话" },
+  { command: "tasks", description: "本会话关联的任务" },
   { command: "machine", description: "本机信息" },
   { command: "status", description: "当前会话状态" },
   { command: "stop", description: "退出当前会话聊天" },
@@ -95,6 +97,8 @@ export type TelegramServiceDeps = {
     /** Whether this agent has a transcript reader (if so, never fall back to raw PTY). */
     supports: (agentId: string) => boolean;
   };
+  /** Tasks associated with a session (frontmatter sessionId match), with full markdown. */
+  listSessionTasks: (projectPath: string, hookSessionId: string) => Promise<Array<{ taskId: string; title: string; raw: string }>>;
   onStatusChanged?: () => void;
   now?: () => number;
   fetchImpl?: FetchLike;
@@ -119,6 +123,7 @@ type ChatSession = {
   typingTimer: ReturnType<typeof setInterval> | null;
   approvalMessageId: number | null;
   lastProgressText: string;
+  lastTasks: Array<{ taskId: string; title: string; raw: string }>;
 };
 
 type TelegramUpdate = {
@@ -314,6 +319,7 @@ export class TelegramService {
       case "machine": return this.sendMachine(chatId);
       case "sessions": return this.sendSessions(chatId, dispatch.args);
       case "resume": return this.sendResume(chatId, dispatch.args);
+      case "tasks": return this.sendTasks(chatId, from.id);
       case "status": return this.sendStatus(chatId, from.id);
       case "stop": return this.handleStop(chatId, from.id);
     }
@@ -338,6 +344,18 @@ export class TelegramService {
     }
     if (data === "sessions:refresh") { await this.api?.answerCallbackQuery(cb.id); return this.sendSessions(chatId, ""); }
     if (data === "resume:refresh") { await this.api?.answerCallbackQuery(cb.id); return this.sendResume(chatId, ""); }
+    if (data.startsWith("task:")) {
+      await this.api?.answerCallbackQuery(cb.id);
+      const chat = this.chats.get(cb.from.id);
+      const index = Number.parseInt(data.slice("task:".length), 10);
+      const task = chat?.lastTasks[index];
+      if (task) {
+        await this.sendFormatted(chatId, task.raw);
+      } else {
+        await this.send(chatId, "任务列表已过期，请重新 /tasks。");
+      }
+      return;
+    }
     if (data.startsWith("use:")) {
       await this.api?.answerCallbackQuery(cb.id);
       const id = parseSelection(data, this.lastSessionRows, "use");
@@ -427,6 +445,19 @@ export class TelegramService {
     await this.send(chatId, text, buttons.length ? toReplyMarkup(buttons) : undefined);
   }
 
+  private async sendTasks(chatId: number, userId: number): Promise<void> {
+    const chat = this.chats.get(userId);
+    if (!chat) { await this.send(chatId, "请先进入一个会话（/sessions）再查看其任务。"); return; }
+    const tasks = await this.deps.listSessionTasks(chat.projectPath, chat.hookSessionId).catch(() => []);
+    if (tasks.length === 0) { await this.send(chatId, "未找到与当前会话关联的任务。"); return; }
+    chat.lastTasks = tasks;
+    const buttons = tasks.map((task, i) => ({
+      text: `${i + 1}. ${task.title || task.taskId}`.slice(0, 60),
+      callbackData: `task:${i}`,
+    }));
+    await this.send(chatId, `本会话关联的任务（${tasks.length}）：`, toReplyMarkup(buttons));
+  }
+
   private async sendStatus(chatId: number, userId: number): Promise<void> {
     const chat = this.chats.get(userId);
     if (!chat) { await this.send(chatId, NOT_IN_CHAT_TEXT); return; }
@@ -503,6 +534,7 @@ export class TelegramService {
       typingTimer: null,
       approvalMessageId: null,
       lastProgressText: "",
+      lastTasks: [],
     };
     this.chats.set(userId, chat);
     this.ptyToChat.set(terminalId, userId);
@@ -529,7 +561,7 @@ export class TelegramService {
     const cursor = this.deps.transcript?.turnStartCursor(row) ?? null;
     const answer = cursor != null ? (this.deps.transcript?.answer(row, cursor) ?? null) : null;
     if (answer) {
-      for (const piece of chunkMessage(answer)) await this.send(chatId, piece);
+      await this.sendFormatted(chatId, answer);
     } else {
       await this.send(chatId, "（暂无最近一轮回复记录）");
     }
@@ -603,7 +635,7 @@ export class TelegramService {
 
   /** Fed from hookStateManager stateChange. */
   feedStatusChange(input: StatusChangeInput): void {
-    const userId = [...this.chats.values()].find((c) => c.hookSessionId === input.sessionId && c.projectPath === input.projectPath)?.telegramUserId;
+    const userId = [...this.chats.values()].find((c) => c.hookSessionId === input.sessionId)?.telegramUserId;
     if (userId === undefined) return;
     const chat = this.chats.get(userId);
     if (!chat) return;
@@ -738,7 +770,7 @@ export class TelegramService {
         final = `…（仅显示最近 ${FINAL_MAX_CHARS} 字符）\n${final.slice(-FINAL_MAX_CHARS)}`;
       }
     }
-    for (const piece of chunkMessage(final)) await this.send(chat.chatId, piece);
+    await this.sendFormatted(chat.chatId, final);
     chat.buffer = "";
     chat.transcriptCursor = null;
     chat.turn = null;
@@ -771,6 +803,26 @@ export class TelegramService {
       return msg?.message_id ?? null;
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * Send Markdown content rendered as Telegram MarkdownV2 (bold, code blocks,
+   * links…). Chunks by raw lines first, formats each chunk independently, and
+   * falls back to plain text per chunk if formatting/sending fails.
+   */
+  private async sendFormatted(chatId: number, text: string): Promise<void> {
+    for (const piece of chunkMessage(text)) {
+      const formatted = formatForTelegram(piece);
+      if (formatted) {
+        try {
+          await this.api?.sendMessage({ chatId, text: formatted, parseMode: "MarkdownV2" });
+          continue;
+        } catch {
+          // fall back to plain text below
+        }
+      }
+      await this.send(chatId, piece);
     }
   }
 

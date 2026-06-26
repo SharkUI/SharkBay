@@ -59,8 +59,11 @@ export function createTurn(input: TurnKey & { turnId: string; startedAt: number 
   };
 }
 
-function matchesSession(turn: Turn, e: { hookSessionId: string; projectPath: string }): boolean {
-  return e.hookSessionId === turn.hookSessionId && e.projectPath === turn.projectPath;
+function matchesSession(turn: Turn, e: { hookSessionId: string }): boolean {
+  // Match on the globally-unique hook session id only. projectPath (the hook cwd)
+  // is fragile across macOS realpath/symlink/'/private' differences and must not
+  // gate finalization.
+  return e.hookSessionId === turn.hookSessionId;
 }
 
 export function applyTurnEvent(turn: Turn, event: TurnEvent): TurnResult {

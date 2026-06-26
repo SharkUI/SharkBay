@@ -30,6 +30,7 @@ export type SendMessageParams = {
   text: string;
   replyMarkup?: ReplyMarkup;
   disableNotification?: boolean;
+  parseMode?: "MarkdownV2" | "HTML";
 };
 
 export type TelegramMessage = { message_id: number; chat: { id: number } };
@@ -79,6 +80,7 @@ export class BotApi {
       text: params.text,
       reply_markup: params.replyMarkup,
       disable_notification: params.disableNotification,
+      parse_mode: params.parseMode,
     });
   }
 

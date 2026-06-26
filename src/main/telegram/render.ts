@@ -126,6 +126,7 @@ export const HELP_TEXT = [
   "/machine — 本机信息",
   "/sessions — 已打开的会话（点按钮或回数字序号进入）",
   "/resume — 恢复未打开的历史会话（在 SharkBay 中打开并进入）",
+  "/tasks — 本会话关联的任务（点开看全文）",
   "",
   "💬 聊天态",
   "直接发消息 — 作为 prompt 发给当前会话",
