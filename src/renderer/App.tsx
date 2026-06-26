@@ -40,6 +40,7 @@ import type {
   TerminalSession,
   TerminalUpdateEvent,
   HookSessionViewModel,
+  TelegramConfigView,
   UsageGroupRowView,
   UsageReportResultView,
 } from "./types";
@@ -65,7 +66,7 @@ import {
 
 type View = "dashboard" | "settings";
 type DetailTab = "sessions" | "tasks" | "git" | "files";
-type SettingsSection = "general" | "agent-clis" | "appearance" | "extensions" | "diagnostics";
+type SettingsSection = "general" | "agent-clis" | "appearance" | "extensions" | "telegram" | "diagnostics";
 
 type Toast = {
   tone: "info" | "error" | "success";
@@ -1060,6 +1061,9 @@ function DashboardView({
     return () => unsubscribe?.();
   }, [bridgeAvailable]);
 
+  // A Telegram /resume selection restores a not-open session via the same path
+  // as the project sessions panel — see the effect after agentClisRef below.
+
   const [runningServiceProjectIds, setRunningServiceProjectIds] = useState<Set<string>>(() => new Set());
   const [hookActivityByProjectId, setHookActivityByProjectId] = useState<Record<string, ProjectActivityState>>({});
   const [hookStateBySessionId, setHookStateBySessionId] = useState<Record<string, HookSessionStateEntry>>({});
@@ -1072,6 +1076,25 @@ function DashboardView({
   const [remoteProjectUrl, setRemoteProjectUrl] = useState("");
   const [addingProject, setAddingProject] = useState<"local" | "remote" | null>(null);
   const agentClisByTargetRef = useRef<Record<string, AgentCli[]>>({});
+  const agentClisForRestoreRef = useRef<AgentCli[]>(agentClis);
+  useEffect(() => { agentClisForRestoreRef.current = agentClis; }, [agentClis]);
+
+  // Telegram /resume → restore a not-open session through the SAME path as the
+  // project sessions panel, honoring the Settings CLI config (executable + flags).
+  useEffect(() => {
+    if (!bridgeAvailable) return;
+    const unsubscribe = getBridge().app?.onRestoreAgentSession?.((payload) => {
+      const restore = buildAgentSessionRestoreCommand({
+        agentName: payload.agentId,
+        sessionId: payload.hookSessionId,
+        availableAgents: agentClisForRestoreRef.current,
+        launchFlags: getAgentLaunchFlagsForRestore(payload.agentId),
+      });
+      if (!restore) return;
+      void terminalPaneRef.current?.openAgentSession(payload.cwdUri, payload.projectName, restore.command, restore.title, restore.agentId, restore.hookSessionId);
+    });
+    return () => unsubscribe?.();
+  }, [bridgeAvailable]);
   const [projectColumnWidth, setProjectColumnWidth] = useState(() =>
     storedColumnWidth(projectColumnStorageKey, defaultProjectColumnWidth, minProjectColumnWidth),
   );
@@ -1514,6 +1537,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   // selected project loads) would re-run the restore effect and abort an in-flight restore.
   const agentClisRef = useRef(agentClis);
   useEffect(() => { agentClisRef.current = agentClis; }, [agentClis]);
+
   const candidateRef = useRef(candidate);
   useEffect(() => { candidateRef.current = candidate; }, [candidate]);
   // True for the component's lifetime; set false only on a real unmount so restore aborts on
@@ -1700,13 +1724,14 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     });
   }, []);
   useEffect(() => {
-    const tabs: Array<{ sessionId: string; title: string; projectName: string; agentId?: string; state: string; lastPrompt?: string }> = [];
+    const tabs: Array<{ sessionId: string; title: string; projectName: string; agentId?: string; state: string; lastPrompt?: string; hookSessionId?: string }> = [];
     for (const space of Object.values(spaces)) {
       for (const tab of space.tabs) {
         if (tab.kind === "terminal" && tab.session.agentId && tab.session.status === "running") {
           const hookState = hookStateByTerminalId[tab.session.id];
           const lastPrompt = hookSnapshotByTerminalId[tab.session.id]?.lastPrompt;
-          tabs.push({ sessionId: tab.session.id, title: tab.session.title, projectName: space.projectName ?? space.projectId, agentId: tab.session.agentId, state: hookState || "unknown", lastPrompt });
+          const hookSessionId = tab.hookSessionId ?? hookSnapshotByTerminalId[tab.session.id]?.sessionId;
+          tabs.push({ sessionId: tab.session.id, title: tab.session.title, projectName: space.projectName ?? space.projectId, agentId: tab.session.agentId, state: hookState || "unknown", lastPrompt, hookSessionId });
         }
       }
     }
@@ -4881,6 +4906,9 @@ function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, ca
             <button aria-current={activeSection === "extensions" ? "page" : undefined} className={cx("settings-nav-item", activeSection === "extensions" && "is-selected")} type="button" onClick={() => setActiveSection("extensions")}>
               <PuzzleIcon /><span>Extensions</span>
             </button>
+            <button aria-current={activeSection === "telegram" ? "page" : undefined} className={cx("settings-nav-item", activeSection === "telegram" && "is-selected")} type="button" onClick={() => setActiveSection("telegram")}>
+              <TerminalIcon /><span>Telegram</span>
+            </button>
             <button aria-current={activeSection === "diagnostics" ? "page" : undefined} className={cx("settings-nav-item", activeSection === "diagnostics" && "is-selected")} type="button" onClick={() => setActiveSection("diagnostics")}>
               <ActivityIcon /><span>Diagnostics</span>
             </button>
@@ -4903,6 +4931,10 @@ function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, ca
           <div className="settings-section-panel" hidden={activeSection !== "extensions"}>
             <div className="settings-section-heading"><h4>Extensions</h4><span>Manage installed plugins</span></div>
             <ExtensionsSettingsPanel active={activeSection === "extensions"} setToast={setToast} />
+          </div>
+          <div className="settings-section-panel" hidden={activeSection !== "telegram"}>
+            <div className="settings-section-heading"><h4>Telegram</h4><span>Remote control via your own bot</span></div>
+            <TelegramSettingsPanel active={activeSection === "telegram"} setToast={setToast} />
           </div>
           <div className="settings-section-panel" hidden={activeSection !== "diagnostics"}>
             <div className="settings-section-heading"><h4>Diagnostics</h4><span>Inspect job queue and cache hits</span></div>
@@ -4984,6 +5016,149 @@ function GeneralSettingsPanel({ agentStatusCompletionSoundEnabled, agentStatusAp
       </div>
     </section>
   );
+}
+
+function TelegramSettingsPanel({ active, setToast }: { active: boolean; setToast: (toast: Toast) => void }) {
+  const [view, setView] = useState<TelegramConfigView | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [tokenInput, setTokenInput] = useState("");
+  const [savingToken, setSavingToken] = useState(false);
+  const [togglingEnabled, setTogglingEnabled] = useState(false);
+  const [pairCode, setPairCode] = useState<{ code: string; expiresAt: number } | null>(null);
+
+  useEffect(() => {
+    if (!active) return;
+    let cancelled = false;
+    const getConfig = getBridge().telegram?.getConfig;
+    if (!getConfig) { setLoadError("Telegram API is not available."); return; }
+    getConfig()
+      .then((next) => { if (!cancelled) { setView(next); setLoadError(null); } })
+      .catch((error) => { if (!cancelled) setLoadError(asMessage(error)); });
+    const unsubscribe = getBridge().telegram?.onStatusChanged?.((next) => { if (!cancelled) setView(next); });
+    return () => { cancelled = true; unsubscribe?.(); };
+  }, [active]);
+
+  async function toggleEnabled() {
+    const setEnabled = getBridge().telegram?.setEnabled;
+    if (!setEnabled || !view || togglingEnabled) return;
+    setTogglingEnabled(true);
+    try {
+      setView(await setEnabled({ enabled: !view.enabled }));
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      setTogglingEnabled(false);
+    }
+  }
+
+  async function saveToken() {
+    const setToken = getBridge().telegram?.setToken;
+    if (!setToken || savingToken) return;
+    setSavingToken(true);
+    try {
+      const result = await setToken({ token: tokenInput.trim() });
+      if (result.ok) {
+        setToast({ tone: "success", message: `已连接 @${result.botUsername ?? "bot"}` });
+        setTokenInput("");
+      } else {
+        setToast({ tone: "error", message: result.message ?? "Token 校验失败" });
+      }
+      const refreshed = await getBridge().telegram?.getConfig?.();
+      if (refreshed) setView(refreshed);
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      setSavingToken(false);
+    }
+  }
+
+  async function generatePairCode() {
+    const generate = getBridge().telegram?.generatePairCode;
+    if (!generate) return;
+    try {
+      setPairCode(await generate());
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    }
+  }
+
+  async function revoke(telegramUserId: number) {
+    const revokeUser = getBridge().telegram?.revokeUser;
+    if (!revokeUser) return;
+    try {
+      setView(await revokeUser({ telegramUserId }));
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    }
+  }
+
+  if (loadError) return <section className="workflow-panel"><div className="inline-connection-result is-error" role="status">{loadError}</div></section>;
+  if (!view) return <section className="workflow-panel"><div className="form-note">Loading…</div></section>;
+
+  const statusLabel = telegramStatusLabel(view);
+
+  return (
+    <>
+      <section className="workflow-panel">
+        <h5 className="settings-subsection-title">Connection</h5>
+        <div className="settings-toggle-row">
+          <label className="checkbox-row">
+            <input type="checkbox" checked={view.enabled} disabled={togglingEnabled || !view.hasToken} onChange={() => void toggleEnabled()} />
+            <span>Enable Telegram remote control</span>
+          </label>
+        </div>
+        <div className="form-note">Status: {statusLabel}{view.botUsername ? ` · @${view.botUsername}` : ""}</div>
+        <div className="settings-list-row" style={{ gap: 8, marginTop: 8 }}>
+          <input
+            className="text-input"
+            type="password"
+            placeholder={view.hasToken ? "Bot token saved — paste to replace" : "Paste BotFather token"}
+            value={tokenInput}
+            onChange={(e) => setTokenInput(e.target.value)}
+            style={{ flex: 1 }}
+          />
+          <button className="button secondary compact" type="button" disabled={savingToken || !tokenInput.trim()} onClick={() => void saveToken()}>
+            {savingToken ? "Saving…" : "Save token"}
+          </button>
+        </div>
+        <div className="form-note">Create a bot with @BotFather, then paste its token here. The token is stored in your macOS Keychain, never in plain config.</div>
+      </section>
+
+      <section className="workflow-panel">
+        <h5 className="settings-subsection-title">Pairing</h5>
+        <div className="settings-toggle-row">
+          <button className="button secondary compact" type="button" onClick={() => void generatePairCode()}>Generate pair code</button>
+          {pairCode ? <span className="form-note">Send to your bot: <strong>/pair {pairCode.code}</strong>（{Math.max(0, Math.round((pairCode.expiresAt - Date.now()) / 60000))} 分钟内有效）</span> : null}
+        </div>
+        {view.pairedUsers.length === 0 ? (
+          <div className="form-note">No paired users yet.</div>
+        ) : (
+          <div className="settings-list">
+            {view.pairedUsers.map((user) => (
+              <div className="settings-list-row" key={user.telegramUserId}>
+                <span className="truncate"><strong>{user.displayName}</strong> · id {user.telegramUserId}</span>
+                <button className="button secondary compact" type="button" onClick={() => void revoke(user.telegramUserId)}>Remove</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="workflow-panel">
+        <div className="form-note">消息经 Telegram 服务器中转，非端到端加密；聊天态等同远程命令执行入口，请妥善保管 token 与设备。</div>
+      </section>
+    </>
+  );
+}
+
+function telegramStatusLabel(view: TelegramConfigView): string {
+  switch (view.status) {
+    case "connected": return "已连接";
+    case "checking": return "校验中…";
+    case "error": return `错误：${view.statusMessage ?? "未知"}`;
+    case "unconfigured": return "未配置 token";
+    default: return "已停用";
+  }
 }
 
 function DiagnosticsSettingsPanel({ active, setToast }: { active: boolean; setToast: (toast: Toast) => void }) {

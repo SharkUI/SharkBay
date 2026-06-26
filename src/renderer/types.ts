@@ -582,6 +582,7 @@ export type SharkBayBridge = {
     onOpenSettings?: (callback: () => void) => () => void;
     onNewTerminalTab?: (callback: () => void) => () => void;
     onFocusTerminalSession?: (callback: (id: string) => void) => () => void;
+    onRestoreAgentSession?: (callback: (payload: { cwdUri: string; projectName: string; agentId: string; hookSessionId: string }) => void) => () => void;
     onOpenFind?: (callback: () => void) => () => void;
     onFindClosed?: (callback: () => void) => () => void;
   };
@@ -672,6 +673,14 @@ export type SharkBayBridge = {
   hooks?: {
     getSessions?: (input: { repoPath: string }) => Promise<HookSessionViewModel[]>;
   };
+  telegram?: {
+    getConfig?: () => Promise<TelegramConfigView>;
+    setToken?: (input: { token: string }) => Promise<TelegramSetTokenResult>;
+    setEnabled?: (input: { enabled: boolean }) => Promise<TelegramConfigView>;
+    generatePairCode?: () => Promise<TelegramPairCodeResult>;
+    revokeUser?: (input: { telegramUserId: number }) => Promise<TelegramConfigView>;
+    onStatusChanged?: (callback: (view: TelegramConfigView) => void) => () => void;
+  };
   knowledgeSite?: {
     generate?: (input: { repoPath: string }) => Promise<{ generated: boolean; sitePath: string; reason?: string }>;
     getPath?: (input: { repoPath: string }) => Promise<string>;
@@ -683,7 +692,7 @@ export type SharkBayBridge = {
   dock?: {
     updateBadge?: (count: number) => void;
     contentReady?: () => void;
-    syncIslandTabs?: (tabs: Array<{ sessionId: string; title: string; projectName: string; agentId?: string; state: string; lastPrompt?: string }>) => void;
+    syncIslandTabs?: (tabs: Array<{ sessionId: string; title: string; projectName: string; agentId?: string; state: string; lastPrompt?: string; hookSessionId?: string }>) => void;
     notifyIslandKeyboardActivity?: () => void;
   };
   shell?: {
@@ -699,6 +708,33 @@ export type SharkBayBridge = {
     onOpenUrl?: (callback: (url: string) => void) => () => void;
   };
 };
+
+export type TelegramConnectionStatus =
+  | "disabled"
+  | "unconfigured"
+  | "checking"
+  | "connected"
+  | "error";
+
+export type TelegramPairedUserView = {
+  telegramUserId: number;
+  displayName: string;
+  githubUserId?: string;
+  pairedAt: string;
+};
+
+export type TelegramConfigView = {
+  enabled: boolean;
+  hasToken: boolean;
+  botUsername: string | null;
+  status: TelegramConnectionStatus;
+  statusMessage?: string;
+  idleTimeoutMs: number;
+  pairedUsers: TelegramPairedUserView[];
+};
+
+export type TelegramSetTokenResult = { ok: boolean; botUsername?: string; message?: string };
+export type TelegramPairCodeResult = { code: string; expiresAt: number };
 
 export type UsageSummaryView = {
   totalInputTokens: number;

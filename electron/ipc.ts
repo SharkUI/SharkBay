@@ -109,6 +109,22 @@ import { CursorConnector } from "../src/main/hooks/connectors/cursor.js";
 import type { AgentConnector } from "../src/main/hooks/types.js";
 import { TerminalApprovalDetector } from "../src/main/hooks/terminal-approval-detector.js";
 import { parseHookSessions } from "../src/main/hooks/sessions.js";
+import { TelegramService, type TelegramServiceDeps, type MachineIdentity } from "../src/main/telegram/service.js";
+import { buildSessionRows, type ProjectRef, type LiveStatus } from "../src/main/telegram/session-registry.js";
+import { extractAnswer, lastTurnStartIndex, progressSince } from "../src/main/telegram/transcript.js";
+import { createDefaultTelegramConfig, updateTelegramConfig } from "../src/main/config.js";
+import { createDefaultSecretStore } from "../src/main/secrets.js";
+import type {
+  TelegramConfigView,
+  TelegramPairCodeResult,
+  TelegramRevokeUserInput,
+  TelegramSetEnabledInput,
+  TelegramSetTokenInput,
+  TelegramSetTokenResult,
+} from "../src/shared/types.js";
+import * as os from "node:os";
+import * as nodePath from "node:path";
+import * as nodeFs from "node:fs";
 
 export type IpcRuntime = {
   userDataPath: string;
@@ -122,6 +138,11 @@ export type IpcCallbacks = {
 
 let core: CoreClient | null = null;
 let tokenUsageDb: TokenUsageDb | null = null;
+let telegramService: TelegramService | null = null;
+let telegramMachineIdentity: MachineIdentity | null = null;
+let latestIslandAgentTabs: Array<{ sessionId: string; hookSessionId?: string; title?: string; projectName?: string; agentId?: string; state?: string; lastPrompt?: string }> = [];
+const telegramSecretStore = createDefaultSecretStore();
+const TELEGRAM_TOKEN_SECRET_ID = "telegram-bot-token";
 const agentSessionWatcher = new AgentSessionWatcher();
 const browserManager = new BrowserManager();
 let activeFindBrowserId: string | null = null;
@@ -230,6 +251,7 @@ function requireCore(): CoreClient {
  * orphaned codegraph process groups (issue #15).
  */
 export async function shutdownCore(): Promise<void> {
+  await telegramService?.stop().catch(() => {});
   await core?.dispose();
   browserManager.closeAll();
   closeFindPopover();
@@ -367,6 +389,146 @@ function githubRepoFromRemote(remoteOrigin: string | null): string | null {
   return match?.[1] ?? null;
 }
 
+function broadcastTelegramStatus(): void {
+  if (!telegramService) return;
+  const view = telegramService.getConfigView();
+  BrowserWindow.getAllWindows().forEach((window) => {
+    window.webContents.send(channels.telegramStatusChanged, view);
+  });
+}
+
+async function resolveTelegramMachineIdentity(runtime: IpcRuntime): Promise<MachineIdentity> {
+  if (telegramMachineIdentity) return telegramMachineIdentity;
+  let githubUserId: string | undefined;
+  let machineId = "local";
+  try {
+    const config = await getConfiguredRoots(runtime);
+    for (const projectPath of config.configuredProjects) {
+      const identity = await getLocalHarnessIdentity(projectPath).catch(() => ({} as { githubUserId?: number | string; machineId?: string }));
+      if (identity.machineId) machineId = identity.machineId;
+      if (identity.githubUserId != null) githubUserId = String(identity.githubUserId);
+      if (identity.machineId && identity.githubUserId != null) break;
+    }
+  } catch {
+    // fall through to defaults
+  }
+  telegramMachineIdentity = { label: os.hostname(), githubUserId, machineId };
+  return telegramMachineIdentity;
+}
+
+/** Read an agent session transcript as lines (Kiro `.jsonl`). Empty when unavailable. */
+type HookSessionMeta = { projectPath: string; cwdUri: string; projectName: string; model: string | null; title: string | null; lastEventAt: string };
+
+/** Index every project's hook sessions by session id (for enriching open tabs). */
+async function buildHookSessionIndex(runtime: IpcRuntime): Promise<Map<string, HookSessionMeta>> {
+  const config = await getConfiguredRoots(runtime);
+  const index = new Map<string, HookSessionMeta>();
+  for (const projectPath of config.configuredProjects) {
+    const cwdUri = toLocalProjectUri(projectPath);
+    const projectName = config.projectAliases[cwdUri] ?? nodePath.basename(projectPath);
+    for (const session of parseHookSessions(projectPath)) {
+      index.set(session.sessionId, { projectPath, cwdUri, projectName, model: session.model, title: session.title, lastEventAt: session.lastEventAt });
+    }
+  }
+  return index;
+}
+
+function mapIslandState(state: string | undefined): "working" | "stopped" | "approval" | null {
+  return state === "working" || state === "stopped" || state === "approval" ? state : null;
+}
+
+/** Read an agent session transcript as lines (Kiro `.jsonl`). Empty when unavailable. */
+function readAgentTranscriptLines(agentId: string, hookSessionId: string): string[] {
+  if (agentId.toLowerCase() !== "kiro") return [];
+  const file = nodePath.join(os.homedir(), ".kiro", "sessions", "cli", `${hookSessionId}.jsonl`);
+  try {
+    return nodeFs.readFileSync(file, "utf8").split("\n");
+  } catch {
+    return [];
+  }
+}
+
+function createTelegramService(runtime: IpcRuntime): TelegramService {
+  const deps: TelegramServiceDeps = {
+    loadConfig: async () => (await getConfiguredRoots(runtime)).telegram ?? createDefaultTelegramConfig(),
+    saveConfig: async (patch) => { await updateTelegramConfig(runtime, patch); },
+    secretGet: () => telegramSecretStore.get(TELEGRAM_TOKEN_SECRET_ID),
+    secretSet: (token) => telegramSecretStore.set(TELEGRAM_TOKEN_SECRET_ID, token),
+    secretDelete: () => telegramSecretStore.delete(TELEGRAM_TOKEN_SECRET_ID),
+    getMachineIdentity: () => resolveTelegramMachineIdentity(runtime),
+    listSessions: async () => {
+      const config = await getConfiguredRoots(runtime);
+      const projects: ProjectRef[] = config.configuredProjects.map((projectPath) => {
+        const cwdUri = toLocalProjectUri(projectPath);
+        return {
+          projectPath,
+          cwdUri,
+          projectName: config.projectAliases[cwdUri] ?? nodePath.basename(projectPath),
+        };
+      });
+      const statuses = new Map<string, LiveStatus>(
+        hookStateManager.getAllStatuses().map((entry) => [entry.sessionId, { state: entry.state, action: entry.action }]),
+      );
+      return buildSessionRows({ projects, parse: parseHookSessions, statuses });
+    },
+    listOpenSessions: async () => {
+      const index = await buildHookSessionIndex(runtime);
+      return latestIslandAgentTabs.map((tab) => {
+        const hookId = typeof tab.hookSessionId === "string" && tab.hookSessionId ? tab.hookSessionId : undefined;
+        const meta = hookId ? index.get(hookId) : undefined;
+        const agentId = (tab.agentId ?? "") as string;
+        return {
+          sessionId: hookId ?? tab.sessionId,
+          terminalId: tab.sessionId,
+          projectPath: meta?.projectPath ?? "",
+          cwdUri: meta?.cwdUri ?? "",
+          projectName: tab.projectName ?? meta?.projectName ?? "",
+          agentId,
+          model: meta?.model ?? null,
+          title: tab.title ?? meta?.title ?? null,
+          subtitle: meta?.title ?? tab.lastPrompt ?? null,
+          lastEventAt: meta?.lastEventAt ?? new Date().toISOString(),
+          state: mapIslandState(tab.state),
+        } satisfies import("../src/main/telegram/types.js").TelegramSessionRow;
+      });
+    },
+    resolveOpenTerminal: (hookSessionId) => latestIslandAgentTabs.find((tab) => tab.hookSessionId === hookSessionId)?.sessionId ?? null,
+    restoreSession: async (row) => {
+      // Hand off to the renderer, which builds the restore command via the same
+      // path as the project sessions panel (honoring Settings CLI config).
+      const payload = {
+        cwdUri: row.cwdUri,
+        projectName: row.projectName,
+        agentId: row.agentId,
+        hookSessionId: row.sessionId,
+      };
+      BrowserWindow.getAllWindows().forEach((window) => {
+        window.webContents.send(appChannels.restoreAgentSession, payload);
+      });
+    },
+    inputTerminal: (terminalId, data) => { void requireCore().call("inputTerminal", [{ sessionId: terminalId, data }]).catch(() => {}); },
+    currentStatus: (row) => {
+      const status = hookStateManager.getStatus(row.projectPath, row.sessionId);
+      return status ? { state: status.state, action: status.action } : null;
+    },
+    transcript: {
+      cursor: (row) => readAgentTranscriptLines(row.agentId, row.sessionId).length,
+      turnStartCursor: (row) => lastTurnStartIndex(row.agentId, readAgentTranscriptLines(row.agentId, row.sessionId)),
+      answer: (row, cursor) => {
+        const lines = readAgentTranscriptLines(row.agentId, row.sessionId);
+        return extractAnswer(row.agentId, lines.slice(cursor));
+      },
+      progress: (row, cursor) => {
+        const lines = readAgentTranscriptLines(row.agentId, row.sessionId);
+        return progressSince(row.agentId, lines.slice(cursor));
+      },
+      supports: (agentId) => agentId.toLowerCase() === "kiro",
+    },
+    onStatusChanged: broadcastTelegramStatus,
+  };
+  return new TelegramService(deps);
+}
+
 function handle<Payload, Result>(
   channel: string,
   callback: (payload: Payload) => Promise<Result>
@@ -393,6 +555,7 @@ export async function registerIpcHandlers(
   browserManager.removeAllListeners("foundInPage");
   core.on("terminalData", (event) => {
     terminalApprovalDetector.feed(event.sessionId, event.data);
+    telegramService?.feedTerminalData(event.sessionId, event.data);
     BrowserWindow.getAllWindows().forEach((window) => {
       window.webContents.send(channels.terminalData, event);
     });
@@ -432,6 +595,7 @@ export async function registerIpcHandlers(
   });
   core.on("terminalExit", (event) => {
     terminalApprovalDetector.untrack(event.sessionId);
+    telegramService?.feedTerminalExit(event.sessionId);
     for (const [pid, id] of terminalPidToId) {
       if (id === event.sessionId) { terminalPidToId.delete(pid); break; }
     }
@@ -474,6 +638,13 @@ export async function registerIpcHandlers(
   });
   hookStateManager.removeAllListeners("stateChange");
   hookStateManager.on("stateChange", (event) => {
+    telegramService?.feedStatusChange({
+      sessionId: event.sessionId,
+      projectPath: event.projectPath,
+      state: event.state,
+      action: event.action,
+      at: Date.parse(event.timestamp) || Date.now(),
+    });
     if (event.lastPrompt && promptStore?.get(event.sessionId) !== event.lastPrompt) {
       promptStore?.record(event.sessionId, event.lastPrompt);
     }
@@ -524,6 +695,27 @@ export async function registerIpcHandlers(
     }
   });
   hookBridge.start(runtime.userDataPath).catch(() => {});
+
+  if (!telegramService) {
+    telegramService = createTelegramService(runtime);
+    telegramService.init().catch(() => {});
+  }
+
+  const requireTelegram = (): TelegramService => {
+    if (!telegramService) telegramService = createTelegramService(runtime);
+    return telegramService;
+  };
+  handle<void, TelegramConfigView>(channels.telegramGetConfig, async () => requireTelegram().getConfigView());
+  handle<TelegramSetTokenInput, TelegramSetTokenResult>(channels.telegramSetToken, (payload) => requireTelegram().setToken(payload.token));
+  handle<TelegramSetEnabledInput, TelegramConfigView>(channels.telegramSetEnabled, async (payload) => {
+    await requireTelegram().setEnabled(payload.enabled);
+    return requireTelegram().getConfigView();
+  });
+  handle<void, TelegramPairCodeResult>(channels.telegramGeneratePairCode, async () => requireTelegram().generatePairCode());
+  handle<TelegramRevokeUserInput, TelegramConfigView>(channels.telegramRevokeUser, async (payload) => {
+    await requireTelegram().revokeUser(payload.telegramUserId);
+    return requireTelegram().getConfigView();
+  });
 
   browserManager.on("update", (event: BrowserUpdateEvent) => {
     BrowserWindow.getAllWindows().forEach((window) => {
@@ -898,6 +1090,9 @@ export async function registerIpcHandlers(
   });
 
   ipcMain.on(channels.islandTabsSync, (_event, tabs: unknown) => {
+    if (Array.isArray(tabs)) {
+      latestIslandAgentTabs = tabs as typeof latestIslandAgentTabs;
+    }
     const islandWin = BrowserWindow.getAllWindows().find((w) => w.isAlwaysOnTop());
     if (!islandWin || islandWin.isDestroyed()) return;
     // Inject the authoritative lastPrompt from the store. The main process

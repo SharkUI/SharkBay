@@ -70,7 +70,13 @@ import type {
   UsageReportFilter,
   UsageReportResult,
   UsageSummary,
-  HookSessionViewModel
+  HookSessionViewModel,
+  TelegramConfigView,
+  TelegramPairCodeResult,
+  TelegramRevokeUserInput,
+  TelegramSetEnabledInput,
+  TelegramSetTokenInput,
+  TelegramSetTokenResult
 } from "../src/shared/types.js";
 
 function createAppEventSubscription(channel: string) {
@@ -107,6 +113,16 @@ const onFocusTerminalSession = (callback: (id: string) => void) => {
   return () => focusTerminalSessionListeners.delete(callback);
 };
 
+type RestoreAgentSessionPayload = { cwdUri: string; projectName: string; agentId: string; hookSessionId: string };
+const restoreAgentSessionListeners = new Set<(payload: RestoreAgentSessionPayload) => void>();
+ipcRenderer.on(appChannels.restoreAgentSession, (_ev, payload: RestoreAgentSessionPayload) => {
+  restoreAgentSessionListeners.forEach((cb) => cb(payload));
+});
+const onRestoreAgentSession = (callback: (payload: RestoreAgentSessionPayload) => void) => {
+  restoreAgentSessionListeners.add(callback);
+  return () => restoreAgentSessionListeners.delete(callback);
+};
+
 function invoke<Result>(channel: string, payload?: unknown): Promise<Result> {
   return ipcRenderer.invoke(channel, payload) as Promise<Result>;
 }
@@ -116,6 +132,7 @@ const sharkBayApi = {
     onOpenSettings,
     onNewTerminalTab,
     onFocusTerminalSession,
+    onRestoreAgentSession,
     onOpenFind,
     onFindClosed,
   },
@@ -241,6 +258,18 @@ const sharkBayApi = {
   hooks: {
     getSessions: (input: { repoPath: string }) => invoke<HookSessionViewModel[]>(channels.hookGetSessions, input),
   },
+  telegram: {
+    getConfig: () => invoke<TelegramConfigView>(channels.telegramGetConfig),
+    setToken: (input: TelegramSetTokenInput) => invoke<TelegramSetTokenResult>(channels.telegramSetToken, input),
+    setEnabled: (input: TelegramSetEnabledInput) => invoke<TelegramConfigView>(channels.telegramSetEnabled, input),
+    generatePairCode: () => invoke<TelegramPairCodeResult>(channels.telegramGeneratePairCode),
+    revokeUser: (input: TelegramRevokeUserInput) => invoke<TelegramConfigView>(channels.telegramRevokeUser, input),
+    onStatusChanged: (callback: (view: TelegramConfigView) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: TelegramConfigView) => callback(payload);
+      ipcRenderer.on(channels.telegramStatusChanged, listener);
+      return () => ipcRenderer.removeListener(channels.telegramStatusChanged, listener);
+    },
+  },
   knowledgeSite: {
     generate: (input: { repoPath: string }) => invoke<KnowledgeSiteResult>(channels.knowledgeSiteGenerate, input),
     getPath: (input: { repoPath: string }) => invoke<string>(channels.knowledgeSiteGetPath, input)
@@ -252,7 +281,7 @@ const sharkBayApi = {
   dock: {
     updateBadge: (count: number) => { ipcRenderer.send(channels.dockBadgeUpdate, count); },
     contentReady: () => { ipcRenderer.send(channels.contentReady); },
-    syncIslandTabs: (tabs: Array<{ sessionId: string; title: string; projectName: string; agentId?: string; state: string; lastPrompt?: string }>) => { ipcRenderer.send(channels.islandTabsSync, tabs); },
+    syncIslandTabs: (tabs: Array<{ sessionId: string; title: string; projectName: string; agentId?: string; state: string; lastPrompt?: string; hookSessionId?: string }>) => { ipcRenderer.send(channels.islandTabsSync, tabs); },
     notifyIslandKeyboardActivity: () => { ipcRenderer.send(channels.islandUserKeyboardActivity); },
   },
   shell: {

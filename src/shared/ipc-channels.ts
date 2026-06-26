@@ -81,4 +81,10 @@ export const ipcChannels = {
   recordSessionPrompt: "session:recordPrompt",
   recordPromptHistoryEntry: "session:recordPromptEntry",
   loadSessionPromptHistory: "session:loadPromptHistory",
+  telegramGetConfig: "telegram:getConfig",
+  telegramSetToken: "telegram:setToken",
+  telegramSetEnabled: "telegram:setEnabled",
+  telegramGeneratePairCode: "telegram:generatePairCode",
+  telegramRevokeUser: "telegram:revokeUser",
+  telegramStatusChanged: "telegram:statusChanged",
 } as const;

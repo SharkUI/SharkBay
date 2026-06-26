@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { AppearanceTheme, AppearanceThemeInput, AppConfig, IpcRuntimeLike, ProjectConfigInput, RemoveProjectInput, RemoveRootInput, RenameProjectInput, RootConfigInput, StatusChangeNotificationsInput } from "../shared/types.js";
+import type { AppearanceTheme, AppearanceThemeInput, AppConfig, IpcRuntimeLike, ProjectConfigInput, RemoveProjectInput, RemoveRootInput, RenameProjectInput, RootConfigInput, StatusChangeNotificationsInput, TelegramConfig, TelegramPairedUser } from "../shared/types.js";
 import { isRecord } from "../shared/schema.js";
 import { writeJsonAtomic, readJsonFile } from "./json-file.js";
 
@@ -26,7 +26,17 @@ export function createDefaultConfig(): AppConfig {
     statusChangeNotificationsEnabled: true,
     agentStatusCompletionSoundEnabled: true,
     agentStatusApprovalSoundEnabled: true,
+    telegram: createDefaultTelegramConfig(),
     updatedAt: today(),
+  };
+}
+
+export function createDefaultTelegramConfig(): TelegramConfig {
+  return {
+    enabled: false,
+    botUsername: null,
+    idleTimeoutMs: 15 * 60 * 1000,
+    pairedUsers: [],
   };
 }
 
@@ -217,8 +227,43 @@ function normalizeAppConfig(value: unknown): AppConfig {
     agentStatusApprovalSoundEnabled: typeof value.agentStatusApprovalSoundEnabled === "boolean"
       ? value.agentStatusApprovalSoundEnabled
       : legacyStatusSoundsEnabled,
+    telegram: normalizeTelegramConfig(value.telegram),
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : today(),
   };
+}
+
+function normalizeTelegramConfig(value: unknown): TelegramConfig {
+  const base = createDefaultTelegramConfig();
+  if (!isRecord(value)) return base;
+  return {
+    enabled: value.enabled === true,
+    botUsername: typeof value.botUsername === "string" && value.botUsername.trim() ? value.botUsername.trim() : null,
+    idleTimeoutMs: typeof value.idleTimeoutMs === "number" && value.idleTimeoutMs > 0 ? value.idleTimeoutMs : base.idleTimeoutMs,
+    pairedUsers: Array.isArray(value.pairedUsers) ? value.pairedUsers.flatMap(normalizePairedUser) : [],
+  };
+}
+
+function normalizePairedUser(value: unknown): TelegramPairedUser[] {
+  if (!isRecord(value)) return [];
+  const telegramUserId = typeof value.telegramUserId === "number" ? value.telegramUserId : null;
+  if (telegramUserId === null) return [];
+  return [{
+    telegramUserId,
+    displayName: typeof value.displayName === "string" ? value.displayName : String(telegramUserId),
+    githubUserId: typeof value.githubUserId === "string" ? value.githubUserId : undefined,
+    pairedAt: typeof value.pairedAt === "string" ? value.pairedAt : today(),
+  }];
+}
+
+/** Merge a partial telegram config into persisted config. */
+export async function updateTelegramConfig(runtime: IpcRuntimeLike, patch: Partial<TelegramConfig>): Promise<AppConfig> {
+  const configPath = getRuntimeConfigPath(runtime);
+  const config = await loadAppConfig(configPath);
+  const current = config.telegram ?? createDefaultTelegramConfig();
+  config.telegram = { ...current, ...patch };
+  config.updatedAt = today();
+  await saveAppConfig(config, configPath);
+  return config;
 }
 
 async function migrateLegacyAppConfig(raw: unknown, normalized: AppConfig): Promise<AppConfig> {

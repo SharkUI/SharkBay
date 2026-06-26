@@ -14,6 +14,7 @@ export type AppConfig = {
   terminalFontFamily?: string;
   terminalFontSize?: number;
   terminalLineHeight?: number;
+  telegram?: TelegramConfig;
   updatedAt: string;
 };
 
@@ -911,3 +912,44 @@ export type UsageReportResult = {
     costUsd: number | null;
   };
 };
+
+// --- Telegram remote control -------------------------------------------------
+
+export type TelegramPairedUser = {
+  telegramUserId: number;
+  displayName: string;
+  githubUserId?: string;
+  pairedAt: string;
+};
+
+/** Persisted Telegram config (token is NOT here — it lives in the secret store). */
+export type TelegramConfig = {
+  enabled: boolean;
+  botUsername: string | null;
+  idleTimeoutMs: number;
+  pairedUsers: TelegramPairedUser[];
+};
+
+export type TelegramConnectionStatus =
+  | "disabled"
+  | "unconfigured"
+  | "checking"
+  | "connected"
+  | "error";
+
+/** Renderer-facing view of the Telegram config (never includes the raw token). */
+export type TelegramConfigView = {
+  enabled: boolean;
+  hasToken: boolean;
+  botUsername: string | null;
+  status: TelegramConnectionStatus;
+  statusMessage?: string;
+  idleTimeoutMs: number;
+  pairedUsers: TelegramPairedUser[];
+};
+
+export type TelegramSetTokenInput = { token: string };
+export type TelegramSetTokenResult = { ok: boolean; botUsername?: string; message?: string };
+export type TelegramSetEnabledInput = { enabled: boolean };
+export type TelegramRevokeUserInput = { telegramUserId: number };
+export type TelegramPairCodeResult = { code: string; expiresAt: number };

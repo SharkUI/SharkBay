@@ -1,0 +1,118 @@
+/**
+ * Clean final-answer extraction from agent session transcripts.
+ *
+ * Coding agents render full-screen TUIs, so the raw PTY stream is a pile of
+ * redraw frames and cannot yield a clean answer. Instead we reconstruct the
+ * turn's answer from the agent's own transcript file. Parsers are pure and keyed
+ * by agent; the fs/cursor plumbing lives in the harness (ipc.ts).
+ */
+
+/**
+ * Kiro CLI writes `~/.kiro/sessions/cli/<sessionId>.jsonl`, one JSON object per
+ * line: `{ version, kind, data }`. `kind: "AssistantMessage"` carries
+ * `data.content[]` blocks of kind `thinking` | `text` | `toolUse`. The visible
+ * answer is the concatenation of the non-empty `text` blocks.
+ */
+export function extractKiroAnswer(lines: string[]): string {
+  // The closing summary is the assistant text that comes AFTER the last tool
+  // activity. Text before/between tool calls is intermediate narration (shown in
+  // live progress, not the final answer). A pure-text turn keeps all its text.
+  let afterTool: string[] = [];
+  let lastText: string | null = null;
+  for (const line of lines) {
+    if (!line) continue;
+    let entry: { kind?: string; data?: { content?: Array<{ kind?: string; data?: unknown }> } };
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (entry.kind === "ToolResults") {
+      afterTool = [];
+      continue;
+    }
+    if (entry.kind !== "AssistantMessage") continue;
+    const content = entry.data?.content;
+    if (!Array.isArray(content)) continue;
+    for (const block of content) {
+      if (block?.kind === "toolUse") {
+        afterTool = []; // text before this tool call is intermediate
+      } else if (block?.kind === "text" && typeof block.data === "string" && block.data.trim()) {
+        afterTool.push(block.data.trim());
+        lastText = block.data.trim();
+      }
+    }
+  }
+  const answer = afterTool.join("\n\n").trim();
+  return answer || (lastText ?? "");
+}
+
+/** Extract a turn's clean answer for the given agent, or null when unsupported. */
+export function extractAnswer(agentId: string, lines: string[]): string | null {
+  if (agentId.toLowerCase() === "kiro") {
+    const answer = extractKiroAnswer(lines);
+    return answer || null;
+  }
+  // Other agents fall back to the PTY-derived tail until a reader is added.
+  return null;
+}
+
+/**
+ * Clean live-progress activity for the in-progress turn: assistant text plus a
+ * `🔧 tool · purpose` line per tool call (thinking and raw tool results omitted).
+ */
+export function extractKiroProgress(lines: string[]): string {
+  const out: string[] = [];
+  for (const line of lines) {
+    if (!line) continue;
+    let entry: { kind?: string; data?: { content?: Array<{ kind?: string; data?: unknown }> } };
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (entry.kind !== "AssistantMessage") continue;
+    const content = entry.data?.content;
+    if (!Array.isArray(content)) continue;
+    for (const block of content) {
+      if (block?.kind === "text" && typeof block.data === "string" && block.data.trim()) {
+        out.push(block.data.trim());
+      } else if (block?.kind === "toolUse" && block.data && typeof block.data === "object") {
+        const data = block.data as { name?: unknown; input?: unknown };
+        const name = typeof data.name === "string" ? data.name : "tool";
+        const purpose =
+          data.input && typeof data.input === "object" && typeof (data.input as { __tool_use_purpose?: unknown }).__tool_use_purpose === "string"
+            ? (data.input as { __tool_use_purpose: string }).__tool_use_purpose
+            : "";
+        out.push(purpose ? `🔧 ${name} · ${purpose}` : `🔧 ${name}`);
+      }
+    }
+  }
+  return out.join("\n");
+}
+
+export function progressSince(agentId: string, lines: string[]): string | null {
+  if (agentId.toLowerCase() === "kiro") {
+    return extractKiroProgress(lines) || null;
+  }
+  return null;
+}
+
+/**
+ * Line index where the latest turn begins (the last user `Prompt` entry).
+ * Slicing the transcript from here yields the most recent turn's answer.
+ * Returns 0 (whole file) when unsupported or no prompt is found.
+ */
+export function lastTurnStartIndex(agentId: string, lines: string[]): number {
+  if (agentId.toLowerCase() !== "kiro") return 0;
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const line = lines[i];
+    if (!line) continue;
+    try {
+      if ((JSON.parse(line) as { kind?: string }).kind === "Prompt") return i;
+    } catch {
+      // ignore malformed lines
+    }
+  }
+  return 0;
+}
