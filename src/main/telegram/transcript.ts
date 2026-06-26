@@ -50,8 +50,9 @@ export function extractKiroAnswer(lines: string[]): string {
 /**
  * Codex CLI writes `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`. TUI sessions
  * start with `session_meta`, then emit `event_msg` status records and
- * `response_item` model/tool records. `task_complete.last_agent_message` is the
- * clean final answer for a completed turn.
+ * `response_item` model/tool records. The assistant `response_item` text is the
+ * source of truth; `task_complete.last_agent_message` may be a shortened tail,
+ * so it is only a fallback when no assistant text was recorded.
  */
 export function extractCodexAnswer(lines: string[]): string {
   let taskComplete: string | null = null;
@@ -85,7 +86,7 @@ export function extractCodexAnswer(lines: string[]): string {
   }
 
   const answer = afterTool.join("\n\n").trim();
-  return taskComplete ?? (answer || (lastText ?? ""));
+  return answer || lastText || taskComplete || "";
 }
 
 export function extractClaudeAnswer(lines: string[]): string {
@@ -315,4 +316,3 @@ function outputTextFromContent(content: unknown): string | null {
     .filter((text): text is string => Boolean(text));
   return parts.join("\n\n");
 }
-

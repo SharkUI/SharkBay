@@ -91,10 +91,18 @@ describe("extractAnswer", () => {
 });
 
 describe("extractCodexAnswer", () => {
-  it("prefers the completed turn answer", () => {
+  it("prefers assistant transcript text over task_complete tail", () => {
     const lines = [
       codexLine("event_msg", { type: "agent_message", message: "Checking files." }),
-      codexLine("response_item", { type: "message", role: "assistant", content: [{ type: "output_text", text: "intermediate" }] }),
+      codexLine("response_item", { type: "message", role: "assistant", content: [{ type: "output_text", text: "Full clean answer with context." }] }),
+      codexLine("event_msg", { type: "task_complete", last_agent_message: "...answer with context." }),
+    ];
+    expect(extractCodexAnswer(lines)).toBe("Full clean answer with context.");
+  });
+
+  it("uses task_complete only when no assistant text exists", () => {
+    const lines = [
+      codexLine("event_msg", { type: "agent_message", message: "Checking files." }),
       codexLine("event_msg", { type: "task_complete", last_agent_message: "Final clean answer." }),
     ];
     expect(extractCodexAnswer(lines)).toBe("Final clean answer.");
