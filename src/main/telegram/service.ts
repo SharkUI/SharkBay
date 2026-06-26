@@ -38,6 +38,7 @@ const DEFAULT_SESSIONS_LIMIT = 10;
 const EDIT_THROTTLE_MS = 1000;
 const POLL_TIMEOUT_SEC = 30;
 const POLL_ERROR_BACKOFF_MS = 3000;
+const CODEX_SUBMIT_DELAY_MS = 30;
 /** Progress bubble shows only a short fixed-length tail of the live output. */
 const PROGRESS_TAIL_CHARS = 200;
 /** Safety cap on the final message so a runaway PTY can never dump the whole scrollback. */
@@ -64,6 +65,15 @@ export type StatusChangeInput = {
 };
 
 export type MachineIdentity = { label: string; githubUserId?: string; machineId: string };
+
+export type TerminalSubmitChunk = { data: string; delayMs?: number };
+
+export function buildAgentSubmitSequence(agentId: string, text: string): TerminalSubmitChunk[] {
+  if (agentId.toLowerCase() === "codex") {
+    return [{ data: text }, { data: "\r", delayMs: CODEX_SUBMIT_DELAY_MS }];
+  }
+  return [{ data: `${text}\r` }];
+}
 
 export type TelegramServiceDeps = {
   loadConfig: () => Promise<TelegramConfig>;
@@ -688,9 +698,20 @@ export class TelegramService {
       ptyId: chat.ptyId,
       startedAt: this.now(),
     });
-    this.deps.inputTerminal(chat.ptyId, `${agentText}\r`);
+    this.submitAgentInput(chat, agentText);
     const progress = await this.send(chatId, "🫧 working…");
     chat.progressMessageId = progress ?? null;
+  }
+
+  private submitAgentInput(chat: ChatSession, agentText: string): void {
+    for (const chunk of buildAgentSubmitSequence(chat.row.agentId, agentText)) {
+      if (chunk.delayMs != null) {
+        const ptyId = chat.ptyId;
+        setTimeout(() => this.deps.inputTerminal(ptyId, chunk.data), chunk.delayMs);
+      } else {
+        this.deps.inputTerminal(chat.ptyId, chunk.data);
+      }
+    }
   }
 
   /** Fed from core terminalData. */

@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { extractAnswer, extractKiroAnswer, extractKiroProgress, lastTurnStartIndex } from "../src/main/telegram/transcript.js";
+import { extractAnswer, extractCodexAnswer, extractCodexProgress, extractKiroAnswer, extractKiroProgress, lastTurnStartIndex } from "../src/main/telegram/transcript.js";
 
 function kiroLine(kind: string, content?: Array<{ kind: string; data: unknown }>): string {
   return JSON.stringify({ version: 1, kind, data: content ? { content } : {} });
+}
+
+function codexLine(type: string, payload?: Record<string, unknown>): string {
+  return JSON.stringify({ type, payload });
 }
 
 describe("extractKiroAnswer", () => {
@@ -55,14 +59,48 @@ describe("extractAnswer", () => {
     expect(extractAnswer("kiro", [JSON.stringify({ kind: "AssistantMessage", data: { content: [{ kind: "text", data: "hi" }] } })])).toBe("hi");
   });
 
+  it("uses the codex parser for codex", () => {
+    expect(extractAnswer("codex", [codexLine("event_msg", { type: "task_complete", last_agent_message: "done" })])).toBe("done");
+  });
+
   it("returns null for unsupported agents (fallback to PTY)", () => {
-    expect(extractAnswer("codex", ["whatever"])).toBeNull();
+    expect(extractAnswer("qwen", ["whatever"])).toBeNull();
   });
 
   it("returns null when kiro transcript has no text", () => {
     expect(extractAnswer("kiro", [JSON.stringify({ kind: "ToolResults", data: {} })])).toBeNull();
   });
 });
+
+describe("extractCodexAnswer", () => {
+  it("prefers the completed turn answer", () => {
+    const lines = [
+      codexLine("event_msg", { type: "agent_message", message: "Checking files." }),
+      codexLine("response_item", { type: "message", role: "assistant", content: [{ type: "output_text", text: "intermediate" }] }),
+      codexLine("event_msg", { type: "task_complete", last_agent_message: "Final clean answer." }),
+    ];
+    expect(extractCodexAnswer(lines)).toBe("Final clean answer.");
+  });
+
+  it("falls back to assistant text after the last tool", () => {
+    const lines = [
+      codexLine("response_item", { type: "message", role: "assistant", content: [{ type: "output_text", text: "I will inspect it." }] }),
+      codexLine("response_item", { type: "function_call", name: "exec_command" }),
+      codexLine("response_item", { type: "function_call_output" }),
+      codexLine("response_item", { type: "message", role: "assistant", content: [{ type: "output_text", text: "Done." }] }),
+    ];
+    expect(extractCodexAnswer(lines)).toBe("Done.");
+  });
+
+  it("keeps all assistant text for a pure-text turn", () => {
+    const lines = [
+      codexLine("response_item", { type: "message", role: "assistant", content: [{ type: "output_text", text: "part one" }] }),
+      codexLine("response_item", { type: "message", role: "assistant", content: [{ type: "output_text", text: "part two" }] }),
+    ];
+    expect(extractCodexAnswer(lines)).toBe("part one\n\npart two");
+  });
+});
+
 describe("extractKiroProgress", () => {
   it("renders text and tool activity, skipping thinking", () => {
     const lines = [
@@ -74,6 +112,18 @@ describe("extractKiroProgress", () => {
       ]),
     ];
     expect(extractKiroProgress(lines)).toBe("Looking at the file.\n🔧 shell · Run tests\n🔧 fsRead");
+  });
+});
+
+describe("extractCodexProgress", () => {
+  it("renders clean status messages and tool activity", () => {
+    const lines = [
+      codexLine("event_msg", { type: "agent_message", message: "Reading the code." }),
+      codexLine("response_item", { type: "function_call", name: "exec_command" }),
+      codexLine("response_item", { type: "custom_tool_call", name: "apply_patch" }),
+      codexLine("response_item", { type: "web_search_call" }),
+    ];
+    expect(extractCodexProgress(lines)).toBe("Reading the code.\n🔧 exec_command\n🔧 apply_patch\n🔎 web search");
   });
 });
 
@@ -93,6 +143,18 @@ describe("lastTurnStartIndex", () => {
 
   it("returns 0 when no prompt or unsupported agent", () => {
     expect(lastTurnStartIndex("kiro", [kiroLine("ToolResults")])).toBe(0);
-    expect(lastTurnStartIndex("codex", ["x"])).toBe(0);
+    expect(lastTurnStartIndex("qwen", ["x"])).toBe(0);
+  });
+
+  it("finds the last Codex user message index", () => {
+    const lines = [
+      codexLine("event_msg", { type: "user_message", message: "first" }),
+      codexLine("event_msg", { type: "task_complete", last_agent_message: "a" }),
+      codexLine("response_item", { type: "message", role: "user", content: [{ type: "input_text", text: "context" }] }),
+      codexLine("event_msg", { type: "user_message", message: "second" }),
+      codexLine("event_msg", { type: "task_complete", last_agent_message: "b" }),
+    ];
+    expect(lastTurnStartIndex("codex", lines)).toBe(3);
+    expect(extractCodexAnswer(lines.slice(3))).toBe("b");
   });
 });

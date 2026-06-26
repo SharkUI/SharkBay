@@ -143,6 +143,7 @@ let telegramMachineIdentity: MachineIdentity | null = null;
 let latestIslandAgentTabs: Array<{ sessionId: string; hookSessionId?: string; title?: string; projectName?: string; agentId?: string; state?: string; lastPrompt?: string }> = [];
 const telegramSecretStore = createDefaultSecretStore();
 const TELEGRAM_TOKEN_SECRET_ID = "telegram-bot-token";
+const codexTranscriptPathCache = new Map<string, string>();
 const agentSessionWatcher = new AgentSessionWatcher();
 const browserManager = new BrowserManager();
 let activeFindBrowserId: string | null = null;
@@ -437,14 +438,82 @@ function mapIslandState(state: string | undefined): "working" | "stopped" | "app
   return state === "working" || state === "stopped" || state === "approval" ? state : null;
 }
 
-/** Read an agent session transcript as lines (Kiro `.jsonl`). Empty when unavailable. */
+/** Read an agent session transcript as lines. Empty when unavailable. */
 function readAgentTranscriptLines(agentId: string, hookSessionId: string): string[] {
-  if (agentId.toLowerCase() !== "kiro") return [];
-  const file = nodePath.join(os.homedir(), ".kiro", "sessions", "cli", `${hookSessionId}.jsonl`);
+  const normalized = agentId.toLowerCase();
+  let file: string | null = null;
+  if (normalized === "kiro") {
+    file = nodePath.join(os.homedir(), ".kiro", "sessions", "cli", `${hookSessionId}.jsonl`);
+  } else if (normalized === "codex") {
+    file = findCodexTranscriptFile(hookSessionId);
+  }
+  if (!file) return [];
   try {
     return nodeFs.readFileSync(file, "utf8").split("\n");
   } catch {
     return [];
+  }
+}
+
+function findCodexTranscriptFile(sessionId: string): string | null {
+  if (!sessionId) return null;
+  const cached = codexTranscriptPathCache.get(sessionId);
+  if (cached && nodeFs.existsSync(cached)) return cached;
+
+  const root = nodePath.join(os.homedir(), ".codex", "sessions");
+  const candidates = listJsonlFiles(root);
+  const byName = candidates.find((file) => nodePath.basename(file).includes(sessionId));
+  if (byName) {
+    codexTranscriptPathCache.set(sessionId, byName);
+    return byName;
+  }
+
+  const byMeta = candidates.find((file) => readCodexSessionId(file) === sessionId);
+  if (byMeta) codexTranscriptPathCache.set(sessionId, byMeta);
+  return byMeta ?? null;
+}
+
+function listJsonlFiles(root: string): string[] {
+  const out: string[] = [];
+  const stack = [root];
+  while (stack.length) {
+    const dir = stack.pop()!;
+    let entries: nodeFs.Dirent[];
+    try {
+      entries = nodeFs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const file = nodePath.join(dir, entry.name);
+      if (entry.isDirectory()) stack.push(file);
+      else if (entry.isFile() && entry.name.endsWith(".jsonl")) out.push(file);
+    }
+  }
+  return out;
+}
+
+function readCodexSessionId(file: string): string | null {
+  let fd: number | null = null;
+  try {
+    fd = nodeFs.openSync(file, "r");
+    const buffer = Buffer.alloc(64 * 1024);
+    const bytes = nodeFs.readSync(fd, buffer, 0, buffer.length, 0);
+    const chunk = buffer.toString("utf8", 0, bytes);
+    for (const line of chunk.split("\n")) {
+      if (!line) continue;
+      const entry = JSON.parse(line) as { type?: string; payload?: { id?: unknown; originator?: unknown } };
+      if (entry.type !== "session_meta") continue;
+      if (entry.payload?.originator !== "codex-tui") return null;
+      return typeof entry.payload?.id === "string" ? entry.payload.id : null;
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    if (fd !== null) {
+      try { nodeFs.closeSync(fd); } catch { /* ignore */ }
+    }
   }
 }
 
@@ -522,7 +591,7 @@ function createTelegramService(runtime: IpcRuntime): TelegramService {
         const lines = readAgentTranscriptLines(row.agentId, row.sessionId);
         return progressSince(row.agentId, lines.slice(cursor));
       },
-      supports: (agentId) => agentId.toLowerCase() === "kiro",
+      supports: (agentId) => agentId.toLowerCase() === "kiro" || agentId.toLowerCase() === "codex",
     },
     listSessionTasks: async (projectPath, hookSessionId) => {
       if (!projectPath) return [];
