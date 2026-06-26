@@ -38,7 +38,7 @@ const DEFAULT_SESSIONS_LIMIT = 10;
 const EDIT_THROTTLE_MS = 1000;
 const POLL_TIMEOUT_SEC = 30;
 const POLL_ERROR_BACKOFF_MS = 3000;
-const CODEX_SUBMIT_DELAY_MS = 30;
+const TUI_SUBMIT_DELAY_MS = 30;
 /** Progress bubble shows only a short fixed-length tail of the live output. */
 const PROGRESS_TAIL_CHARS = 200;
 /** Safety cap on the final message so a runaway PTY can never dump the whole scrollback. */
@@ -69,8 +69,9 @@ export type MachineIdentity = { label: string; githubUserId?: string; machineId:
 export type TerminalSubmitChunk = { data: string; delayMs?: number };
 
 export function buildAgentSubmitSequence(agentId: string, text: string): TerminalSubmitChunk[] {
-  if (agentId.toLowerCase() === "codex") {
-    return [{ data: text }, { data: "\r", delayMs: CODEX_SUBMIT_DELAY_MS }];
+  const normalized = agentId.toLowerCase();
+  if (normalized === "codex" || normalized === "claude") {
+    return [{ data: text }, { data: "\r", delayMs: TUI_SUBMIT_DELAY_MS }];
   }
   return [{ data: `${text}\r` }];
 }
@@ -877,13 +878,21 @@ export class TelegramService {
       chat.progressMessageId = null;
     }
 
+    const supported = this.deps.transcript?.supports?.(chat.row.agentId) ?? false;
+
     // Prefer the clean answer reconstructed from the agent transcript; the PTY
     // stream of a TUI agent is redraw frames and cannot be sent verbatim.
     let final: string | null = null;
     if (chat.transcriptCursor != null) {
       final = this.deps.transcript?.answer(chat.row, chat.transcriptCursor) ?? null;
+      // Transcript flush may lag behind the stop hook by a few hundred ms.
+      // Retry once after a short delay for supported agents.
+      if (!final && supported) {
+        await delay(500);
+        final = this.deps.transcript?.answer(chat.row, chat.transcriptCursor) ?? null;
+      }
     }
-    if (!final) {
+    if (!final && !supported) {
       // Fallback (agents without a transcript reader): capped PTY tail.
       const clean = stripAnsi(chat.buffer).trim();
       final = clean || "（本轮无文本回复）";
@@ -891,7 +900,7 @@ export class TelegramService {
         final = `…（仅显示最近 ${FINAL_MAX_CHARS} 字符）\n${final.slice(-FINAL_MAX_CHARS)}`;
       }
     }
-    await this.sendFormatted(chat.chatId, final);
+    await this.sendFormatted(chat.chatId, final || "（本轮无文本回复）");
     chat.buffer = "";
     chat.transcriptCursor = null;
     chat.turn = null;

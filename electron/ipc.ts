@@ -144,6 +144,7 @@ let latestIslandAgentTabs: Array<{ sessionId: string; hookSessionId?: string; ti
 const telegramSecretStore = createDefaultSecretStore();
 const TELEGRAM_TOKEN_SECRET_ID = "telegram-bot-token";
 const codexTranscriptPathCache = new Map<string, string>();
+const claudeTranscriptPathCache = new Map<string, string>();
 const agentSessionWatcher = new AgentSessionWatcher();
 const browserManager = new BrowserManager();
 let activeFindBrowserId: string | null = null;
@@ -446,6 +447,8 @@ function readAgentTranscriptLines(agentId: string, hookSessionId: string): strin
     file = nodePath.join(os.homedir(), ".kiro", "sessions", "cli", `${hookSessionId}.jsonl`);
   } else if (normalized === "codex") {
     file = findCodexTranscriptFile(hookSessionId);
+  } else if (normalized === "claude") {
+    file = findClaudeTranscriptFile(hookSessionId);
   }
   if (!file) return [];
   try {
@@ -453,6 +456,17 @@ function readAgentTranscriptLines(agentId: string, hookSessionId: string): strin
   } catch {
     return [];
   }
+}
+
+function findClaudeTranscriptFile(sessionId: string): string | null {
+  if (!sessionId) return null;
+  const cached = claudeTranscriptPathCache.get(sessionId);
+  if (cached && nodeFs.existsSync(cached)) return cached;
+
+  const root = nodePath.join(os.homedir(), ".claude", "projects");
+  const byName = listJsonlFiles(root).find((file) => nodePath.basename(file) === `${sessionId}.jsonl`);
+  if (byName) claudeTranscriptPathCache.set(sessionId, byName);
+  return byName ?? null;
 }
 
 function findCodexTranscriptFile(sessionId: string): string | null {
@@ -591,7 +605,10 @@ function createTelegramService(runtime: IpcRuntime): TelegramService {
         const lines = readAgentTranscriptLines(row.agentId, row.sessionId);
         return progressSince(row.agentId, lines.slice(cursor));
       },
-      supports: (agentId) => agentId.toLowerCase() === "kiro" || agentId.toLowerCase() === "codex",
+      supports: (agentId) => {
+        const normalized = agentId.toLowerCase();
+        return normalized === "kiro" || normalized === "codex" || normalized === "claude";
+      },
     },
     listSessionTasks: async (projectPath, hookSessionId) => {
       if (!projectPath) return [];

@@ -88,6 +88,46 @@ export function extractCodexAnswer(lines: string[]): string {
   return taskComplete ?? (answer || (lastText ?? ""));
 }
 
+export function extractClaudeAnswer(lines: string[]): string {
+  let endTurnText: string[] = [];
+  let lastText: string | null = null;
+
+  for (const line of lines) {
+    const entry = parseJsonObject(line);
+    if (!entry) continue;
+    if (readString(entry, "type") !== "assistant") continue;
+    const message = readObject(entry, "message");
+    if (!message) continue;
+    const content = readUnknown(message, "content");
+    if (!Array.isArray(content)) continue;
+
+    const stopReason = readString(message, "stop_reason");
+
+    for (const block of content) {
+      if (!block || typeof block !== "object") continue;
+      if (readString(block, "type") === "text") {
+        const text = readString(block, "text")?.trim();
+        if (text) lastText = text;
+      }
+    }
+
+    if (stopReason === "end_turn") {
+      const texts: string[] = [];
+      for (const block of content) {
+        if (!block || typeof block !== "object") continue;
+        if (readString(block, "type") === "text") {
+          const text = readString(block, "text")?.trim();
+          if (text) texts.push(text);
+        }
+      }
+      if (texts.length) endTurnText = texts;
+    }
+  }
+
+  const answer = endTurnText.join("\n\n").trim();
+  return answer || (lastText ?? "");
+}
+
 /** Extract a turn's clean answer for the given agent, or null when unsupported. */
 export function extractAnswer(agentId: string, lines: string[]): string | null {
   const normalized = agentId.toLowerCase();
@@ -97,6 +137,10 @@ export function extractAnswer(agentId: string, lines: string[]): string | null {
   }
   if (normalized === "codex") {
     const answer = extractCodexAnswer(lines);
+    return answer || null;
+  }
+  if (normalized === "claude") {
+    const answer = extractClaudeAnswer(lines);
     return answer || null;
   }
   // Other agents fall back to the PTY-derived tail until a reader is added.
@@ -162,6 +206,28 @@ export function extractCodexProgress(lines: string[]): string {
   return out.join("\n");
 }
 
+export function extractClaudeProgress(lines: string[]): string {
+  const out: string[] = [];
+  for (const line of lines) {
+    const entry = parseJsonObject(line);
+    if (!entry || readString(entry, "type") !== "assistant") continue;
+    const message = readObject(entry, "message");
+    const content = readUnknown(message ?? entry, "content");
+    if (!Array.isArray(content)) continue;
+    for (const block of content) {
+      if (!block || typeof block !== "object") continue;
+      const type = readString(block, "type");
+      if (type === "text") {
+        const text = readString(block, "text")?.trim();
+        if (text) out.push(text);
+      } else if (type === "tool_use") {
+        out.push(`🔧 ${readString(block, "name") ?? "tool"}`);
+      }
+    }
+  }
+  return out.join("\n");
+}
+
 export function progressSince(agentId: string, lines: string[]): string | null {
   const normalized = agentId.toLowerCase();
   if (normalized === "kiro") {
@@ -169,6 +235,9 @@ export function progressSince(agentId: string, lines: string[]): string | null {
   }
   if (normalized === "codex") {
     return extractCodexProgress(lines) || null;
+  }
+  if (normalized === "claude") {
+    return extractClaudeProgress(lines) || null;
   }
   return null;
 }
@@ -191,6 +260,19 @@ export function lastTurnStartIndex(agentId: string, lines: string[]): number {
       const payloadType = readString(payload, "type");
       if (type === "event_msg" && payloadType === "user_message") return i;
       if (type === "response_item" && payloadType === "message" && readString(payload, "role") === "user") return i;
+    }
+    return 0;
+  }
+  if (normalized === "claude") {
+    for (let i = lines.length - 1; i >= 0; i -= 1) {
+      const line = lines[i];
+      if (!line) continue;
+      const entry = parseJsonObject(line);
+      if (!entry || readString(entry, "type") !== "user") continue;
+      const message = readObject(entry, "message");
+      const content = readUnknown(message ?? entry, "content");
+      if (typeof content === "string" && content.trim()) return i;
+      if (Array.isArray(content) && content.some((block) => block && typeof block === "object" && readString(block, "type") !== "tool_result")) return i;
     }
     return 0;
   }
@@ -245,3 +327,4 @@ function outputTextFromContent(content: unknown): string | null {
     .filter((text): text is string => Boolean(text));
   return parts.join("\n\n");
 }
+

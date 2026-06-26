@@ -10,7 +10,14 @@ describe("buildAgentSubmitSequence", () => {
     ]);
   });
 
-  it("keeps the existing single write for other agents", () => {
+  it("splits Claude text and Enter (same TUI paste-mode issue)", () => {
+    expect(buildAgentSubmitSequence("claude", "hello")).toEqual([
+      { data: "hello" },
+      { data: "\r", delayMs: 30 },
+    ]);
+  });
+
+  it("keeps the existing single write for non-TUI agents", () => {
     expect(buildAgentSubmitSequence("kiro", "hello")).toEqual([{ data: "hello\r" }]);
   });
 });

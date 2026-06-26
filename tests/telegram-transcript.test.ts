@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { extractAnswer, extractCodexAnswer, extractCodexProgress, extractKiroAnswer, extractKiroProgress, lastTurnStartIndex } from "../src/main/telegram/transcript.js";
+import {
+  extractAnswer,
+  extractClaudeAnswer,
+  extractClaudeProgress,
+  extractCodexAnswer,
+  extractCodexProgress,
+  extractKiroAnswer,
+  extractKiroProgress,
+  lastTurnStartIndex,
+} from "../src/main/telegram/transcript.js";
 
 function kiroLine(kind: string, content?: Array<{ kind: string; data: unknown }>): string {
   return JSON.stringify({ version: 1, kind, data: content ? { content } : {} });
@@ -8,6 +17,11 @@ function kiroLine(kind: string, content?: Array<{ kind: string; data: unknown }>
 
 function codexLine(type: string, payload?: Record<string, unknown>): string {
   return JSON.stringify({ type, payload });
+}
+
+function claudeLine(type: string, content: unknown, extra: Record<string, unknown> = {}): string {
+  const stop_reason = type === "assistant" && Array.isArray(content) && content.some((b: { type?: string }) => b.type === "tool_use") ? "tool_use" : type === "assistant" ? "end_turn" : undefined;
+  return JSON.stringify({ type, entrypoint: "cli", sessionId: "claude-1", cwd: "/workspace", message: { role: type, content, ...(stop_reason ? { stop_reason } : {}) }, ...extra });
 }
 
 describe("extractKiroAnswer", () => {
@@ -63,6 +77,10 @@ describe("extractAnswer", () => {
     expect(extractAnswer("codex", [codexLine("event_msg", { type: "task_complete", last_agent_message: "done" })])).toBe("done");
   });
 
+  it("uses the claude parser for claude", () => {
+    expect(extractAnswer("claude", [claudeLine("assistant", [{ type: "text", text: "done" }])])).toBe("done");
+  });
+
   it("returns null for unsupported agents (fallback to PTY)", () => {
     expect(extractAnswer("qwen", ["whatever"])).toBeNull();
   });
@@ -101,6 +119,52 @@ describe("extractCodexAnswer", () => {
   });
 });
 
+describe("extractClaudeAnswer", () => {
+  it("returns only the closing summary after the last tool", () => {
+    const lines = [
+      claudeLine("user", "fix it"),
+      claudeLine("assistant", [{ type: "text", text: "I will inspect it." }, { type: "tool_use", name: "Bash" }]),
+      claudeLine("user", [{ type: "tool_result", content: "ok" }]),
+      claudeLine("assistant", [{ type: "text", text: "Done." }]),
+    ];
+    expect(extractClaudeAnswer(lines)).toBe("Done.");
+  });
+
+  it("returns text from the last end_turn message", () => {
+    const lines = [
+      claudeLine("assistant", [{ type: "text", text: "part one" }]),
+      claudeLine("assistant", [{ type: "text", text: "part two" }]),
+    ];
+    expect(extractClaudeAnswer(lines)).toBe("part two");
+  });
+
+  it("returns all text blocks within a single end_turn message", () => {
+    const lines = [
+      claudeLine("assistant", [{ type: "text", text: "intro" }, { type: "text", text: "conclusion" }]),
+    ];
+    expect(extractClaudeAnswer(lines)).toBe("intro\n\nconclusion");
+  });
+
+  it("falls back to last text when no end_turn message exists", () => {
+    const lines = [
+      claudeLine("assistant", [{ type: "text", text: "summary here" }, { type: "tool_use", name: "Bash" }]),
+    ];
+    expect(extractClaudeAnswer(lines)).toBe("summary here");
+  });
+
+  it("ignores intermediate text from tool_use messages", () => {
+    const lines = [
+      claudeLine("user", "fix it"),
+      claudeLine("assistant", [{ type: "text", text: "Let me look at this." }, { type: "tool_use", name: "Bash" }]),
+      claudeLine("user", [{ type: "tool_result", content: "ok" }]),
+      claudeLine("assistant", [{ type: "text", text: "I see the issue, trying another approach." }, { type: "tool_use", name: "Edit" }]),
+      claudeLine("user", [{ type: "tool_result", content: "done" }]),
+      claudeLine("assistant", [{ type: "text", text: "Fixed the bug. Here is what I did:\n\n1. Found the root cause\n2. Applied the fix" }]),
+    ];
+    expect(extractClaudeAnswer(lines)).toBe("Fixed the bug. Here is what I did:\n\n1. Found the root cause\n2. Applied the fix");
+  });
+});
+
 describe("extractKiroProgress", () => {
   it("renders text and tool activity, skipping thinking", () => {
     const lines = [
@@ -124,6 +188,19 @@ describe("extractCodexProgress", () => {
       codexLine("response_item", { type: "web_search_call" }),
     ];
     expect(extractCodexProgress(lines)).toBe("Reading the code.\n🔧 exec_command\n🔧 apply_patch\n🔎 web search");
+  });
+});
+
+describe("extractClaudeProgress", () => {
+  it("renders text and tool activity, skipping thinking", () => {
+    const lines = [
+      claudeLine("assistant", [
+        { type: "thinking", thinking: "secret" },
+        { type: "text", text: "Reading files." },
+        { type: "tool_use", name: "Bash" },
+      ]),
+    ];
+    expect(extractClaudeProgress(lines)).toBe("Reading files.\n🔧 Bash");
   });
 });
 
@@ -156,5 +233,18 @@ describe("lastTurnStartIndex", () => {
     ];
     expect(lastTurnStartIndex("codex", lines)).toBe(3);
     expect(extractCodexAnswer(lines.slice(3))).toBe("b");
+  });
+
+  it("finds the last Claude user prompt index and skips tool results", () => {
+    const lines = [
+      claudeLine("user", "first"),
+      claudeLine("assistant", [{ type: "tool_use", name: "Bash" }]),
+      claudeLine("user", [{ type: "tool_result", content: "ok" }]),
+      claudeLine("assistant", [{ type: "text", text: "a" }]),
+      claudeLine("user", [{ type: "text", text: "second" }]),
+      claudeLine("assistant", [{ type: "text", text: "b" }]),
+    ];
+    expect(lastTurnStartIndex("claude", lines)).toBe(4);
+    expect(extractClaudeAnswer(lines.slice(4))).toBe("b");
   });
 });
