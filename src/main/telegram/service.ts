@@ -885,11 +885,13 @@ export class TelegramService {
     let final: string | null = null;
     if (chat.transcriptCursor != null) {
       final = this.deps.transcript?.answer(chat.row, chat.transcriptCursor) ?? null;
-      // Transcript flush may lag behind the stop hook by a few hundred ms.
-      // Retry once after a short delay for supported agents.
+      // Transcript flush may lag behind the stop hook — poll briefly for the
+      // end_turn entry to appear in the jsonl file.
       if (!final && supported) {
-        await delay(500);
-        final = this.deps.transcript?.answer(chat.row, chat.transcriptCursor) ?? null;
+        for (let i = 0; i < 6 && !final; i++) {
+          await delay(500);
+          final = this.deps.transcript?.answer(chat.row, chat.transcriptCursor) ?? null;
+        }
       }
     }
     if (!final && !supported) {

@@ -90,7 +90,6 @@ export function extractCodexAnswer(lines: string[]): string {
 
 export function extractClaudeAnswer(lines: string[]): string {
   let endTurnText: string[] = [];
-  let lastText: string | null = null;
 
   for (const line of lines) {
     const entry = parseJsonObject(line);
@@ -101,17 +100,7 @@ export function extractClaudeAnswer(lines: string[]): string {
     const content = readUnknown(message, "content");
     if (!Array.isArray(content)) continue;
 
-    const stopReason = readString(message, "stop_reason");
-
-    for (const block of content) {
-      if (!block || typeof block !== "object") continue;
-      if (readString(block, "type") === "text") {
-        const text = readString(block, "text")?.trim();
-        if (text) lastText = text;
-      }
-    }
-
-    if (stopReason === "end_turn") {
+    if (readString(message, "stop_reason") === "end_turn") {
       const texts: string[] = [];
       for (const block of content) {
         if (!block || typeof block !== "object") continue;
@@ -124,8 +113,7 @@ export function extractClaudeAnswer(lines: string[]): string {
     }
   }
 
-  const answer = endTurnText.join("\n\n").trim();
-  return answer || (lastText ?? "");
+  return endTurnText.join("\n\n").trim();
 }
 
 /** Extract a turn's clean answer for the given agent, or null when unsupported. */

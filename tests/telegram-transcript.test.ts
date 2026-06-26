@@ -145,11 +145,11 @@ describe("extractClaudeAnswer", () => {
     expect(extractClaudeAnswer(lines)).toBe("intro\n\nconclusion");
   });
 
-  it("falls back to last text when no end_turn message exists", () => {
+  it("returns empty when no end_turn message exists (triggers retry)", () => {
     const lines = [
       claudeLine("assistant", [{ type: "text", text: "summary here" }, { type: "tool_use", name: "Bash" }]),
     ];
-    expect(extractClaudeAnswer(lines)).toBe("summary here");
+    expect(extractClaudeAnswer(lines)).toBe("");
   });
 
   it("ignores intermediate text from tool_use messages", () => {
