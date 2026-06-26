@@ -16,6 +16,7 @@ export const BOT_COMMANDS = [
   "machine",
   "sessions",
   "resume",
+  "new",
   "tasks",
   "status",
   "stop",

@@ -583,6 +583,7 @@ export type SharkBayBridge = {
     onNewTerminalTab?: (callback: () => void) => () => void;
     onFocusTerminalSession?: (callback: (id: string) => void) => () => void;
     onRestoreAgentSession?: (callback: (payload: { cwdUri: string; projectName: string; agentId: string; hookSessionId: string }) => void) => () => void;
+    onLaunchAgentSession?: (callback: (payload: { cwdUri: string; projectName: string; agentId: string }) => void) => () => void;
     onOpenFind?: (callback: () => void) => () => void;
     onFindClosed?: (callback: () => void) => () => void;
   };

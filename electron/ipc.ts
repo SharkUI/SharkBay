@@ -531,6 +531,27 @@ function createTelegramService(runtime: IpcRuntime): TelegramService {
         .filter((task) => task.sessionId === hookSessionId)
         .map((task) => ({ taskId: task.taskId, title: task.title, raw: task.rawMarkdown }));
     },
+    listProjects: async () => {
+      const config = await getConfiguredRoots(runtime);
+      return config.configuredProjects.map((projectPath) => {
+        const cwdUri = toLocalProjectUri(projectPath);
+        return { cwdUri, projectName: config.projectAliases[cwdUri] ?? nodePath.basename(projectPath) };
+      });
+    },
+    listAgents: async (cwdUri) => {
+      const agents = await requireCore().call("listAgentClis", [runtime, { cwdUri }]).catch(() => [] as AgentCli[]);
+      return agents.map((agent) => ({ id: agent.id, label: agent.label }));
+    },
+    launchSession: async (cwdUri, projectName, agentId) => {
+      BrowserWindow.getAllWindows().forEach((window) => {
+        window.webContents.send(appChannels.launchAgentSession, { cwdUri, projectName, agentId });
+      });
+    },
+    currentOpenTerminalIds: () => latestIslandAgentTabs.map((tab) => tab.sessionId),
+    resolveHookForTerminal: (terminalId) => {
+      const tab = latestIslandAgentTabs.find((t) => t.sessionId === terminalId);
+      return (typeof tab?.hookSessionId === "string" && tab.hookSessionId) ? tab.hookSessionId : null;
+    },
     onStatusChanged: broadcastTelegramStatus,
   };
   return new TelegramService(deps);

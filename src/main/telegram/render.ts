@@ -125,6 +125,7 @@ export const HELP_TEXT = [
   "🖥 机器与会话",
   "/machine — 本机信息",
   "/sessions — 已打开的会话（点按钮或回数字序号进入）",
+  "/new — 新建 agent 会话（选项目→选 agent）",
   "/resume — 恢复未打开的历史会话（在 SharkBay 中打开并进入）",
   "/tasks — 本会话关联的任务（点开看全文）",
   "",

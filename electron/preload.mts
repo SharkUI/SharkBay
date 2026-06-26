@@ -123,6 +123,16 @@ const onRestoreAgentSession = (callback: (payload: RestoreAgentSessionPayload) =
   return () => restoreAgentSessionListeners.delete(callback);
 };
 
+type LaunchAgentSessionPayload = { cwdUri: string; projectName: string; agentId: string };
+const launchAgentSessionListeners = new Set<(payload: LaunchAgentSessionPayload) => void>();
+ipcRenderer.on(appChannels.launchAgentSession, (_ev, payload: LaunchAgentSessionPayload) => {
+  launchAgentSessionListeners.forEach((cb) => cb(payload));
+});
+const onLaunchAgentSession = (callback: (payload: LaunchAgentSessionPayload) => void) => {
+  launchAgentSessionListeners.add(callback);
+  return () => launchAgentSessionListeners.delete(callback);
+};
+
 function invoke<Result>(channel: string, payload?: unknown): Promise<Result> {
   return ipcRenderer.invoke(channel, payload) as Promise<Result>;
 }
@@ -133,6 +143,7 @@ const sharkBayApi = {
     onNewTerminalTab,
     onFocusTerminalSession,
     onRestoreAgentSession,
+    onLaunchAgentSession,
     onOpenFind,
     onFindClosed,
   },

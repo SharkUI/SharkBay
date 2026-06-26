@@ -46,6 +46,7 @@ const FINAL_MAX_CHARS = 6000;
 const BOT_COMMAND_MENU: BotCommandSpec[] = [
   { command: "sessions", description: "已打开的会话" },
   { command: "resume", description: "恢复未打开的历史会话" },
+  { command: "new", description: "新建 agent 会话" },
   { command: "tasks", description: "本会话关联的任务" },
   { command: "machine", description: "本机信息" },
   { command: "status", description: "当前会话状态" },
@@ -99,6 +100,16 @@ export type TelegramServiceDeps = {
   };
   /** Tasks associated with a session (frontmatter sessionId match), with full markdown. */
   listSessionTasks: (projectPath: string, hookSessionId: string) => Promise<Array<{ taskId: string; title: string; raw: string }>>;
+  /** Configured projects, for the /new wizard. */
+  listProjects: () => Promise<Array<{ cwdUri: string; projectName: string }>>;
+  /** Available agent CLIs for a project, for the /new wizard. */
+  listAgents: (cwdUri: string) => Promise<Array<{ id: string; label: string }>>;
+  /** Launch a brand-new agent session as a SharkBay tab. */
+  launchSession: (cwdUri: string, projectName: string, agentId: string) => Promise<void>;
+  /** Terminal ids of currently-open agent tabs (to detect a newly-launched one). */
+  currentOpenTerminalIds: () => string[];
+  /** Resolve the agent hook session id for an open terminal (backfill after launch). */
+  resolveHookForTerminal: (terminalId: string) => string | null;
   onStatusChanged?: () => void;
   now?: () => number;
   fetchImpl?: FetchLike;
@@ -148,6 +159,7 @@ export class TelegramService {
   private lastSessionRows: TelegramSessionRow[] = [];
   private lastResumeRows: TelegramSessionRow[] = [];
   private lastListKind: "use" | "resume" = "use";
+  private newWizard = new Map<number, { projects: Array<{ cwdUri: string; projectName: string }>; project?: { cwdUri: string; projectName: string }; agents: Array<{ id: string; label: string }> }>();
   private idleTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(deps: TelegramServiceDeps) {
@@ -319,6 +331,7 @@ export class TelegramService {
       case "machine": return this.sendMachine(chatId);
       case "sessions": return this.sendSessions(chatId, dispatch.args);
       case "resume": return this.sendResume(chatId, dispatch.args);
+      case "new": return this.sendNewProjects(chatId, from.id);
       case "tasks": return this.sendTasks(chatId, from.id);
       case "status": return this.sendStatus(chatId, from.id);
       case "stop": return this.handleStop(chatId, from.id);
@@ -344,6 +357,28 @@ export class TelegramService {
     }
     if (data === "sessions:refresh") { await this.api?.answerCallbackQuery(cb.id); return this.sendSessions(chatId, ""); }
     if (data === "resume:refresh") { await this.api?.answerCallbackQuery(cb.id); return this.sendResume(chatId, ""); }
+    if (data.startsWith("new:p:")) {
+      await this.api?.answerCallbackQuery(cb.id);
+      const wizard = this.newWizard.get(cb.from.id);
+      const project = wizard?.projects[Number.parseInt(data.slice("new:p:".length), 10)];
+      if (!wizard || !project) { await this.send(chatId, "向导已过期，请重新 /new。"); return; }
+      const agents = await this.deps.listAgents(project.cwdUri).catch(() => []);
+      if (agents.length === 0) { await this.send(chatId, "该项目没有可用的 agent CLI。"); this.newWizard.delete(cb.from.id); return; }
+      wizard.project = project;
+      wizard.agents = agents;
+      const buttons = agents.map((a, i) => ({ text: a.label, callbackData: `new:a:${i}` }));
+      await this.send(chatId, `项目：${project.projectName}\n选择 agent：`, toReplyMarkup(buttons));
+      return;
+    }
+    if (data.startsWith("new:a:")) {
+      await this.api?.answerCallbackQuery(cb.id);
+      const wizard = this.newWizard.get(cb.from.id);
+      const agent = wizard?.agents[Number.parseInt(data.slice("new:a:".length), 10)];
+      if (!wizard || !wizard.project || !agent) { await this.send(chatId, "向导已过期，请重新 /new。"); return; }
+      this.newWizard.delete(cb.from.id);
+      await this.startNewSession(chatId, cb.from.id, wizard.project, agent);
+      return;
+    }
     if (data.startsWith("task:")) {
       await this.api?.answerCallbackQuery(cb.id);
       const chat = this.chats.get(cb.from.id);
@@ -445,6 +480,57 @@ export class TelegramService {
     await this.send(chatId, text, buttons.length ? toReplyMarkup(buttons) : undefined);
   }
 
+  private async sendNewProjects(chatId: number, userId: number): Promise<void> {
+    const projects = await this.deps.listProjects().catch(() => []);
+    if (projects.length === 0) { await this.send(chatId, "没有已配置的项目。"); return; }
+    this.newWizard.set(userId, { projects, agents: [] });
+    const buttons = projects.map((p, i) => ({ text: p.projectName, callbackData: `new:p:${i}` }));
+    await this.send(chatId, "新建会话 — 选择项目：", toReplyMarkup(buttons));
+  }
+
+  private async startNewSession(chatId: number, userId: number, project: { cwdUri: string; projectName: string }, agent: { id: string; label: string }): Promise<void> {
+    await this.send(chatId, `🚀 正在 ${project.projectName} 启动 ${agent.label}…`);
+    const before = new Set(this.deps.currentOpenTerminalIds());
+    try {
+      await this.deps.launchSession(project.cwdUri, project.projectName, agent.id);
+    } catch (error) {
+      await this.send(chatId, `⚠️ 启动失败：${errorMessage(error)}`);
+      return;
+    }
+    const terminalId = await this.waitForNewTerminal(before, 20_000);
+    if (!terminalId) {
+      await this.send(chatId, "已请求启动；打开后用 /sessions 进入。");
+      return;
+    }
+    const hookSessionId = this.deps.resolveHookForTerminal(terminalId) ?? "";
+    const row: TelegramSessionRow = {
+      sessionId: hookSessionId || terminalId,
+      terminalId,
+      projectPath: "",
+      cwdUri: project.cwdUri,
+      projectName: project.projectName,
+      agentId: agent.id,
+      model: null,
+      title: agent.label,
+      subtitle: null,
+      lastEventAt: new Date(this.now()).toISOString(),
+      state: null,
+    };
+    const chat = this.registerChat(chatId, userId, row, terminalId);
+    this.startTyping(chat);
+    await this.send(chatId, `💬 已在 ${project.projectName} 启动 ${agent.label} 新会话并切入。\n直接发消息开始对话，/stop 退出。`);
+  }
+
+  private async waitForNewTerminal(before: Set<string>, timeoutMs: number): Promise<string | null> {
+    const deadline = this.now() + timeoutMs;
+    while (this.now() < deadline) {
+      const fresh = this.deps.currentOpenTerminalIds().find((id) => !before.has(id));
+      if (fresh) return fresh;
+      await delay(800);
+    }
+    return null;
+  }
+
   private async sendTasks(chatId: number, userId: number): Promise<void> {
     const chat = this.chats.get(userId);
     if (!chat) { await this.send(chatId, "请先进入一个会话（/sessions）再查看其任务。"); return; }
@@ -509,12 +595,11 @@ export class TelegramService {
   }
 
   /** Bind a Telegram chat to an open SharkBay terminal and sync current state. */
-  private async attach(chatId: number, userId: number, row: TelegramSessionRow, terminalId: string): Promise<void> {
+  /** Build + register a chat bound to an open terminal (detaching any previous). */
+  private registerChat(chatId: number, userId: number, row: TelegramSessionRow, terminalId: string): ChatSession {
     const existing = this.chats.get(userId);
     if (existing) this.detach(existing); // switch sessions; leave the old tab open
-
     const live = this.deps.currentStatus?.(row) ?? null;
-    const state: SessionState | null = live?.state ?? row.state;
     const chat: ChatSession = {
       chatId,
       telegramUserId: userId,
@@ -527,7 +612,7 @@ export class TelegramService {
       buffer: "",
       lastEditAt: 0,
       lastActivityAt: this.now(),
-      liveState: state,
+      liveState: live?.state ?? row.state,
       lastAction: live?.action ?? "",
       editTimer: null,
       transcriptCursor: null,
@@ -538,6 +623,12 @@ export class TelegramService {
     };
     this.chats.set(userId, chat);
     this.ptyToChat.set(terminalId, userId);
+    return chat;
+  }
+
+  private async attach(chatId: number, userId: number, row: TelegramSessionRow, terminalId: string): Promise<void> {
+    const chat = this.registerChat(chatId, userId, row, terminalId);
+    const state = chat.liveState;
 
     const model = row.model ? `/${row.model}` : "";
     const header = `💬 ${row.projectName} ｜ ${row.agentId}${model} ｜ ${statusBadge(state)} ${stateWord(state)}`;
@@ -608,6 +699,15 @@ export class TelegramService {
     if (userId === undefined) return;
     const chat = this.chats.get(userId);
     if (!chat) return;
+    // Backfill the hook session id once the new tab reports it (e.g. /new sessions
+    // where the agent generates the id only after it starts).
+    if (!chat.hookSessionId || chat.hookSessionId === chat.ptyId) {
+      const hookId = this.deps.resolveHookForTerminal(chat.ptyId);
+      if (hookId) {
+        chat.hookSessionId = hookId;
+        if (chat.row.sessionId === "" || chat.row.sessionId === chat.ptyId) chat.row.sessionId = hookId;
+      }
+    }
     chat.lastActivityAt = this.now();
     // Ignore output produced while no turn is active — this drops the resume
     // replay / boot banner the agent prints before the user's prompt is processed.

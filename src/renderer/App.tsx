@@ -1095,6 +1095,18 @@ function DashboardView({
     });
     return () => unsubscribe?.();
   }, [bridgeAvailable]);
+
+  // Telegram /new → launch a brand-new agent session in the chosen project.
+  useEffect(() => {
+    if (!bridgeAvailable) return;
+    const unsubscribe = getBridge().app?.onLaunchAgentSession?.((payload) => {
+      const agent = agentClisForRestoreRef.current.find((a) => a.id === payload.agentId);
+      if (!agent) return;
+      const command = buildAgentLaunchCommand(agent);
+      void terminalPaneRef.current?.openAgentSession(payload.cwdUri, payload.projectName, command, agent.label, agent.id);
+    });
+    return () => unsubscribe?.();
+  }, [bridgeAvailable]);
   const [projectColumnWidth, setProjectColumnWidth] = useState(() =>
     storedColumnWidth(projectColumnStorageKey, defaultProjectColumnWidth, minProjectColumnWidth),
   );
