@@ -3,39 +3,47 @@ kind: sharkbay_task
 taskId: H6C9LA-u3960864-m81ae10
 taskTag: H6C9LA
 mode: task
-title: Optimize Claude Telegram transcript behavior
+title: Fix Claude Telegram transcript answer and submit delay
 status: completed
 actor: SharkUI
 githubUserId: 3960864
 machine: 81ae10
-agent: Codex GPT-5
-sessionId: 019f036c-a166-7f71-9a3d-4e3cba8a3e08
+agent: Claude Code Opus 4.6
+sessionId: a9cbaae7-c59c-462f-952c-761456af077d
 branch: main
 createdAt: 2026-06-26T10:38:47Z
-updatedAt: 2026-06-26T10:41:21Z
-completedAt: 2026-06-26T10:41:21Z
+updatedAt: 2026-06-26T11:30:09Z
+completedAt: 2026-06-26T11:30:09Z
+commits:
+  - a112d4b7
+  - 1d682adb
+  - 61b0b7c8
 ---
 
 ## Summary
-按照 Kiro/Codex 的 Telegram 标准，为 Claude Code 增加干净 transcript 输出支持。Telegram 现在可从 Claude transcript 重建最终答案、显示干净进度，并避免回退到 TUI PTY。
+Fix Claude Telegram integration: extractClaudeAnswer strictly uses stop_reason:"end_turn" (no fallback to intermediate text), finalizeChat polls up to 3s for transcript flush, and buildAgentSubmitSequence delays \r for Claude TUI.
 
 ## Files
 - src/main/telegram/transcript.ts
+- src/main/telegram/service.ts
 - electron/ipc.ts
 - tests/telegram-transcript.test.ts
+- tests/telegram-service.test.ts
 
 ## Work
-- 目标聚焦 Claude Code 的 Telegram transcript reader、最终答案和进度表现。
-- 假设暂不修改 Claude 提交键序列，除非发现和 Codex 一样的已知提交问题。
-- 增加 Claude transcript parser：最终答案取最后一次工具后的 assistant text，纯文本轮保留全文，进度显示干净 text 和工具名。
-- IPC transcript reader 支持从 `~/.claude/projects/**/<sessionId>.jsonl` 按 Claude session id 读取记录，并把 Claude 标记为支持 transcript 的 agent，避免回退到 TUI PTY。
+- Took over from Codex GPT-5 (session 019f036c, commit a112d4b7).
+- Root cause of "unclean result": extractClaudeAnswer had a lastText fallback that returned intermediate tool narration when end_turn hadn't flushed to jsonl yet. This made the result non-null (skipping retry) but incomplete.
+- Fix: extractClaudeAnswer returns "" when no end_turn exists → extractAnswer returns null → finalizeChat polls up to 6×500ms for the end_turn entry to appear.
+- buildAgentSubmitSequence delays \r for Claude (TUI paste-mode fix, same as Codex).
+- For supported agents, never fall back to raw PTY.
+- findClaudeTranscriptFile locates ~/.claude/projects/**/<sessionId>.jsonl.
 
 ## Verification
-- `npm test -- tests/telegram-transcript.test.ts`：23 tests passed。
-- `npm run typecheck`：renderer + node typecheck passed。
-- `npm test -- tests/telegram-*.test.ts`：84 tests / 9 files passed。
-- `npm run build`：node compile + Vite production build passed。
-- `git diff --check`：passed。
+- `npm test -- tests/telegram-*.test.ts`: 87 tests / 9 files passed.
+- `npm run typecheck`: passed.
+- Manual Telegram test: final answer now displays clean and complete.
 
 ## Notes
-- 关联参考任务：K9R2WX、C8D4XM、T8M4QK。
+- Continues Codex's H6C9LA work (commit a112d4b7).
+- Related tasks: K9R2WX, C8D4XM, T8M4QK.
+- The 3s polling window covers Claude Code's typical transcript flush delay after stop hook.
