@@ -4919,7 +4919,7 @@ function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, ca
               <PuzzleIcon /><span>Extensions</span>
             </button>
             <button aria-current={activeSection === "telegram" ? "page" : undefined} className={cx("settings-nav-item", activeSection === "telegram" && "is-selected")} type="button" onClick={() => setActiveSection("telegram")}>
-              <TerminalIcon /><span>Telegram</span>
+              <TelegramIcon /><span>Telegram</span>
             </button>
             <button aria-current={activeSection === "diagnostics" ? "page" : undefined} className={cx("settings-nav-item", activeSection === "diagnostics" && "is-selected")} type="button" onClick={() => setActiveSection("diagnostics")}>
               <ActivityIcon /><span>Diagnostics</span>
@@ -6067,6 +6067,10 @@ function ServerIcon() {
 
 function TerminalIcon() {
   return <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18"><polyline points="4 17 10 11 4 5" /><line x1="12" x2="20" y1="19" y2="19" /></svg>;
+}
+
+function TelegramIcon() {
+  return <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18"><path d="M21.5 3.5 10.8 14.2" /><path d="m21.5 3.5-6.8 17-3.9-6.3-6.3-3.9 17-6.8Z" /></svg>;
 }
 
 function InstallAgentDialog({ targetId, targetLabel, installedAgentIds, onClose, onInstalled, setToast }: {
