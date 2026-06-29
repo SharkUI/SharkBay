@@ -11,12 +11,12 @@ machine: 81ae10
 agent: Codex GPT-5
 branch: main
 createdAt: 2026-06-29T06:11:22Z
-updatedAt: 2026-06-29T06:48:21Z
-completedAt: 2026-06-29T06:48:21Z
+updatedAt: 2026-06-29T06:55:35Z
+completedAt: 2026-06-29T06:55:35Z
 ---
 
 ## Summary
-Rebuilt the Telegram settings mockup as a simpler UCD-oriented settings surface aligned with the current SharkBay Settings VI. The design now uses the existing Settings navigation, heading, panel, form note, list row, input, checkbox, and compact button language while focusing only on connection and pairing.
+Rebuilt the Telegram settings mockup as a simpler UCD-oriented multi-state settings demo aligned with the current SharkBay Settings VI. The no-token state now shows only token setup, while connected states progressively reveal remote control and pairing.
 
 ## Files
 - docs/shared/telegram-settings-design.html
@@ -29,12 +29,16 @@ Rebuilt the Telegram settings mockup as a simpler UCD-oriented settings surface 
 - Reopened the task after user feedback that the simplified mockup no longer matched SharkBay Settings VI.
 - Reworked the mockup to load `src/styles/app.css` and mirror the current `SettingsView` / `TelegramSettingsPanel` structure.
 - Fixed static-demo-only hidden/input/button constraints exposed by visual verification.
+- Reopened the task to split the mockup into multiple data states so irrelevant controls are absent, not merely disabled.
+- Replaced the single interactive mock with three static settings states: no token, connected with no paired users, and connected with a paired user.
+- Removed enable and pairing controls from the no-token state.
 
 ## Verification
 - `node -e` sanity check: verified key HTML markers and disabled-state CSS are present.
 - `node -e` whitespace check: passed.
 - Playwright desktop and mobile render/interaction check: passed; verified no horizontal overflow, initial disabled pairing state, connect flow, and pairing flow.
 - Playwright VI regression check: passed; verified `app.css` loads, current Settings class markers are present, paired user starts hidden, and `Save token` stays single-line.
+- Playwright multi-state check: passed; verified three states render, no-token has only one panel, no-token has no enable checkbox or pairing, connected states include the expected controls, and desktop/mobile have no horizontal overflow.
 
 ## Notes
 - User requested a simpler UCD-oriented Telegram Settings mockup with less invalid information.
