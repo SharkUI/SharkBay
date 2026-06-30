@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.8] — 2026-06-30
+
+### Added
+- Telegram remote control: operate your SharkBay agent sessions from a self-hosted Telegram bot. Add a BotFather token in Settings → Telegram and pair your account, then from Telegram: `/sessions` to attach to an open session, `/resume` to restore a past one, `/new` to start a fresh session (pick project → agent), and `/tasks` to read the session's task records. Chat with the agent with live progress, a typing indicator, and inline approval buttons; replies and task docs render as Telegram markdown, with clean answers reconstructed from agent transcripts (Kiro, Claude, Codex).
+- In-tab search: Cmd+F finds within terminal and browser tabs, with a popover showing match count, navigation, and per-tab state.
+- Agent tab restore across app restarts: terminal and agent tabs are preserved and restored on relaunch.
+
+### Changed
+- Island auto-expands on attention states and auto-collapses while you keep working; clicking an island session clears its stopped/approval indicator.
+
+### Fixed
+- Task context menu and Review submenu no longer clip at the right screen edge.
+- Restored agent tabs keep their titles and stay "unknown" until activity.
+- Cleaner development shutdown with no orphaned process.
+
 ## [0.2.7] — 2026-06-21
 
 ### Added
