@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SharkBay Telegram Settings Design</title>
+<link rel="stylesheet" href="../../src/styles/app.css" />
+<style>
+html,
+body {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  overflow: auto;
+  background: #f4f1eb;
+}
+
+body {
+  display: grid;
+  place-items: center;
+  padding: 28px;
+}
+
+button {
+  cursor: pointer;
+}
+
+.mock-shell {
+  width: min(1120px, 100%);
+  height: min(760px, calc(100vh - 56px));
+  min-height: 660px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f4f1eb;
+  border: 1px solid #dcd7ca;
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
+}
+
+.mock-titlebar {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 0 14px;
+  border-bottom: 1px solid #e8e4db;
+}
+
+.mock-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+}
+
+.mock-dot.red { background: #ff5f57; }
+.mock-dot.yellow { background: #febc2e; }
+.mock-dot.green { background: #28c840; }
+
+.mock-shell .settings-layout {
+  flex: 1 1 auto;
+}
+
+.mock-shell .settings-nav {
+  padding-top: 24px;
+}
+
+.mock-shell .settings-content {
+  padding: 28px 36px 40px;
+}
+
+.state-stack {
+  display: grid;
+  gap: 34px;
+}
+
+.state-demo {
+  display: grid;
+  gap: 18px;
+  padding-bottom: 30px;
+  border-bottom: 1px solid #e8e4db;
+}
+
+.state-demo:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.state-label {
+  margin: 0 0 -8px;
+  color: #697477;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.state-demo .workflow-panel + .workflow-panel {
+  margin-top: 8px;
+}
+
+.mock-shell .text-input {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 5px 8px;
+  color: #172528;
+  background: #fff;
+  border: 1px solid #d8d4ca;
+  border-radius: 6px;
+  outline: none;
+}
+
+.mock-shell .text-input:focus {
+  border-color: #8fa09b;
+  box-shadow: 0 0 0 2px rgba(50, 80, 86, 0.1);
+}
+
+.telegram-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.telegram-status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #c85d4d;
+}
+
+.telegram-status.is-connected::before {
+  background: #5cb47a;
+}
+
+.token-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.token-row .text-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.token-row .button {
+  min-width: 82px;
+  white-space: nowrap;
+}
+
+.replace-token-row[hidden] {
+  display: none;
+}
+
+.pair-command {
+  color: #172528;
+}
+
+.telegram-plane {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.75;
+}
+
+@media (max-width: 760px) {
+  body {
+    padding: 0;
+  }
+
+  .mock-shell {
+    width: 100%;
+    height: 100vh;
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .mock-shell .settings-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .mock-shell .settings-nav {
+    display: none;
+  }
+
+  .mock-shell .settings-content {
+    padding: 24px 18px 32px;
+  }
+
+  .settings-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .token-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+</style>
+</head>
+<body>
+<div class="mock-shell">
+  <div class="mock-titlebar" aria-hidden="true">
+    <span class="mock-dot red"></span>
+    <span class="mock-dot yellow"></span>
+    <span class="mock-dot green"></span>
+  </div>
+
+  <div class="settings-layout">
+    <div class="settings-shell">
+      <aside class="settings-nav" aria-label="Settings sections">
+        <button class="settings-back-button" type="button">
+          <svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" /></svg>
+          <span>Back</span>
+        </button>
+        <div class="settings-nav-group">
+          <button class="settings-nav-item" type="button">
+            <svg viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg>
+            <span>General</span>
+          </button>
+          <button class="settings-nav-item" type="button">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" /></svg>
+            <span>Appearance</span>
+          </button>
+          <button class="settings-nav-item" type="button">
+            <svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5" /><line x1="12" x2="20" y1="19" y2="19" /></svg>
+            <span>Agent CLIs</span>
+          </button>
+          <button class="settings-nav-item" type="button">
+            <svg viewBox="0 0 24 24"><path d="M19.4 7.9c-.1.3.1.6.3.8l1.6 1.6c.5.5.7 1.1.7 1.7s-.2 1.2-.7 1.7l-1.6 1.6a1 1 0 0 1-.8.3c-.5-.1-.8-.5-1-.9a2.5 2.5 0 1 0-3.2 3.2c.4.2.9.5.9 1a1 1 0 0 1-.3.8l-1.6 1.6a2.4 2.4 0 0 1-3.4 0l-1.6-1.6a1 1 0 0 0-.9-.3c-.5.1-.8.5-1 .9a2.5 2.5 0 1 1-3.2-3.2c.5-.2.9-.5 1-1a1 1 0 0 0-.3-.9l-1.6-1.6a2.4 2.4 0 0 1 0-3.4l1.5-1.5c.2-.2.6-.4.9-.3.5.1.9.5 1.1 1a2.5 2.5 0 1 0 3.3-3.3c-.5-.2-.9-.6-1-1.1-.1-.3.1-.7.3-.9l1.5-1.5a2.4 2.4 0 0 1 3.4 0l1.6 1.6c.2.2.6.3.9.3.5-.1.8-.5 1-.9a2.5 2.5 0 1 1 3.2 3.2c-.5.2-.9.6-1 1.1Z" /></svg>
+            <span>Extensions</span>
+          </button>
+          <button class="settings-nav-item is-selected" type="button" aria-current="page">
+            <svg class="telegram-plane" viewBox="0 0 24 24"><path d="M21.5 3.5 10.8 14.2" /><path d="m21.5 3.5-6.8 17-3.9-6.3-6.3-3.9 17-6.8Z" /></svg>
+            <span>Telegram</span>
+          </button>
+          <button class="settings-nav-item" type="button">
+            <svg viewBox="0 0 24 24"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" /></svg>
+            <span>Diagnostics</span>
+          </button>
+        </div>
+      </aside>
+
+      <section class="settings-content" aria-label="Settings content">
+        <div class="state-stack">
+          <section class="state-demo" data-state="no-token">
+            <p class="state-label">No token</p>
+            <div class="settings-section-heading">
+              <h4>Telegram</h4>
+              <span>Remote control via your own bot</span>
+            </div>
+            <section class="workflow-panel">
+              <h5 class="settings-subsection-title">Connection</h5>
+              <div class="form-note">
+                Status: <span class="telegram-status">Not configured</span>
+              </div>
+              <div class="token-row">
+                <input class="text-input" type="password" placeholder="Paste BotFather token" />
+                <button class="button secondary compact" type="button" disabled>Save token</button>
+              </div>
+            </section>
+          </section>
+
+          <section class="state-demo" data-state="connected">
+            <p class="state-label">Connected, no paired users</p>
+            <div class="settings-section-heading">
+              <h4>Telegram</h4>
+              <span>Remote control via your own bot</span>
+            </div>
+            <section class="workflow-panel">
+              <h5 class="settings-subsection-title">Connection</h5>
+              <div class="settings-toggle-row">
+                <label class="checkbox-row">
+                  <input type="checkbox" checked />
+                  <span>Enable Telegram remote control</span>
+                </label>
+                <button class="button secondary compact replace-token-button" type="button">Replace token</button>
+              </div>
+              <div class="form-note">
+                Status: <span class="telegram-status is-connected">Connected · @sharkbay_remote_bot</span>
+              </div>
+              <div class="token-row replace-token-row" hidden>
+                <input class="text-input" type="password" placeholder="Paste replacement BotFather token" />
+                <button class="button secondary compact replace-save-button" type="button" disabled>Save token</button>
+              </div>
+            </section>
+            <section class="workflow-panel">
+              <h5 class="settings-subsection-title">Pairing</h5>
+              <div class="settings-toggle-row">
+                <button class="button secondary compact" type="button">Generate pair code</button>
+                <span class="form-note">No paired users yet.</span>
+              </div>
+            </section>
+          </section>
+
+          <section class="state-demo" data-state="paired">
+            <p class="state-label">Connected, paired user</p>
+            <div class="settings-section-heading">
+              <h4>Telegram</h4>
+              <span>Remote control via your own bot</span>
+            </div>
+            <section class="workflow-panel">
+              <h5 class="settings-subsection-title">Connection</h5>
+              <div class="settings-toggle-row">
+                <label class="checkbox-row">
+                  <input type="checkbox" checked />
+                  <span>Enable Telegram remote control</span>
+                </label>
+                <button class="button secondary compact replace-token-button" type="button">Replace token</button>
+              </div>
+              <div class="form-note">
+                Status: <span class="telegram-status is-connected">Connected · @sharkbay_remote_bot</span>
+              </div>
+              <div class="token-row replace-token-row" hidden>
+                <input class="text-input" type="password" placeholder="Paste replacement BotFather token" />
+                <button class="button secondary compact replace-save-button" type="button" disabled>Save token</button>
+              </div>
+            </section>
+            <section class="workflow-panel">
+              <h5 class="settings-subsection-title">Pairing</h5>
+              <div class="settings-toggle-row">
+                <button class="button secondary compact" type="button">Generate pair code</button>
+                <span class="form-note">Send to your bot: <strong class="pair-command">/pair 482913</strong></span>
+              </div>
+              <div class="settings-list">
+                <div class="settings-list-row">
+                  <span class="truncate"><strong>SharkUI</strong> · id 3960864</span>
+                  <small>Paired just now</small>
+                </div>
+              </div>
+            </section>
+          </section>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+<script>
+document.querySelectorAll(".replace-token-button").forEach((button) => {
+  button.addEventListener("click", () => {
+    const panel = button.closest(".workflow-panel");
+    const row = panel?.querySelector(".replace-token-row");
+    const input = row?.querySelector(".text-input");
+    if (!row || !input) return;
+    row.hidden = false;
+    input.focus();
+  });
+});
+
+document.querySelectorAll(".replace-token-row .text-input").forEach((input) => {
+  input.addEventListener("input", () => {
+    const row = input.closest(".replace-token-row");
+    const save = row?.querySelector(".replace-save-button");
+    if (save) save.disabled = input.value.trim().length < 8;
+  });
+});
+</script>
+</body>
+</html>

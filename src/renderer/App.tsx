@@ -5035,6 +5035,7 @@ function TelegramSettingsPanel({ active, setToast }: { active: boolean; setToast
   const [loadError, setLoadError] = useState<string | null>(null);
   const [tokenInput, setTokenInput] = useState("");
   const [savingToken, setSavingToken] = useState(false);
+  const [replacingToken, setReplacingToken] = useState(false);
   const [togglingEnabled, setTogglingEnabled] = useState(false);
   const [pairCode, setPairCode] = useState<{ code: string; expiresAt: number } | null>(null);
 
@@ -5049,6 +5050,12 @@ function TelegramSettingsPanel({ active, setToast }: { active: boolean; setToast
     const unsubscribe = getBridge().telegram?.onStatusChanged?.((next) => { if (!cancelled) setView(next); });
     return () => { cancelled = true; unsubscribe?.(); };
   }, [active]);
+
+  useEffect(() => {
+    if (view?.hasToken) return;
+    setReplacingToken(false);
+    setPairCode(null);
+  }, [view?.hasToken]);
 
   async function toggleEnabled() {
     const setEnabled = getBridge().telegram?.setEnabled;
@@ -5072,6 +5079,8 @@ function TelegramSettingsPanel({ active, setToast }: { active: boolean; setToast
       if (result.ok) {
         setToast({ tone: "success", message: `已连接 @${result.botUsername ?? "bot"}` });
         setTokenInput("");
+        setReplacingToken(false);
+        setPairCode(null);
       } else {
         setToast({ tone: "error", message: result.message ?? "Token 校验失败" });
       }
@@ -5108,57 +5117,64 @@ function TelegramSettingsPanel({ active, setToast }: { active: boolean; setToast
   if (!view) return <section className="workflow-panel"><div className="form-note">Loading…</div></section>;
 
   const statusLabel = telegramStatusLabel(view);
+  const showTokenInput = !view.hasToken || replacingToken;
 
   return (
     <>
       <section className="workflow-panel">
         <h5 className="settings-subsection-title">Connection</h5>
-        <div className="settings-toggle-row">
-          <label className="checkbox-row">
-            <input type="checkbox" checked={view.enabled} disabled={togglingEnabled || !view.hasToken} onChange={() => void toggleEnabled()} />
-            <span>Enable Telegram remote control</span>
-          </label>
-        </div>
-        <div className="form-note">Status: {statusLabel}{view.botUsername ? ` · @${view.botUsername}` : ""}</div>
-        <div className="settings-list-row" style={{ gap: 8, marginTop: 8 }}>
-          <input
-            className="text-input"
-            type="password"
-            placeholder={view.hasToken ? "Bot token saved — paste to replace" : "Paste BotFather token"}
-            value={tokenInput}
-            onChange={(e) => setTokenInput(e.target.value)}
-            style={{ flex: 1 }}
-          />
-          <button className="button secondary compact" type="button" disabled={savingToken || !tokenInput.trim()} onClick={() => void saveToken()}>
-            {savingToken ? "Saving…" : "Save token"}
-          </button>
-        </div>
-        <div className="form-note">Create a bot with @BotFather, then paste its token here. The token is stored in your macOS Keychain, never in plain config.</div>
-      </section>
-
-      <section className="workflow-panel">
-        <h5 className="settings-subsection-title">Pairing</h5>
-        <div className="settings-toggle-row">
-          <button className="button secondary compact" type="button" onClick={() => void generatePairCode()}>Generate pair code</button>
-          {pairCode ? <span className="form-note">Send to your bot: <strong>/pair {pairCode.code}</strong>（{Math.max(0, Math.round((pairCode.expiresAt - Date.now()) / 60000))} 分钟内有效）</span> : null}
-        </div>
-        {view.pairedUsers.length === 0 ? (
-          <div className="form-note">No paired users yet.</div>
-        ) : (
-          <div className="settings-list">
-            {view.pairedUsers.map((user) => (
-              <div className="settings-list-row" key={user.telegramUserId}>
-                <span className="truncate"><strong>{user.displayName}</strong> · id {user.telegramUserId}</span>
-                <button className="button secondary compact" type="button" onClick={() => void revoke(user.telegramUserId)}>Remove</button>
-              </div>
-            ))}
+        {view.hasToken ? (
+          <div className="settings-toggle-row">
+            <label className="checkbox-row">
+              <input type="checkbox" checked={view.enabled} disabled={togglingEnabled} onChange={() => void toggleEnabled()} />
+              <span>Enable Telegram remote control</span>
+            </label>
+            <button className="button secondary compact" type="button" onClick={() => { setReplacingToken(true); setTokenInput(""); }}>
+              Replace token
+            </button>
           </div>
-        )}
+        ) : null}
+        <div className="form-note">Status: {statusLabel}{view.botUsername ? ` · @${view.botUsername}` : ""}</div>
+        {showTokenInput ? (
+          <div className="settings-list-row" style={{ gap: 8, marginTop: 8 }}>
+            <input
+              className="text-input"
+              type="password"
+              placeholder={view.hasToken ? "Paste replacement BotFather token" : "Paste BotFather token"}
+              value={tokenInput}
+              onChange={(e) => setTokenInput(e.target.value)}
+              style={{ flex: 1 }}
+            />
+            <button className="button secondary compact" type="button" disabled={savingToken || !tokenInput.trim()} onClick={() => void saveToken()}>
+              {savingToken ? "Saving…" : "Save token"}
+            </button>
+          </div>
+        ) : null}
       </section>
 
-      <section className="workflow-panel">
-        <div className="form-note">消息经 Telegram 服务器中转，非端到端加密；聊天态等同远程命令执行入口，请妥善保管 token 与设备。</div>
-      </section>
+      {view.hasToken ? (
+        <section className="workflow-panel">
+          <h5 className="settings-subsection-title">Pairing</h5>
+          <div className="settings-toggle-row">
+            <button className="button secondary compact" type="button" onClick={() => void generatePairCode()}>Generate pair code</button>
+            {pairCode ? (
+              <span className="form-note">Send to your bot: <strong>/pair {pairCode.code}</strong>（{Math.max(0, Math.round((pairCode.expiresAt - Date.now()) / 60000))} 分钟内有效）</span>
+            ) : view.pairedUsers.length === 0 ? (
+              <span className="form-note">No paired users yet.</span>
+            ) : null}
+          </div>
+          {view.pairedUsers.length > 0 ? (
+            <div className="settings-list">
+              {view.pairedUsers.map((user) => (
+                <div className="settings-list-row" key={user.telegramUserId}>
+                  <span className="truncate"><strong>{user.displayName}</strong> · id {user.telegramUserId}</span>
+                  <button className="button secondary compact" type="button" onClick={() => void revoke(user.telegramUserId)}>Remove</button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
     </>
   );
 }
