@@ -159,6 +159,42 @@ describe("harness install", () => {
     expect(stdout.trim()).toBe(sessionId);
   });
 
+  it("resolves Codex session id when transcript metadata starts with session_id", async () => {
+    const root = await makeTempRoot("harness-codex-session");
+    const repo = await createRealGitRepoFixture(root);
+    const workspace = await fs.realpath(repo);
+    await installHarness(repo, harnessOptions);
+
+    const home = path.join(root, "home");
+    const transcript = path.join(home, ".codex", "sessions", "2026", "07", "01", "rollout-current.jsonl");
+    const sessionId = "019f1e00-b4e1-7ec3-8de1-3c74e63596aa";
+    await writeText(transcript, `${JSON.stringify({
+      timestamp: "2026-07-01T14:06:31.067Z",
+      type: "session_meta",
+      payload: {
+        session_id: sessionId,
+        id: sessionId,
+        cwd: workspace,
+        originator: "codex-tui",
+      },
+    })}\n`);
+
+    const bin = path.join(root, "bin");
+    await writeText(path.join(bin, "lsof"), [
+      "#!/bin/sh",
+      `printf '%s\\n' 'codex 123 shark txt REG 1,2 1 ${transcript}'`,
+      "",
+    ].join("\n"));
+    await fs.chmod(path.join(bin, "lsof"), 0o755);
+
+    const { stdout } = await execFileAsync("sh", [path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"), "codex"], {
+      cwd: workspace,
+      env: { ...process.env, HOME: home, PATH: `${bin}${path.delimiter}${process.env.PATH}`, SHARKBAY_RESTORED_SESSION_ID: "" },
+    });
+
+    expect(stdout.trim()).toBe(sessionId);
+  });
+
   it("resolves OpenCode session id from the active process logs", async () => {
     const root = await makeTempRoot("harness-opencode-session");
     const repo = await createRealGitRepoFixture(root);
