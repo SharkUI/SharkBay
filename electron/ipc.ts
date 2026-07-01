@@ -309,7 +309,7 @@ async function getProtocolStatus(repoPath: string): Promise<ProtocolStatus> {
   };
 }
 
-async function installProtocol(repoPath: string): Promise<ProtocolStatus> {
+export async function installProtocol(repoPath: string): Promise<ProtocolStatus> {
   const gitMeta = await readGitMetadata(repoPath);
   const machineId = await getMachineId(repoPath) ?? generateMachineId();
 
@@ -318,9 +318,7 @@ async function installProtocol(repoPath: string): Promise<ProtocolStatus> {
   if (repo) {
     const identity = await resolveGitHubIdentity();
     const permission = await checkRepoPermission(repo, identity.login);
-    if (permission !== "admin" && permission !== "write") {
-      throw new Error(`Insufficient permission: ${permission}. Need at least write.`);
-    }
+    if (permission !== "admin" && permission !== "write") return installLocalOnlyProtocol(repoPath, gitMeta, machineId, identity, repo, permission);
 
     const sync = syncInstances.get(repoPath) ?? new TeamworkSync(repoPath);
     await sync.ensureContextBranch(repo, identity.login);
@@ -353,14 +351,30 @@ async function installProtocol(repoPath: string): Promise<ProtocolStatus> {
     };
   }
 
-  // Local-only install: no git or no GitHub remote — tasks work but sync is unavailable
+  return installLocalOnlyProtocol(repoPath, gitMeta, machineId);
+}
+
+async function installLocalOnlyProtocol(
+  repoPath: string,
+  gitMeta: Awaited<ReturnType<typeof readGitMetadata>>,
+  machineId: string,
+  resolvedIdentity: { login: string; id: number } | null = null,
+  repo?: string,
+  permission?: string,
+): Promise<ProtocolStatus> {
+  // Local-only install: no git, no GitHub remote, or no write permission - tasks work but sync is unavailable
   let identity: { login: string; id: number } | null = null;
-  try { identity = await resolveGitHubIdentity(); } catch { /* gh CLI may not be available */ }
+  if (resolvedIdentity) {
+    identity = resolvedIdentity;
+  } else {
+    try { identity = await resolveGitHubIdentity(); } catch { /* gh CLI may not be available */ }
+  }
   await installHarness(repoPath, {
     githubLogin: identity?.login ?? "unknown",
     githubUserId: identity?.id ?? 0,
     machineId,
     agent: "",
+    repo,
   });
 
   return {
@@ -371,8 +385,12 @@ async function installProtocol(repoPath: string): Promise<ProtocolStatus> {
     lastSyncAt: null,
     pendingCount: 0,
     lastError: null,
+    githubLogin: identity?.login,
+    githubUserId: identity?.id,
     machineId,
+    repo,
     branch: gitMeta.currentBranch ?? undefined,
+    permission,
   };
 }
 
