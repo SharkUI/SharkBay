@@ -5,7 +5,9 @@ taskTag: 1ZRFFN
 mode: task
 title: Allow local protocol for read-only remotes
 status: completed
-completedAt: 2026-07-01T14:14:35Z
+completedAt: 2026-07-01T14:34:20Z
+commits:
+  - 9963f39f
 actor: SharkUI
 githubUserId: 3960864
 machine: 81ae10
@@ -13,7 +15,7 @@ agent: Codex GPT-5
 sessionId: 019f1de8-0b29-7ee0-b340-b3c5d40fed5f
 branch: main
 createdAt: 2026-07-01T14:10:49Z
-updatedAt: 2026-07-01T14:14:35Z
+updatedAt: 2026-07-01T14:34:20Z
 ---
 
 ## Summary
@@ -28,6 +30,8 @@ Allow installing the local SharkBay task protocol when a project has a GitHub re
 - Identified `installProtocol` as the remaining hard failure path for read-only upstream remotes.
 - Changed `installProtocol` so read-only GitHub remotes fall back to local-only harness installation with sync disabled.
 - Added an IPC protocol install regression test for a read-only upstream remote.
+- Preparing commit at user request.
+- Committed tracked source and test changes.
 
 ## Verification
 - `npm test -- tests/ipc-protocol-install.test.ts` passed.
@@ -36,4 +40,3 @@ Allow installing the local SharkBay task protocol when a project has a GitHub re
 
 ## Notes
 - Team sync should remain enabled only for write/admin remotes.
-- No commit was produced.
