@@ -836,8 +836,8 @@ Project:
 - GitHub user id: ${opts.githubUserId}
 - Machine id: ${opts.machineId}
 - Local tasks: .sharkbay/tasks/
-- Team context mirror: .sharkbay/team-context/
-- Team context branch: sharkbay-team-context
+- Team context mirror: .sharkbay/team-context/ (when sync is configured)
+- Team context branch: sharkbay-team-context (when sync is configured)
 
 ## Agent Responsibility
 
@@ -846,14 +846,20 @@ SharkBay reads and displays them.
 
 ## Team Context
 
-Synced task records from the team are available in:
+Team context is available only when this protocol is installed for a GitHub repo
+with sync configured. If .sharkbay/team-context/tasks/ is absent or empty
+because no GitHub repo is configured, skip team-context searches and continue
+with local task files under .sharkbay/tasks/.
+
+When synced task records from the team are available, they are in:
 .sharkbay/team-context/tasks/**/*.md
 
 Treat .sharkbay/team-context/ as read-only. Write only your own task records
 under .sharkbay/tasks/.
 
-Before editing files, making design decisions, or continuing work that may
-overlap with prior team work, search the team context mirror.
+When the mirror exists and may contain synced tasks, before editing files,
+making design decisions, or continuing work that may overlap with prior team
+work, search the team context mirror.
 
 Useful searches:
 - rg "browser fullscreen" .sharkbay/team-context/tasks
@@ -959,7 +965,7 @@ when those fields are written or changed.
 
 Never estimate, round, backfill, or fabricate timestamps.
 
-When the task is ready for team sync, add:
+When the task is complete (and ready for team sync when sync is configured), add:
 
 status: completed
 completedAt: 2026-05-15T11:40:00Z

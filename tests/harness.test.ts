@@ -35,6 +35,13 @@ const harnessOptions = {
   repo: "SharkUI/AIBF",
 };
 
+const localOnlyHarnessOptions = {
+  githubLogin: "unknown",
+  githubUserId: 0,
+  machineId: "abcdef",
+  agent: "codex",
+};
+
 class CaptureTerminalProvider extends LocalProvider {
   readonly terminalInputs: TerminalCreateInput[] = [];
 
@@ -82,6 +89,9 @@ describe("harness install", () => {
     expect(protocol).toContain("prefer CodeGraph over `rg`, `grep`, or broad file reads");
     expect(protocol).toContain("codegraph query <symbol-or-name>");
     expect(protocol).toContain('Use `codegraph context "what you need to understand"` only for initial');
+    expect(protocol).toContain("Team context is available only when this protocol is installed for a GitHub repo");
+    expect(protocol).toContain("skip team-context searches and continue");
+    expect(protocol).toContain("When the task is complete (and ready for team sync when sync is configured), add:");
     const sessionHelper = await fs.stat(path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"));
     expect(sessionHelper.mode & 0o111).not.toBe(0);
     const sessionHelperText = await fs.readFile(path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"), "utf8");
@@ -229,8 +239,14 @@ describe("harness install", () => {
     const repo = path.join(root, "plain-folder");
     await fs.mkdir(repo, { recursive: true });
 
-    await installHarness(repo, harnessOptions);
+    await installHarness(repo, localOnlyHarnessOptions);
     await expect(isHarnessInstalled(repo)).resolves.toBe(true);
+    const protocol = await fs.readFile(path.join(repo, ".sharkbay", "harness", "protocol.md"), "utf8");
+    expect(protocol).toContain("Repo: ");
+    expect(protocol).toContain("GitHub login: unknown");
+    expect(protocol).toContain("GitHub user id: 0");
+    expect(protocol).toContain("Team context is available only when this protocol is installed for a GitHub repo");
+    expect(protocol).toContain("skip team-context searches and continue");
     // No .git/info/exclude should be created for non-git projects
     await expect(fs.stat(path.join(repo, ".git")).catch(() => null)).resolves.toBeNull();
   });
