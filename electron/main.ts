@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, shell } from "electron";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { flushPromptStore, registerIpcHandlers, shutdownCore } from "./ipc.js";
+import { flushPromptStore, registerIpcHandlers, shouldAllowBrowserCertificateError, shutdownCore } from "./ipc.js";
 import { createApplicationMenuTemplate } from "../src/main/application-menu.js";
 import { getRuntimeConfigPath, loadAppConfig } from "../src/main/config.js";
 import { appChannels } from "../src/shared/app-events.js";
@@ -18,6 +18,15 @@ let appearanceTheme: AppearanceTheme = "morning";
 let isQuitting = false;
 
 app.setName("SharkBay");
+
+app.on("certificate-error", (event, webContents, url, _error, _certificate, callback) => {
+  if (shouldAllowBrowserCertificateError(webContents, url)) {
+    event.preventDefault();
+    callback(true);
+    return;
+  }
+  callback(false);
+});
 
 // In development `concurrently -k` sends SIGTERM (and Ctrl+C sends SIGINT) to the
 // Electron process. The normal before-quit path defers quitting until CodeGraph /

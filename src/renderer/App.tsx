@@ -1829,7 +1829,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
 
   useEffect(() => {
     if (!bridgeAvailable) return;
-    const unsubscribe = getBridge().browser?.onUpdate?.((event: BrowserUpdateEvent) => updateBrowserSession(event.browser));
+    const unsubscribe = getBridge().browser?.onUpdate?.((event: BrowserUpdateEvent) => handleBrowserUpdate(event));
     return () => unsubscribe?.();
   }, [bridgeAvailable]);
 
@@ -2264,6 +2264,28 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       browser,
       addressValue: browser.url === "about:blank" ? "" : browser.url,
     })));
+  }
+
+  function handleBrowserUpdate(event: BrowserUpdateEvent) {
+    if (event.reason !== "created") {
+      updateBrowserSession(event.browser);
+      return;
+    }
+    const target = selectedSpaceRef.current ?? Object.values(spacesRef.current)[0];
+    if (!target) return;
+    onActiveTabKindChange("browser");
+    setActiveProjectId(target.projectId);
+    setSpaces((current) => {
+      if (findTabWithSpace(current, event.browser.id)) return mapBrowserTab(current, event.browser.id, (currentTab) => ({
+        ...currentTab,
+        browser: event.browser,
+        addressValue: event.browser.url === "about:blank" ? "" : event.browser.url,
+      }));
+      const space = current[target.projectId];
+      if (!space) return current;
+      const tab: BrowserTab = { kind: "browser", browser: event.browser, addressValue: event.browser.url === "about:blank" ? "" : event.browser.url };
+      return { ...current, [space.projectId]: { ...space, tabs: [...space.tabs, tab], activeId: event.browser.id } };
+    });
   }
 
   function updateBrowserAddress(browserId: string, value: string) {

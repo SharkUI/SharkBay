@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { BrowserWindow, dialog, ipcMain, shell, type WebContents } from "electron";
 import {
   addConfiguredProject,
   getConfiguredRoots,
@@ -165,6 +165,10 @@ const hookConnectors = new Map<string, AgentConnector>([
 ]);
 for (const connector of hookConnectors.values()) {
   hookStateManager.registerConnector(connector);
+}
+
+export function shouldAllowBrowserCertificateError(webContents: WebContents, url: string): boolean {
+  return browserManager.shouldAllowCertificateError(webContents, url);
 }
 
 const terminalApprovalDetector = new TerminalApprovalDetector();
@@ -849,8 +853,9 @@ export async function registerIpcHandlers(
     return requireTelegram().getConfigView();
   });
 
-  browserManager.on("update", (event: BrowserUpdateEvent) => {
-    BrowserWindow.getAllWindows().forEach((window) => {
+  browserManager.on("update", (event: BrowserUpdateEvent, ownerWindow) => {
+    const windows = event.reason === "created" ? [ownerWindow] : BrowserWindow.getAllWindows();
+    windows.forEach((window) => {
       window.webContents.send(channels.browserUpdate, event);
     });
   });

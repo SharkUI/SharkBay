@@ -775,6 +775,7 @@ export type BrowserSession = {
 
 export type BrowserUpdateEvent = {
   browser: BrowserSession;
+  reason?: "created";
 };
 
 export type TaskViewModel = {

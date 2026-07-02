@@ -1,4 +1,4 @@
-import { BrowserView, BrowserWindow, shell } from "electron";
+import { BrowserView, BrowserWindow, type WebContents } from "electron";
 import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
 import type {
@@ -27,7 +27,7 @@ type BrowserRecord = {
 };
 
 type BrowserManagerEvents = {
-  update: [BrowserUpdateEvent];
+  update: [BrowserUpdateEvent, BrowserWindow];
   foundInPage: [BrowserFoundInPageEvent];
 };
 
@@ -59,7 +59,12 @@ export class BrowserManager extends EventEmitter<BrowserManagerEvents> {
 
     this.records.set(id, record);
     view.webContents.setWindowOpenHandler(({ url }) => {
-      void shell.openExternal(url);
+      const browser = this.create(record.window, {
+        initialUrl: url,
+        bounds: { x: 0, y: 0, width: 1, height: 1 },
+      });
+      const createdRecord = this.records.get(browser.id);
+      if (createdRecord) this.emitUpdate(createdRecord, "created");
       return { action: "deny" };
     });
     view.webContents.on("page-title-updated", (_event, title) => {
@@ -204,6 +209,14 @@ export class BrowserManager extends EventEmitter<BrowserManagerEvents> {
     }
   }
 
+  shouldAllowCertificateError(webContents: WebContents, url: string): boolean {
+    if (!isPrivateBrowserHttpsUrl(url)) return false;
+    for (const record of this.records.values()) {
+      if (record.view.webContents === webContents) return true;
+    }
+    return false;
+  }
+
   private requireRecord(browserId: string): BrowserRecord {
     const record = this.records.get(browserId);
     if (!record) {
@@ -212,8 +225,8 @@ export class BrowserManager extends EventEmitter<BrowserManagerEvents> {
     return record;
   }
 
-  private emitUpdate(record: BrowserRecord): void {
-    this.emit("update", { browser: publicBrowserSession(record) });
+  private emitUpdate(record: BrowserRecord, reason?: BrowserUpdateEvent["reason"]): void {
+    this.emit("update", { browser: publicBrowserSession(record), reason }, record.window);
   }
 
   private hideOtherViews(activeRecord: BrowserRecord): void {
@@ -271,6 +284,37 @@ export function scaleBrowserBounds(bounds: BrowserBounds, scale: number): Browse
     width: positiveDimension(bounds.width * factor),
     height: positiveDimension(bounds.height * factor),
   };
+}
+
+export function isPrivateBrowserHttpsUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" && isPrivateOrLocalHost(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function isPrivateOrLocalHost(value: string): boolean {
+  const host = value.toLowerCase().replace(/^\[(.*)\]$/, "$1");
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) return true;
+
+  const ipv4 = parseIpv4(host);
+  if (ipv4) {
+    const [a, b] = ipv4;
+    return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+  }
+
+  if (host === "::1" || host === "::") return true;
+  const firstIpv6Segment = Number.parseInt(host.split(":")[0] ?? "", 16);
+  return Number.isFinite(firstIpv6Segment) && ((firstIpv6Segment >= 0xfc00 && firstIpv6Segment <= 0xfdff) || (firstIpv6Segment >= 0xfe80 && firstIpv6Segment <= 0xfebf));
+}
+
+function parseIpv4(host: string): [number, number, number, number] | null {
+  const parts = host.split(".");
+  if (parts.length !== 4) return null;
+  const octets = parts.map((part) => Number(part));
+  return octets.every((octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255) ? octets as [number, number, number, number] : null;
 }
 
 function integer(value: number): number {
