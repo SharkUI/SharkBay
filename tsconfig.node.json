@@ -23,6 +23,7 @@
     "src/profiles/**/*.ts",
     "src/storage/**/*.ts",
     "src/renderer/workflow.ts",
+    "src/renderer/prompt-search.ts",
     "src/shared/**/*.ts",
     "tests/**/*.ts",
     "vite.config.ts",

@@ -8,6 +8,7 @@ import "@xterm/xterm/css/xterm.css";
 import defaultProjectIconUrl from "./assets/shark-fin.png";
 import { CodeEditor } from "./code-editor";
 import { colorSchemes, getColorScheme } from "./color-schemes";
+import { promptSearchKeys } from "./prompt-search";
 import { buildAgentSessionRestoreCommand, inferAgentSessionRestoreAgent, type AgentSessionRestoreCommand } from "../shared/agent-session-restore";
 import type {
   AgentCli,
@@ -2536,6 +2537,24 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
         onInteraction={acknowledgeActiveStoppedSession}
         onInput={immediatelyClearActiveTab}
         onSubmit={pinTerminalToBottom}
+        onRecallHistory={(text, direction) => {
+          const term = selectedActiveTerminal?.terminal;
+          if (!term) return;
+          const id = selectedActiveTerminal?.session.id;
+          if (id) followBottomUntil.current.delete(id);
+          if (text === null) {
+            term.clearSelection();
+            term.scrollToBottom();
+            return;
+          }
+          const search = selectedActiveTerminal?.searchAddon;
+          if (!search) return;
+          const keys = promptSearchKeys(text, term.cols);
+          for (const key of keys) {
+            const found = direction === "previous" ? search.findPrevious(key) : search.findNext(key);
+            if (found) break;
+          }
+        }}
       />
     </div>
   );
@@ -6507,6 +6526,7 @@ function PromptInputBar({
   onInteraction: onInteractionCallback,
   onInput: onInputCallback,
   onSubmit: onSubmitCallback,
+  onRecallHistory,
 }: {
   projectId: string | null;
   sessionId: string | null;
@@ -6518,6 +6538,7 @@ function PromptInputBar({
   onInteraction?: () => void;
   onInput?: () => void;
   onSubmit?: (sessionId: string) => void;
+  onRecallHistory?: (text: string | null, direction: "previous" | "next") => void;
 }) {
   const [value, setValue] = useState("");
   const [isComposing, setIsComposing] = useState(false);
@@ -6636,6 +6657,7 @@ function PromptInputBar({
       const nextIndex = currentCursor ? Math.max(0, currentCursor.index - 1) : history.length - 1;
       setHistoryCursor({ historyKey, index: nextIndex, draft: currentCursor?.draft ?? value });
       setPromptValue(history[nextIndex] ?? "", event.currentTarget);
+      onRecallHistory?.(history[nextIndex] ?? "", "previous");
       event.preventDefault();
       return true;
     }
@@ -6644,9 +6666,11 @@ function PromptInputBar({
     if (nextIndex >= history.length) {
       setHistoryCursor(null);
       setPromptValue(currentCursor.draft, event.currentTarget);
+      onRecallHistory?.(null, "next");
     } else {
       setHistoryCursor({ ...currentCursor, index: nextIndex });
       setPromptValue(history[nextIndex] ?? "", event.currentTarget);
+      onRecallHistory?.(history[nextIndex] ?? "", "next");
     }
     event.preventDefault();
     return true;
