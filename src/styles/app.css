@@ -4275,6 +4275,29 @@ button.project-file-toggle:focus-visible {
   background: #eef5f3;
 }
 
+.terminal-scroll-bottom {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  color: #263034;
+  background: #fffdfa;
+  border: 1px solid #d7d2c8;
+  border-radius: 50%;
+  box-shadow: 0 8px 24px rgba(38, 48, 52, 0.18);
+  cursor: pointer;
+}
+
+.terminal-scroll-bottom:hover,
+.terminal-scroll-bottom:focus-visible {
+  background: #eef5f3;
+}
+
 .prompt-input-bar {
   position: absolute;
   bottom: 0;
@@ -4524,6 +4547,18 @@ body.is-resizing-columns .app-shell[data-theme="night"] .column-resizer::before 
 
 .app-shell[data-theme="night"] .terminal-link-context-menu-item:hover,
 .app-shell[data-theme="night"] .terminal-link-context-menu-item:focus-visible {
+  background: #223235;
+}
+
+.app-shell[data-theme="night"] .terminal-scroll-bottom {
+  color: #d9e5df;
+  background: #182426;
+  border-color: #32474b;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+}
+
+.app-shell[data-theme="night"] .terminal-scroll-bottom:hover,
+.app-shell[data-theme="night"] .terminal-scroll-bottom:focus-visible {
   background: #223235;
 }
 

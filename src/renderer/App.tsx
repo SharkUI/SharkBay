@@ -2710,7 +2710,20 @@ function XTermSurface({ active, focusRequest, onResize, onCloseSearch, showSearc
   const onResizeRef = useRef(onResize);
   const [linkMenu, setLinkMenu] = useState<{ url: string; x: number; y: number } | null>(null);
   const linkMenuRef = useRef<HTMLDivElement>(null);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   useEffect(() => { onResizeRef.current = onResize; }, [onResize]);
+  useEffect(() => {
+    const term = tab.terminal;
+    const update = () => {
+      const buffer = term.buffer.active;
+      const distance = buffer.baseY - buffer.viewportY;
+      setShowScrollToBottom(distance > term.rows * 2);
+    };
+    const scrollSub = term.onScroll(update);
+    const writeSub = term.onWriteParsed(update);
+    update();
+    return () => { scrollSub.dispose(); writeSub.dispose(); };
+  }, [tab]);
   useEffect(() => { if (!hostRef.current || openedRef.current) return; tab.terminal.open(hostRef.current); openedRef.current = true; }, [tab]);
   useEffect(() => {
     if (!active || !openedRef.current) return;
@@ -2758,6 +2771,17 @@ function XTermSurface({ active, focusRequest, onResize, onCloseSearch, showSearc
       ) : null}
       {showSearch ? (
         <SearchOverlay searchAddon={tab.searchAddon} tabId={tab.session.id} onClose={onCloseSearch} />
+      ) : null}
+      {showScrollToBottom ? (
+        <button
+          aria-label="Scroll to bottom"
+          className="terminal-scroll-bottom"
+          title="Scroll to bottom"
+          type="button"
+          onClick={() => { tab.terminal.scrollToBottom(); if (!isUserEditingElsewhere()) tab.terminal.focus(); }}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
       ) : null}
     </div>
   );
