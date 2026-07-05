@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.9] — 2026-07-05
+
+### Added
+- Prompt history recall now searches the active terminal for robust prompt fragments, making recalled prompts easier to locate even when agent output wraps or adds leading gutters.
+- Terminal tabs show a floating scroll-to-bottom button when you are far above the latest output.
+
+### Changed
+- Read-only GitHub remotes can install SharkBay Task Protocol in local-only mode, with clearer wording around local-only protocol behavior.
+
+### Fixed
+- Built-in browser links that request a new window now open as new internal browser tabs instead of the system browser.
+- Built-in browser pages on local/private HTTPS hosts can continue through certificate errors, improving self-signed NAS and development service access while keeping public-host certificate checks intact.
+- Kiro terminal approval detection now waits for settled live approval footer output, avoiding false positives from replayed scrollback or incidental text.
+- Codex session id parsing handles helper output more reliably.
+
 ## [0.2.8] — 2026-06-30
 
 ### Added
