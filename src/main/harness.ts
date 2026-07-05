@@ -1009,6 +1009,10 @@ Update the task file when:
 Keep task files concise. Summarize work; keep raw chat transcripts in the CLI's
 own session history.
 
+When adding new content to an existing section, append it at the end of that
+section. For example, add new Work or Verification bullets after the existing
+bullets in those sections, not before them.
+
 ## Sync Readiness
 
 Before setting status: completed, make sure:

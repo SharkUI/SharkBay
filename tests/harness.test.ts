@@ -92,6 +92,8 @@ describe("harness install", () => {
     expect(protocol).toContain("Team context is available only when this protocol is installed for a GitHub repo");
     expect(protocol).toContain("skip team-context searches and continue");
     expect(protocol).toContain("When the task is complete (and ready for team sync when sync is configured), add:");
+    expect(protocol).toContain("When adding new content to an existing section, append it at the end of that");
+    expect(protocol).toContain("add new Work or Verification bullets after the existing");
     const sessionHelper = await fs.stat(path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"));
     expect(sessionHelper.mode & 0o111).not.toBe(0);
     const sessionHelperText = await fs.readFile(path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"), "utf8");
