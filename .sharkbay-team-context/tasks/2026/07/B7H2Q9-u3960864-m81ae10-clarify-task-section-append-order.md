@@ -12,8 +12,10 @@ agent: Codex GPT-5
 sessionId: 019f3283-71c5-7141-8074-f53a31a62406
 branch: main
 createdAt: 2026-07-05T13:43:21Z
-updatedAt: 2026-07-05T13:44:34Z
-completedAt: 2026-07-05T13:44:34Z
+updatedAt: 2026-07-05T13:47:02Z
+completedAt: 2026-07-05T13:47:02Z
+commits:
+  - f0ae272f
 ---
 
 ## Summary
@@ -32,11 +34,14 @@ Clarified SharkBay task protocol wording so new section entries are appended at 
 - Located the managed protocol generator and matching harness install test via CodeGraph-guided inspection.
 - Updated the protocol wording to require appending new section content after existing entries, including Work and Verification bullets.
 - Added harness install test assertions for the new generated protocol text.
+- Prepared a commit for the tracked generator and test changes; local `.sharkbay` task/protocol files are not git-tracked.
 
 ## Verification
 
 - `codegraph affected .sharkbay/harness/protocol.md src/main/harness.ts tests/harness.test.ts`
 - `npm test -- tests/harness.test.ts`
+- `git diff --check -- src/main/harness.ts tests/harness.test.ts`
+- `git status --short`
 
 ## Notes
 
