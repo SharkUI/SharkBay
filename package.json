@@ -13,7 +13,7 @@
     "lint": "npm run typecheck",
     "test": "vitest run",
     "build": "tsc -p tsconfig.node.json && vite build",
-    "pack": "npm run build && electron-builder --mac --dir",
+    "pack": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --dir",
     "dist": "npm run build && electron-builder --mac"
   },
   "dependencies": {
