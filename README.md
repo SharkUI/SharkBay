@@ -22,7 +22,7 @@
 brew install --cask SharkUI/tap/sharkbay
 ```
 
-macOS on Apple Silicon (arm64). SharkBay is signed with a Developer ID certificate and notarized by Apple, so it launches without Gatekeeper warnings.
+macOS on Apple Silicon (arm64).
 
 ## Features
 
