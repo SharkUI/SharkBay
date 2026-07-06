@@ -3786,7 +3786,7 @@ function SessionAgentIcon({ agentId }: { agentId: string }) {
 function taskPill(task: TaskViewModel): { label: string; cls: string } {
   if (task.status === "completed" && task.sync === "failed") return { label: "Sync failed", cls: "phase-blocked" };
   if (task.status === "completed") return { label: "Done", cls: "phase-done" };
-  if (task.status === "active") return { label: "Active", cls: "phase-done" };
+  if (task.status === "active") return { label: "Active", cls: "phase-active" };
   if (task.status === "paused") return { label: "Paused", cls: "phase-blocked" };
   if (task.status === "blocked") return { label: "Blocked", cls: "phase-blocked" };
   if (task.status === "abandoned") return { label: "Dropped", cls: "phase-blocked" };

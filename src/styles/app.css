@@ -909,6 +909,7 @@ body.is-resizing-columns * {
 }
 
 .phase-waiting { color: #6f4c00; background: #fff0b8; border-color: #e4c96d; }
+.phase-active { color: #ffffff; background: #2f7d54; border-color: #2f7d54; }
 .phase-done { color: #24553f; background: #dff2e8; border-color: #b7dcc9; }
 .phase-blocked { color: #7e3028; background: #fbebe6; border-color: #edc7bf; }
 
@@ -4847,6 +4848,7 @@ body.is-resizing-columns .app-shell[data-theme="night"] .column-resizer::before 
   border-color: rgba(111, 210, 140, 0.16);
 }
 
+.app-shell[data-theme="night"] .phase-active,
 .app-shell[data-theme="night"] .terminal-activity-pill.is-working {
   color: #ffffff;
   background: #2f7d54;
