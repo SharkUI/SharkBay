@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0] — 2026-07-06
+
+### Added
+- One-line install via Homebrew: `brew install --cask SharkUI/tap/sharkbay`.
+
+### Changed
+- macOS builds are now code-signed with a Developer ID Application certificate and notarized by Apple, so SharkBay launches without Gatekeeper warnings on any Mac.
+
 ## [0.2.9] — 2026-07-05
 
 ### Added

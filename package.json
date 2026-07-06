@@ -1,6 +1,6 @@
 {
   "name": "sharkbay",
-  "version": "0.2.9",
+  "version": "0.3.0",
   "private": true,
   "description": "A local macOS control panel for software projects.",
   "license": "GPL-3.0-only",
@@ -93,6 +93,8 @@
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
+      "hardenedRuntime": true,
+      "notarize": true,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.inherit.plist",
       "extendInfo": {

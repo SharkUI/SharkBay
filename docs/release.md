@@ -51,6 +51,42 @@ Electron Builder signs the macOS app with `build/entitlements.mac.plist` and chi
 
 The main app entitlement includes `com.apple.security.automation.apple-events` so terminal-launched local tools can request macOS Automation access through SharkBay. Keep the Electron code-signing entitlements in both files; removing them can break arm64 Electron builds.
 
+## Developer ID Signing And Notarization
+
+The macOS config enables `hardenedRuntime` and `notarize`, so `npm run dist`
+signs with a Developer ID Application certificate and notarizes with Apple.
+
+Prerequisites:
+
+- Active Apple Developer Program membership.
+- A "Developer ID Application" certificate installed in the login keychain
+  (Xcode → Settings → Accounts → Manage Certificates → +, or developer.apple.com).
+- An app-specific password created at appleid.apple.com.
+- The 10-character Team ID from developer.apple.com → Membership.
+
+Provide credentials via environment variables when running `npm run dist`:
+
+```bash
+export APPLE_ID="you@example.com"
+export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+export APPLE_TEAM_ID="ABCDE12345"
+# Signing cert: omit when the Developer ID cert is in the login keychain.
+# For CI, supply the exported .p12 instead:
+# export CSC_LINK="base64-or-path-to-cert.p12"
+# export CSC_KEY_PASSWORD="cert-password"
+```
+
+Verify a signed, notarized, stapled build:
+
+```bash
+spctl --assess --verbose --type exec "release/mac-arm64/SharkBay.app"  # → accepted, source=Notarized Developer ID
+xcrun stapler validate "release/mac-arm64/SharkBay.app"                 # → The validate action worked!
+codesign --verify --deep --strict --verbose=2 "release/mac-arm64/SharkBay.app"
+```
+
+Keep all Apple credentials out of the repo; pass them through the environment
+(or CI secrets) only.
+
 ## Release Checks
 
 Before producing distributable artifacts:
