@@ -16,6 +16,14 @@
   <img src="docs/screenshot.png" width="720" alt="SharkBay screenshot">
 </p>
 
+## Install
+
+```bash
+brew install --cask SharkUI/tap/sharkbay
+```
+
+macOS on Apple Silicon (arm64). SharkBay is signed with a Developer ID certificate and notarized by Apple, so it launches without Gatekeeper warnings.
+
 ## Features
 
 ### Multi-Agent Support
