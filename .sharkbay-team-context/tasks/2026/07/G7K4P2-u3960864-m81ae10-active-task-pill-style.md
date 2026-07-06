@@ -12,8 +12,10 @@ agent: Codex GPT-5
 sessionId: 019f36e1-a31d-7cb0-b7b1-299877d93ce7
 branch: main
 createdAt: 2026-07-06T10:04:51Z
-updatedAt: 2026-07-06T10:05:48Z
-completedAt: 2026-07-06T10:05:48Z
+updatedAt: 2026-07-06T10:07:07Z
+completedAt: 2026-07-06T10:07:07Z
+commits:
+  - 18ef1c56cb9daa95a51309df30b91ff42a947fb6
 ---
 
 ## Summary
@@ -29,6 +31,8 @@ Project detail task `Active` pills now use a solid green background with white t
 - Reviewed related team task `N9P2Q6-u3960864-m81ae10`, which previously adjusted task pill status behavior.
 - Changed active task pills to use a dedicated `phase-active` class.
 - Added green-background, white-text styling for `phase-active`, including night theme coverage.
+- Reopened task for commit preparation.
+- Committed the task changes.
 
 ## Verification
 - `git diff --check -- src/renderer/App.tsx src/styles/app.css .sharkbay/tasks/G7K4P2-u3960864-m81ae10-active-task-pill-style.md`
@@ -36,4 +40,3 @@ Project detail task `Active` pills now use a solid green background with white t
 
 ## Notes
 - Assumption: only the project-detail task status pill styling should change; no task status logic changes are intended.
-- No commit was produced for this task.
