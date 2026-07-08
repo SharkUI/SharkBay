@@ -365,7 +365,16 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
 
     session.inspecting = true;
     try {
-      if (session.pid !== null) {
+      const foregroundProcess = safeForegroundProcess(session.pty);
+      if (foregroundProcess) {
+        session.foregroundProcess = foregroundProcess;
+      }
+
+      if (session.pid !== null && shouldInspectTerminalCwd({
+        foregroundProcess: session.foregroundProcess,
+        shell: session.shell,
+        serviceLabel: session.service?.label,
+      })) {
         const currentCwd = await this.inspectProcessCwd(session.pid);
         if (this.sessions.get(sessionId) !== session || session.status !== "running") {
           return;
@@ -373,11 +382,6 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
         if (currentCwd) {
           session.currentCwd = currentCwd;
         }
-      }
-
-      const foregroundProcess = safeForegroundProcess(session.pty);
-      if (foregroundProcess) {
-        session.foregroundProcess = foregroundProcess;
       }
 
       const shellForeground = isShellForeground(session.foregroundProcess, session.shell);
@@ -478,6 +482,14 @@ export function terminalDisplayTitle(input: TerminalTitleInput): string {
     return normalizeTerminalCommandLine(input.activeCommandLine) ?? foregroundProcess;
   }
   return relativeTerminalCwd(input.projectRoot, input.currentCwd);
+}
+
+export function shouldInspectTerminalCwd(input: Pick<TerminalTitleInput, "foregroundProcess" | "shell" | "serviceLabel">): boolean {
+  const serviceLabel = input.serviceLabel?.trim();
+  if (serviceLabel) {
+    return false;
+  }
+  return isShellForeground(input.foregroundProcess, input.shell);
 }
 
 export function applyTerminalInputData(

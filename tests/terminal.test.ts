@@ -5,6 +5,7 @@ import { getRuntimeConfigPath } from "../src/main/config.js";
 import {
   applyTerminalInputData,
   resolveTerminalCwd,
+  shouldInspectTerminalCwd,
   terminalCommand,
   terminalDisplayTitle,
   terminalShellEnvironment,
@@ -144,6 +145,26 @@ describe("terminal cwd validation", () => {
       pendingInputLine: "",
       submittedCommand: null,
     });
+  });
+
+  it("skips cwd inspection when the title does not depend on cwd", () => {
+    expect(shouldInspectTerminalCwd({
+      foregroundProcess: "zsh",
+      shell: "/bin/zsh",
+    })).toBe(true);
+    expect(shouldInspectTerminalCwd({
+      foregroundProcess: null,
+      shell: "/bin/zsh",
+    })).toBe(true);
+    expect(shouldInspectTerminalCwd({
+      foregroundProcess: "node",
+      shell: "/bin/zsh",
+    })).toBe(false);
+    expect(shouldInspectTerminalCwd({
+      foregroundProcess: "zsh",
+      shell: "/bin/zsh",
+      serviceLabel: "dev",
+    })).toBe(false);
   });
 
   it("rejects directories outside configured projects", async () => {
