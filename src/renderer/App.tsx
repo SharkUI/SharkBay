@@ -192,6 +192,7 @@ const minDetailColumnWidth = 340;
 const minTerminalColumnWidth = 420;
 const maxPendingTerminalOutputChars = 1024 * 1024;
 const codeGraphSyncDebounceMs = 300000;
+const diagnosticsRefreshIntervalMs = 15_000;
 const sessionDetailRefreshIntervalMs = 15_000;
 const taskDetailRefreshIntervalMs = 15_000;
 const defaultProjectColumnWidth = minProjectColumnWidth;
@@ -5312,8 +5313,21 @@ function DiagnosticsSettingsPanel({ active, setToast }: { active: boolean; setTo
 
   useEffect(() => {
     if (!active) return;
-    const timer = window.setInterval(() => setFetchKey((current) => current + 1), 3000);
-    return () => window.clearInterval(timer);
+    const refreshIfVisible = () => {
+      if (document.hidden) return;
+      setFetchKey((current) => current + 1);
+    };
+    const handleVisibilityChange = () => {
+      if (!document.hidden) refreshIfVisible();
+    };
+    const timer = window.setInterval(refreshIfVisible, diagnosticsRefreshIntervalMs);
+    window.addEventListener("focus", refreshIfVisible);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshIfVisible);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [active]);
 
   if (loadError) return <section className="workflow-panel"><div className="inline-connection-result is-error" role="status">{loadError}</div></section>;
