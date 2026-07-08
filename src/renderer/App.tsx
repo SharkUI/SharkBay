@@ -192,6 +192,7 @@ const minDetailColumnWidth = 340;
 const minTerminalColumnWidth = 420;
 const maxPendingTerminalOutputChars = 1024 * 1024;
 const codeGraphSyncDebounceMs = 300000;
+const sessionDetailRefreshIntervalMs = 15_000;
 const taskDetailRefreshIntervalMs = 15_000;
 const defaultProjectColumnWidth = minProjectColumnWidth;
 const defaultDetailColumnWidth = minDetailColumnWidth;
@@ -3725,9 +3726,24 @@ function SessionsDetailTab({ active, agentClis, candidate, setToast, onRestoreAg
       }
     }
 
+    const refreshIfVisible = () => {
+      if (document.hidden) return;
+      void refresh();
+    };
+    const handleVisibilityChange = () => {
+      if (!document.hidden) refreshIfVisible();
+    };
+
     void refresh();
-    const timer = window.setInterval(() => void refresh(), 5000);
-    return () => { cancelled = true; window.clearInterval(timer); };
+    const timer = window.setInterval(refreshIfVisible, sessionDetailRefreshIntervalMs);
+    window.addEventListener("focus", refreshIfVisible);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshIfVisible);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [active, repoPath]);
 
   if (!repoPath) return <EmptyState title="Sessions unavailable" body="Sessions are available for local projects with hooks installed." />;
