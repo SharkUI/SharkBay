@@ -193,6 +193,7 @@ const minTerminalColumnWidth = 420;
 const maxPendingTerminalOutputChars = 1024 * 1024;
 const codeGraphSyncDebounceMs = 300000;
 const diagnosticsRefreshIntervalMs = 15_000;
+const foregroundRefreshDebounceMs = 250;
 const sessionDetailRefreshIntervalMs = 15_000;
 const taskDetailRefreshIntervalMs = 15_000;
 const defaultProjectColumnWidth = minProjectColumnWidth;
@@ -217,6 +218,53 @@ const appearanceThemes: Array<{ id: AppearanceTheme; label: string }> = [
   { id: "day", label: "Day" },
   { id: "night", label: "Night" },
 ];
+
+function startVisibleRefreshInterval(refresh: () => void, intervalMs: number): () => void {
+  let interval: number | null = null;
+  let foregroundTimer: number | null = null;
+  let lastForegroundRefreshAt = 0;
+
+  const stopInterval = () => {
+    if (interval === null) return;
+    window.clearInterval(interval);
+    interval = null;
+  };
+  const startInterval = () => {
+    if (document.hidden || interval !== null) return;
+    interval = window.setInterval(refresh, intervalMs);
+  };
+  const scheduleForegroundRefresh = () => {
+    if (document.hidden) {
+      stopInterval();
+      return;
+    }
+    startInterval();
+    if (foregroundTimer !== null || Date.now() - lastForegroundRefreshAt < foregroundRefreshDebounceMs) return;
+    foregroundTimer = window.setTimeout(() => {
+      foregroundTimer = null;
+      if (document.hidden) {
+        stopInterval();
+        return;
+      }
+      lastForegroundRefreshAt = Date.now();
+      refresh();
+    }, 0);
+  };
+  const handleVisibilityChange = () => {
+    if (document.hidden) stopInterval();
+    else scheduleForegroundRefresh();
+  };
+
+  startInterval();
+  window.addEventListener("focus", scheduleForegroundRefresh);
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+  return () => {
+    stopInterval();
+    if (foregroundTimer !== null) window.clearTimeout(foregroundTimer);
+    window.removeEventListener("focus", scheduleForegroundRefresh);
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+  };
+}
 
 const terminalThemes: Record<AppearanceTheme, NonNullable<ConstructorParameters<typeof XTerm>[0]>["theme"]> = {
   day: {
@@ -843,21 +891,9 @@ export function App() {
 
   useEffect(() => {
     if (!bridgeAvailable || view !== "dashboard") return;
-    const refreshVisibleWorkspace = () => {
-      if (document.hidden) return;
+    return startVisibleRefreshInterval(() => {
       void refreshWorkspace({ showToast: false, setBusy: false });
-    };
-    const handleVisibilityChange = () => {
-      if (!document.hidden) refreshVisibleWorkspace();
-    };
-    const timer = window.setInterval(refreshVisibleWorkspace, 5000);
-    window.addEventListener("focus", refreshVisibleWorkspace);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("focus", refreshVisibleWorkspace);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
+    }, 5000);
   }, [bridgeAvailable, selectedCandidate?.id, view]);
 
   useEffect(() => {
@@ -3727,23 +3763,11 @@ function SessionsDetailTab({ active, agentClis, candidate, setToast, onRestoreAg
       }
     }
 
-    const refreshIfVisible = () => {
-      if (document.hidden) return;
-      void refresh();
-    };
-    const handleVisibilityChange = () => {
-      if (!document.hidden) refreshIfVisible();
-    };
-
     void refresh();
-    const timer = window.setInterval(refreshIfVisible, sessionDetailRefreshIntervalMs);
-    window.addEventListener("focus", refreshIfVisible);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    const cleanupRefresh = startVisibleRefreshInterval(() => void refresh(), sessionDetailRefreshIntervalMs);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
-      window.removeEventListener("focus", refreshIfVisible);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      cleanupRefresh();
     };
   }, [active, repoPath]);
 
@@ -3883,18 +3907,8 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
       }
     }
 
-    const refreshIfVisible = () => {
-      if (document.hidden) return;
-      void refresh(false);
-    };
-    const handleVisibilityChange = () => {
-      if (!document.hidden) refreshIfVisible();
-    };
-
     void refresh(true);
-    const timer = window.setInterval(refreshIfVisible, taskDetailRefreshIntervalMs);
-    window.addEventListener("focus", refreshIfVisible);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    const cleanupRefresh = startVisibleRefreshInterval(() => void refresh(false), taskDetailRefreshIntervalMs);
     const unsubscribe = protocol?.onTasksChanged?.((event) => {
       if (event.repoPath === activeRepoPath) {
         setTasks(event.tasks);
@@ -3903,9 +3917,7 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
     });
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
-      window.removeEventListener("focus", refreshIfVisible);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      cleanupRefresh();
       unsubscribe?.();
     };
   }, [active, repoPath, setToast]);
@@ -5313,21 +5325,9 @@ function DiagnosticsSettingsPanel({ active, setToast }: { active: boolean; setTo
 
   useEffect(() => {
     if (!active) return;
-    const refreshIfVisible = () => {
-      if (document.hidden) return;
+    return startVisibleRefreshInterval(() => {
       setFetchKey((current) => current + 1);
-    };
-    const handleVisibilityChange = () => {
-      if (!document.hidden) refreshIfVisible();
-    };
-    const timer = window.setInterval(refreshIfVisible, diagnosticsRefreshIntervalMs);
-    window.addEventListener("focus", refreshIfVisible);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("focus", refreshIfVisible);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
+    }, diagnosticsRefreshIntervalMs);
   }, [active]);
 
   if (loadError) return <section className="workflow-panel"><div className="inline-connection-result is-error" role="status">{loadError}</div></section>;
