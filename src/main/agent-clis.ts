@@ -42,7 +42,9 @@ type AgentSessionWatcherEvents = {
 };
 
 const defaultPollIntervalMs = 1000;
+const defaultIdlePollIntervalMs = 5000;
 const defaultDiscoveryIntervalMs = 5000;
+const defaultActivePollGraceMs = 15000;
 const discoveredFileGraceMs = 5000;
 const maxStatusLength = 180;
 
@@ -76,27 +78,35 @@ export class AgentSessionWatcher extends EventEmitter<AgentSessionWatcherEvents>
   private readonly codexSessionsRoot: string;
   private readonly claudeProjectsRoot: string;
   private readonly pollIntervalMs: number;
+  private readonly idlePollIntervalMs: number;
   private readonly discoveryIntervalMs: number;
+  private readonly activePollGraceMs: number;
   private readonly startedAt: number;
   private readonly files = new Map<string, AgentSessionState>();
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private running = false;
   private scanning = false;
   private usageCollector: TokenUsageCollector | null = null;
   private discoveredFiles: AgentLogFile[] = [];
   private lastDiscoveryAt = 0;
+  private lastActivityAt: number | null = null;
 
   constructor(options: {
     codexSessionsRoot?: string;
     claudeProjectsRoot?: string;
     pollIntervalMs?: number;
+    idlePollIntervalMs?: number;
     discoveryIntervalMs?: number;
+    activePollGraceMs?: number;
     startedAt?: number;
   } = {}) {
     super();
     this.codexSessionsRoot = options.codexSessionsRoot ?? path.join(os.homedir(), ".codex", "sessions");
     this.claudeProjectsRoot = options.claudeProjectsRoot ?? path.join(os.homedir(), ".claude", "projects");
     this.pollIntervalMs = options.pollIntervalMs ?? defaultPollIntervalMs;
+    this.idlePollIntervalMs = options.idlePollIntervalMs ?? defaultIdlePollIntervalMs;
     this.discoveryIntervalMs = options.discoveryIntervalMs ?? defaultDiscoveryIntervalMs;
+    this.activePollGraceMs = options.activePollGraceMs ?? defaultActivePollGraceMs;
     this.startedAt = options.startedAt ?? Date.now();
   }
 
@@ -105,24 +115,53 @@ export class AgentSessionWatcher extends EventEmitter<AgentSessionWatcherEvents>
   }
 
   start(): void {
-    if (this.timer) return;
-    this.timer = setInterval(() => void this.scan(), this.pollIntervalMs);
-    this.timer.unref?.();
-    void this.scan();
+    if (this.running) return;
+    this.running = true;
+    this.scheduleNextScan(0);
   }
 
   stop(): void {
-    if (!this.timer) return;
-    clearInterval(this.timer);
-    this.timer = null;
+    this.running = false;
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
   }
 
   async scan(): Promise<void> {
-    if (this.scanning) return;
+    await this.scanOnce();
+  }
+
+  private scheduleNextScan(delayMs: number): void {
+    if (!this.running || this.timer) return;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      void this.runScheduledScan();
+    }, delayMs);
+    this.timer.unref?.();
+  }
+
+  private async runScheduledScan(): Promise<void> {
+    const hadActivity = await this.scanOnce();
+    const now = Date.now();
+    if (hadActivity) this.lastActivityAt = now;
+    const delayMs = agentSessionWatcherPollInterval({
+      lastActivityAt: this.lastActivityAt,
+      now,
+      activePollGraceMs: this.activePollGraceMs,
+      activeIntervalMs: this.pollIntervalMs,
+      idleIntervalMs: this.idlePollIntervalMs,
+    });
+    this.scheduleNextScan(delayMs);
+  }
+
+  private async scanOnce(): Promise<boolean> {
+    if (this.scanning) return false;
     this.scanning = true;
     try {
       const files = await this.discoverFiles();
-      await Promise.all(files.map((file) => this.readNewContent(file)));
+      const activity = await Promise.all(files.map((file) => this.readNewContent(file)));
+      return activity.some(Boolean);
     } finally {
       this.scanning = false;
     }
@@ -147,14 +186,14 @@ export class AgentSessionWatcher extends EventEmitter<AgentSessionWatcherEvents>
     return this.discoveredFiles;
   }
 
-  private async readNewContent(file: AgentLogFile): Promise<void> {
+  private async readNewContent(file: AgentLogFile): Promise<boolean> {
     let stat;
     try {
       stat = await fs.stat(file.filePath);
     } catch {
-      return;
+      return false;
     }
-    if (!stat.isFile()) return;
+    if (!stat.isFile()) return false;
 
     const key = `${file.agentId}:${file.filePath}`;
     let state = this.files.get(key);
@@ -171,7 +210,7 @@ export class AgentSessionWatcher extends EventEmitter<AgentSessionWatcherEvents>
         filePath: file.filePath,
       };
       this.files.set(key, state);
-      if (existingBeforeWatcher) return;
+      if (existingBeforeWatcher) return false;
     }
 
     if (stat.size < state.offset) {
@@ -182,7 +221,7 @@ export class AgentSessionWatcher extends EventEmitter<AgentSessionWatcherEvents>
       state.ignored = false;
       state.sessionId = null;
     }
-    if (stat.size === state.offset || state.ignored) return;
+    if (stat.size === state.offset || state.ignored) return false;
 
     const handle = await fs.open(file.filePath, "r");
     try {
@@ -191,6 +230,7 @@ export class AgentSessionWatcher extends EventEmitter<AgentSessionWatcherEvents>
       await handle.read(buffer, 0, length, state.offset);
       state.offset = stat.size;
       this.processChunk(state, buffer.toString("utf8"));
+      return true;
     } finally {
       await handle.close();
     }
@@ -346,6 +386,19 @@ export function shouldRefreshDiscovery(
 ): boolean {
   if (!hasCached) return true;
   return now - lastDiscoveryAt >= intervalMs;
+}
+
+export function agentSessionWatcherPollInterval(input: {
+  lastActivityAt: number | null;
+  now: number;
+  activePollGraceMs: number;
+  activeIntervalMs: number;
+  idleIntervalMs: number;
+}): number {
+  if (input.lastActivityAt !== null && input.now - input.lastActivityAt < input.activePollGraceMs) {
+    return input.activeIntervalMs;
+  }
+  return input.idleIntervalMs;
 }
 
 async function claudeTranscriptFiles(root: string): Promise<AgentLogFile[]> {

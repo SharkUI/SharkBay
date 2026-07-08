@@ -145,6 +145,7 @@ let telegramMachineIdentity: MachineIdentity | null = null;
 let latestIslandAgentTabs: Array<{ sessionId: string; hookSessionId?: string; title?: string; projectName?: string; agentId?: string; state?: string; lastPrompt?: string }> = [];
 const telegramSecretStore = createDefaultSecretStore();
 const TELEGRAM_TOKEN_SECRET_ID = "telegram-bot-token";
+const tokenUsageBackfillDelayMs = 5000;
 const codexTranscriptPathCache = new Map<string, string>();
 const claudeTranscriptPathCache = new Map<string, string>();
 const agentSessionWatcher = new AgentSessionWatcher();
@@ -167,6 +168,13 @@ const hookConnectors = new Map<string, AgentConnector>([
 ]);
 for (const connector of hookConnectors.values()) {
   hookStateManager.registerConnector(connector);
+}
+
+function scheduleTokenUsageBackfill(collector: TokenUsageCollector): void {
+  const timer = setTimeout(() => {
+    collector.backfill().catch(() => {});
+  }, tokenUsageBackfillDelayMs);
+  timer.unref?.();
 }
 
 export function shouldAllowBrowserCertificateError(webContents: WebContents, url: string): boolean {
@@ -759,7 +767,7 @@ export async function registerIpcHandlers(
     tokenUsageDb = new TokenUsageDb(runtime.userDataPath);
     const collector = new TokenUsageCollector(tokenUsageDb);
     agentSessionWatcher.setUsageCollector(collector);
-    collector.backfill().catch(() => {});
+    scheduleTokenUsageBackfill(collector);
   }
 
   if (!promptStore) {

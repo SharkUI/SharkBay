@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { prependPathDirectories, resolveCommandPath, resolveCommandSearchPaths, shouldRefreshDiscovery } from "../src/main/agent-clis.js";
+import { agentSessionWatcherPollInterval, prependPathDirectories, resolveCommandPath, resolveCommandSearchPaths, shouldRefreshDiscovery } from "../src/main/agent-clis.js";
 
 describe("agent cli discovery", () => {
   it("finds executables in fallback directories when they are absent from PATH", async () => {
@@ -59,5 +59,29 @@ describe("agent cli discovery", () => {
     // Warm cache, interval elapsed: re-discover.
     expect(shouldRefreshDiscovery(1000, 6000, 5000, true)).toBe(true);
     expect(shouldRefreshDiscovery(1000, 6001, 5000, true)).toBe(true);
+  });
+
+  it("uses fast session polling only shortly after transcript activity", () => {
+    expect(agentSessionWatcherPollInterval({
+      lastActivityAt: null,
+      now: 10_000,
+      activePollGraceMs: 15_000,
+      activeIntervalMs: 1_000,
+      idleIntervalMs: 5_000,
+    })).toBe(5_000);
+    expect(agentSessionWatcherPollInterval({
+      lastActivityAt: 10_000,
+      now: 20_000,
+      activePollGraceMs: 15_000,
+      activeIntervalMs: 1_000,
+      idleIntervalMs: 5_000,
+    })).toBe(1_000);
+    expect(agentSessionWatcherPollInterval({
+      lastActivityAt: 10_000,
+      now: 25_000,
+      activePollGraceMs: 15_000,
+      activeIntervalMs: 1_000,
+      idleIntervalMs: 5_000,
+    })).toBe(5_000);
   });
 });
