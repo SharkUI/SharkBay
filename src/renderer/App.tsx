@@ -192,6 +192,7 @@ const minDetailColumnWidth = 340;
 const minTerminalColumnWidth = 420;
 const maxPendingTerminalOutputChars = 1024 * 1024;
 const codeGraphSyncDebounceMs = 300000;
+const taskDetailRefreshIntervalMs = 15_000;
 const defaultProjectColumnWidth = minProjectColumnWidth;
 const defaultDetailColumnWidth = minDetailColumnWidth;
 const resizerColumnWidth = 12;
@@ -3865,8 +3866,18 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
       }
     }
 
+    const refreshIfVisible = () => {
+      if (document.hidden) return;
+      void refresh(false);
+    };
+    const handleVisibilityChange = () => {
+      if (!document.hidden) refreshIfVisible();
+    };
+
     void refresh(true);
-    const timer = window.setInterval(() => void refresh(false), 3000);
+    const timer = window.setInterval(refreshIfVisible, taskDetailRefreshIntervalMs);
+    window.addEventListener("focus", refreshIfVisible);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     const unsubscribe = protocol?.onTasksChanged?.((event) => {
       if (event.repoPath === activeRepoPath) {
         setTasks(event.tasks);
@@ -3876,6 +3887,8 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
     return () => {
       cancelled = true;
       window.clearInterval(timer);
+      window.removeEventListener("focus", refreshIfVisible);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       unsubscribe?.();
     };
   }, [active, repoPath, setToast]);
