@@ -839,12 +839,23 @@ export function App() {
   }, [bridgeAvailable]);
 
   useEffect(() => {
-    if (!bridgeAvailable) return;
-    const timer = window.setInterval(() => {
+    if (!bridgeAvailable || view !== "dashboard") return;
+    const refreshVisibleWorkspace = () => {
+      if (document.hidden) return;
       void refreshWorkspace({ showToast: false, setBusy: false });
-    }, 5000);
-    return () => window.clearInterval(timer);
-  }, [bridgeAvailable, selectedCandidate?.id]);
+    };
+    const handleVisibilityChange = () => {
+      if (!document.hidden) refreshVisibleWorkspace();
+    };
+    const timer = window.setInterval(refreshVisibleWorkspace, 5000);
+    window.addEventListener("focus", refreshVisibleWorkspace);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshVisibleWorkspace);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [bridgeAvailable, selectedCandidate?.id, view]);
 
   useEffect(() => {
     setDetail(null);
