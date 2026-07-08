@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { createDefaultConfig, getRuntimeConfigPath, loadAppConfig } from "../src/main/config.js";
+import { createDefaultConfig, getRuntimeConfigPath, loadAppConfig, setTerminalAppearance } from "../src/main/config.js";
 import { createGitRepoFixture, makeTestRuntime, writeJson } from "./helpers.js";
 
 describe("config migration", () => {
@@ -51,5 +51,41 @@ describe("config migration", () => {
     const loaded = await loadAppConfig(getRuntimeConfigPath(runtime));
 
     expect(loaded.statusChangeNotificationsEnabled).toBe(false);
+  });
+
+  it("persists and clears terminal appearance settings", async () => {
+    const runtime = await makeTestRuntime("config-terminal-appearance");
+
+    const configured = await setTerminalAppearance(runtime, {
+      colorScheme: "nord",
+      fontFamily: "Menlo",
+      fontSize: 14,
+      lineHeight: 1.25,
+    });
+
+    expect(configured).toEqual(expect.objectContaining({
+      terminalColorScheme: "nord",
+      terminalFontFamily: "Menlo",
+      terminalFontSize: 14,
+      terminalLineHeight: 1.25,
+    }));
+
+    const loaded = await loadAppConfig(getRuntimeConfigPath(runtime));
+    expect(loaded.terminalColorScheme).toBe("nord");
+    expect(loaded.terminalFontFamily).toBe("Menlo");
+    expect(loaded.terminalFontSize).toBe(14);
+    expect(loaded.terminalLineHeight).toBe(1.25);
+
+    const cleared = await setTerminalAppearance(runtime, {
+      colorScheme: null,
+      fontFamily: null,
+      fontSize: null,
+      lineHeight: null,
+    });
+
+    expect(cleared.terminalColorScheme).toBeUndefined();
+    expect(cleared.terminalFontFamily).toBeUndefined();
+    expect(cleared.terminalFontSize).toBeUndefined();
+    expect(cleared.terminalLineHeight).toBeUndefined();
   });
 });

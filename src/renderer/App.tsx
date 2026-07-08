@@ -778,10 +778,10 @@ export function App() {
       const [rootConfig, scan] = await Promise.all([configHandler(), scanProjects()]);
       if (isAppConfig(rootConfig)) {
         setAppearanceTheme(normalizeAppearanceTheme(rootConfig.appearanceTheme));
-        if (rootConfig.terminalColorScheme) setTerminalColorScheme(rootConfig.terminalColorScheme);
-        if (rootConfig.terminalFontFamily) setTerminalFontFamily(rootConfig.terminalFontFamily);
-        if (rootConfig.terminalFontSize) setTerminalFontSize(rootConfig.terminalFontSize);
-        if (rootConfig.terminalLineHeight) setTerminalLineHeight(rootConfig.terminalLineHeight);
+        setTerminalColorScheme(rootConfig.terminalColorScheme ?? null);
+        setTerminalFontFamily(rootConfig.terminalFontFamily ?? null);
+        setTerminalFontSize(rootConfig.terminalFontSize ?? null);
+        setTerminalLineHeight(rootConfig.terminalLineHeight ?? null);
         const legacyStatusSoundsEnabled = rootConfig.statusChangeNotificationsEnabled !== false;
         setAgentStatusCompletionSoundEnabled(rootConfig.agentStatusCompletionSoundEnabled ?? legacyStatusSoundsEnabled);
         setAgentStatusApprovalSoundEnabled(rootConfig.agentStatusApprovalSoundEnabled ?? legacyStatusSoundsEnabled);
@@ -949,7 +949,7 @@ export function App() {
                   if (opts.fontSize !== undefined) setTerminalFontSize(opts.fontSize);
                   if (opts.lineHeight !== undefined) setTerminalLineHeight(opts.lineHeight);
                   const handler = getBridge().config?.setTerminalAppearance;
-                  if (handler) await handler({ colorScheme: opts.colorScheme ?? undefined, fontFamily: opts.fontFamily ?? undefined, fontSize: opts.fontSize ?? undefined, lineHeight: opts.lineHeight ?? undefined });
+                  if (handler) await handler(opts);
                 }}
               />
             </div>

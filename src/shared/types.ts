@@ -74,6 +74,13 @@ export type StatusChangeNotificationsInput = {
   approvalEnabled?: boolean;
 };
 
+export type TerminalAppearanceInput = {
+  colorScheme?: string | null;
+  fontFamily?: string | null;
+  fontSize?: number | null;
+  lineHeight?: number | null;
+};
+
 export type ExecutionTargetKind = "local" | "container" | "wsl";
 
 export type ExecutionTargetStatus = "available" | "unavailable" | "auth-required" | "unknown";

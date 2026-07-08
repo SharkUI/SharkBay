@@ -598,7 +598,7 @@ export type SharkBayBridge = {
     createWorktree?: (input: { sourceProjectPath: string; branchName: string }) => Promise<{ targetPath: string; branchName: string }>;
     setAppearanceTheme?: (input: { theme: AppearanceTheme }) => Promise<AppConfig>;
     setStatusChangeNotifications?: (input: { enabled?: boolean; completionEnabled?: boolean; approvalEnabled?: boolean }) => Promise<AppConfig>;
-    setTerminalAppearance?: (input: { colorScheme?: string; fontFamily?: string; fontSize?: number; lineHeight?: number }) => Promise<AppConfig>;
+    setTerminalAppearance?: (input: { colorScheme?: string | null; fontFamily?: string | null; fontSize?: number | null; lineHeight?: number | null }) => Promise<AppConfig>;
   };
   projects?: {
     scan?: () => Promise<ScanResult | ProjectCandidate[]>;

@@ -7,6 +7,7 @@ import {
   renameProject,
   setAppearanceTheme,
   setStatusChangeNotificationsEnabled,
+  setTerminalAppearance,
 } from "../src/main/config.js";
 import { cloneProject } from "../src/main/project-clone.js";
 import { createWorktree } from "../src/main/worktree.js";
@@ -18,6 +19,7 @@ import type {
   AppearanceTheme,
   AppearanceThemeInput,
   StatusChangeNotificationsInput,
+  TerminalAppearanceInput,
   CodeGraphProjectStatus,
   UsageReportFilter,
   UsageReportResult,
@@ -915,6 +917,9 @@ export async function registerIpcHandlers(
       callbacks.onStatusChangeNotificationsChanged?.(config);
       return config;
     })
+  );
+  handle<TerminalAppearanceInput, AppConfig>(channels.setTerminalAppearance, (payload) =>
+    setTerminalAppearance(runtime, payload)
   );
   handle<ProjectScanInput | undefined, ScanProjectsResult>(channels.scanProjects, (payload) =>
     requireCore().call("scanProjects", [runtime, payload])

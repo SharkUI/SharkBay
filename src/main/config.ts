@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { AppearanceTheme, AppearanceThemeInput, AppConfig, IpcRuntimeLike, ProjectConfigInput, RemoveProjectInput, RemoveRootInput, RenameProjectInput, RootConfigInput, StatusChangeNotificationsInput, TelegramConfig, TelegramPairedUser } from "../shared/types.js";
+import type { AppearanceTheme, AppearanceThemeInput, AppConfig, IpcRuntimeLike, ProjectConfigInput, RemoveProjectInput, RemoveRootInput, RenameProjectInput, RootConfigInput, StatusChangeNotificationsInput, TelegramConfig, TelegramPairedUser, TerminalAppearanceInput } from "../shared/types.js";
 import { isRecord } from "../shared/schema.js";
 import { writeJsonAtomic, readJsonFile } from "./json-file.js";
 
@@ -186,6 +186,20 @@ export async function setStatusChangeNotificationsEnabled(runtime: IpcRuntimeLik
   return config;
 }
 
+export async function setTerminalAppearance(runtime: IpcRuntimeLike, input: TerminalAppearanceInput): Promise<AppConfig> {
+  const configPath = getRuntimeConfigPath(runtime);
+  const config = await loadAppConfig(configPath);
+
+  applyOptionalStringSetting(config, "terminalColorScheme", input.colorScheme);
+  applyOptionalStringSetting(config, "terminalFontFamily", input.fontFamily);
+  applyOptionalNumberSetting(config, "terminalFontSize", input.fontSize);
+  applyOptionalNumberSetting(config, "terminalLineHeight", input.lineHeight);
+
+  config.updatedAt = today();
+  await saveAppConfig(config, configPath);
+  return config;
+}
+
 function rootFromInput(input: string | RootConfigInput | RemoveRootInput | undefined): string {
   if (typeof input === "string") return input;
   const rootPath = input?.path || input?.rootPath;
@@ -207,6 +221,10 @@ function projectFromInput(input: string | ProjectConfigInput | RemoveProjectInpu
 function normalizeAppConfig(value: unknown): AppConfig {
   if (!isRecord(value)) return createDefaultConfig();
   const legacyStatusSoundsEnabled = value.statusChangeNotificationsEnabled !== false;
+  const terminalColorScheme = normalizeOptionalStringValue(value.terminalColorScheme);
+  const terminalFontFamily = normalizeOptionalStringValue(value.terminalFontFamily);
+  const terminalFontSize = normalizeOptionalNumberValue(value.terminalFontSize);
+  const terminalLineHeight = normalizeOptionalNumberValue(value.terminalLineHeight);
   return {
     schemaVersion: 1,
     configuredRoots: Array.isArray(value.configuredRoots)
@@ -227,6 +245,10 @@ function normalizeAppConfig(value: unknown): AppConfig {
     agentStatusApprovalSoundEnabled: typeof value.agentStatusApprovalSoundEnabled === "boolean"
       ? value.agentStatusApprovalSoundEnabled
       : legacyStatusSoundsEnabled,
+    ...(terminalColorScheme ? { terminalColorScheme } : {}),
+    ...(terminalFontFamily ? { terminalFontFamily } : {}),
+    ...(terminalFontSize !== undefined ? { terminalFontSize } : {}),
+    ...(terminalLineHeight !== undefined ? { terminalLineHeight } : {}),
     telegram: normalizeTelegramConfig(value.telegram),
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : today(),
   };
@@ -305,6 +327,10 @@ function shouldPersistMigratedConfig(raw: unknown, normalized: AppConfig): boole
   if (raw.statusChangeNotificationsEnabled !== normalized.statusChangeNotificationsEnabled) return true;
   if (raw.agentStatusCompletionSoundEnabled !== normalized.agentStatusCompletionSoundEnabled) return true;
   if (raw.agentStatusApprovalSoundEnabled !== normalized.agentStatusApprovalSoundEnabled) return true;
+  if (raw.terminalColorScheme !== normalized.terminalColorScheme) return true;
+  if (raw.terminalFontFamily !== normalized.terminalFontFamily) return true;
+  if (raw.terminalFontSize !== normalized.terminalFontSize) return true;
+  if (raw.terminalLineHeight !== normalized.terminalLineHeight) return true;
   if (raw.updatedAt !== normalized.updatedAt) return true;
   return !sameStringArray(raw.configuredRoots, normalized.configuredRoots)
     || !sameStringArray(raw.configuredProjects, normalized.configuredProjects)
@@ -331,6 +357,37 @@ function normalizeProjectAliases(value: unknown): Record<string, string> {
 
 function normalizeOptionalString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeOptionalStringValue(value: unknown): string | undefined {
+  const normalized = normalizeOptionalString(value);
+  return normalized || undefined;
+}
+
+function normalizeOptionalNumberValue(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function applyOptionalStringSetting<Key extends "terminalColorScheme" | "terminalFontFamily">(
+  config: AppConfig,
+  key: Key,
+  value: string | null | undefined,
+): void {
+  if (value === undefined) return;
+  const normalized = normalizeOptionalStringValue(value);
+  if (normalized) config[key] = normalized;
+  else delete config[key];
+}
+
+function applyOptionalNumberSetting<Key extends "terminalFontSize" | "terminalLineHeight">(
+  config: AppConfig,
+  key: Key,
+  value: number | null | undefined,
+): void {
+  if (value === undefined) return;
+  const normalized = normalizeOptionalNumberValue(value);
+  if (normalized !== undefined) config[key] = normalized;
+  else delete config[key];
 }
 
 function normalizeAppearanceTheme(value: unknown): AppearanceTheme {

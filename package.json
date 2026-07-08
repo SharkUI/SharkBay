@@ -76,20 +76,52 @@
     "files": [
       "dist/renderer/**/*",
       "dist-electron/**/*",
+      "!dist-electron/tests/**/*",
+      "!dist-electron/**/*.map",
+      "!dist-electron/**/*.d.ts",
+      "!dist-electron/**/*.d.ts.map",
+      "!dist-electron/**/*.tsbuildinfo",
+      "!dist-electron/vite.config.*",
+      "!dist-electron/vitest.config.*",
+      "!node_modules/**/*.map",
+      "!node_modules/**/*.d.ts",
+      "!node_modules/**/*.d.ts.map",
+      "!node_modules/**/*.md",
+      "!node_modules/bun-pty/**/*",
+      "!node_modules/better-sqlite3/deps/**/*",
+      "!node_modules/better-sqlite3/src/**/*",
+      "!node_modules/better-sqlite3/build/Release/sqlite3.a",
+      "!node_modules/better-sqlite3/build/Release/test_extension.node",
+      "!node_modules/better-sqlite3/build/Release/.deps/**/*",
+      "!node_modules/better-sqlite3/build/deps/**/*",
+      "!node_modules/better-sqlite3/build/**/Makefile",
+      "!node_modules/better-sqlite3/build/**/*.target.mk",
+      "!node_modules/better-sqlite3/build/**/*.Makefile",
+      "!node_modules/better-sqlite3/build/config.gypi",
+      "!node_modules/better-sqlite3/build/gyp-mac-tool",
+      "!node_modules/better-sqlite3/binding.gyp",
       "src/island/**/*",
       "src/find-popover/**/*",
       "package.json"
     ],
     "extraResources": [
       {
-        "from": "resources",
-        "to": "resources"
+        "from": "resources/shark-morning.png",
+        "to": "resources/shark-morning.png"
+      },
+      {
+        "from": "resources/shark-day.png",
+        "to": "resources/shark-day.png"
+      },
+      {
+        "from": "resources/shark-night.png",
+        "to": "resources/shark-night.png"
       }
     ],
     "asarUnpack": [
       "node_modules/@lydell/node-pty/**/*",
       "node_modules/@lydell/node-pty-*/**/*",
-      "node_modules/better-sqlite3/**/*"
+      "node_modules/better-sqlite3/build/Release/better_sqlite3.node"
     ],
     "mac": {
       "category": "public.app-category.developer-tools",

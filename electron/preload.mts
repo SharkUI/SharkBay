@@ -8,6 +8,7 @@ import type {
   AppConfig,
   AppearanceThemeInput,
   StatusChangeNotificationsInput,
+  TerminalAppearanceInput,
   BrowserActionInput,
   BrowserCloseInput,
   BrowserCreateInput,
@@ -156,7 +157,8 @@ const sharkBayApi = {
     pickProjectFolder: () => invoke<{ cancelled: boolean; paths: string[] }>(channels.pickProjectFolder),
     createWorktree: (input: CreateWorktreeInput) => invoke<CreateWorktreeResult>(channels.createWorktree, input),
     setAppearanceTheme: (input: AppearanceThemeInput) => invoke<AppConfig>(channels.setAppearanceTheme, input),
-    setStatusChangeNotifications: (input: StatusChangeNotificationsInput) => invoke<AppConfig>(channels.setStatusChangeNotifications, input)
+    setStatusChangeNotifications: (input: StatusChangeNotificationsInput) => invoke<AppConfig>(channels.setStatusChangeNotifications, input),
+    setTerminalAppearance: (input: TerminalAppearanceInput) => invoke<AppConfig>(channels.setTerminalAppearance, input)
   },
   projects: {
     scan: (input?: ProjectScanInput) => invoke<ScanProjectsResult>(channels.scanProjects, input),

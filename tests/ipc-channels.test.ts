@@ -12,6 +12,7 @@ describe("IPC channels", () => {
       renameProject: "config:renameProject",
       setAppearanceTheme: "config:setAppearanceTheme",
       setStatusChangeNotifications: "config:setStatusChangeNotifications",
+      setTerminalAppearance: "config:setTerminalAppearance",
       scanProjects: "projects:scan",
       getProjectDetail: "projects:getDetail",
       readProjectGitHub: "projects:getGitHub",
