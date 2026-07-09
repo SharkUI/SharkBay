@@ -11,19 +11,21 @@ machine: 81ae10
 agent: Codex GPT-5.5
 branch: feature/reasonix-agent-support
 createdAt: 2026-07-09T11:51:08Z
-updatedAt: 2026-07-09T11:59:52Z
-completedAt: 2026-07-09T11:59:52Z
+updatedAt: 2026-07-09T12:10:00Z
+completedAt: 2026-07-09T12:10:00Z
 ---
 
 ## Summary
-Added Reasonix (esengine/DeepSeek-Reasonix) as a fully-supported agent in SharkBay: CLI detection, install recipe, session restore, hook-based status monitoring connector, and SVG icon. TypeScript compilation passes cleanly.
+Added Reasonix (esengine/DeepSeek-Reasonix) as a fully-supported agent in SharkBay: CLI detection, install recipe, session restore, hook-based status monitoring connector, SVG icon, bootstrap prompt injection, and hook wiring.
 
 ## Files
 - src/main/agent-clis.ts
+- src/main/harness.ts
 - src/renderer/App.tsx
 - src/plugins/bundled/agent-detector.ts
 - src/shared/agent-session-restore.ts
 - src/main/hooks/connectors/reasonix.ts
+- electron/ipc.ts
 
 ## Work
 - Added reasonix to agent CLI definitions (id="reasonix", commands=["reasonix"], shortLabel="Rx")
@@ -31,15 +33,16 @@ Added Reasonix (esengine/DeepSeek-Reasonix) as a fully-supported agent in SharkB
 - Added ReasonixIcon (16px monochrome) and ReasonixLogoColorIcon (color gradient) SVG components
 - Updated AgentCliIcon and AgentLogoIcon mappings to include reasonix
 - Added reasonix to agent-detector plugin: detection via `which reasonix`, npm install recipe
-- Added reasonix to session-restore: type, definition (match: /\breasonix\b/), --resume command
-- Created ReasonixConnector: maps PreToolUse→tool_start, PostToolUse→tool_end, PermissionRequest→attention, UserPromptSubmit→prompt, Stop→turn_end; writes to ~/.reasonix/settings.json
+- Added reasonix to session-restore: type, definition, --resume command
+- Created ReasonixConnector: maps PreToolUse→tool_start, PostToolUse→tool_end, PermissionRequest→attention, UserPromptSubmit→prompt, Stop→turn_end
+- Fixed bootstrap injection: added reasonix to agentBootstrapArgs, withLaunchSessionId, and agent-session-id.sh
+- Fixed hook wiring: imported and registered ReasonixConnector in electron/ipc.ts
 
 ## Verification
-- TypeScript compilation: `npm run typecheck` passes with zero errors (tsconfig.renderer.json + tsconfig.node.json)
+- TypeScript compilation: `npm run typecheck` passes with zero errors
 
 ## Notes
-- Reasonix has no native `--yolo` CLI flag; YOLO-equivalent achieved via `[permissions] mode = "allow"` in reasonix.toml
-- Hook payload format inferred from Reasonix docs; may need refinement after testing with actual Reasonix
-- Reasonix hooks configured via `~/.reasonix/settings.json` (global, always active)
-- Connector follows the same AgentConnector pattern as KiroConnector, GeminiConnector, etc.
-- The Reasonix icon is a rounded rectangle (rx=5) with a stylized "R" letterform in negative space
+- Reasonix has no native `--yolo` CLI flag; YOLO-equivalent via `[permissions] mode = "allow"` in reasonix.toml
+- Hook payload format inferred from Reasonix docs; may need refinement after testing
+- ReasonixConnector writes hooks to `~/.reasonix/settings.json` (global, always active)
+- SHARKBAY_SESSION_ID env var injected at launch for session tracking
