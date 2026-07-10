@@ -7,6 +7,8 @@ import type {
   AgentProjectStatusEvent,
   AppConfig,
   AppearanceThemeInput,
+  CaffeinateActiveInput,
+  CaffeinateWhenTerminalWorkingInput,
   StatusChangeNotificationsInput,
   TerminalAppearanceInput,
   BrowserActionInput,
@@ -158,6 +160,7 @@ const sharkBayApi = {
     createWorktree: (input: CreateWorktreeInput) => invoke<CreateWorktreeResult>(channels.createWorktree, input),
     setAppearanceTheme: (input: AppearanceThemeInput) => invoke<AppConfig>(channels.setAppearanceTheme, input),
     setStatusChangeNotifications: (input: StatusChangeNotificationsInput) => invoke<AppConfig>(channels.setStatusChangeNotifications, input),
+    setCaffeinateWhenTerminalWorking: (input: CaffeinateWhenTerminalWorkingInput) => invoke<AppConfig>(channels.setCaffeinateWhenTerminalWorking, input),
     setTerminalAppearance: (input: TerminalAppearanceInput) => invoke<AppConfig>(channels.setTerminalAppearance, input)
   },
   projects: {
@@ -183,6 +186,7 @@ const sharkBayApi = {
     loadPromptHistory: (input: { sessionId: string }) => invoke<string[]>(channels.loadSessionPromptHistory, input),
     resize: (input: TerminalResizeInput) => invoke<TerminalSession>(channels.resizeTerminal, input),
     close: (input: TerminalCloseInput) => invoke<TerminalSession>(channels.closeTerminal, input),
+    setCaffeinateActive: (input: CaffeinateActiveInput) => invoke<void>(channels.setCaffeinateActive, input),
     onData: (callback: (event: TerminalDataEvent) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: TerminalDataEvent) => callback(payload);
       ipcRenderer.on(channels.terminalData, listener);

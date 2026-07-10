@@ -1,11 +1,12 @@
 import { execFile } from "node:child_process";
-import { BrowserWindow, dialog, ipcMain, shell, type WebContents } from "electron";
+import { BrowserWindow, dialog, ipcMain, powerSaveBlocker, shell, type WebContents } from "electron";
 import {
   addConfiguredProject,
   getConfiguredRoots,
   removeConfiguredProject,
   renameProject,
   setAppearanceTheme,
+  setCaffeinateWhenTerminalWorking,
   setStatusChangeNotificationsEnabled,
   setTerminalAppearance,
 } from "../src/main/config.js";
@@ -18,6 +19,8 @@ import type {
   AppConfig,
   AppearanceTheme,
   AppearanceThemeInput,
+  CaffeinateActiveInput,
+  CaffeinateWhenTerminalWorkingInput,
   StatusChangeNotificationsInput,
   TerminalAppearanceInput,
   CodeGraphProjectStatus,
@@ -153,6 +156,7 @@ const browserManager = new BrowserManager();
 let activeFindBrowserId: string | null = null;
 let lastFindQuery = "";
 let refocusPopoverOnResult = false;
+let caffeinateBlockerId: number | null = null;
 
 const hookBridge = new HookBridge();
 const hookStateManager = new AgentHookStateManager();
@@ -260,6 +264,20 @@ function requireCore(): CoreClient {
   return core;
 }
 
+function setCaffeinateActive(active: boolean): void {
+  if (active) {
+    if (caffeinateBlockerId !== null && powerSaveBlocker.isStarted(caffeinateBlockerId)) return;
+    caffeinateBlockerId = powerSaveBlocker.start("prevent-display-sleep");
+    return;
+  }
+
+  if (caffeinateBlockerId === null) return;
+  if (powerSaveBlocker.isStarted(caffeinateBlockerId)) {
+    powerSaveBlocker.stop(caffeinateBlockerId);
+  }
+  caffeinateBlockerId = null;
+}
+
 /**
  * Awaitable shutdown for app exit: cancels background CodeGraph jobs and closes
  * terminals via the core process (awaited) BEFORE the core utility process is
@@ -267,6 +285,7 @@ function requireCore(): CoreClient {
  * orphaned codegraph process groups (issue #15).
  */
 export async function shutdownCore(): Promise<void> {
+  setCaffeinateActive(false);
   await telegramService?.stop().catch(() => {});
   await core?.dispose();
   browserManager.closeAll();
@@ -926,9 +945,15 @@ export async function registerIpcHandlers(
       return config;
     })
   );
+  handle<CaffeinateWhenTerminalWorkingInput, AppConfig>(channels.setCaffeinateWhenTerminalWorking, (payload) =>
+    setCaffeinateWhenTerminalWorking(runtime, payload)
+  );
   handle<TerminalAppearanceInput, AppConfig>(channels.setTerminalAppearance, (payload) =>
     setTerminalAppearance(runtime, payload)
   );
+  handle<CaffeinateActiveInput, void>(channels.setCaffeinateActive, async (payload) => {
+    setCaffeinateActive(payload.active === true);
+  });
   handle<ProjectScanInput | undefined, ScanProjectsResult>(channels.scanProjects, (payload) =>
     requireCore().call("scanProjects", [runtime, payload])
   );

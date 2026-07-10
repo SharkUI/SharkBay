@@ -808,6 +808,8 @@ export function App() {
   const [terminalLineHeight, setTerminalLineHeight] = useState<number | null>(null);
   const [agentStatusCompletionSoundEnabled, setAgentStatusCompletionSoundEnabled] = useState(true);
   const [agentStatusApprovalSoundEnabled, setAgentStatusApprovalSoundEnabled] = useState(true);
+  const [caffeinateWhenTerminalWorkingEnabled, setCaffeinateWhenTerminalWorkingEnabled] = useState(false);
+  const [terminalWorking, setTerminalWorking] = useState(false);
   const refreshInFlight = useRef(false);
 
   const bridgeAvailable = typeof window !== "undefined" && Boolean(window.sharkBay);
@@ -836,6 +838,7 @@ export function App() {
         const legacyStatusSoundsEnabled = rootConfig.statusChangeNotificationsEnabled !== false;
         setAgentStatusCompletionSoundEnabled(rootConfig.agentStatusCompletionSoundEnabled ?? legacyStatusSoundsEnabled);
         setAgentStatusApprovalSoundEnabled(rootConfig.agentStatusApprovalSoundEnabled ?? legacyStatusSoundsEnabled);
+        setCaffeinateWhenTerminalWorkingEnabled(rootConfig.caffeinateWhenTerminalWorkingEnabled === true);
         setConfiguredProjects(rootConfig.configuredProjects ?? []);
         setProjectAliases(rootConfig.projectAliases ?? {});
       }
@@ -907,6 +910,20 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  useEffect(() => {
+    if (!bridgeAvailable) return;
+    const handler = getBridge().terminal?.setCaffeinateActive;
+    if (!handler) return;
+    void handler({ active: caffeinateWhenTerminalWorkingEnabled && terminalWorking }).catch(() => {});
+  }, [bridgeAvailable, caffeinateWhenTerminalWorkingEnabled, terminalWorking]);
+
+  useEffect(() => {
+    if (!bridgeAvailable) return;
+    return () => {
+      void getBridge().terminal?.setCaffeinateActive?.({ active: false })?.catch(() => {});
+    };
+  }, [bridgeAvailable]);
+
   return (
     <div className="app-shell" data-theme={appearanceTheme}>
       <main className="workspace">
@@ -923,6 +940,7 @@ export function App() {
               terminalFontFamily={terminalFontFamily}
               terminalFontSize={terminalFontSize}
               terminalLineHeight={terminalLineHeight}
+              onTerminalWorkingChange={setTerminalWorking}
               
               scanErrors={scanErrors}
               selectedCandidate={selectedCandidate}
@@ -967,6 +985,7 @@ export function App() {
                 onRemoveProject={async (path) => { await removeProject(path); await refreshProjects({ showToast: true }); }}
                 agentStatusCompletionSoundEnabled={agentStatusCompletionSoundEnabled}
                 agentStatusApprovalSoundEnabled={agentStatusApprovalSoundEnabled}
+                caffeinateWhenTerminalWorkingEnabled={caffeinateWhenTerminalWorkingEnabled}
                 onStatusChangeNotificationsChange={async (input) => {
                   const previousCompletion = agentStatusCompletionSoundEnabled;
                   const previousApproval = agentStatusApprovalSoundEnabled;
@@ -982,6 +1001,19 @@ export function App() {
                   } catch (error) {
                     setAgentStatusCompletionSoundEnabled(previousCompletion);
                     setAgentStatusApprovalSoundEnabled(previousApproval);
+                    throw error;
+                  }
+                }}
+                onCaffeinateWhenTerminalWorkingChange={async (enabled) => {
+                  const previous = caffeinateWhenTerminalWorkingEnabled;
+                  setCaffeinateWhenTerminalWorkingEnabled(enabled);
+                  const handler = getBridge().config?.setCaffeinateWhenTerminalWorking;
+                  try {
+                    if (!handler) throw new Error("Caffeinate settings are not exposed by the preload API.");
+                    const config = await handler({ enabled });
+                    setCaffeinateWhenTerminalWorkingEnabled(config.caffeinateWhenTerminalWorkingEnabled === true);
+                  } catch (error) {
+                    setCaffeinateWhenTerminalWorkingEnabled(previous);
                     throw error;
                   }
                 }}
@@ -1071,6 +1103,7 @@ function DashboardView({
   onRemoveProject,
   onRenameProject,
   onUninstallProtocol,
+  onTerminalWorkingChange,
   terminalColorScheme,
   terminalFontFamily,
   terminalFontSize,
@@ -1095,6 +1128,7 @@ function DashboardView({
   onRemoveProject: (uri: string) => Promise<void>;
   onRenameProject: (uri: string, name: string) => Promise<void>;
   onUninstallProtocol: (repoPath: string, cleanTeamContext?: boolean) => Promise<void>;
+  onTerminalWorkingChange: (working: boolean) => void;
   terminalColorScheme: string | null;
   terminalFontFamily: string | null;
   terminalFontSize: number | null;
@@ -1416,6 +1450,7 @@ function DashboardView({
           onProjectActivityChange={(nextActivity) =>
             setHookActivityByProjectId((current) => sameActivityMap(current, nextActivity) ? current : nextActivity)
           }
+          onTerminalWorkingChange={onTerminalWorkingChange}
           onAgentSessionClear={clearAgentSession}
         />
       </section>
@@ -1529,7 +1564,8 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   onAgentSessionClear: (agentSessionId: string) => void;
   onRunningServiceProjectIdsChange: (projectIds: Set<string>) => void;
   onProjectActivityChange: (activityByProjectId: Record<string, ProjectActivityState>) => void;
-}>(function TerminalPane({ appearanceTheme, agentClis, agentClisReady, bridgeAvailable, browserLayoutKey, candidate, hookStateBySessionId, projectAliases, isVisible, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onAgentSessionClear, onRunningServiceProjectIdsChange, onProjectActivityChange }, ref) {
+  onTerminalWorkingChange: (working: boolean) => void;
+}>(function TerminalPane({ appearanceTheme, agentClis, agentClisReady, bridgeAvailable, browserLayoutKey, candidate, hookStateBySessionId, projectAliases, isVisible, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onAgentSessionClear, onRunningServiceProjectIdsChange, onProjectActivityChange, onTerminalWorkingChange }, ref) {
   const [spaces, setSpaces] = useState<Record<string, TerminalSpace>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [terminalSpacesRestored, setTerminalSpacesRestored] = useState(false);
@@ -1719,11 +1755,13 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   useEffect(() => {
     const compute = () => {
       const byProject: Record<string, ProjectActivityState> = {};
+      let working = false;
       for (const space of Object.values(spaces)) {
         for (const tab of space.tabs) {
           const isActiveTab = tabIdForTab(tab) === space.activeId;
           const state = agentTabLightState(tab, isActiveTab, hookStateByTerminalId);
           if (!state) continue;
+          if (state === "working") working = true;
           const current = byProject[space.projectId];
           if (!current || priorityOf(state) > priorityOf(current)) {
             byProject[space.projectId] = state;
@@ -1731,12 +1769,13 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
         }
       }
       onProjectActivityChange(byProject);
+      onTerminalWorkingChange(working);
     };
     compute();
     window.addEventListener("focus", compute);
     window.addEventListener("blur", compute);
     return () => { window.removeEventListener("focus", compute); window.removeEventListener("blur", compute); };
-  }, [spaces, hookStateByTerminalId, onProjectActivityChange]);
+  }, [spaces, hookStateByTerminalId, onProjectActivityChange, onTerminalWorkingChange]);
 
   const selectedSpace = candidate?.id ? spaces[candidate.id] ?? null : null;
   const canCreate = bridgeAvailable && Boolean(candidate?.uri) && (candidate?.providerKind === "local");
@@ -5005,12 +5044,14 @@ function removeExpandedProjectDirectory(paths: Set<string>, directoryPath: strin
   return next;
 }
 
-function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, candidates, scanErrors, initialSection, setToast, onBack, onRemoveProject, agentStatusCompletionSoundEnabled, agentStatusApprovalSoundEnabled, onStatusChangeNotificationsChange, onThemeChange, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, onTerminalAppearanceChange }: {
+function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, candidates, scanErrors, initialSection, setToast, onBack, onRemoveProject, agentStatusCompletionSoundEnabled, agentStatusApprovalSoundEnabled, caffeinateWhenTerminalWorkingEnabled, onStatusChangeNotificationsChange, onCaffeinateWhenTerminalWorkingChange, onThemeChange, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, onTerminalAppearanceChange }: {
   appearanceTheme: AppearanceTheme; configuredProjects: string[];  bridgeAvailable: boolean; candidates: ProjectCandidate[]; scanErrors: string[]; initialSection?: SettingsSection; setToast: (toast: Toast) => void;
   onBack: () => void; onRemoveProject: (path: string) => Promise<void>;
   agentStatusCompletionSoundEnabled: boolean;
   agentStatusApprovalSoundEnabled: boolean;
+  caffeinateWhenTerminalWorkingEnabled: boolean;
   onStatusChangeNotificationsChange: (input: { completionEnabled?: boolean; approvalEnabled?: boolean }) => Promise<void>;
+  onCaffeinateWhenTerminalWorkingChange: (enabled: boolean) => Promise<void>;
   onThemeChange: (theme: AppearanceTheme) => Promise<void>;
   terminalColorScheme: string | null; terminalFontFamily: string | null; terminalFontSize: number | null; terminalLineHeight: number | null;
   onTerminalAppearanceChange: (opts: { colorScheme?: string | null; fontFamily?: string | null; fontSize?: number | null; lineHeight?: number | null }) => Promise<void>;
@@ -5050,8 +5091,10 @@ function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, ca
             <GeneralSettingsPanel
               agentStatusCompletionSoundEnabled={agentStatusCompletionSoundEnabled}
               agentStatusApprovalSoundEnabled={agentStatusApprovalSoundEnabled}
+              caffeinateWhenTerminalWorkingEnabled={caffeinateWhenTerminalWorkingEnabled}
               setToast={setToast}
               onStatusChangeNotificationsChange={onStatusChangeNotificationsChange}
+              onCaffeinateWhenTerminalWorkingChange={onCaffeinateWhenTerminalWorkingChange}
             />
           </div>
           <div className="settings-section-panel" hidden={activeSection !== "agent-clis"}>
@@ -5080,13 +5123,16 @@ function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, ca
   );
 }
 
-function GeneralSettingsPanel({ agentStatusCompletionSoundEnabled, agentStatusApprovalSoundEnabled, setToast, onStatusChangeNotificationsChange }: {
+function GeneralSettingsPanel({ agentStatusCompletionSoundEnabled, agentStatusApprovalSoundEnabled, caffeinateWhenTerminalWorkingEnabled, setToast, onStatusChangeNotificationsChange, onCaffeinateWhenTerminalWorkingChange }: {
   agentStatusCompletionSoundEnabled: boolean;
   agentStatusApprovalSoundEnabled: boolean;
+  caffeinateWhenTerminalWorkingEnabled: boolean;
   setToast: (toast: Toast) => void;
   onStatusChangeNotificationsChange: (input: { completionEnabled?: boolean; approvalEnabled?: boolean }) => Promise<void>;
+  onCaffeinateWhenTerminalWorkingChange: (enabled: boolean) => Promise<void>;
 }) {
   const [savingSound, setSavingSound] = useState<AgentStatusSoundKind | null>(null);
+  const [savingCaffeinate, setSavingCaffeinate] = useState(false);
 
   async function toggleSound(kind: AgentStatusSoundKind) {
     if (savingSound) return;
@@ -5109,8 +5155,34 @@ function GeneralSettingsPanel({ agentStatusCompletionSoundEnabled, agentStatusAp
     }
   }
 
+  async function toggleCaffeinate() {
+    if (savingCaffeinate) return;
+    setSavingCaffeinate(true);
+    try {
+      await onCaffeinateWhenTerminalWorkingChange(!caffeinateWhenTerminalWorkingEnabled);
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      setSavingCaffeinate(false);
+    }
+  }
+
   return (
     <section className="workflow-panel">
+      <h5 className="settings-subsection-title">Power</h5>
+      <div className="settings-sound-controls">
+        <div className="settings-toggle-row">
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={caffeinateWhenTerminalWorkingEnabled}
+              disabled={savingCaffeinate}
+              onChange={() => void toggleCaffeinate()}
+            />
+            <span>Caffeinate while terminals are working</span>
+          </label>
+        </div>
+      </div>
       <h5 className="settings-subsection-title">Sounds</h5>
       <div className="settings-sound-controls">
         <div className="settings-toggle-row">

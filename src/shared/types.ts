@@ -10,6 +10,7 @@ export type AppConfig = {
   statusChangeNotificationsEnabled: boolean;
   agentStatusCompletionSoundEnabled: boolean;
   agentStatusApprovalSoundEnabled: boolean;
+  caffeinateWhenTerminalWorkingEnabled: boolean;
   terminalColorScheme?: string;
   terminalFontFamily?: string;
   terminalFontSize?: number;
@@ -74,11 +75,19 @@ export type StatusChangeNotificationsInput = {
   approvalEnabled?: boolean;
 };
 
+export type CaffeinateWhenTerminalWorkingInput = {
+  enabled: boolean;
+};
+
 export type TerminalAppearanceInput = {
   colorScheme?: string | null;
   fontFamily?: string | null;
   fontSize?: number | null;
   lineHeight?: number | null;
+};
+
+export type CaffeinateActiveInput = {
+  active: boolean;
 };
 
 export type ExecutionTargetKind = "local" | "container" | "wsl";

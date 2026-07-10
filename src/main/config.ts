@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { AppearanceTheme, AppearanceThemeInput, AppConfig, IpcRuntimeLike, ProjectConfigInput, RemoveProjectInput, RemoveRootInput, RenameProjectInput, RootConfigInput, StatusChangeNotificationsInput, TelegramConfig, TelegramPairedUser, TerminalAppearanceInput } from "../shared/types.js";
+import type { AppearanceTheme, AppearanceThemeInput, AppConfig, CaffeinateWhenTerminalWorkingInput, IpcRuntimeLike, ProjectConfigInput, RemoveProjectInput, RemoveRootInput, RenameProjectInput, RootConfigInput, StatusChangeNotificationsInput, TelegramConfig, TelegramPairedUser, TerminalAppearanceInput } from "../shared/types.js";
 import { isRecord } from "../shared/schema.js";
 import { writeJsonAtomic, readJsonFile } from "./json-file.js";
 
@@ -26,6 +26,7 @@ export function createDefaultConfig(): AppConfig {
     statusChangeNotificationsEnabled: true,
     agentStatusCompletionSoundEnabled: true,
     agentStatusApprovalSoundEnabled: true,
+    caffeinateWhenTerminalWorkingEnabled: false,
     telegram: createDefaultTelegramConfig(),
     updatedAt: today(),
   };
@@ -186,6 +187,15 @@ export async function setStatusChangeNotificationsEnabled(runtime: IpcRuntimeLik
   return config;
 }
 
+export async function setCaffeinateWhenTerminalWorking(runtime: IpcRuntimeLike, input: CaffeinateWhenTerminalWorkingInput): Promise<AppConfig> {
+  const configPath = getRuntimeConfigPath(runtime);
+  const config = await loadAppConfig(configPath);
+  config.caffeinateWhenTerminalWorkingEnabled = input.enabled === true;
+  config.updatedAt = today();
+  await saveAppConfig(config, configPath);
+  return config;
+}
+
 export async function setTerminalAppearance(runtime: IpcRuntimeLike, input: TerminalAppearanceInput): Promise<AppConfig> {
   const configPath = getRuntimeConfigPath(runtime);
   const config = await loadAppConfig(configPath);
@@ -245,6 +255,7 @@ function normalizeAppConfig(value: unknown): AppConfig {
     agentStatusApprovalSoundEnabled: typeof value.agentStatusApprovalSoundEnabled === "boolean"
       ? value.agentStatusApprovalSoundEnabled
       : legacyStatusSoundsEnabled,
+    caffeinateWhenTerminalWorkingEnabled: value.caffeinateWhenTerminalWorkingEnabled === true,
     ...(terminalColorScheme ? { terminalColorScheme } : {}),
     ...(terminalFontFamily ? { terminalFontFamily } : {}),
     ...(terminalFontSize !== undefined ? { terminalFontSize } : {}),
@@ -327,6 +338,7 @@ function shouldPersistMigratedConfig(raw: unknown, normalized: AppConfig): boole
   if (raw.statusChangeNotificationsEnabled !== normalized.statusChangeNotificationsEnabled) return true;
   if (raw.agentStatusCompletionSoundEnabled !== normalized.agentStatusCompletionSoundEnabled) return true;
   if (raw.agentStatusApprovalSoundEnabled !== normalized.agentStatusApprovalSoundEnabled) return true;
+  if (raw.caffeinateWhenTerminalWorkingEnabled !== normalized.caffeinateWhenTerminalWorkingEnabled) return true;
   if (raw.terminalColorScheme !== normalized.terminalColorScheme) return true;
   if (raw.terminalFontFamily !== normalized.terminalFontFamily) return true;
   if (raw.terminalFontSize !== normalized.terminalFontSize) return true;

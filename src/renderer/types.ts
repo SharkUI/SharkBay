@@ -17,6 +17,7 @@ export type AppConfig = {
   statusChangeNotificationsEnabled?: boolean;
   agentStatusCompletionSoundEnabled?: boolean;
   agentStatusApprovalSoundEnabled?: boolean;
+  caffeinateWhenTerminalWorkingEnabled?: boolean;
   terminalColorScheme?: string;
   terminalFontFamily?: string;
   terminalFontSize?: number;
@@ -598,6 +599,7 @@ export type SharkBayBridge = {
     createWorktree?: (input: { sourceProjectPath: string; branchName: string }) => Promise<{ targetPath: string; branchName: string }>;
     setAppearanceTheme?: (input: { theme: AppearanceTheme }) => Promise<AppConfig>;
     setStatusChangeNotifications?: (input: { enabled?: boolean; completionEnabled?: boolean; approvalEnabled?: boolean }) => Promise<AppConfig>;
+    setCaffeinateWhenTerminalWorking?: (input: { enabled: boolean }) => Promise<AppConfig>;
     setTerminalAppearance?: (input: { colorScheme?: string | null; fontFamily?: string | null; fontSize?: number | null; lineHeight?: number | null }) => Promise<AppConfig>;
   };
   projects?: {
@@ -623,6 +625,7 @@ export type SharkBayBridge = {
     loadPromptHistory?: (input: { sessionId: string }) => Promise<string[]>;
     resize?: (input: TerminalResizeInput) => Promise<TerminalSession>;
     close?: (input: TerminalCloseInput) => Promise<TerminalSession>;
+    setCaffeinateActive?: (input: { active: boolean }) => Promise<void>;
     onData?: (callback: (event: TerminalDataEvent) => void) => () => void;
     onExit?: (callback: (event: TerminalExitEvent) => void) => () => void;
     onUpdate?: (callback: (event: TerminalUpdateEvent) => void) => () => void;
