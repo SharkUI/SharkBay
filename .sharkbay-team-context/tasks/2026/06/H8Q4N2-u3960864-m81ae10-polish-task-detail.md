@@ -94,3 +94,6 @@ Improved the project detail task view so task records are easier to scan and rea
 
 ## Notes
 - Related team context: `T5R8K2-u3960864-m81ae10` fixed task detail refresh; `R6T4W2-u3960864-m81ae10` cached task avatars; `RVW7K2-u3960864-m81ae10` added task review menu. Keep behavior unchanged.
+
+## Artifacts
+- `.sharkbay/artifacts/H8Q4N2-NB513R.html` — Task detail readability artifact summarizing the structured detail view, file/diff behavior, tests, and commit context (2026-06-19T15:55:37Z)

@@ -149,3 +149,8 @@ application-menu accelerator. Requirement 1 only; history-locate (req 2) deferre
 ## Reviews
 
 - 通过 — 存在真实但可控的未验证风险（浏览器弹窗从未在打包应用中进行运行时验证）；1 个主要问题，3 个次要问题 — `.sharkbay/reviews/FND8K2-SK1JF8.md` (2026-06-24T06:33:18Z)
+- Review SK1JF8 (CodeWhale) PASSED, no blocking issues. Major item (browser popover
+  not runtime-verified) retired: user manually verified count + Enter traversal +
+  per-tab close in dev. Addressed the 3 minor recommendations in commit 9ea4f4fa:
+  SearchOverlay made terminal-only (removed dead browser SearchTarget branch);
+  popover morning border distinct from night; activeBrowserFindId memoized.

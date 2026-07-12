@@ -26,9 +26,10 @@ notarized build (v0.3.0), created the self-hosted tap SharkUI/homebrew-tap with 
 verified cask, and documented install in the README.
 
 ## Files
-- package.json — enabled `mac.hardenedRuntime` + `mac.notarize` (done)
-- docs/release.md — documented Developer ID signing/notarization env vars + verify commands (done)
-- SharkUI/homebrew-tap : Casks/sharkbay.rb (planned, separate repo) — cask definition
+- package.json — enabled `mac.hardenedRuntime` + `mac.notarize` (done, commit ab161104)
+- docs/release.md — documented Developer ID signing/notarization env vars + verify commands (done, commit ab161104)
+- README.md — added Homebrew install instructions (done, commit 5b9399f6)
+- SharkUI/homebrew-tap (separate repo) — Casks/sharkbay.rb + README (done; commits e83467c and earlier)
 
 ## Work
 - Investigated current distribution: repo SharkUI/SharkBay, GitHub Releases through v0.2.9.

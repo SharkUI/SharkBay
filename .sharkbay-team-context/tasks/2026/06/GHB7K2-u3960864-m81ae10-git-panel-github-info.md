@@ -62,13 +62,20 @@ GitHub.
   unavailable or there are no open issues/PRs.
 - Reused subpanel / row styling; added github-* CSS incl. night theme.
 - Updated tests/ipc-channels.test.ts for the new channel.
+- Follow-up fix (commit 784987f0): cards showed in dev but vanished in packaged
+  builds. Cause: macOS GUI apps get a minimal PATH; gh lives under Homebrew
+  (/opt/homebrew/bin), not on that PATH, while git is at /usr/bin so it kept
+  working. Fixed github.ts to resolve gh's absolute path via resolveCommandPath
+  and run it with a PATH augmented by resolveCommandSearchPaths (gh shells out
+  to git, so it needs an enriched PATH too).
 
 ## Verification
 - npm run typecheck: pass.
-- npx vitest run: 44 files / 189 tests pass (incl. new tests/github.test.ts).
+- npx vitest run: 44 files / 189 tests pass (incl. tests/github.test.ts).
 - npm run build: pass (tsc + vite).
-- Confirmed live `gh` output for SharkUI/SharkBay matches parser expectations
-  (repo view guard, issue list, release list).
+- Confirmed live `gh` output for SharkUI/SharkBay matches parser expectations.
+- Confirmed diagnosis: `which gh` => /opt/homebrew/bin/gh, `which git` =>
+  /usr/bin/git (explains why git worked but gh did not when packaged).
 
 ## Notes
 - gh JSON fields confirmed: issue/pr list expose number,title,author,createdAt,

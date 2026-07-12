@@ -20,15 +20,22 @@ completedAt: 2026-06-09T01:38:11Z
 Detect Kiro's permission approval prompt from terminal output and inject a synthetic attention event into the state manager, giving Kiro sessions a red (approval) indicator.
 
 ## Files
-- (TBD)
+- src/main/hooks/terminal-approval-detector.ts
+- src/main/hooks/state-manager.ts
+- electron/ipc.ts
+- tests/terminal-approval-detector.test.ts
 
 ## Work
-- Kiro connector has no "attention" event in its hook protocol
-- Terminal output contains `ESC to close | Enter to see more options` as reliable signal
-- Hook events (tool_start, turn_end) will naturally override the state when approval completes
+- Created TerminalApprovalDetector: sliding window (256 chars) pattern match on "ESC to close"
+- Added `injectEvent()` to AgentHookStateManager for synthetic event injection (bypasses connector normalize)
+- Integrated in ipc.ts: track kiro terminals on update, feed on data, untrack on exit
+- Callback does reverse hookSessionToTerminal lookup to find hook session id
+- The `fired` flag prevents duplicate events; resets when pattern leaves the window
 
 ## Verification
-- (TBD)
+- `npm run typecheck` — passed
+- `npm test` — 166/167 passed (pre-existing harness locale failure only)
+- `tests/terminal-approval-detector.test.ts` — 6/6 passed (pattern detection, chunked input, dedup, untrack)
 
 ## Notes
 - Related to R7K4M9 (state rename). Prior task D1GSIG investigated kiro attention status.

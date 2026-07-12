@@ -14,6 +14,8 @@ branch: feat/island-overlay
 createdAt: 2026-06-08T15:17:00Z
 updatedAt: 2026-06-08T15:27:34Z
 completedAt: 2026-06-08T15:27:34Z
+commits:
+  - f2253941
 ---
 
 ## Summary

@@ -50,3 +50,6 @@ never overflows the right edge either.
 ## Notes
 - Related prior task: RVW7K2 (introduced the Review / Review with… submenu),
   V3N8W2 (context menu width).
+
+## Reviews
+- 通过：实现与 Summary/Files/Work 一致，提交 97d2e96f 范围干净，typecheck 复核通过；仅垂直裁切/极窄窗口翻转/魔数重复等小问题 — `.sharkbay/reviews/F4S8N2-B0Q02I.md` (2026-06-22T13:39:33Z)

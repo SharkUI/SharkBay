@@ -6,6 +6,8 @@ mode: task
 title: Fix island transparent area blocking mouse events
 status: completed
 completedAt: 2026-06-08T01:39:37Z
+commits:
+  - 3d67e3a8
 actor: SharkUI
 githubUserId: 3960864
 machine: 81ae10

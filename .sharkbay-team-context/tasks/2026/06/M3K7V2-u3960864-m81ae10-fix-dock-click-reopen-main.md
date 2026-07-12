@@ -6,6 +6,8 @@ mode: quick
 title: Fix dock click not reopening main window
 status: completed
 completedAt: 2026-06-10T06:03:09Z
+commits:
+  - 7801a66d
 actor: SharkUI
 githubUserId: 3960864
 machine: 81ae10

@@ -6,6 +6,8 @@ mode: task
 title: Filter sub-agent sessions from Sessions tab
 status: completed
 completedAt: 2026-06-06T13:48:59Z
+commits:
+  - 176040ac
 actor: SharkUI
 githubUserId: 3960864
 machine: 81ae10
@@ -25,7 +27,8 @@ Filter out Kiro sub-agent sessions from the Sessions tab display. Sub-agents (sp
 
 ## Work
 - Diagnosed: Veridia's Sessions tab shows 7 sessions, but 6 are sub-agent sessions spawned by a single parent. They have `session_created_reason: "subagent"` in their `~/.kiro/sessions/cli/<id>.json` file.
-- Fix: in `parseHookSessions`, skip Kiro sessions where the session file indicates `session_created_reason === "subagent"`.
+- Fix: in `parseHookSessions`, skip Kiro sessions where the session file has both `session_created_reason === "subagent"` AND a `parent_session_id` string.
+- Key distinction: `--agent` flag sessions also have `session_created_reason: "subagent"` but lack `parent_session_id`. Only true spawned sub-agents have both.
 
 ## Verification
 - `npx vitest run` — 160 tests pass across 40 files, including 2 new sub-agent filtering tests.
