@@ -12,8 +12,8 @@ agent: Codex GPT-5
 sessionId: 019f5a41-2f28-75b2-8f70-3a2a31cbf82d
 branch: main
 createdAt: 2026-07-13T11:08:53Z
-updatedAt: 2026-07-13T11:54:28Z
-completedAt: 2026-07-13T11:54:28Z
+updatedAt: 2026-07-13T12:02:07Z
+completedAt: 2026-07-13T12:02:07Z
 ---
 
 ## Summary
@@ -23,6 +23,7 @@ Implemented agent-initiated Review orchestration: a Codex master can asynchronou
 ## Files
 
 - `.sharkbay/tasks/9NOEQ2-u3960864-m81ae10-implement-agent-review-orchestration.md`
+- `.sharkbay/harness/protocol.md`
 - `.sharkbay/specs/agent-review-orchestration/design.md`
 - `src/shared/types.ts`
 - `src/shared/ipc-channels.ts`
@@ -65,6 +66,8 @@ Implemented agent-initiated Review orchestration: a Codex master can asynchronou
 - Applied the accepted fixes: reviewer callers cannot see the parent Terminal id; failed/cancelled runs remove only empty reserved reports; automated Review tabs fall back to the matching project space; stopped SharkBay clients return a concise error; the bootstrap prompt documents single-line draft detection and the `status` fallback.
 - Kept the remaining Minor findings unchanged where the current invariant is stronger or reliability would regress: exact reserved-path validation already constrains report names, notification retry remains unbounded for eventual delivery, and the renderer origin field is harmless protocol context.
 - Removed the cancelled duplicate run's empty report. The live-installed control client received the same one-line socket write fix so this verification could continue before the next packaged rebuild.
+- Reopened the task to move detailed Review usage guidance out of the bootstrap prompt and into the generated harness protocol; bootstrap should only advertise the mechanism and direct the agent to the protocol.
+- Added the Review lifecycle and commands to the generated protocol while reducing bootstrap guidance to a one-sentence capability pointer; added tests that keep command details out of bootstrap.
 
 ## Verification
 
@@ -75,6 +78,9 @@ Implemented agent-initiated Review orchestration: a Codex master can asynchronou
 - `npm run build` passed; Electron TypeScript and the Vite renderer production bundle were generated successfully.
 - `git diff --check` passed; `git diff --name-only -- src/main/hooks` returned no changes.
 - Live end-to-end OpenCode Review completed and automatically submitted its fixed completion prompt into this real Codex TUI without `wait`; the report was then read by the parent agent.
+- `npx vitest run tests/harness.test.ts` passed (25 tests), covering generated protocol Review guidance and the detail-free bootstrap pointer.
+- `npm run typecheck` passed after the protocol/bootstrap guidance split.
+- Final `git diff --check` passed; the current harness protocol contains the Review section and `src/main/hooks` remains unchanged.
 
 ## Notes
 
