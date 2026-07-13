@@ -12,7 +12,7 @@ agent: Codex GPT-5
 sessionId: 019f5a41-2f28-75b2-8f70-3a2a31cbf82d
 branch: main
 createdAt: 2026-07-13T11:08:53Z
-updatedAt: 2026-07-13T12:15:43Z
+updatedAt: 2026-07-13T12:17:55Z
 completedAt: 2026-07-13T12:15:43Z
 ---
 
@@ -76,6 +76,8 @@ Reviewer completion now uses a private per-run capability, so vendor shell tools
 - Confirmed the CodeWhale TUI processes inherited `SHARKBAY_TERMINAL_SESSION_ID=term-mrj6e0rr-15`, while its shell tool did not reliably expose that identity. Recovered the existing run through its recorded reviewer id; it completed and automatically notified the real Codex parent.
 - Added a private per-run completion capability to the fixed reviewer prompt and control request. The token is not exposed in ReviewRun responses or reports; Terminal identity remains a compatibility path, while parent start/status/cancel ownership is unchanged.
 - Assessed the CodeWhale report: real idle Codex notification is now proven twice, so its Major is overstated; accepted the protocol visibility issue by documenting the single-line draft boundary. Kept exact-path validation, eventual notification retry, and the existing delay pending contrary runtime evidence.
+- Started a fresh post-rebuild CodeWhale Review to verify that the reviewer shell can complete through the new per-run capability without relying on Terminal environment inheritance.
+- Post-rebuild run `review-a5812894-fe03-4236-9ea8-2b009e672877` is running in Terminal `term-mrj6tz3v-15`; reserved report: `.sharkbay/reviews/9NOEQ2-W1YZTT.md`.
 
 ## Verification
 
