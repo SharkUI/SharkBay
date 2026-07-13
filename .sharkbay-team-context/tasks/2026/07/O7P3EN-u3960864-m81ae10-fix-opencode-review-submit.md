@@ -12,8 +12,9 @@ agent: Codex GPT-5
 sessionId: 019f5a41-2f28-75b2-8f70-3a2a31cbf82d
 branch: main
 createdAt: 2026-07-13T07:35:48Z
-updatedAt: 2026-07-13T07:58:51Z
-completedAt: 2026-07-13T07:58:51Z
+updatedAt: 2026-07-13T09:04:14Z
+completedAt: 2026-07-13T09:04:14Z
+commit: ec21ee5e
 ---
 
 ## Summary
@@ -42,6 +43,8 @@ OpenCode and CodeWhale review sessions now submit delayed bootstrap prompts auto
 - Extended the PTY regression test to cover both agents; before the runtime change only the CodeWhale case failed with a missing `\r` write.
 - Added CodeWhale's 250ms delayed Enter while preserving OpenCode's existing 30ms sequence; both targeted cases now pass.
 - Ran CodeGraph affected analysis for the final source and test pair; it selected `tests/terminal-bootstrap.test.ts`.
+- Reopened for commit preparation after the user confirmed both OpenCode and CodeWhale work in the real UI.
+- Committed the terminal timing fix and regression coverage as `ec21ee5e`.
 
 ## Verification
 
@@ -53,9 +56,12 @@ OpenCode and CodeWhale review sessions now submit delayed bootstrap prompts auto
 - `npm run build` — passed.
 - `git diff --check` — passed.
 - Real OpenCode and CodeWhale Review launches were not run automatically because submitting the prompts would invoke configured models and incur usage; UI runtime confirmation remains manual.
+- User confirmed both agents submit their review bootstrap prompts successfully in the real UI.
+- `git show --stat --oneline HEAD` — confirmed commit `ec21ee5e` contains only `src/main/terminal.ts` and `tests/terminal-bootstrap.test.ts`.
+- `git status --short` — clean after the commit.
 
 ## Notes
 
 - Related team-context tasks: `T2K8M7-u3960864-m81ae10`, `Q24IBU-u3960864-m81ae10`, `L4V8N3-u3960864-m81ae10`, `P6T9R4-u3960864-m81ae10`, `W2R6K8-u3960864-m81ae10`, and `RVW7K2-u3960864-m81ae10`.
 - `.sharkbay/team-context/` remains read-only.
-- No commit has been created.
+- Commit: `ec21ee5e92e900288ce72ebae2e085eb72617cea`.
