@@ -12,13 +12,15 @@ agent: Codex GPT-5
 sessionId: 019f5a41-2f28-75b2-8f70-3a2a31cbf82d
 branch: main
 createdAt: 2026-07-13T11:08:53Z
-updatedAt: 2026-07-13T12:02:07Z
-completedAt: 2026-07-13T12:02:07Z
+updatedAt: 2026-07-13T12:15:43Z
+completedAt: 2026-07-13T12:15:43Z
 ---
 
 ## Summary
 
 Implemented agent-initiated Review orchestration: a Codex master can asynchronously launch an OpenCode or CodeWhale reviewer through `review.sh`, receive a validated report callback in its original TUI, and inspect the visible background Review tab. The control plane is independent of MCP, agent configuration, and hooks.
+
+Reviewer completion now uses a private per-run capability, so vendor shell tools do not need to inherit SharkBay's Terminal environment variable.
 
 ## Files
 
@@ -68,6 +70,12 @@ Implemented agent-initiated Review orchestration: a Codex master can asynchronou
 - Removed the cancelled duplicate run's empty report. The live-installed control client received the same one-line socket write fix so this verification could continue before the next packaged rebuild.
 - Reopened the task to move detailed Review usage guidance out of the bootstrap prompt and into the generated harness protocol; bootstrap should only advertise the mechanism and direct the agent to the protocol.
 - Added the Review lifecycle and commands to the generated protocol while reducing bootstrap guidance to a one-sentence capability pointer; added tests that keep command details out of bootstrap.
+- Started a user-requested follow-up CodeWhale Review of the completed task; the parent uses the asynchronous callback path rather than blocking on `review.sh wait`.
+- CodeWhale run `review-94ae2639-414d-41c8-8352-89bf2e59959a` is running in Terminal `term-mrj6e0rr-15`; reserved report: `.sharkbay/reviews/9NOEQ2-6QPQCH.md`.
+- The CodeWhale report was written, but its shell tool could not call `review.sh complete`: the run remained `running` because `SHARKBAY_TERMINAL_SESSION_ID` did not reach the command execution context. Reopened the task to fix reviewer identity propagation for CodeWhale and complete the live run.
+- Confirmed the CodeWhale TUI processes inherited `SHARKBAY_TERMINAL_SESSION_ID=term-mrj6e0rr-15`, while its shell tool did not reliably expose that identity. Recovered the existing run through its recorded reviewer id; it completed and automatically notified the real Codex parent.
+- Added a private per-run completion capability to the fixed reviewer prompt and control request. The token is not exposed in ReviewRun responses or reports; Terminal identity remains a compatibility path, while parent start/status/cancel ownership is unchanged.
+- Assessed the CodeWhale report: real idle Codex notification is now proven twice, so its Major is overstated; accepted the protocol visibility issue by documenting the single-line draft boundary. Kept exact-path validation, eventual notification retry, and the existing delay pending contrary runtime evidence.
 
 ## Verification
 
@@ -81,6 +89,11 @@ Implemented agent-initiated Review orchestration: a Codex master can asynchronou
 - `npx vitest run tests/harness.test.ts` passed (25 tests), covering generated protocol Review guidance and the detail-free bootstrap pointer.
 - `npm run typecheck` passed after the protocol/bootstrap guidance split.
 - Final `git diff --check` passed; the current harness protocol contains the Review section and `src/main/hooks` remains unchanged.
+- Live CodeWhale run `review-94ae2639-414d-41c8-8352-89bf2e59959a` produced `.sharkbay/reviews/9NOEQ2-6QPQCH.md`; after compatibility recovery it completed and automatically notified this real Codex parent.
+- Process inspection confirmed CodeWhale's TUI inherited the reviewer Terminal id while its shell tool completion path did not reliably provide it, validating the need for a vendor-independent capability.
+- `npx vitest run tests/review-runs.test.ts tests/review-control-server.test.ts tests/harness.test.ts` passed (29 tests), including token-only completion with no Terminal environment and rejection of an invalid token.
+- `npm test` passed after the capability fix: 60 test files and 330 tests.
+- `npm run build` passed after the capability fix; final `git diff --check` passed and `src/main/hooks` remains unchanged.
 
 ## Notes
 
@@ -89,8 +102,10 @@ Implemented agent-initiated Review orchestration: a Codex master can asynchronou
 - Design spec: `.sharkbay/specs/agent-review-orchestration/design.md`.
 - Implementation Review: `.sharkbay/reviews/9NOEQ2-NWFAC8.md`.
 - Source changed after the user's current package was built; another rebuild/restart is required to deploy all reviewed follow-up fixes. The current live-installed control client contains only the transport write fix used for this end-to-end run.
+- A rebuilt app and a fresh CodeWhale Review are required to exercise the new completion capability end to end; the completed live run predates the token protocol and was recovered through its recorded reviewer Terminal id.
 - No commit has been created.
 
 ## Reviews
 
 - 实现与设计/任务声明吻合、四项 Verification 全部复现、hooks 边界守住；Codex master TUI 注入仍无真实验证且复用 OpenCode 30ms 延迟为 Major，余 8 项 Minor — `.sharkbay/reviews/9NOEQ2-NWFAC8.md` (2026-07-13T11:51:04Z)
+- 复审：前轮 4 项 accepted fix 全部落实、全部自动化 Verification 复现、hooks 边界零侵入；Codex 30ms 仍未解决维持 Major，余 4 项 Minor — `.sharkbay/reviews/9NOEQ2-6QPQCH.md` (2026-07-13T12:08:42Z)
