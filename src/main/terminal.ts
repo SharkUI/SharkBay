@@ -28,6 +28,8 @@ const initialCommandQuietDelayMs = 150;
 const initialCommandMaxDelayMs = 900;
 const staleSubmittedCommandMs = 2000;
 const delayedBootstrapWriteMs = 2000;
+const delayedBootstrapSubmitMs = 30;
+const codeWhaleDelayedBootstrapSubmitMs = 250;
 const interactiveForegroundProcesses = new Set(["btop", "claude", "codex", "codewhale", "htop", "top"]);
 
 type CwdInspector = (pid: number) => Promise<string | null>;
@@ -229,6 +231,13 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
       const timer = setTimeout(() => {
         if (session.status === "running") {
           ptyProcess.write(`${"\b".repeat(100)}${prompt}`);
+          const submitDelayMs = input.agentId === "codewhale"
+            ? codeWhaleDelayedBootstrapSubmitMs
+            : delayedBootstrapSubmitMs;
+          const submitTimer = setTimeout(() => {
+            if (session.status === "running") ptyProcess.write("\r");
+          }, submitDelayMs);
+          submitTimer.unref?.();
         }
       }, delayedBootstrapWriteMs);
       timer.unref?.();
