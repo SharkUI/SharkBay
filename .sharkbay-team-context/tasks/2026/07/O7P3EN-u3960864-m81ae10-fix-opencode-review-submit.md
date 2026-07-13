@@ -12,8 +12,8 @@ agent: Codex GPT-5
 sessionId: 019f5a41-2f28-75b2-8f70-3a2a31cbf82d
 branch: main
 createdAt: 2026-07-13T07:35:48Z
-updatedAt: 2026-07-13T07:58:28Z
-completedAt: 2026-07-13T07:58:28Z
+updatedAt: 2026-07-13T07:58:51Z
+completedAt: 2026-07-13T07:58:51Z
 ---
 
 ## Summary
@@ -35,10 +35,10 @@ OpenCode and CodeWhale review sessions now submit delayed bootstrap prompts auto
 - Kept the existing delayed interactive launch and avoided the previously problematic OpenCode `--prompt` startup path.
 - Initially scoped the new Enter write to OpenCode, then reopened the task when the user confirmed CodeWhale had the same visible failure.
 - Ran CodeGraph affected analysis for the changed runtime and test files; it identified the new terminal bootstrap regression test.
-- Reopened after the user confirmed CodeWhale has the same visible missing-Enter problem; investigate its required Enter sequence before extending the fix.
+- Reopened after the user confirmed CodeWhale had the same visible missing-Enter problem and investigated its required Enter sequence before extending the fix.
 - Matched the installed CodeWhale `v0.8.47` binary to official source commit `70743997ca503bcc8b25d5bbdbd0247ab4da5e35`.
 - Found CodeWhale's non-bracketed paste detector suppresses Enter for 120ms after rapid text input, so the existing 30ms sequence is interpreted as a pasted newline rather than submit.
-- Plan: keep OpenCode at 30ms and give CodeWhale a 250ms submit delay, with PTY timing coverage for both agents.
+- Kept OpenCode at 30ms and gave CodeWhale a 250ms submit delay, with PTY timing coverage for both agents.
 - Extended the PTY regression test to cover both agents; before the runtime change only the CodeWhale case failed with a missing `\r` write.
 - Added CodeWhale's 250ms delayed Enter while preserving OpenCode's existing 30ms sequence; both targeted cases now pass.
 - Ran CodeGraph affected analysis for the final source and test pair; it selected `tests/terminal-bootstrap.test.ts`.
