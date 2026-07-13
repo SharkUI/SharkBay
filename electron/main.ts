@@ -211,19 +211,23 @@ function createIslandWindow(config: Pick<AppConfig, "statusChangeNotificationsEn
   // and let the HTML content handle vertical offset so the pill
   // visually merges with the notch's black area.
   const menuBarHeight = primaryDisplay.workArea.y - primaryDisplay.bounds.y;
+  const closedWidth = 295;
+  const closedGlowPadding = 12;
+  const closedWindowWidth = closedWidth + closedGlowPadding * 2;
+  const closedHeight = menuBarHeight + 32;
   const panelWidth = 520;
-  const panelHeight = 360 + menuBarHeight;
-  const x = Math.round((screenWidth - panelWidth) / 2) + primaryDisplay.bounds.x;
   const y = primaryDisplay.bounds.y;
+  const centeredX = (width: number): number => Math.round((screenWidth - width) / 2) + primaryDisplay.bounds.x;
 
   const preload = join(currentDir, "island-preload.mjs");
   const window = new BrowserWindow({
-    x,
+    x: centeredX(closedWindowWidth),
     y,
-    width: panelWidth,
-    height: panelHeight,
+    width: closedWindowWidth,
+    height: closedHeight,
     frame: false,
     transparent: true,
+    backgroundColor: "#00000000",
     hasShadow: false,
     roundedCorners: false,
     resizable: false,
@@ -256,7 +260,7 @@ function createIslandWindow(config: Pick<AppConfig, "statusChangeNotificationsEn
 
   void window.loadFile(islandPath);
   window.once("ready-to-show", () => {
-    window.setSize(panelWidth, menuBarHeight + 32);
+    window.setBounds({ x: centeredX(closedWindowWidth), y, width: closedWindowWidth, height: closedHeight });
     window.webContents.send("island:preferences", {
       statusChangeNotificationsEnabled: config.statusChangeNotificationsEnabled !== false,
       agentStatusCompletionSoundEnabled: config.agentStatusCompletionSoundEnabled !== false,
@@ -267,8 +271,9 @@ function createIslandWindow(config: Pick<AppConfig, "statusChangeNotificationsEn
 
   ipcMain.on("island:setExpanded", (_event, expanded: boolean, height?: number) => {
     if (window.isDestroyed()) return;
-    const h = expanded && height ? height : menuBarHeight + 32;
-    window.setSize(panelWidth, h);
+    const width = expanded ? panelWidth : closedWindowWidth;
+    const h = expanded && height ? height : closedHeight;
+    window.setBounds({ x: centeredX(width), y, width, height: h });
   });
 
   ipcMain.on("island:setIgnoreMouseEvents", (_event, ignore: boolean) => {
