@@ -12,13 +12,13 @@ agent: Codex GPT-5
 sessionId: 019f5a41-2f28-75b2-8f70-3a2a31cbf82d
 branch: codex/agent-review-orchestration
 createdAt: 2026-07-14T02:42:40Z
-updatedAt: 2026-07-14T03:35:41Z
-completedAt: 2026-07-14T03:35:41Z
+updatedAt: 2026-07-14T03:40:04Z
+completedAt: 2026-07-14T03:40:04Z
 ---
 
 ## Summary
 
-Agent-initiated Review now accepts any installed supported agent as the parent or reviewer. Omitting the reviewer defaults to the parent agent without changing hooks, MCP, agent configuration, or existing UI selection behavior; post-review fixes also clarified UI errors and hardened ancestor identity recovery.
+Review now accepts any installed supported agent as parent or reviewer, defaults agent-started runs to the parent agent, and reports GUI-started completion to the task's precisely mapped live owner Terminal. The implementation does not change hooks, MCP, or agent configuration and never guesses a parent by vendor or recency.
 
 ## Files
 
@@ -44,6 +44,8 @@ Agent-initiated Review now accepts any installed supported agent as the parent o
 - Assessed `.sharkbay/reviews/D76AF7-YRU1I4.md`: accepted the UI error-message and ancestor-read robustness findings; treated cross-vendor live coverage as an explicit verification gap rather than a code defect.
 - Corrected the UI missing-agent error and made each ancestor environment read independent from parent-pid discovery, so a failed environment read can still continue along the known ancestor chain.
 - Kept the existing 64-level fallback bound and did not add a non-ancestor process test: the implementation only traverses `ppid` and never enumerates or selects unrelated processes.
+- Follow-up: resolve a GUI-started Review's parent Terminal from the task's native agent `sessionId` through SharkBay's existing live hook-session mapping, without guessing by agent vendor or recency.
+- Implemented GUI owner resolution inside ReviewRunManager, including running-state and same-project validation; missing or stale mappings remain notification-free instead of selecting another Terminal.
 
 ## Verification
 
@@ -57,6 +59,8 @@ Agent-initiated Review now accepts any installed supported agent as the parent o
 - Post-review: `npx vitest run tests/review-runs.test.ts tests/review-control-server.test.ts` passed (6 tests); `npm run typecheck` passed.
 - Live validation of a newly enabled non-Codex parent or non-OpenCode/CodeWhale reviewer remains pending until the packaged application is rebuilt and restarted.
 - Post-review: `npm test` passed (60 files, 332 tests); `npm run build`, `git diff --check`, and the hooks-boundary check passed.
+- GUI callback focused verification: `npx vitest run tests/review-runs.test.ts tests/review-control-server.test.ts tests/harness.test.ts` passed (33 tests); `npm run typecheck` passed.
+- GUI owner callback final verification: `npm test` passed (60 files, 335 tests); `npm run build`, `git diff --check`, and the hooks-boundary check passed.
 
 ## Notes
 
