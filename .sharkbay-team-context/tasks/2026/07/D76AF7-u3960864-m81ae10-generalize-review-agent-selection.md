@@ -12,13 +12,13 @@ agent: Codex GPT-5
 sessionId: 019f5a41-2f28-75b2-8f70-3a2a31cbf82d
 branch: codex/agent-review-orchestration
 createdAt: 2026-07-14T02:42:40Z
-updatedAt: 2026-07-14T03:06:04Z
-completedAt: 2026-07-14T03:06:04Z
+updatedAt: 2026-07-14T03:35:41Z
+completedAt: 2026-07-14T03:35:41Z
 ---
 
 ## Summary
 
-Agent-initiated Review now accepts any installed supported agent as the parent or reviewer. Omitting the reviewer defaults to the parent agent without changing hooks, MCP, agent configuration, or existing UI selection behavior.
+Agent-initiated Review now accepts any installed supported agent as the parent or reviewer. Omitting the reviewer defaults to the parent agent without changing hooks, MCP, agent configuration, or existing UI selection behavior; post-review fixes also clarified UI errors and hardened ancestor identity recovery.
 
 ## Files
 
@@ -41,19 +41,28 @@ Agent-initiated Review now accepts any installed supported agent as the parent o
 - Fixed scope: optional reviewer selection defaults to the authenticated parent agent; explicit selection accepts any installed supported AgentCli; parent is no longer Codex-only.
 - Preserve the no-intrusion boundary: no hooks, MCP, or agent configuration changes. Recover missing Terminal identity from the caller's process ancestry so vendor shell tools do not require new bootstrap credentials.
 - Implemented the generalized input contract, parent-agent fallback, installed-agent validation, control-client ancestry recovery, protocol text, design follow-up, and focused regression coverage.
+- Assessed `.sharkbay/reviews/D76AF7-YRU1I4.md`: accepted the UI error-message and ancestor-read robustness findings; treated cross-vendor live coverage as an explicit verification gap rather than a code defect.
+- Corrected the UI missing-agent error and made each ancestor environment read independent from parent-pid discovery, so a failed environment read can still continue along the known ancestor chain.
+- Kept the existing 64-level fallback bound and did not add a non-ancestor process test: the implementation only traverses `ppid` and never enumerates or selects unrelated processes.
 
 ## Verification
 
-- Pending focused tests for cross-agent selection, same-agent defaulting, and ancestor Terminal identity recovery.
-- Pending typecheck, full tests, production build, diff check, and hooks-boundary check.
 - `npx vitest run tests/review-runs.test.ts tests/review-control-server.test.ts tests/harness.test.ts` (30 tests passed).
 - `npm run typecheck` passed for renderer and Node TypeScript configurations.
 - `npm test` passed (60 files, 331 tests).
 - `npm run build` passed.
 - `git diff --check` passed; `git diff --name-only -- src/main/hooks` returned no changes.
 - Searched the implementation, tests, harness, and specs for the removed vendor/parent restrictions; no stale restriction text remains.
+- Review `.sharkbay/reviews/D76AF7-YRU1I4.md` passed the implementation and independently reproduced all automated verification; its accepted follow-up findings were addressed.
+- Post-review: `npx vitest run tests/review-runs.test.ts tests/review-control-server.test.ts` passed (6 tests); `npm run typecheck` passed.
+- Live validation of a newly enabled non-Codex parent or non-OpenCode/CodeWhale reviewer remains pending until the packaged application is rebuilt and restarted.
+- Post-review: `npm test` passed (60 files, 332 tests); `npm run build`, `git diff --check`, and the hooks-boundary check passed.
 
 ## Notes
 
 - Parent implementation task and commit: `9NOEQ2-u3960864-m81ae10`, `ae73711c`.
 - No commit has been created.
+
+## Reviews
+
+- 通过：实现与设计第22节 follow-up 吻合、改动精确、四项 Verification 全部复现(30/331/typecheck/build)、hooks 零侵入；Major 为新 agent 组合无 live 验证(通知沿用固定提交延迟)，余 4 项 Minor — `.sharkbay/reviews/D76AF7-YRU1I4.md` (2026-07-14T03:14:31Z)
