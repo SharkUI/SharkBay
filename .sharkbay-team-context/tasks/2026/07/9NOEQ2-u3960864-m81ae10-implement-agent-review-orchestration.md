@@ -12,8 +12,8 @@ agent: Codex GPT-5
 sessionId: 019f5a41-2f28-75b2-8f70-3a2a31cbf82d
 branch: main
 createdAt: 2026-07-13T11:08:53Z
-updatedAt: 2026-07-13T12:17:55Z
-completedAt: 2026-07-13T12:15:43Z
+updatedAt: 2026-07-14T01:41:33Z
+completedAt: 2026-07-14T01:41:33Z
 ---
 
 ## Summary
@@ -21,6 +21,8 @@ completedAt: 2026-07-13T12:15:43Z
 Implemented agent-initiated Review orchestration: a Codex master can asynchronously launch an OpenCode or CodeWhale reviewer through `review.sh`, receive a validated report callback in its original TUI, and inspect the visible background Review tab. The control plane is independent of MCP, agent configuration, and hooks.
 
 Reviewer completion now uses a private per-run capability, so vendor shell tools do not need to inherit SharkBay's Terminal environment variable.
+
+Reviewer crashes and transient notification failures now also wake the parent through the same fixed, retryable notification path.
 
 ## Files
 
@@ -78,6 +80,10 @@ Reviewer completion now uses a private per-run capability, so vendor shell tools
 - Assessed the CodeWhale report: real idle Codex notification is now proven twice, so its Major is overstated; accepted the protocol visibility issue by documenting the single-line draft boundary. Kept exact-path validation, eventual notification retry, and the existing delay pending contrary runtime evidence.
 - Started a fresh post-rebuild CodeWhale Review to verify that the reviewer shell can complete through the new per-run capability without relying on Terminal environment inheritance.
 - Post-rebuild run `review-a5812894-fe03-4236-9ea8-2b009e672877` is running in Terminal `term-mrj6tz3v-15`; reserved report: `.sharkbay/reviews/9NOEQ2-W1YZTT.md`.
+- Post-rebuild CodeWhale completed through the new capability and automatically notified the real Codex parent, proving the vendor-independent completion path end to end.
+- Assessed the third Review: accepted failure notification, transient notification retry, and capability-response redaction fixes. Deferred changing the Codex submit delay without busy-state evidence; rejected findings contradicted by shell single-quote semantics and the design's explicit V1 non-persistence statement.
+- Implemented fixed parent notifications for reviewer terminal failure, retried transient notification exceptions, and kept parent Terminal ids out of capability-based complete responses.
+- Updated the protocol and design to state that premature reviewer exit marks the run failed and notifies the master agent.
 
 ## Verification
 
@@ -96,6 +102,10 @@ Reviewer completion now uses a private per-run capability, so vendor shell tools
 - `npx vitest run tests/review-runs.test.ts tests/review-control-server.test.ts tests/harness.test.ts` passed (29 tests), including token-only completion with no Terminal environment and rejection of an invalid token.
 - `npm test` passed after the capability fix: 60 test files and 330 tests.
 - `npm run build` passed after the capability fix; final `git diff --check` passed and `src/main/hooks` remains unchanged.
+- Fresh post-rebuild CodeWhale run `review-a5812894-fe03-4236-9ea8-2b009e672877` completed through its capability and automatically notified this real Codex parent with no manual recovery or blocking wait.
+- `npx vitest run tests/review-runs.test.ts tests/review-control-server.test.ts tests/harness.test.ts tests/terminal.test.ts tests/ipc-channels.test.ts` passed (5 files / 42 tests), including failed-review notification and retry after a thrown notification error.
+- Final `npm run typecheck`, `npm test` (60 files / 330 tests), and `npm run build` passed after the third Review fixes.
+- Final `git diff --check` passed and `git diff --name-only -- src/main/hooks` remained empty.
 
 ## Notes
 
@@ -105,9 +115,11 @@ Reviewer completion now uses a private per-run capability, so vendor shell tools
 - Implementation Review: `.sharkbay/reviews/9NOEQ2-NWFAC8.md`.
 - Source changed after the user's current package was built; another rebuild/restart is required to deploy all reviewed follow-up fixes. The current live-installed control client contains only the transport write fix used for this end-to-end run.
 - A rebuilt app and a fresh CodeWhale Review are required to exercise the new completion capability end to end; the completed live run predates the token protocol and was recovered through its recorded reviewer Terminal id.
+- The preceding rebuild requirement is now satisfied: `.sharkbay/reviews/9NOEQ2-W1YZTT.md` records the successful post-rebuild CodeWhale capability run.
 - No commit has been created.
 
 ## Reviews
 
 - 实现与设计/任务声明吻合、四项 Verification 全部复现、hooks 边界守住；Codex master TUI 注入仍无真实验证且复用 OpenCode 30ms 延迟为 Major，余 8 项 Minor — `.sharkbay/reviews/9NOEQ2-NWFAC8.md` (2026-07-13T11:51:04Z)
 - 复审：前轮 4 项 accepted fix 全部落实、全部自动化 Verification 复现、hooks 边界零侵入；Codex 30ms 仍未解决维持 Major，余 4 项 Minor — `.sharkbay/reviews/9NOEQ2-6QPQCH.md` (2026-07-13T12:08:42Z)
+- 三审：实现吻合、自动化 Verification 全部复现 (330 tests)、hooks 零侵入；2 Major (reviewer 崩溃不通知 parent、30ms 延迟沿用) 延续，5 Minor 新发现 — `.sharkbay/reviews/9NOEQ2-W1YZTT.md` (2026-07-13T14:10:20Z)
