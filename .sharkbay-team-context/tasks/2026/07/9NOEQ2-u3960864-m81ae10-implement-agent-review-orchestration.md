@@ -12,8 +12,10 @@ agent: Codex GPT-5
 sessionId: 019f5a41-2f28-75b2-8f70-3a2a31cbf82d
 branch: main
 createdAt: 2026-07-13T11:08:53Z
-updatedAt: 2026-07-14T01:41:33Z
-completedAt: 2026-07-14T01:41:33Z
+updatedAt: 2026-07-14T01:44:47Z
+completedAt: 2026-07-14T01:44:47Z
+commits:
+  - ae73711c
 ---
 
 ## Summary
@@ -84,6 +86,8 @@ Reviewer crashes and transient notification failures now also wake the parent th
 - Assessed the third Review: accepted failure notification, transient notification retry, and capability-response redaction fixes. Deferred changing the Codex submit delay without busy-state evidence; rejected findings contradicted by shell single-quote semantics and the design's explicit V1 non-persistence statement.
 - Implemented fixed parent notifications for reviewer terminal failure, retried transient notification exceptions, and kept parent Terminal ids out of capability-based complete responses.
 - Updated the protocol and design to state that premature reviewer exit marks the run failed and notifies the master agent.
+- Preparing the verified agent-initiated Review implementation as one feature commit on `codex/agent-review-orchestration`; local `.sharkbay` task, spec, protocol, and report artifacts remain uncommitted by repository policy.
+- Committed the complete implementation and tests as `ae73711c` (`feat: add agent-initiated review orchestration`).
 
 ## Verification
 
@@ -106,6 +110,7 @@ Reviewer crashes and transient notification failures now also wake the parent th
 - `npx vitest run tests/review-runs.test.ts tests/review-control-server.test.ts tests/harness.test.ts tests/terminal.test.ts tests/ipc-channels.test.ts` passed (5 files / 42 tests), including failed-review notification and retry after a thrown notification error.
 - Final `npm run typecheck`, `npm test` (60 files / 330 tests), and `npm run build` passed after the third Review fixes.
 - Final `git diff --check` passed and `git diff --name-only -- src/main/hooks` remained empty.
+- `git diff --cached --check` passed before commit; commit `ae73711c` contains 20 implementation/test files with no SharkBay local metadata or hook changes.
 
 ## Notes
 
@@ -116,7 +121,7 @@ Reviewer crashes and transient notification failures now also wake the parent th
 - Source changed after the user's current package was built; another rebuild/restart is required to deploy all reviewed follow-up fixes. The current live-installed control client contains only the transport write fix used for this end-to-end run.
 - A rebuilt app and a fresh CodeWhale Review are required to exercise the new completion capability end to end; the completed live run predates the token protocol and was recovered through its recorded reviewer Terminal id.
 - The preceding rebuild requirement is now satisfied: `.sharkbay/reviews/9NOEQ2-W1YZTT.md` records the successful post-rebuild CodeWhale capability run.
-- No commit has been created.
+- Implementation commit: `ae73711c`.
 
 ## Reviews
 
