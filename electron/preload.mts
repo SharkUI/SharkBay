@@ -46,6 +46,10 @@ import type {
   ReadFileResult,
   RenameFileInput,
   RenameFileResult,
+  ReviewRunStartedEvent,
+  ReviewRunUpdatedEvent,
+  ReviewRun,
+  ReviewStartInput,
   WriteFileInput,
   WriteFileResult,
   RenameProjectInput,
@@ -206,6 +210,20 @@ const sharkBayApi = {
       const listener = (_event: Electron.IpcRendererEvent, payload: ArtifactReadyEvent) => callback(payload);
       ipcRenderer.on(channels.openArtifact, listener);
       return () => ipcRenderer.removeListener(channels.openArtifact, listener);
+    }
+  },
+  reviews: {
+    start: (input: ReviewStartInput) => invoke<ReviewRunStartedEvent>(channels.startReview, input),
+    cancel: (input: { runId: string }) => invoke<ReviewRun>(channels.cancelReview, input),
+    onStarted: (callback: (event: ReviewRunStartedEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: ReviewRunStartedEvent) => callback(payload);
+      ipcRenderer.on(channels.reviewRunStarted, listener);
+      return () => ipcRenderer.removeListener(channels.reviewRunStarted, listener);
+    },
+    onUpdated: (callback: (event: ReviewRunUpdatedEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: ReviewRunUpdatedEvent) => callback(payload);
+      ipcRenderer.on(channels.reviewRunUpdated, listener);
+      return () => ipcRenderer.removeListener(channels.reviewRunUpdated, listener);
     }
   },
   browser: {

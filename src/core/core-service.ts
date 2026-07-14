@@ -33,8 +33,11 @@ import type {
   RenameFileResult,
   ScanProjectsResult,
   TerminalCloseInput,
+  TerminalControlState,
   TerminalCreateInput,
   TerminalInput,
+  TerminalNotificationInput,
+  TerminalNotificationResult,
   TerminalResizeInput,
   TerminalSession,
   WriteFileInput,
@@ -352,6 +355,14 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
 
   inputTerminal(input: TerminalInput): TerminalSession | null {
     return this.terminalProviders.get(input.sessionId)?.inputTerminal(input) ?? null;
+  }
+
+  inspectTerminal(sessionId: string): TerminalControlState | null {
+    return this.terminalProviders.get(sessionId)?.inspectTerminal(sessionId) ?? null;
+  }
+
+  notifyTerminal(input: TerminalNotificationInput): TerminalNotificationResult | null {
+    return this.terminalProviders.get(input.sessionId)?.notifyTerminal(input) ?? null;
   }
 
   resizeTerminal(input: TerminalResizeInput): TerminalSession | null {

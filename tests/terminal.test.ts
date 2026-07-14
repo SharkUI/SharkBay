@@ -266,6 +266,53 @@ describe("terminal cwd validation", () => {
     }
   });
 
+  it("exposes the terminal id and protects a pending draft from notifications", async () => {
+    const runtime = await makeTestRuntime("terminal-notification-config");
+    const root = await makeTempRoot("terminal-notification-root");
+    const repo = await createGitRepoFixture(root, "TerminalNotificationRepo");
+    await writeJson(getRuntimeConfigPath(runtime), {
+      schemaVersion: 1,
+      configuredRoots: [],
+      configuredProjects: [repo],
+      updatedAt: "2026-07-13",
+    });
+
+    const manager = new TerminalManager();
+    const session = await manager.create(runtime, { cwdUri: toLocalProjectUri(repo), title: "TerminalNotificationRepo" });
+    const output = new Promise<string>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("terminal notification output timed out")), 3000);
+      let received = "";
+      manager.on("data", (event) => {
+        if (event.sessionId !== session.id) return;
+        received += event.data;
+        if (received.includes(`sharkbay-notify-ok:${session.id}`) && received.includes("sharkbay-user-input-ok")) {
+          clearTimeout(timeout);
+          resolve(received);
+        }
+      });
+    });
+
+    try {
+      expect(manager.inspect(session.id)).toMatchObject({
+        projectRoot: await fs.realpath(repo),
+        hasPendingInput: false,
+      });
+      manager.input({ sessionId: session.id, data: "do not submit" });
+      expect(manager.notify({ sessionId: session.id, text: "printf 'should-not-run'" }).state).toBe("draft-pending");
+      expect(manager.inspect(session.id).hasPendingInput).toBe(true);
+
+      manager.input({ sessionId: session.id, data: "\u0015" });
+      expect(manager.notify({
+        sessionId: session.id,
+        text: "printf 'sharkbay-notify-ok:%s\\n' \"$SHARKBAY_TERMINAL_SESSION_ID\"",
+      }).state).toBe("submitted");
+      manager.input({ sessionId: session.id, data: "printf 'sharkbay-user-input-ok\\n'\r" });
+      await expect(output).resolves.toContain(`sharkbay-notify-ok:${session.id}`);
+    } finally {
+      manager.close({ sessionId: session.id });
+    }
+  });
+
   it("runs initial commands without echoing the command text", async () => {
     const runtime = await makeTestRuntime("terminal-initial-command-config");
     const root = await makeTempRoot("terminal-initial-command-root");

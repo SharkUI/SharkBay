@@ -199,6 +199,23 @@ const OPEN_ARTIFACT_SCRIPT = [
   "printf '%s' \"$payload\" | \"$hook_cli\" --source artifact",
   "exit 0",
 ].join("\n") + "\n";
+
+const REVIEW_SCRIPT = [
+  "#!/bin/sh",
+  "set -eu",
+  "",
+  "command=\"${1:-}\"",
+  "[ -n \"$command\" ] || { echo 'Usage: review.sh <start|status|wait|cancel|complete> [options]' >&2; exit 2; }",
+  "shift",
+  "case \"$command\" in start|status|wait|cancel|complete) ;; *) echo \"Unknown review command: $command\" >&2; exit 2 ;; esac",
+  "",
+  "script_dir=\"$(cd \"$(dirname \"$0\")\" && pwd)\"",
+  "repo_root=\"$(cd \"$script_dir/../..\" && pwd)\"",
+  "client=\"$HOME/Library/Application Support/SharkBay/bin/sharkbay-review-control\"",
+  "[ -x \"$client\" ] || { echo 'SharkBay Review control client is unavailable' >&2; exit 1; }",
+  "",
+  "exec \"$client\" \"$command\" \"$@\" --repo \"$repo_root\"",
+].join("\n") + "\n";
 const BOOTSTRAP_INTRO = [
   "I'm working in SharkBay Task Protocol mode for this project.",
   "Please read `.sharkbay/harness/protocol.md` first and follow it for the rest of this session.",
@@ -211,6 +228,7 @@ const BOOTSTRAP_TASK_PROMPT = [
   "Keep Files and Work updated while working; finish by filling Summary and Verification; record the commit hash if a commit is produced.",
   "Treat `.sharkbay/team-context/` as read-only.",
   "If `AGENTS.md` exists at the project root, also read it and follow its instructions.",
+  "SharkBay supports asynchronous agent-initiated reviews; see `Agent-Initiated Review` in `.sharkbay/harness/protocol.md` before starting one.",
 ];
 
 export type BootstrapPromptOptions = {
@@ -248,6 +266,8 @@ export type ReviewPromptInput = {
   sourcePath?: string;
   reviewPath?: string;
   agentLabel?: string;
+  runId?: string;
+  completionToken?: string;
 };
 
 export type ArtifactPromptInput = {
@@ -272,6 +292,9 @@ export function reviewPrompt(review: ReviewPromptInput, options: BootstrapPrompt
   const recordInstruction = review.reviewPath
     ? `Then record it: append a one-line entry to this task's local record file under \`.sharkbay/tasks/\` (the file whose name begins with \`${review.taskId.split("-")[0]}\`) inside a \`## Reviews\` section — create that section at the end of the file if it does not exist. Use the format \`- <one-line verdict> — \\\`${review.reviewPath}\\\` (<timestamp>)\`, where <timestamp> is the output of \`date -u +%Y-%m-%dT%H:%M:%SZ\`. Append only; do not edit other sections. When you are done, tell me the report path.`
     : null;
+  const completionInstruction = review.reviewPath && review.runId
+    ? `Finally run \`.sharkbay/harness/review.sh complete --run ${review.runId} --report ${review.reviewPath}${review.completionToken ? ` --completion-token ${review.completionToken}` : ""}\`. SharkBay will validate the reserved report and notify the parent agent; do not skip this command.`
+    : null;
   return [
     "I'm starting a read-only review session.",
     "This project tracks work as SharkBay task records under `.sharkbay/tasks/` (team records, read-only, under `.sharkbay/team-context/tasks/`).",
@@ -281,6 +304,7 @@ export function reviewPrompt(review: ReviewPromptInput, options: BootstrapPrompt
     reviewFocusLine(review.status),
     reportInstruction,
     ...(recordInstruction ? [recordInstruction] : []),
+    ...(completionInstruction ? [completionInstruction] : []),
     ...(languageSuffix ? [languageSuffix] : []),
   ].join(" ");
 }
@@ -458,6 +482,11 @@ function managedHarnessFiles(options: ProtocolOptions): ManagedHarnessFile[] {
     {
       path: ".sharkbay/harness/open-artifact.sh",
       content: OPEN_ARTIFACT_SCRIPT,
+      executable: true,
+    },
+    {
+      path: ".sharkbay/harness/review.sh",
+      content: REVIEW_SCRIPT,
       executable: true,
     },
   ];
@@ -882,6 +911,39 @@ prefer CodeGraph over \`rg\`, \`grep\`, or broad file reads:
 
 Use \`codegraph context "what you need to understand"\` only for initial
 exploration when no clear symbol or file is known.
+
+## Agent-Initiated Review
+
+SharkBay can run OpenCode or CodeWhale as an asynchronous, read-only reviewer
+for an existing task. Start a review from a SharkBay-managed master agent
+terminal when a design or implementation is ready for independent review:
+
+\`.sharkbay/harness/review.sh start --agent opencode --task-id <task-id>\`
+
+Use \`--agent codewhale\` to select CodeWhale. The command returns a run id and
+reserved report path without waiting for the review to finish. SharkBay opens
+the reviewer in a background Review tab in the current application instance.
+
+When the reviewer completes, SharkBay validates the reserved report and injects
+a completion prompt into the original master agent terminal. The master agent
+must read the report, assess its findings, and continue the parent task.
+If the reviewer terminal exits before completion, SharkBay marks the run failed
+and notifies the master agent to inspect its status.
+
+Automatic notification waits while SharkBay observes an unsubmitted single-line
+draft. SharkBay cannot inspect multi-line editor state held inside an agent TUI;
+use the status fallback below if the completion prompt is delayed.
+
+If the completion prompt is delayed, inspect the run without blocking:
+
+\`.sharkbay/harness/review.sh status --run <run-id>\`
+
+Cancel an unneeded run with:
+
+\`.sharkbay/harness/review.sh cancel --run <run-id>\`
+
+\`review.sh wait\` is a blocking fallback for scripted workflows. Do not use it
+for the normal interactive flow.
 
 ## When To Create Or Update A Task
 

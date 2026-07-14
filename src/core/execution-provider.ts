@@ -23,8 +23,11 @@ import type {
   RenameFileResult,
   ScanProjectsResult,
   TerminalCloseInput,
+  TerminalControlState,
   TerminalCreateInput,
   TerminalInput,
+  TerminalNotificationInput,
+  TerminalNotificationResult,
   TerminalResizeInput,
   TerminalSession,
   WriteFileInput,
@@ -126,6 +129,8 @@ export interface ExecutionProvider {
   runCommand(runtime: IpcRuntimeLike, uriOrTargetId: string, command: string, options?: RunCommandOptions): Promise<CommandResult>;
   createTerminal(runtime: IpcRuntimeLike, input: TerminalCreateInput): Promise<TerminalSession>;
   inputTerminal(input: TerminalInput): TerminalSession;
+  inspectTerminal(sessionId: string): TerminalControlState;
+  notifyTerminal(input: TerminalNotificationInput): TerminalNotificationResult;
   resizeTerminal(input: TerminalResizeInput): TerminalSession;
   closeTerminal(input: TerminalCloseInput): TerminalSession;
   closeAllTerminalSessions(): void;

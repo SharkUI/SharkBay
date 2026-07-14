@@ -23,10 +23,13 @@ import type {
   RenameFileResult,
   ScanProjectsResult,
   TerminalCloseInput,
+  TerminalControlState,
   TerminalCreateInput,
   TerminalDataEvent,
   TerminalExitEvent,
   TerminalInput,
+  TerminalNotificationInput,
+  TerminalNotificationResult,
   TerminalResizeInput,
   TerminalSession,
   TerminalUpdateEvent,
@@ -58,6 +61,8 @@ export type CoreMethodMap = {
   readDiagnostics: { args: []; result: DiagnosticsSnapshot };
   createTerminal: { args: [IpcRuntimeLike, TerminalCreateInput]; result: TerminalSession };
   inputTerminal: { args: [TerminalInput]; result: TerminalSession | null };
+  inspectTerminal: { args: [string]; result: TerminalControlState | null };
+  notifyTerminal: { args: [TerminalNotificationInput]; result: TerminalNotificationResult | null };
   resizeTerminal: { args: [TerminalResizeInput]; result: TerminalSession | null };
   closeTerminal: { args: [TerminalCloseInput]; result: TerminalSession | null };
   closeAllTerminalSessions: { args: []; result: void };

@@ -628,7 +628,7 @@ export type TerminalCreateInput = {
   agentId?: string;
   service?: { id: string; label: string; command: string };
   protocolBootstrap?: { codeGraphEnabled?: boolean };
-  review?: { taskId: string; status: string; sourcePath?: string; agentLabel?: string };
+  review?: { taskId: string; status: string; sourcePath?: string; agentLabel?: string; reviewPath?: string; runId?: string; completionToken?: string };
   artifact?: { taskId: string; status: string; sourcePath?: string; agentLabel?: string };
   cols?: number;
   rows?: number;
@@ -662,6 +662,23 @@ export type TerminalCloseInput = {
   sessionId: string;
 };
 
+export type TerminalControlState = {
+  session: TerminalSession;
+  projectRoot: string;
+  hasPendingInput: boolean;
+};
+
+export type TerminalNotificationInput = {
+  sessionId: string;
+  text: string;
+  submitDelayMs?: number;
+};
+
+export type TerminalNotificationResult = {
+  state: "submitted" | "draft-pending" | "exited";
+  session: TerminalSession;
+};
+
 export type TerminalDataEvent = {
   sessionId: string;
   data: string;
@@ -684,6 +701,43 @@ export type ArtifactReadyEvent = {
 
 export type TerminalUpdateEvent = {
   session: TerminalSession;
+};
+
+export type ReviewRunStatus = "running" | "completed" | "failed" | "cancelled";
+
+export type ReviewRun = {
+  id: string;
+  repoPath: string;
+  taskId: string;
+  agentId: string;
+  origin: "ui" | "agent";
+  parentTerminalSessionId?: string;
+  reviewerTerminalSessionId: string;
+  reportPath: string;
+  status: ReviewRunStatus;
+  createdAt: string;
+  completedAt?: string;
+  notifiedAt?: string;
+  error?: string;
+};
+
+export type ReviewStartInput = {
+  repoPath: string;
+  taskId: string;
+  agentId: string;
+  origin: "ui" | "agent";
+  parentTerminalSessionId?: string;
+  initialCommand?: string;
+  initialCommandTitle?: string;
+};
+
+export type ReviewRunStartedEvent = {
+  run: ReviewRun;
+  session: TerminalSession;
+};
+
+export type ReviewRunUpdatedEvent = {
+  run: ReviewRun;
 };
 
 export type AgentCli = {

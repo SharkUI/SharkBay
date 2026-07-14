@@ -63,6 +63,10 @@ import type {
   WriteFileInput,
   WriteFileResult,
   RenameProjectInput,
+  ReviewRunStartedEvent,
+  ReviewRunUpdatedEvent,
+  ReviewRun,
+  ReviewStartInput,
   RemoveProjectInput,
   CreateWorktreeInput,
   CreateWorktreeResult,
@@ -93,7 +97,7 @@ import { TokenUsageCollector } from "../src/main/token-usage-collector.js";
 import { BrowserManager } from "../src/main/browser-tabs.js";
 import { readGitMetadata } from "../src/main/git.js";
 import { resolveRepoPath } from "../src/main/path-safety.js";
-import { checkRepoPermission, ensureLocalExclude, generateMachineId, getHarnessUpdateStatus, getLocalHarnessIdentity, getMachineId, installHarness, isGitWorktree, isHarnessInstalled, resolveGitHubIdentity, uninstallHarness, updateHarnessFiles } from "../src/main/harness.js";
+import { checkRepoPermission, ensureLocalExclude, generateMachineId, getHarnessUpdateStatus, getLocalHarnessIdentity, getMachineId, installHarness, isGitWorktree, isHarnessInstalled, reserveReviewPath, resolveGitHubIdentity, uninstallHarness, updateHarnessFiles } from "../src/main/harness.js";
 import { deleteTeamContextBranch, hasLocalContextBranch, TeamworkSync } from "../src/main/teamwork-sync.js";
 import { scanTasks, watchTasks } from "../src/main/tasks.js";
 import { generateKnowledgeSite, getKnowledgeSitePath } from "../src/main/knowledge-site.js";
@@ -113,6 +117,8 @@ import { OpenCodeConnector } from "../src/main/hooks/connectors/opencode.js";
 import { CursorConnector } from "../src/main/hooks/connectors/cursor.js";
 import type { AgentConnector } from "../src/main/hooks/types.js";
 import { TerminalApprovalDetector } from "../src/main/hooks/terminal-approval-detector.js";
+import { ReviewRunManager } from "../src/main/review-runs.js";
+import { ReviewControlServer, type ReviewControlRequest } from "../src/main/review-control-server.js";
 import { parseHookSessions } from "../src/main/hooks/sessions.js";
 import { TelegramService, type TelegramServiceDeps, type MachineIdentity } from "../src/main/telegram/service.js";
 import { buildSessionRows, type ProjectRef, type LiveStatus } from "../src/main/telegram/session-registry.js";
@@ -142,6 +148,8 @@ export type IpcCallbacks = {
 };
 
 let core: CoreClient | null = null;
+let reviewRunManager: ReviewRunManager | null = null;
+let reviewControlServer: ReviewControlServer | null = null;
 let tokenUsageDb: TokenUsageDb | null = null;
 let telegramService: TelegramService | null = null;
 let telegramMachineIdentity: MachineIdentity | null = null;
@@ -264,6 +272,102 @@ function requireCore(): CoreClient {
   return core;
 }
 
+function requireReviewRunManager(): ReviewRunManager {
+  if (!reviewRunManager) throw new Error("Review orchestration is not initialized");
+  return reviewRunManager;
+}
+
+function registerCreatedTerminal(session: TerminalSession): void {
+  if (session.pid != null && session.agentId) terminalPidToId.set(session.pid, session.id);
+  if (session.agentId === "kiro") {
+    const cwd = session.cwdUri.startsWith("local:") ? decodeURI(session.cwdUri.slice(6)) : session.cwdUri.replace(/^file:\/\//, "");
+    terminalApprovalDetector.track(session.id, "kiro", cwd);
+  }
+}
+
+async function ensureReviewOrchestration(runtime: IpcRuntime): Promise<void> {
+  if (!reviewRunManager) {
+    reviewRunManager = new ReviewRunManager({
+      resolveRepoPath: (value) => resolveProtocolRepoPath(runtime, localPathFromUri(value)),
+      scanTasks,
+      listAgentClis: (cwdUri) => requireCore().call("listAgentClis", [runtime, { cwdUri }]),
+      createTerminal: async (input) => {
+        const session = await requireCore().call("createTerminal", [runtime, input]);
+        registerCreatedTerminal(session);
+        return session;
+      },
+      inspectTerminal: (sessionId) => requireCore().call("inspectTerminal", [sessionId]),
+      notifyTerminal: (sessionId, text) => requireCore().call("notifyTerminal", [{ sessionId, text }]),
+      closeTerminal: async (sessionId) => { await requireCore().call("closeTerminal", [{ sessionId }]); },
+      reserveReviewPath,
+      onStarted: (event: ReviewRunStartedEvent) => {
+        if (event.run.origin !== "agent") return;
+        BrowserWindow.getAllWindows().forEach((window) => window.webContents.send(channels.reviewRunStarted, event));
+      },
+      onUpdated: (event: ReviewRunUpdatedEvent) => {
+        BrowserWindow.getAllWindows().forEach((window) => window.webContents.send(channels.reviewRunUpdated, event));
+      },
+    });
+  }
+  if (!reviewControlServer) {
+    reviewControlServer = new ReviewControlServer(runtime.userDataPath, handleReviewControlRequest);
+    await reviewControlServer.start();
+  }
+}
+
+async function handleReviewControlRequest(request: ReviewControlRequest): Promise<unknown> {
+  const manager = requireReviewRunManager();
+  const callerTerminalSessionId = request.method === "complete"
+    ? optionalControlString(request.params, "callerTerminalSessionId")
+    : requiredControlString(request.params, "callerTerminalSessionId", request.method === "start" ? "parentTerminalSessionId" : undefined);
+  if (request.method === "start") {
+    return manager.start({
+      repoPath: requiredControlString(request.params, "repoPath"),
+      taskId: requiredControlString(request.params, "taskId"),
+      agentId: requiredControlString(request.params, "agentId"),
+      origin: "agent",
+      parentTerminalSessionId: callerTerminalSessionId,
+    }).then((event) => controlReviewRun(event.run, callerTerminalSessionId));
+  }
+  const runId = requiredControlString(request.params, "runId");
+  if (request.method === "status") return controlReviewRun(manager.status(runId, callerTerminalSessionId), callerTerminalSessionId);
+  if (request.method === "cancel") return manager.cancel(runId, callerTerminalSessionId).then((run) => controlReviewRun(run, callerTerminalSessionId));
+  if (request.method === "complete") {
+    return manager.complete({
+      runId,
+      reportPath: requiredControlString(request.params, "reportPath"),
+      callerTerminalSessionId,
+      completionToken: typeof request.params.completionToken === "string" ? request.params.completionToken.trim() : undefined,
+    }).then((run) => controlReviewRun(run, callerTerminalSessionId, true));
+  }
+  const timeout = Number(request.params.timeoutMs ?? 300_000);
+  if (!Number.isFinite(timeout) || timeout <= 0) throw new Error("wait timeout must be a positive number");
+  return manager.wait(runId, callerTerminalSessionId, Math.min(timeout, 3_600_000)).then((run) => controlReviewRun(run, callerTerminalSessionId));
+}
+
+function controlReviewRun(run: ReviewRun, callerTerminalSessionId: string, reviewerResponse = false): ReviewRun & { runId: string } {
+  const result = { ...run, runId: run.id };
+  if (reviewerResponse || (callerTerminalSessionId === run.reviewerTerminalSessionId && callerTerminalSessionId !== run.parentTerminalSessionId)) {
+    delete result.parentTerminalSessionId;
+  }
+  return result;
+}
+
+function requiredControlString(params: Record<string, unknown>, key: string, fallbackKey?: string): string {
+  const value = params[key] ?? (fallbackKey ? params[fallbackKey] : undefined);
+  if (typeof value !== "string" || !value.trim()) throw new Error(`Missing ${key}`);
+  return value.trim();
+}
+
+function optionalControlString(params: Record<string, unknown>, key: string): string {
+  const value = params[key];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function localPathFromUri(value: string): string {
+  return value.startsWith("local:") ? decodeURI(value.slice("local:".length)) : value;
+}
+
 function setCaffeinateActive(active: boolean): void {
   if (active) {
     if (caffeinateBlockerId !== null && powerSaveBlocker.isStarted(caffeinateBlockerId)) return;
@@ -287,6 +391,10 @@ function setCaffeinateActive(active: boolean): void {
 export async function shutdownCore(): Promise<void> {
   setCaffeinateActive(false);
   await telegramService?.stop().catch(() => {});
+  reviewRunManager?.dispose();
+  reviewRunManager = null;
+  await reviewControlServer?.stop().catch(() => {});
+  reviewControlServer = null;
   await core?.dispose();
   browserManager.closeAll();
   closeFindPopover();
@@ -715,6 +823,7 @@ export async function registerIpcHandlers(
     core.removeAllListeners("terminalUpdate");
     core.removeAllListeners("terminalExit");
   }
+  await ensureReviewOrchestration(runtime);
   agentSessionWatcher.removeAllListeners("status");
   browserManager.removeAllListeners("update");
   browserManager.removeAllListeners("foundInPage");
@@ -759,6 +868,7 @@ export async function registerIpcHandlers(
     });
   });
   core.on("terminalExit", (event) => {
+    reviewRunManager?.handleTerminalExit(event.sessionId);
     terminalApprovalDetector.untrack(event.sessionId);
     telegramService?.feedTerminalExit(event.sessionId);
     for (const [pid, id] of terminalPidToId) {
@@ -1106,15 +1216,19 @@ export async function registerIpcHandlers(
   });
   handle<TerminalCreateInput, TerminalSession>(channels.createTerminal, async (payload) => {
     const session = await requireCore().call("createTerminal", [runtime, payload]);
-    if (session.pid != null && session.agentId) {
-      terminalPidToId.set(session.pid, session.id);
-    }
-    if (session.agentId === "kiro") {
-      const cwd = session.cwdUri.startsWith("local:") ? decodeURI(session.cwdUri.slice(6)) : session.cwdUri.replace(/^file:\/\//, "");
-      terminalApprovalDetector.track(session.id, "kiro", cwd);
-    }
+    registerCreatedTerminal(session);
     return session;
   });
+  handle<ReviewStartInput, ReviewRunStartedEvent>(channels.startReview, (payload) =>
+    requireReviewRunManager().start({
+      ...payload,
+      origin: "ui",
+      parentTerminalSessionId: undefined,
+    })
+  );
+  handle<{ runId: string }, ReviewRun>(channels.cancelReview, ({ runId }) =>
+    requireReviewRunManager().cancel(runId)
+  );
   handle<TerminalInput, TerminalSession | null>(channels.terminalInput, (payload) =>
     requireCore().call("inputTerminal", [payload])
   );

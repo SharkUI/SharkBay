@@ -13,10 +13,13 @@ import { prepareAgentLaunch, reserveReviewPath, reserveArtifactPath, reviewPromp
 import type {
   IpcRuntimeLike,
   TerminalCloseInput,
+  TerminalControlState,
   TerminalCreateInput,
   TerminalDataEvent,
   TerminalExitEvent,
   TerminalInput,
+  TerminalNotificationInput,
+  TerminalNotificationResult,
   TerminalResizeInput,
   TerminalSession,
   TerminalUpdateEvent,
@@ -43,6 +46,7 @@ type TerminalRecord = TerminalSession & {
   activeCommandLine: string | null;
   activeCommandTitle: string | null;
   pendingInputLine: string;
+  notificationInputBuffer: string[] | null;
   commandSubmittedAt: number | null;
   foregroundCommandObserved: boolean;
   inspectTimer: ReturnType<typeof setInterval> | null;
@@ -102,7 +106,7 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
       const codeGraphEnabled = input.protocolBootstrap?.codeGraphEnabled ?? false;
       let reviewPromptText: string | undefined;
       if (input.review) {
-        const reviewPath = await reserveReviewPath(spec.projectRoot, input.review.taskId);
+        const reviewPath = input.review.reviewPath ?? await reserveReviewPath(spec.projectRoot, input.review.taskId);
         reviewPromptText = reviewPrompt({ ...input.review, reviewPath }, { codeGraphEnabled });
       }
       let artifactPromptText: string | undefined;
@@ -132,7 +136,7 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
       cols: input.cols ?? 80,
       rows: input.rows ?? 24,
       name: "xterm-256color",
-      env: spec.env,
+      env: { ...spec.env, SHARKBAY_TERMINAL_SESSION_ID: id },
     });
     const foregroundProcess = safeForegroundProcess(ptyProcess);
     const initialTitle = terminalDisplayTitle({
@@ -162,6 +166,7 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
       activeCommandLine: initialCommand,
       activeCommandTitle: initialCommandTitle,
       pendingInputLine: "",
+      notificationInputBuffer: null,
       commandSubmittedAt: initialCommand ? this.now() : null,
       foregroundCommandObserved: false,
       inspectTimer: null,
@@ -281,9 +286,52 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
     if (session.status !== "running") {
       throw new Error("Terminal session has exited");
     }
+    if (session.notificationInputBuffer) {
+      session.notificationInputBuffer.push(input.data);
+      return publicSession(session);
+    }
     this.recordInput(session, input.data);
     session.pty.write(input.data);
     return publicSession(session);
+  }
+
+  inspect(sessionId: string): TerminalControlState {
+    const session = this.requireSession(sessionId);
+    return {
+      session: publicSession(session),
+      projectRoot: session.projectRoot,
+      hasPendingInput: session.pendingInputLine.length > 0,
+    };
+  }
+
+  notify(input: TerminalNotificationInput): TerminalNotificationResult {
+    const session = this.requireSession(input.sessionId);
+    if (session.status !== "running") {
+      return { state: "exited", session: publicSession(session) };
+    }
+    if (session.pendingInputLine.length > 0) {
+      return { state: "draft-pending", session: publicSession(session) };
+    }
+    if (!input.text.trim() || /[\r\n]/u.test(input.text)) {
+      throw new Error("Terminal notification must be a non-empty single line");
+    }
+
+    this.recordInput(session, input.text);
+    session.notificationInputBuffer = [];
+    session.pty.write(input.text);
+    const timer = setTimeout(() => {
+      const bufferedInput = session.notificationInputBuffer ?? [];
+      session.notificationInputBuffer = null;
+      if (session.status !== "running") return;
+      this.recordInput(session, "\r");
+      session.pty.write("\r");
+      for (const data of bufferedInput) {
+        this.recordInput(session, data);
+        session.pty.write(data);
+      }
+    }, Math.max(0, input.submitDelayMs ?? delayedBootstrapSubmitMs));
+    timer.unref?.();
+    return { state: "submitted", session: publicSession(session) };
   }
 
   resize(input: TerminalResizeInput): TerminalSession {

@@ -36,8 +36,11 @@ import type {
   RenameFileResult,
   ScanProjectsResult,
   TerminalCloseInput,
+  TerminalControlState,
   TerminalCreateInput,
   TerminalInput,
+  TerminalNotificationInput,
+  TerminalNotificationResult,
   TerminalResizeInput,
   TerminalSession,
   WriteFileInput,
@@ -278,6 +281,14 @@ export class LocalProvider extends EventEmitter implements ExecutionProvider {
 
   inputTerminal(input: TerminalInput): TerminalSession {
     return this.terminalManager.input(input);
+  }
+
+  inspectTerminal(sessionId: string): TerminalControlState {
+    return this.terminalManager.inspect(sessionId);
+  }
+
+  notifyTerminal(input: TerminalNotificationInput): TerminalNotificationResult {
+    return this.terminalManager.notify(input);
   }
 
   resizeTerminal(input: TerminalResizeInput): TerminalSession {

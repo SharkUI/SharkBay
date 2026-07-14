@@ -89,6 +89,13 @@ describe("harness install", () => {
     expect(protocol).toContain("prefer CodeGraph over `rg`, `grep`, or broad file reads");
     expect(protocol).toContain("codegraph query <symbol-or-name>");
     expect(protocol).toContain('Use `codegraph context "what you need to understand"` only for initial');
+    expect(protocol).toContain("## Agent-Initiated Review");
+    expect(protocol).toContain(".sharkbay/harness/review.sh start --agent opencode --task-id <task-id>");
+    expect(protocol).toContain("returns a run id and\nreserved report path without waiting");
+    expect(protocol).toContain("cannot inspect multi-line editor state held inside an agent TUI");
+    expect(protocol).toContain("marks the run failed\nand notifies the master agent");
+    expect(protocol).toContain("review.sh status --run <run-id>");
+    expect(protocol).toContain("review.sh wait` is a blocking fallback");
     expect(protocol).toContain("Team context is available only when this protocol is installed for a GitHub repo");
     expect(protocol).toContain("skip team-context searches and continue");
     expect(protocol).toContain("When the task is complete (and ready for team sync when sync is configured), add:");
@@ -111,6 +118,11 @@ describe("harness install", () => {
     expect(artifactHelperText).toContain("open_artifact");
     expect(artifactHelperText).toContain("sharkbay-hook");
     expect(artifactHelperText).toContain("hook-socket-path");
+    const reviewHelper = await fs.stat(path.join(repo, ".sharkbay", "harness", "review.sh"));
+    expect(reviewHelper.mode & 0o111).not.toBe(0);
+    const reviewHelperText = await fs.readFile(path.join(repo, ".sharkbay", "harness", "review.sh"), "utf8");
+    expect(reviewHelperText).toContain("sharkbay-review-control");
+    expect(reviewHelperText).not.toContain("sharkbay-hook");
     const exclude = await fs.readFile(path.join(repo, ".git", "info", "exclude"), "utf8");
     expect(exclude).toContain("/.sharkbay/");
     expect(exclude).not.toContain("/AGENTS.md");
@@ -336,14 +348,16 @@ describe("harness install", () => {
       "Keep Files and Work updated while working; finish by filling Summary and Verification; record the commit hash if a commit is produced.",
       "Treat `.sharkbay/team-context/` as read-only.",
       "If `AGENTS.md` exists at the project root, also read it and follow its instructions.",
+      "SharkBay supports asynchronous agent-initiated reviews; see `Agent-Initiated Review` in `.sharkbay/harness/protocol.md` before starting one.",
     ].join(" "));
+    expect(bootstrapPrompt({ codeGraphEnabled: true, locale: "en" })).not.toContain("review.sh start");
     expect(BOOTSTRAP_PROMPT).not.toContain("CodeGraph is installed and configured");
     await expect(fs.stat(path.join(repo, "AGENTS.md")).catch(() => null)).resolves.toBeNull();
     await expect(fs.stat(path.join(repo, "QWEN.md")).catch(() => null)).resolves.toBeNull();
   });
 
   it("builds a status-specific, read-only review prompt", () => {
-    const base = { taskId: "RVW7K2-u3960864-m81ae10", sourcePath: ".sharkbay/tasks/RVW7K2.md", reviewPath: ".sharkbay/reviews/RVW7K2-u3960864-m81ae10-abc.md" };
+    const base = { taskId: "RVW7K2-u3960864-m81ae10", sourcePath: ".sharkbay/tasks/RVW7K2.md", reviewPath: ".sharkbay/reviews/RVW7K2-u3960864-m81ae10-abc.md", runId: "review-test", completionToken: "reviewer-capability" };
 
     const completed = reviewPrompt({ ...base, status: "completed" }, { codeGraphEnabled: true, locale: "en" });
     expect(completed).toContain("read-only review session");
@@ -357,6 +371,7 @@ describe("harness install", () => {
     // Records the review back into the task file under a Reviews section.
     expect(completed).toContain("## Reviews");
     expect(completed).toContain("date -u +%Y-%m-%dT%H:%M:%SZ");
+    expect(completed).toContain("review.sh complete --run review-test --report .sharkbay/reviews/RVW7K2-u3960864-m81ae10-abc.md --completion-token reviewer-capability");
     // Review must NOT pull the session into the harness/task protocol.
     expect(completed).not.toContain("create or update the required task");
     expect(completed).not.toContain(".sharkbay/harness/protocol.md");

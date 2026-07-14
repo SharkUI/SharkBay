@@ -30,6 +30,9 @@ import type {
   ProjectDetail,
   ProjectFileTreeItem,
   ProjectSummary,
+  ReviewRun,
+  ReviewRunStartedEvent,
+  ReviewRunUpdatedEvent,
   ScanResult,
   SharkBayBridge,
   TaskViewModel,
@@ -111,6 +114,7 @@ type TerminalShellTab = {
   searchAddon: SearchAddon;
   hoveredLink: { current: string | null };
   disposables: Disposable[];
+  reviewRun?: ReviewRun;
 };
 
 type BrowserTab = {
@@ -409,6 +413,7 @@ function writePersistedTerminalSpaces(spaces: Record<string, TerminalSpace>, hoo
         tabs: space.tabs.map((tab): PersistedTerminalTab | null => {
           const key = tabIdForTab(tab);
           if (tab.kind === "terminal") {
+            if (tab.reviewRun) return null;
             const hookSessionId = tab.hookSessionId ?? hookSnapshotByTerminalId[tab.session.id]?.sessionId;
             return {
               kind: "terminal",
@@ -723,6 +728,9 @@ function agentTabLightState(
   hookStateByTerminalId: Record<string, ProjectActivityState>,
 ): ProjectActivityState | null {
   if (tab.kind !== "terminal" || !tab.session.agentId) return null;
+  if (tab.reviewRun?.status === "running") return "working";
+  if (tab.reviewRun?.status === "completed" || tab.reviewRun?.status === "cancelled") return "stopped";
+  if (tab.reviewRun?.status === "failed") return "approval";
   const state = hookStateByTerminalId[tab.session.id];
   if (!state) return null;
   return state;
@@ -1914,7 +1922,9 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     const offData = terminal.onData((event) => appendTerminalOutput(event));
     const offExit = terminal.onExit((event) => markTerminalExit(event));
     const offUpdate = terminal.onUpdate ? terminal.onUpdate((event) => updateTerminalSession(event)) : () => undefined;
-    return () => { offData(); offExit(); offUpdate(); };
+    const offReviewStarted = getBridge().reviews?.onStarted?.((event) => attachAutomatedReviewRun(event)) ?? (() => undefined);
+    const offReviewUpdated = getBridge().reviews?.onUpdated?.((event) => updateReviewRun(event)) ?? (() => undefined);
+    return () => { offData(); offExit(); offUpdate(); offReviewStarted(); offReviewUpdated(); };
   }, [bridgeAvailable]);
 
   useEffect(() => {
@@ -2123,11 +2133,19 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     },
     openReviewSession: async (projectUri, projectName, agent, review) => {
       const launchCommand = buildAgentLaunchCommand(agent);
-      await openProjectTab(projectUri, projectUri, projectName, selectedSpace?.displayPath ?? projectUri, false, {
+      const start = getBridge().reviews?.start;
+      if (!start) throw new Error("Review orchestration is not exposed by the preload API.");
+      const event = await start({
+        repoPath: projectUri,
+        taskId: review.taskId,
         agentId: agent.id,
+        origin: "ui",
         initialCommand: launchCommand,
         initialCommandTitle: `Review ${review.taskId}`,
-        review,
+      });
+      attachTerminalSession(projectUri, projectUri, projectName, selectedSpace?.displayPath ?? projectUri, event.session, {
+        activate: true,
+        reviewRun: event.run,
       });
     },
     openArtifactSession: async (projectUri, projectName, agent, artifact) => {
@@ -2243,26 +2261,62 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     try {
       const { hookSessionId, restoredOutput, activate = true, ...createOptions } = options;
       const session = await createTerminal(cwdUri, projectName, createOptions);
-      const terminal = createXTerm(session.id, appearanceTheme, setToast, (url) => void openBrowserTab(projectId, cwdUri, projectName, displayPath, url), () => clearStoppedTerminalSession(session.id), { colorScheme: terminalColorScheme, fontFamily: terminalFontFamily, fontSize: terminalFontSize, lineHeight: terminalLineHeight });
-      if (restoredOutput) {
-        const restored = cleanRestoredTerminalOutput(restoredOutput);
-        if (restored) {
-          const output = compactTerminalOutput(`${restored}\r\n`);
-          terminal.instance.write(output);
-        }
-      }
-      const tab: TerminalTab = { kind: "terminal", session, hookSessionId, terminal: terminal.instance, fitAddon: terminal.fitAddon, searchAddon: terminal.searchAddon, hoveredLink: terminal.hoveredLink, disposables: terminal.disposables };
-      if (activate) onActiveTabKindChange("terminal");
-      setSpaces((current) => {
-        const existing = current[projectId] ?? { projectId, projectName, uri: cwdUri, displayPath, tabs: [], activeId: null, serviceUrl: null };
-        return { ...current, [projectId]: { ...existing, projectName, uri: cwdUri, displayPath, tabs: [...existing.tabs, tab], activeId: activate ? session.id : existing.activeId } };
-      });
-      if (activate) setActiveProjectId(projectId);
-      return session.id;
+      return attachTerminalSession(projectId, cwdUri, projectName, displayPath, session, { activate, hookSessionId, restoredOutput });
     } catch (error) {
       if (!quiet) setToast({ tone: "error", message: asMessage(error) });
       return null;
     }
+  }
+
+  function attachTerminalSession(
+    projectId: string,
+    cwdUri: string,
+    projectName: string,
+    displayPath: string,
+    session: TerminalSession,
+    options: { activate: boolean; hookSessionId?: string; restoredOutput?: string; reviewRun?: ReviewRun },
+  ): string {
+    if (findTerminalTab(spacesRef.current, session.id)) return session.id;
+    const terminal = createXTerm(session.id, appearanceTheme, setToast, (url) => void openBrowserTab(projectId, cwdUri, projectName, displayPath, url), () => clearStoppedTerminalSession(session.id), { colorScheme: terminalColorScheme, fontFamily: terminalFontFamily, fontSize: terminalFontSize, lineHeight: terminalLineHeight });
+    if (options.restoredOutput) {
+      const restored = cleanRestoredTerminalOutput(options.restoredOutput);
+      if (restored) terminal.instance.write(compactTerminalOutput(`${restored}\r\n`));
+    }
+    const tab: TerminalTab = {
+      kind: "terminal",
+      session,
+      hookSessionId: options.hookSessionId,
+      terminal: terminal.instance,
+      fitAddon: terminal.fitAddon,
+      searchAddon: terminal.searchAddon,
+      hoveredLink: terminal.hoveredLink,
+      disposables: terminal.disposables,
+      reviewRun: options.reviewRun,
+    };
+    if (options.activate) onActiveTabKindChange("terminal");
+    setSpaces((current) => {
+      const existing = current[projectId] ?? { projectId, projectName, uri: cwdUri, displayPath, tabs: [], activeId: null, serviceUrl: null };
+      if (existing.tabs.some((item) => item.kind === "terminal" && item.session.id === session.id)) return current;
+      return { ...current, [projectId]: { ...existing, projectName, uri: cwdUri, displayPath, tabs: [...existing.tabs, tab], activeId: options.activate ? session.id : existing.activeId } };
+    });
+    if (options.activate) setActiveProjectId(projectId);
+    return session.id;
+  }
+
+  function attachAutomatedReviewRun(event: ReviewRunStartedEvent): void {
+    const parentId = event.run.parentTerminalSessionId;
+    const parent = parentId ? findTerminalTabWithSpace(spacesRef.current, parentId) : null;
+    const projectSpace = Object.values(spacesRef.current).find((space) => space.uri === event.session.cwdUri);
+    const targetSpace = parent?.space ?? projectSpace;
+    if (!targetSpace) return;
+    attachTerminalSession(targetSpace.projectId, targetSpace.uri, targetSpace.projectName, targetSpace.displayPath, event.session, {
+      activate: false,
+      reviewRun: event.run,
+    });
+  }
+
+  function updateReviewRun(event: ReviewRunUpdatedEvent): void {
+    setSpaces((current) => mapTerminalTab(current, event.run.reviewerTerminalSessionId, (tab) => ({ ...tab, reviewRun: event.run })));
   }
 
   async function openBrowserTab(projectId: string, uri: string, projectName: string, displayPath: string, initialUrl: string, activate = true): Promise<string | null> {
@@ -2396,6 +2450,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
 
   async function closeTab(tabId: string) {
     const match = findTabWithSpace(spacesRef.current, tabId);
+    const cancelReview = getBridge().reviews?.cancel;
     if (match?.tab.kind === "editor") {
       const tab = match.tab;
       if (tab.content !== tab.savedContent) {
@@ -2407,7 +2462,9 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     }
     try {
       if (match?.tab.kind === "browser") await closeBrowser(tabId);
-      else await closeTerminal(tabId);
+      else if (match?.tab.kind === "terminal" && match.tab.reviewRun?.status === "running" && cancelReview) {
+        await cancelReview({ runId: match.tab.reviewRun.id });
+      } else await closeTerminal(tabId);
     } catch (error) {
       setToast({ tone: "error", message: asMessage(error) });
     } finally {
