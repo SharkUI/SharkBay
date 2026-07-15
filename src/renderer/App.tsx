@@ -59,11 +59,13 @@ import {
 } from "./workflow";
 import type { WorkflowProjectActivityState } from "./workflow";
 import {
+  formatTaskTabTitle,
   shouldOpenTaskFileDiff,
   stripTaskBullet,
   taskDetailCommits,
   taskDetailLines,
   taskFileActionPath,
+  taskTitlesBySessionId,
   extractArtifactPath,
   extractReviewPath,
 } from "../shared/task-detail-helpers";
@@ -785,13 +787,17 @@ function formatRelativeTime(value: string): string {
   return new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(Math.round(diffSeconds / secondsPerUnit), unit);
 }
 
-function localPathFromCandidate(candidate: ProjectCandidate): string | null {
-  if (candidate.providerKind !== "local" || !candidate.uri.startsWith("local:")) return null;
+function localPathFromProjectUri(projectUri: string): string | null {
+  if (!projectUri.startsWith("local:")) return null;
   try {
-    return decodeURI(candidate.uri.slice("local:".length));
+    return decodeURI(projectUri.slice("local:".length));
   } catch {
     return null;
   }
+}
+
+function localPathFromCandidate(candidate: ProjectCandidate): string | null {
+  return candidate.providerKind === "local" ? localPathFromProjectUri(candidate.uri) : null;
 }
 
 function githubOwnerFromRemote(remoteOrigin: string | null | undefined): string | null {
@@ -1575,9 +1581,11 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   onTerminalWorkingChange: (working: boolean) => void;
 }>(function TerminalPane({ appearanceTheme, agentClis, agentClisReady, bridgeAvailable, browserLayoutKey, candidate, hookStateBySessionId, projectAliases, isVisible, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onAgentSessionClear, onRunningServiceProjectIdsChange, onProjectActivityChange, onTerminalWorkingChange }, ref) {
   const [spaces, setSpaces] = useState<Record<string, TerminalSpace>>({});
+  const [taskTitlesByProjectPath, setTaskTitlesByProjectPath] = useState<Record<string, Record<string, string>>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [terminalSpacesRestored, setTerminalSpacesRestored] = useState(false);
   const spacesRef = useRef<Record<string, TerminalSpace>>({});
+  const taskProjectPathsRef = useRef(new Set<string>());
   const creatingProjects = useRef(new Set<string>());
   const pendingTerminalOutput = useRef(new Map<string, string>());
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1591,6 +1599,12 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
   const tabDragRef = useRef<{ projectId: string; tabId: string; pointerId: number } | null>(null);
   const agentSessionToTerminalRef = useRef<Record<string, string>>({});
+  const cacheTaskTitles = useCallback((repoPath: string, tasks: TaskViewModel[]) => {
+    setTaskTitlesByProjectPath((current) => ({
+      ...current,
+      [repoPath]: taskTitlesBySessionId(tasks),
+    }));
+  }, []);
   const hookSnapshotByTerminalId = useMemo(() => {
     const map = agentSessionToTerminalRef.current;
     const runningTabsByProjectAgent = new Map<string, string[]>();
@@ -1639,6 +1653,28 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   }, [hookSnapshotByTerminalId]);
   const hookSnapshotByTerminalIdRef = useRef(hookSnapshotByTerminalId);
   useEffect(() => { hookSnapshotByTerminalIdRef.current = hookSnapshotByTerminalId; }, [hookSnapshotByTerminalId]);
+  useEffect(() => {
+    if (!bridgeAvailable) return;
+    const subscribe = getBridge().protocol?.onTasksChanged;
+    if (!subscribe) return;
+    return subscribe((event) => {
+      if (taskProjectPathsRef.current.has(event.repoPath)) cacheTaskTitles(event.repoPath, event.tasks);
+    });
+  }, [bridgeAvailable, cacheTaskTitles]);
+  useEffect(() => {
+    if (!bridgeAvailable) return;
+    const getTasks = getBridge().protocol?.getTasks;
+    if (!getTasks) return;
+    for (const space of Object.values(spaces)) {
+      if (!space.tabs.some((tab) => tab.kind === "terminal" && Boolean(tab.session.agentId))) continue;
+      const repoPath = localPathFromProjectUri(space.uri);
+      if (!repoPath || taskProjectPathsRef.current.has(repoPath)) continue;
+      taskProjectPathsRef.current.add(repoPath);
+      void getTasks({ repoPath })
+        .then((tasks) => cacheTaskTitles(repoPath, tasks))
+        .catch(() => { taskProjectPathsRef.current.delete(repoPath); });
+    }
+  }, [bridgeAvailable, cacheTaskTitles, spaces]);
   // Let the async tab-restore loop read the latest agentClis/candidate without listing them
   // as effect deps; otherwise a benign re-render (e.g. the startup agent-CLI re-scan once the
   // selected project loads) would re-run the restore effect and abort an in-flight restore.
@@ -2596,7 +2632,16 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                   {space.tabs.map((tab) => {
                     const tabId = tabIdForTab(tab);
                     const isActiveTab = tabId === space.activeId;
-                    const tabTitle = titleForTab(tab);
+                    const nativeTabTitle = titleForTab(tab);
+                    const hookSessionId = tab.kind === "terminal"
+                      ? tab.hookSessionId ?? hookSnapshotByTerminalId[tab.session.id]?.sessionId
+                      : undefined;
+                    const repoPath = localPathFromProjectUri(space.uri);
+                    const taskTitle = tab.kind === "terminal" && tab.session.agentId && hookSessionId && repoPath
+                      ? taskTitlesByProjectPath[repoPath]?.[hookSessionId]
+                      : undefined;
+                    const tabTitle = taskTitle ? formatTaskTabTitle(taskTitle) : nativeTabTitle;
+                    const fullTabTitle = taskTitle ?? nativeTabTitle;
                     const lightState = agentTabLightState(tab, isActiveTab, hookStateByTerminalId);
                     return (
                       <div
@@ -2617,9 +2662,9 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                           ) : (
                             <EditorTabIcon dirty={tab.content !== tab.savedContent} />
                           )}
-                          <span className="truncate">{tabTitle}{tab.kind === "editor" && tab.content !== tab.savedContent ? " •" : ""}</span>
+                          <span className="truncate" title={taskTitle}>{tabTitle}{tab.kind === "editor" && tab.content !== tab.savedContent ? " •" : ""}</span>
                         </button>
-                        <button aria-label={`Close ${tabTitle}`} className="terminal-tab-close" type="button" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); void closeTab(tabId); }}>x</button>
+                        <button aria-label={`Close ${fullTabTitle}`} className="terminal-tab-close" type="button" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); void closeTab(tabId); }}>x</button>
                       </div>
                     );
                   })}

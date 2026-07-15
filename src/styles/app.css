@@ -1772,7 +1772,7 @@ button.project-file-toggle:focus-visible {
 }
 .split-pill-main {
   padding: 4px 10px;
-  font-size: 12px;
+  font-size: 11px;
   border-radius: 5px 0 0 5px;
 }
 .split-pill-caret {

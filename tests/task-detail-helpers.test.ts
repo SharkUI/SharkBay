@@ -1,15 +1,36 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatTaskTabTitle,
   isNewTaskFileRecord,
   shouldOpenTaskFileDiff,
   taskDetailCommits,
   taskFileActionPath,
+  taskTitlesBySessionId,
   extractArtifactPath,
   extractReviewPath,
 } from "../src/shared/task-detail-helpers.js";
 import type { TaskViewModel } from "../src/shared/types.js";
 
 describe("task detail helpers", () => {
+  it("indexes the newest task title for each agent session", () => {
+    expect(taskTitlesBySessionId([
+      task({ taskId: "old", sessionId: "session-1", title: "Older task", createdAt: "2026-07-15T10:00:00Z" }),
+      task({ taskId: "new", sessionId: "session-1", title: "Newer task", createdAt: "2026-07-15T11:00:00Z" }),
+      task({ taskId: "other", sessionId: "session-2", title: "Other task" }),
+      task({ taskId: "unlinked", sessionId: undefined, title: "Unlinked task" }),
+    ])).toEqual({
+      "session-1": "Newer task",
+      "session-2": "Other task",
+    });
+  });
+
+  it("shortens task tab titles by Unicode grapheme without splitting emoji", () => {
+    expect(formatTaskTabTitle("abcdefghij")).toBe("abcdefghij");
+    expect(formatTaskTabTitle("abcdefghijk")).toBe("abcdefghij...");
+    expect(formatTaskTabTitle("一二三四五六七八九十甲")).toBe("一二三四五六七八九十...");
+    expect(formatTaskTabTitle("123456789👨‍👩‍👧‍👦X")).toBe("123456789👨‍👩‍👧‍👦...");
+  });
+
   it("normalizes task file status annotations with or without a separating space", () => {
     expect(taskFileActionPath("packages/server/src/middleware/proxy-secret.ts (new)")).toBe("packages/server/src/middleware/proxy-secret.ts");
     expect(taskFileActionPath("packages/server/src/middleware/proxy-secret.ts(new)")).toBe("packages/server/src/middleware/proxy-secret.ts");
