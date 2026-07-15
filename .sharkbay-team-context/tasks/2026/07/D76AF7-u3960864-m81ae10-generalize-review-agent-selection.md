@@ -12,8 +12,10 @@ agent: Codex GPT-5
 sessionId: 019f5a41-2f28-75b2-8f70-3a2a31cbf82d
 branch: codex/agent-review-orchestration
 createdAt: 2026-07-14T02:42:40Z
-updatedAt: 2026-07-15T04:17:12Z
-completedAt: 2026-07-15T04:17:12Z
+updatedAt: 2026-07-15T06:30:51Z
+completedAt: 2026-07-15T06:30:51Z
+commits:
+  - 20fa3d0a
 ---
 
 ## Summary
@@ -50,6 +52,8 @@ Review now accepts any installed supported agent as parent or reviewer, defaults
 - Root cause: after application restart, a restored owner tab can retain the exact native session association while `hookSessionToTerminal` remains empty until the first new hook event; the affected run therefore started without a parent.
 - Added an exact restored-tab fallback keyed by the task `sessionId` and tab `hookSessionId`, while retaining running-state and same-project validation in ReviewRunManager.
 - Assessed `.sharkbay/reviews/D76AF7-P9MAEL.md`: its pass verdict is accepted; this review run itself closes the claimed live gap for restored GUI owner callback and a Gemini reviewer, while non-Codex parent timing remains residual risk.
+- Preparing the verified generalized Review and restored-owner callback changes for commit.
+- Committed the verified implementation as `20fa3d0a` (`feat: generalize review agents and owner callbacks`).
 
 ## Verification
 
