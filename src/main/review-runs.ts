@@ -15,12 +15,12 @@ import type {
 } from "../shared/types.js";
 import type { TaskViewModel } from "./tasks.js";
 
-const agentReviewers = new Set(["opencode", "codewhale"]);
 const defaultNotificationRetryMs = 500;
 
 export type ReviewRunManagerDeps = {
   resolveRepoPath: (repoPath: string) => Promise<string>;
   scanTasks: (repoPath: string) => Promise<TaskViewModel[]>;
+  resolveTaskTerminalSession?: (task: TaskViewModel) => string | undefined;
   listAgentClis: (cwdUri: string) => Promise<AgentCli[]>;
   createTerminal: (input: TerminalCreateInput) => Promise<TerminalSession>;
   inspectTerminal: (sessionId: string) => Promise<TerminalControlState | null>;
@@ -58,22 +58,36 @@ export class ReviewRunManager {
     const task = (await this.deps.scanTasks(repoPath)).find((candidate) => candidate.taskId === input.taskId);
     if (!task) throw new Error(`Task not found: ${input.taskId}`);
 
+    let reviewerAgentId = input.agentId?.trim();
+    let parentTerminalSessionId = input.parentTerminalSessionId;
     if (input.origin === "agent") {
-      if (!agentReviewers.has(input.agentId)) {
-        throw new Error("Agent-initiated Review supports only opencode and codewhale");
-      }
-      if (!input.parentTerminalSessionId) throw new Error("Parent terminal session is required");
-      const parent = await this.deps.inspectTerminal(input.parentTerminalSessionId);
+      if (!parentTerminalSessionId) throw new Error("Parent terminal session is required");
+      const parent = await this.deps.inspectTerminal(parentTerminalSessionId);
       if (!parent || parent.session.status !== "running") throw new Error("Parent terminal session is not running");
-      if (parent.session.agentId !== "codex") throw new Error("Agent-initiated Review currently requires a Codex parent");
       if (path.resolve(parent.projectRoot) !== path.resolve(repoPath)) {
         throw new Error("Parent terminal does not belong to the requested project");
       }
+      reviewerAgentId ||= parent.session.agentId;
+    } else {
+      parentTerminalSessionId = this.deps.resolveTaskTerminalSession?.(task);
+      if (parentTerminalSessionId) {
+        const parent = await this.deps.inspectTerminal(parentTerminalSessionId).catch(() => null);
+        if (!parent
+          || parent.session.status !== "running"
+          || path.resolve(parent.projectRoot) !== path.resolve(repoPath)) {
+          parentTerminalSessionId = undefined;
+        }
+      }
+    }
+    if (!reviewerAgentId) {
+      throw new Error(input.origin === "agent"
+        ? "Review agent is required because the parent terminal has no agent"
+        : "Review agent is required");
     }
 
     const cwdUri = toLocalProjectUri(repoPath);
-    const agent = (await this.deps.listAgentClis(cwdUri)).find((candidate) => candidate.id === input.agentId);
-    if (!agent) throw new Error(`Review agent is not installed: ${input.agentId}`);
+    const agent = (await this.deps.listAgentClis(cwdUri)).find((candidate) => candidate.id === reviewerAgentId);
+    if (!agent) throw new Error(`Review agent is not installed: ${reviewerAgentId}`);
 
     const reportPath = await this.deps.reserveReviewPath(repoPath, task.taskId);
     const runId = `review-${randomUUID()}`;
@@ -105,7 +119,7 @@ export class ReviewRunManager {
       taskId: task.taskId,
       agentId: agent.id,
       origin: input.origin,
-      ...(input.parentTerminalSessionId ? { parentTerminalSessionId: input.parentTerminalSessionId } : {}),
+      ...(parentTerminalSessionId ? { parentTerminalSessionId } : {}),
       reviewerTerminalSessionId: session.id,
       reportPath,
       status: "running",

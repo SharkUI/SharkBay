@@ -90,8 +90,10 @@ describe("harness install", () => {
     expect(protocol).toContain("codegraph query <symbol-or-name>");
     expect(protocol).toContain('Use `codegraph context "what you need to understand"` only for initial');
     expect(protocol).toContain("## Agent-Initiated Review");
-    expect(protocol).toContain(".sharkbay/harness/review.sh start --agent opencode --task-id <task-id>");
-    expect(protocol).toContain("returns a run id and\nreserved report path without waiting");
+    expect(protocol).toContain(".sharkbay/harness/review.sh start --task-id <task-id>");
+    expect(protocol).toContain("Without `--agent`, SharkBay uses the same agent as the parent terminal.");
+    expect(protocol).toContain("--agent <agent-id>` to select another installed supported agent");
+    expect(protocol).toContain("returns a run id and reserved report path without waiting");
     expect(protocol).toContain("cannot inspect multi-line editor state held inside an agent TUI");
     expect(protocol).toContain("marks the run failed\nand notifies the master agent");
     expect(protocol).toContain("review.sh status --run <run-id>");

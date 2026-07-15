@@ -290,6 +290,10 @@ async function ensureReviewOrchestration(runtime: IpcRuntime): Promise<void> {
     reviewRunManager = new ReviewRunManager({
       resolveRepoPath: (value) => resolveProtocolRepoPath(runtime, localPathFromUri(value)),
       scanTasks,
+      resolveTaskTerminalSession: (task) => task.sessionId
+        ? hookSessionToTerminal.get(task.sessionId)
+          ?? latestIslandAgentTabs.find((tab) => tab.hookSessionId === task.sessionId)?.sessionId
+        : undefined,
       listAgentClis: (cwdUri) => requireCore().call("listAgentClis", [runtime, { cwdUri }]),
       createTerminal: async (input) => {
         const session = await requireCore().call("createTerminal", [runtime, input]);
@@ -321,10 +325,11 @@ async function handleReviewControlRequest(request: ReviewControlRequest): Promis
     ? optionalControlString(request.params, "callerTerminalSessionId")
     : requiredControlString(request.params, "callerTerminalSessionId", request.method === "start" ? "parentTerminalSessionId" : undefined);
   if (request.method === "start") {
+    const agentId = optionalControlString(request.params, "agentId");
     return manager.start({
       repoPath: requiredControlString(request.params, "repoPath"),
       taskId: requiredControlString(request.params, "taskId"),
-      agentId: requiredControlString(request.params, "agentId"),
+      ...(agentId ? { agentId } : {}),
       origin: "agent",
       parentTerminalSessionId: callerTerminalSessionId,
     }).then((event) => controlReviewRun(event.run, callerTerminalSessionId));

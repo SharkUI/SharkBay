@@ -39,11 +39,36 @@ describe("ReviewControlServer", () => {
         },
       })]);
 
+      const runnerPath = `${userDataPath}/ancestor-runner.cjs`;
+      await fs.writeFile(runnerPath, [
+        'const { spawn } = require("node:child_process");',
+        "const env = { ...process.env };",
+        "delete env.SHARKBAY_TERMINAL_SESSION_ID;",
+        "const child = spawn(process.argv[2], process.argv.slice(3), { env, stdio: \"inherit\" });",
+        "child.on(\"exit\", (code) => process.exit(code ?? 1));",
+        "",
+      ].join("\n"), "utf8");
+      await execFileAsync(process.execPath, [
+        runnerPath,
+        server.clientPath,
+        "start",
+        "--repo", "/tmp/project",
+        "--task-id", "TASK01-u1-m1",
+      ], { env: { ...process.env, SHARKBAY_TERMINAL_SESSION_ID: "term-ancestor-parent" } });
+      expect(requests[1]).toEqual(expect.objectContaining({
+        method: "start",
+        params: {
+          repoPath: "/tmp/project",
+          taskId: "TASK01-u1-m1",
+          parentTerminalSessionId: "term-ancestor-parent",
+        },
+      }));
+
       const status = await execFileAsync(server.clientPath, ["status", "review-test"], {
         env: { ...process.env, SHARKBAY_TERMINAL_SESSION_ID: "term-parent" },
       });
       expect(JSON.parse(status.stdout)).toEqual({ id: "review-test", status: "running" });
-      expect(requests[1]).toEqual(expect.objectContaining({
+      expect(requests[2]).toEqual(expect.objectContaining({
         method: "status",
         params: { runId: "review-test", callerTerminalSessionId: "term-parent" },
       }));
@@ -54,14 +79,13 @@ describe("ReviewControlServer", () => {
         "--report", ".sharkbay/reviews/TASK01-TEST01.md",
         "--completion-token", "reviewer-capability",
       ], { env: { ...process.env, SHARKBAY_TERMINAL_SESSION_ID: "" } });
-      expect(requests[2]).toEqual(expect.objectContaining({
+      expect(requests[3]).toEqual(expect.objectContaining({
         method: "complete",
-        params: {
+        params: expect.objectContaining({
           runId: "review-test",
           reportPath: ".sharkbay/reviews/TASK01-TEST01.md",
-          callerTerminalSessionId: "",
           completionToken: "reviewer-capability",
-        },
+        }),
       }));
 
       await server.stop();

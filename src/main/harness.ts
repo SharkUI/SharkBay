@@ -914,15 +914,17 @@ exploration when no clear symbol or file is known.
 
 ## Agent-Initiated Review
 
-SharkBay can run OpenCode or CodeWhale as an asynchronous, read-only reviewer
-for an existing task. Start a review from a SharkBay-managed master agent
+SharkBay can run any installed supported agent as an asynchronous, read-only
+reviewer for an existing task. Start a review from a SharkBay-managed agent
 terminal when a design or implementation is ready for independent review:
 
-\`.sharkbay/harness/review.sh start --agent opencode --task-id <task-id>\`
+\`.sharkbay/harness/review.sh start --task-id <task-id>\`
 
-Use \`--agent codewhale\` to select CodeWhale. The command returns a run id and
-reserved report path without waiting for the review to finish. SharkBay opens
-the reviewer in a background Review tab in the current application instance.
+Without \`--agent\`, SharkBay uses the same agent as the parent terminal. Pass
+\`--agent <agent-id>\` to select another installed supported agent. The command
+returns a run id and reserved report path without waiting for the review to
+finish. SharkBay opens the reviewer in a background Review tab in the current
+application instance.
 
 When the reviewer completes, SharkBay validates the reserved report and injects
 a completion prompt into the original master agent terminal. The master agent

@@ -724,7 +724,7 @@ export type ReviewRun = {
 export type ReviewStartInput = {
   repoPath: string;
   taskId: string;
-  agentId: string;
+  agentId?: string;
   origin: "ui" | "agent";
   parentTerminalSessionId?: string;
   initialCommand?: string;

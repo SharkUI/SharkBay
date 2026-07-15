@@ -111,6 +111,7 @@ function isReviewControlMethod(value: unknown): value is ReviewControlMethod {
 export function reviewControlClientScript(): string {
   return `#!/usr/bin/env node
 const fs = require("node:fs");
+const childProcess = require("node:child_process");
 const net = require("node:net");
 const path = require("node:path");
 
@@ -128,15 +129,15 @@ for (let index = 3; index < process.argv.length; index += 1) {
 }
 if (!values.run && !values["run-id"] && positional[0]) values.run = positional[0];
 
-const callerTerminalSessionId = process.env.SHARKBAY_TERMINAL_SESSION_ID || "";
+const callerTerminalSessionId = resolveCallerTerminalSessionId();
 let params;
 if (command === "start") {
   params = {
     repoPath: required("repo"),
     taskId: required("task-id"),
-    agentId: required("agent"),
     parentTerminalSessionId: callerTerminalSessionId,
   };
+  if (values.agent) params.agentId = values.agent;
 } else if (command === "complete") {
   params = {
     runId: requiredRun(),
@@ -190,6 +191,34 @@ function requiredRun() {
   const value = values.run || values["run-id"];
   if (!value) fail("Missing --run");
   return value;
+}
+
+function resolveCallerTerminalSessionId() {
+  const direct = process.env.SHARKBAY_TERMINAL_SESSION_ID || "";
+  if (direct) return direct;
+  const visited = new Set();
+  let pid = process.ppid;
+  for (let depth = 0; pid > 1 && depth < 64 && !visited.has(pid); depth += 1) {
+    visited.add(pid);
+    let parentPid = 0;
+    try {
+      const parent = childProcess.execFileSync("/bin/ps", ["-o", "ppid=", "-p", String(pid)], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+      parentPid = Number(parent);
+    } catch {}
+    try {
+      const command = childProcess.execFileSync("/bin/ps", ["eww", "-p", String(pid), "-o", "command="], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      const match = command.match(/(?:^|\\s)SHARKBAY_TERMINAL_SESSION_ID=([^\\s]+)/);
+      if (match && match[1]) return match[1];
+    } catch {}
+    pid = parentPid;
+  }
+  return "";
 }
 
 function fail(message) {

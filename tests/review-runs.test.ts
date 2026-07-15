@@ -7,6 +7,121 @@ import type { TerminalCreateInput, TerminalSession } from "../src/shared/types.j
 import { makeTempRoot } from "./helpers.js";
 
 describe("ReviewRunManager", () => {
+  it("notifies the task owner when a GUI Review resolves its live Terminal", async () => {
+    const repo = await makeTempRoot("review-runs-ui-parent");
+    const task = { ...taskFixture(repo), sessionId: "agent-session-parent" };
+    const notifications: Array<{ sessionId: string; text: string }> = [];
+    const deps = managerDeps(repo, task, [], async (sessionId, text) => {
+      notifications.push({ sessionId, text });
+      return { state: "submitted", session: parentSession(repo) };
+    });
+    deps.resolveTaskTerminalSession = (candidate) => candidate.sessionId === "agent-session-parent" ? "term-parent" : undefined;
+    const manager = new ReviewRunManager(deps);
+
+    const started = await manager.start({
+      repoPath: repo,
+      taskId: task.taskId,
+      agentId: "opencode",
+      origin: "ui",
+    });
+    expect(started.run.parentTerminalSessionId).toBe("term-parent");
+
+    await fs.writeFile(path.join(repo, started.run.reportPath), "Verdict: pass\n", "utf8");
+    const completed = await manager.complete({
+      runId: started.run.id,
+      reportPath: started.run.reportPath,
+      callerTerminalSessionId: started.run.reviewerTerminalSessionId,
+    });
+    expect(completed.notifiedAt).toBeTruthy();
+    expect(notifications).toEqual([{
+      sessionId: "term-parent",
+      text: expect.stringContaining(`Read \`${started.run.reportPath}\``),
+    }]);
+    manager.dispose();
+  });
+
+  it("does not notify a GUI Review mapping outside the task project", async () => {
+    const repo = await makeTempRoot("review-runs-ui-wrong-project");
+    const task = { ...taskFixture(repo), sessionId: "agent-session-parent" };
+    const deps = managerDeps(repo, task, [], async () => null);
+    deps.resolveTaskTerminalSession = () => "term-other-project";
+    deps.inspectTerminal = async () => ({
+      session: parentSession("/tmp/other-project"),
+      projectRoot: "/tmp/other-project",
+      hasPendingInput: false,
+    });
+    const manager = new ReviewRunManager(deps);
+
+    const started = await manager.start({
+      repoPath: repo,
+      taskId: task.taskId,
+      agentId: "opencode",
+      origin: "ui",
+    });
+    expect(started.run.parentTerminalSessionId).toBeUndefined();
+    manager.dispose();
+  });
+
+  it("starts a GUI Review without notification when no live owner mapping exists", async () => {
+    const repo = await makeTempRoot("review-runs-ui-no-parent");
+    const task = { ...taskFixture(repo), sessionId: "agent-session-parent" };
+    const deps = managerDeps(repo, task, [], async () => null);
+    deps.resolveTaskTerminalSession = () => undefined;
+    const manager = new ReviewRunManager(deps);
+
+    const started = await manager.start({
+      repoPath: repo,
+      taskId: task.taskId,
+      agentId: "opencode",
+      origin: "ui",
+    });
+    expect(started.run.parentTerminalSessionId).toBeUndefined();
+    manager.dispose();
+  });
+
+  it("reports a UI-specific missing reviewer error", async () => {
+    const repo = await makeTempRoot("review-runs-ui-agent");
+    const task = taskFixture(repo);
+    const manager = new ReviewRunManager(managerDeps(repo, task, [], async () => null));
+
+    await expect(manager.start({
+      repoPath: repo,
+      taskId: task.taskId,
+      origin: "ui",
+    })).rejects.toThrow(/^Review agent is required$/);
+    manager.dispose();
+  });
+
+  it("defaults to the non-Codex parent agent and allows an explicit installed reviewer", async () => {
+    const repo = await makeTempRoot("review-runs-agent-selection");
+    const task = taskFixture(repo);
+    const created: TerminalCreateInput[] = [];
+    const deps = managerDeps(repo, task, created, async () => null);
+    deps.inspectTerminal = async () => ({ session: parentSession(repo, "codewhale"), projectRoot: repo, hasPendingInput: false });
+    const manager = new ReviewRunManager(deps);
+
+    const sameAgent = await manager.start({
+      repoPath: repo,
+      taskId: task.taskId,
+      origin: "agent",
+      parentTerminalSessionId: "term-parent",
+    });
+    expect(sameAgent.run.agentId).toBe("codewhale");
+    expect(created[0]?.agentId).toBe("codewhale");
+    await manager.cancel(sameAgent.run.id, "term-parent");
+
+    const crossAgent = await manager.start({
+      repoPath: repo,
+      taskId: task.taskId,
+      agentId: "claude",
+      origin: "agent",
+      parentTerminalSessionId: "term-parent",
+    });
+    expect(crossAgent.run.agentId).toBe("claude");
+    expect(created[1]?.agentId).toBe("claude");
+    manager.dispose();
+  });
+
   it("validates completion and retries parent notification after a draft clears", async () => {
     const repo = await makeTempRoot("review-runs");
     const task = taskFixture(repo);
@@ -142,6 +257,7 @@ function managerDeps(
     listAgentClis: async () => [
       { id: "opencode", label: "OpenCode", command: "opencode", executablePath: "/usr/local/bin/opencode", shortLabel: "OC" },
       { id: "codewhale", label: "CodeWhale", command: "codewhale", executablePath: "/usr/local/bin/codewhale", shortLabel: "CW" },
+      { id: "claude", label: "Claude Code", command: "claude", executablePath: "/usr/local/bin/claude", shortLabel: "CC" },
     ],
     createTerminal: async (input) => {
       created.push(input);
@@ -177,16 +293,16 @@ function taskFixture(repo: string): TaskViewModel {
   };
 }
 
-function parentSession(repo: string): TerminalSession {
+function parentSession(repo: string, agentId = "codex"): TerminalSession {
   return {
     id: "term-parent",
     cwdUri: `local:${encodeURI(repo)}`,
-    title: "codex",
+    title: agentId,
     shell: "/bin/zsh",
     pid: 100,
     status: "running",
     createdAt: "2026-07-13T00:00:00.000Z",
-    agentId: "codex",
+    agentId,
   };
 }
 
