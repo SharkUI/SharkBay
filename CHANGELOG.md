@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.1] — 2026-07-15
+
+### Added
+- Agent-initiated Review orchestration can launch an asynchronous read-only reviewer, show it in a background Review tab, validate its report, and notify the originating agent terminal. Review supports any installed agent and precisely reconnects to live or restored task owners.
+- An optional General setting keeps the Mac awake while at least one SharkBay agent terminal is working.
+
+### Changed
+- Runtime overhead is lower through visibility-aware workspace, task, session, and diagnostics refresh; adaptive transcript polling; delayed token usage backfill; and reduced terminal cwd inspection.
+- Packaged app contents are smaller, terminal appearance settings persist, and local `npm run pack` builds skip code signing.
+- Active task status is easier to distinguish, and agent terminal tabs show the newest linked task title.
+
+### Fixed
+- OpenCode and CodeWhale Review sessions submit delayed bootstrap prompts reliably with agent-specific timing.
+- Task detail Review and Create artifact actions now use matching typography.
+
 ## [0.3.0] — 2026-07-06
 
 ### Added
