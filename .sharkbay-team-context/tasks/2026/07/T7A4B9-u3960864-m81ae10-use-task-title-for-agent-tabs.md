@@ -9,9 +9,10 @@ actor: SharkUI
 githubUserId: 3960864
 machine: 81ae10
 agent: Codex GPT-5
+sessionId: 019f6569-a024-72e2-a5a9-21917e1d0806
 branch: main
 createdAt: 2026-07-15T11:16:34Z
-updatedAt: 2026-07-15T11:20:03Z
+updatedAt: 2026-07-15T11:25:13Z
 completedAt: 2026-07-15T11:20:03Z
 ---
 
@@ -31,6 +32,7 @@ Agent terminal tabs now display the newest associated task title, shortened to t
 - Added task helpers that select the newest task per sessionId and truncate display titles to ten Unicode graphemes without splitting emoji.
 - Loaded tasks for projects with agent tabs and reused the existing task-change event to keep renderer title indexes current.
 - Derived the visible tab title from the hook session mapping while preserving the native terminal title as the fallback and persistence source.
+- Backfilled the current Codex sessionId after it became available from the managed terminal environment.
 
 ## Verification
 - `npx vitest run tests/task-detail-helpers.test.ts` passed (7 tests).
@@ -41,7 +43,8 @@ Agent terminal tabs now display the newest associated task title, shortened to t
 - `npm test` passed (60 files, 337 tests).
 - `npm run build` passed.
 - Final `git diff --check` and scope review passed; the pre-existing src/styles/app.css change remains separate and untouched by this task.
-- Live association was not demonstrated because this Codex session had no discoverable hook sessionId; unassociated tabs intentionally retain their native title.
+- Live association was unavailable during implementation because this Codex sessionId was not discoverable yet; it became available later and was backfilled.
+- Confirmed `CODEX_THREAD_ID` and `SHARKBAY_RESTORED_SESSION_ID` both match the current Codex transcript before backfilling sessionId.
 
 ## Notes
 - Preserve the unrelated existing src/styles/app.css modification from task R7F3Q9-u3960864-m81ae10.
