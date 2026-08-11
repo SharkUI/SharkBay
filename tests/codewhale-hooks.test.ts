@@ -24,6 +24,48 @@ describe("CodeWhale status hooks", () => {
     });
   });
 
+  it("normalizes the current turn_end lifecycle hook", () => {
+    const connector = new CodeWhaleConnector();
+
+    expect(connector.normalize({
+      hook_event: "turn_end",
+      workspace: "/tmp/sharkbay-project",
+      session_id: "sess_123",
+    })).toMatchObject({
+      agent: "codewhale",
+      sessionId: "sess_123",
+      event: "turn_end",
+      cwd: "/tmp/sharkbay-project",
+    });
+  });
+
+  it("stops the session when CodeWhale finishes a turn", () => {
+    const manager = new AgentHookStateManager();
+    const events: Array<{ state: string }> = [];
+    manager.registerConnector(new CodeWhaleConnector());
+    manager.on("stateChange", (event) => events.push(event));
+
+    manager.handleMessage({
+      source: "codewhale",
+      payload: {
+        hook_event: "message_submit",
+        workspace: "/tmp/sharkbay-project",
+        session_id: "sess_123",
+      },
+    });
+    manager.handleMessage({
+      source: "codewhale",
+      payload: {
+        hook_event: "turn_end",
+        workspace: "/tmp/sharkbay-project",
+        session_id: "sess_123",
+      },
+    });
+
+    expect(events.map((event) => event.state)).toEqual(["working", "stopped"]);
+    manager.dispose();
+  });
+
   it("applies CodeWhale hook events to project hook state", () => {
     const manager = new AgentHookStateManager();
     const events: Array<{ projectPath: string; state: string; action: string; agent: string }> = [];

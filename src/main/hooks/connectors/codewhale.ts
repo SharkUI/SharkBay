@@ -17,13 +17,14 @@ import type { AgentConnector, ConnectorStatus, HookEventKind, UnifiedHookEvent }
 const EVENT_MAP: Record<string, HookEventKind> = {
   session_start: "session_start",
   session_end: "session_end",
+  turn_end: "turn_end",
   message_submit: "prompt",
   tool_call_before: "tool_start",
   tool_call_after: "tool_end",
   on_error: "attention",
 };
 
-const HOOK_EVENTS = ["session_start", "session_end", "message_submit", "tool_call_before", "tool_call_after", "on_error"];
+const HOOK_EVENTS = ["session_start", "session_end", "turn_end", "message_submit", "tool_call_before", "tool_call_after", "on_error"];
 const MANAGED_NAME = "sharkbay-status";
 const ATTENTION_TOOL_NAMES = new Set(["delete_file", "edit_file", "task_shell_start", "write_file"]);
 
@@ -35,7 +36,7 @@ function shellQuote(s: string): string {
 export class CodeWhaleConnector implements AgentConnector {
   readonly id = "codewhale";
   readonly displayName = "CodeWhale";
-  readonly supportedEvents: readonly HookEventKind[] = ["session_start", "session_end", "prompt", "tool_start", "tool_end", "attention"];
+  readonly supportedEvents: readonly HookEventKind[] = ["session_start", "session_end", "turn_end", "prompt", "tool_start", "tool_end", "attention"];
 
   private readonly configPath = path.join(os.homedir(), ".codewhale", "config.toml");
 
