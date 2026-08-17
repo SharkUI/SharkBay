@@ -175,7 +175,22 @@ describe("harness install", () => {
     expect(stdout.trim()).toBe(sessionId);
   });
 
-  it("resolves Codex session id when transcript metadata starts with session_id", async () => {
+  it("resolves Codex session id from the Codex thread environment", async () => {
+    const root = await makeTempRoot("harness-codex-thread-session");
+    const repo = await createRealGitRepoFixture(root);
+    const workspace = await fs.realpath(repo);
+    await installHarness(repo, harnessOptions);
+
+    const sessionId = "44444444-4444-4444-8444-444444444444";
+    const { stdout } = await execFileAsync("sh", [path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"), "codex"], {
+      cwd: workspace,
+      env: { ...process.env, CODEX_THREAD_ID: sessionId, SHARKBAY_RESTORED_SESSION_ID: "" },
+    });
+
+    expect(stdout.trim()).toBe(sessionId);
+  });
+
+  it("resolves Codex session id from an ancestor transcript with current metadata", async () => {
     const root = await makeTempRoot("harness-codex-session");
     const repo = await createRealGitRepoFixture(root);
     const workspace = await fs.realpath(repo);
@@ -198,14 +213,26 @@ describe("harness install", () => {
     const bin = path.join(root, "bin");
     await writeText(path.join(bin, "lsof"), [
       "#!/bin/sh",
-      `printf '%s\\n' 'codex 123 shark txt REG 1,2 1 ${transcript}'`,
+      "if [ \"$2\" = \"4242\" ]; then",
+      `  printf '%s\\n' 'codex 4242 shark txt REG 1,2 1 ${transcript}'`,
+      "fi",
+      "",
+    ].join("\n"));
+    await writeText(path.join(bin, "ps"), [
+      "#!/bin/sh",
+      "if [ \"$4\" = \"4242\" ]; then",
+      "  printf '1\\n'",
+      "else",
+      "  printf '4242\\n'",
+      "fi",
       "",
     ].join("\n"));
     await fs.chmod(path.join(bin, "lsof"), 0o755);
+    await fs.chmod(path.join(bin, "ps"), 0o755);
 
     const { stdout } = await execFileAsync("sh", [path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"), "codex"], {
       cwd: workspace,
-      env: { ...process.env, HOME: home, PATH: `${bin}${path.delimiter}${process.env.PATH}`, SHARKBAY_RESTORED_SESSION_ID: "" },
+      env: { ...process.env, HOME: home, PATH: `${bin}${path.delimiter}${process.env.PATH}`, CODEX_THREAD_ID: "", SHARKBAY_RESTORED_SESSION_ID: "" },
     });
 
     expect(stdout.trim()).toBe(sessionId);
