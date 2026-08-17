@@ -12,8 +12,10 @@ agent: Codex GPT-5.6
 sessionId: 01a01005-13c0-7760-9cc3-09dbd93f77cb
 branch: main
 createdAt: 2026-08-17T15:02:18Z
-updatedAt: 2026-08-17T15:06:38Z
-completedAt: 2026-08-17T15:06:38Z
+updatedAt: 2026-08-17T15:13:30Z
+completedAt: 2026-08-17T15:13:30Z
+commits:
+  - f81b06ff68e693757b65b1fcef6d4efdb86970c6
 ---
 
 ## Summary
@@ -36,6 +38,8 @@ completedAt: 2026-08-17T15:06:38Z
 - Added regressions for the current Codex thread environment and for a shell-parent/Codex-ancestor process chain; both failed against the previous helper.
 - Updated the managed helper to prefer `CODEX_THREAD_ID` for fresh Codex sessions and walk ancestor processes only as a compatibility fallback.
 - Kept the existing restored-session priority and transcript metadata compatibility; no GitHub install behavior or historical task record was changed.
+- Preparing the verified source and regression test changes for a focused commit at user request.
+- Committed the focused source and regression test changes as `f81b06ff68e693757b65b1fcef6d4efdb86970c6`.
 
 ## Verification
 
@@ -47,6 +51,7 @@ completedAt: 2026-08-17T15:06:38Z
 - `codegraph affected src/main/harness.ts tests/harness.test.ts`: only `tests/harness.test.ts` affected.
 - `npm run typecheck`: passed.
 - `git diff --check`: passed.
+- `git show --stat --oneline f81b06ff`: confirmed the expected two-file commit.
 
 ## Notes
 
