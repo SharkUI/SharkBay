@@ -44,6 +44,7 @@ interface RemoteTask {
 export class TeamworkSync {
   private repoPath: string;
   private timer: ReturnType<typeof setInterval> | null = null;
+  private syncInFlight: Promise<SyncResult> | null = null;
   private lastSyncAt: string | null = null;
   private lastError: string | null = null;
   private pendingCount = 0;
@@ -106,7 +107,16 @@ export class TeamworkSync {
     }
   }
 
-  async syncOnce(): Promise<SyncResult> {
+  syncOnce(): Promise<SyncResult> {
+    if (this.syncInFlight) return this.syncInFlight;
+    const sync = this.runSyncOnce().finally(() => {
+      if (this.syncInFlight === sync) this.syncInFlight = null;
+    });
+    this.syncInFlight = sync;
+    return sync;
+  }
+
+  private async runSyncOnce(): Promise<SyncResult> {
     try {
       // 1. Fetch
       const fetched = await this.fetch();

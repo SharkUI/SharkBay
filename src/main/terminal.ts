@@ -27,6 +27,7 @@ import type {
 
 const execFileAsync = promisify(execFile);
 const defaultTerminalInspectIntervalMs = 1000;
+const defaultTerminalCwdInspectIntervalMs = 5000;
 const initialCommandQuietDelayMs = 150;
 const initialCommandMaxDelayMs = 900;
 const staleSubmittedCommandMs = 2000;
@@ -50,12 +51,14 @@ type TerminalRecord = TerminalSession & {
   commandSubmittedAt: number | null;
   foregroundCommandObserved: boolean;
   inspectTimer: ReturnType<typeof setInterval> | null;
+  cwdInspectedAt: number | null;
   inspecting: boolean;
   cleanup: (() => Promise<void>) | null;
 };
 
 export type TerminalManagerOptions = {
   inspectIntervalMs?: number;
+  cwdInspectIntervalMs?: number;
   inspectProcessCwd?: CwdInspector;
   now?: () => number;
 };
@@ -86,12 +89,14 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
   private sessions = new Map<string, TerminalRecord>();
   private sequence = 0;
   private inspectIntervalMs: number;
+  private cwdInspectIntervalMs: number;
   private inspectProcessCwd: CwdInspector;
   private now: () => number;
 
   constructor(options: TerminalManagerOptions = {}) {
     super();
     this.inspectIntervalMs = options.inspectIntervalMs ?? defaultTerminalInspectIntervalMs;
+    this.cwdInspectIntervalMs = options.cwdInspectIntervalMs ?? defaultTerminalCwdInspectIntervalMs;
     this.inspectProcessCwd = options.inspectProcessCwd ?? resolveProcessCwd;
     this.now = options.now ?? Date.now;
   }
@@ -170,6 +175,7 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
       commandSubmittedAt: initialCommand ? this.now() : null,
       foregroundCommandObserved: false,
       inspectTimer: null,
+      cwdInspectedAt: null,
       inspecting: false,
       cleanup: spec.cleanup ?? null,
     };
@@ -427,11 +433,17 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
         session.foregroundProcess = foregroundProcess;
       }
 
-      if (session.pid !== null && shouldInspectTerminalCwd({
+      const now = this.now();
+      if (session.pid !== null && terminalCwdInspectionDue({
+        lastInspectedAt: session.cwdInspectedAt,
+        now,
+        intervalMs: this.cwdInspectIntervalMs,
+      }) && shouldInspectTerminalCwd({
         foregroundProcess: session.foregroundProcess,
         shell: session.shell,
         serviceLabel: session.service?.label,
       })) {
+        session.cwdInspectedAt = now;
         const currentCwd = await this.inspectProcessCwd(session.pid);
         if (this.sessions.get(sessionId) !== session || session.status !== "running") {
           return;
@@ -547,6 +559,11 @@ export function shouldInspectTerminalCwd(input: Pick<TerminalTitleInput, "foregr
     return false;
   }
   return isShellForeground(input.foregroundProcess, input.shell);
+}
+
+export function terminalCwdInspectionDue(input: { lastInspectedAt: number | null; now: number; intervalMs: number }): boolean {
+  if (input.intervalMs <= 0) return false;
+  return input.lastInspectedAt === null || input.now - input.lastInspectedAt >= input.intervalMs;
 }
 
 export function applyTerminalInputData(

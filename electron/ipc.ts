@@ -207,6 +207,7 @@ terminalApprovalDetector.setCallback((event) => {
 });
 
 const syncInstances = new Map<string, TeamworkSync>();
+let activeSyncRepoPath: string | null = null;
 const taskWatcherCleanups = new Map<string, () => void>();
 
 // Terminal PID → terminal session ID cache (for hook→tab matching)
@@ -405,6 +406,7 @@ export async function shutdownCore(): Promise<void> {
   closeFindPopover();
   for (const sync of syncInstances.values()) sync.stop();
   syncInstances.clear();
+  activeSyncRepoPath = null;
   for (const cleanup of taskWatcherCleanups.values()) cleanup();
   taskWatcherCleanups.clear();
 }
@@ -420,6 +422,7 @@ async function resolveProtocolRepoPath(runtime: IpcRuntime, repoPath: string): P
 }
 
 async function syncForStatus(repoPath: string, installed: boolean): Promise<TeamworkSync | null> {
+  if (activeSyncRepoPath !== repoPath) return null;
   const existing = syncInstances.get(repoPath);
   if (existing) return existing;
   if (!installed || !await hasLocalContextBranch(repoPath)) return null;
@@ -428,6 +431,15 @@ async function syncForStatus(repoPath: string, installed: boolean): Promise<Team
   sync.start();
   syncInstances.set(repoPath, sync);
   return sync;
+}
+
+function activateSyncRepo(repoPath: string): void {
+  activeSyncRepoPath = repoPath;
+  for (const [candidatePath, sync] of syncInstances) {
+    if (candidatePath === repoPath) continue;
+    sync.stop();
+    syncInstances.delete(candidatePath);
+  }
 }
 
 async function getProtocolStatus(repoPath: string): Promise<ProtocolStatus> {
@@ -1264,6 +1276,7 @@ export async function registerIpcHandlers(
 
   handle<{ repoPath: string }, ProtocolStatus>(channels.protocolGetStatus, async (payload) => {
     const repoPath = await resolveProtocolRepoPath(runtime, payload.repoPath);
+    activateSyncRepo(repoPath);
     return getProtocolStatus(repoPath);
   });
 
@@ -1271,11 +1284,13 @@ export async function registerIpcHandlers(
 
   handle<ProtocolInstallInput, ProtocolStatus>(channels.protocolInstall, async (payload) => {
     const repoPath = await resolveProtocolRepoPath(runtime, payload.repoPath);
+    activateSyncRepo(repoPath);
     return installProtocol(repoPath);
   });
 
   handle<{ repoPath: string }, ProtocolStatus>(channels.protocolEnable, async (payload) => {
     const repoPath = await resolveProtocolRepoPath(runtime, payload.repoPath);
+    activateSyncRepo(repoPath);
     return installProtocol(repoPath);
   });
 
@@ -1284,6 +1299,7 @@ export async function registerIpcHandlers(
     const sync = syncInstances.get(repoPath);
     sync?.stop();
     syncInstances.delete(repoPath);
+    if (activeSyncRepoPath === repoPath) activeSyncRepoPath = null;
 
     let contextBranchDeleted = false;
     if (payload.cleanTeamContext) {
@@ -1304,6 +1320,7 @@ export async function registerIpcHandlers(
 
   handle<{ repoPath: string }, void>(channels.protocolSyncNow, async (payload) => {
     const repoPath = await resolveProtocolRepoPath(runtime, payload.repoPath);
+    activateSyncRepo(repoPath);
     let sync = syncInstances.get(repoPath);
     if (!sync) {
       sync = new TeamworkSync(repoPath);
@@ -1315,6 +1332,7 @@ export async function registerIpcHandlers(
 
   handle<{ repoPath: string }, ProtocolStatus>(channels.protocolUpdateHarness, async (payload) => {
     const repoPath = await resolveProtocolRepoPath(runtime, payload.repoPath);
+    activateSyncRepo(repoPath);
     await updateHarnessFiles(repoPath);
     return getProtocolStatus(repoPath);
   });

@@ -17,6 +17,20 @@ const gitIdentityEnv = {
 };
 
 describe("teamwork context sync", () => {
+  it("coalesces overlapping sync requests", async () => {
+    const { repo } = await createInstalledSyncRepo("teamwork-sync-overlap");
+
+    await withGitIdentity(async () => {
+      const sync = new TeamworkSync(repo);
+      await sync.ensureContextBranch("SharkUI/AIBF", "SharkUI");
+      const first = sync.syncOnce();
+      const second = sync.syncOnce();
+
+      expect(second).toBe(first);
+      await expect(first).resolves.toEqual({ fetched: true, pushed: [], error: null });
+    });
+  });
+
   it("creates the context branch and syncs completed local tasks", async () => {
     const root = await makeTempRoot("teamwork-sync");
     const remote = path.join(root, "remote.git");

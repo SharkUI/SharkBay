@@ -909,7 +909,7 @@ export function App() {
   useEffect(() => {
     if (!bridgeAvailable || view !== "dashboard") return;
     return startVisibleRefreshInterval(() => {
-      void refreshWorkspace({ showToast: false, setBusy: false });
+      if (selectedCandidate) void refreshDetail(selectedCandidate, { showToast: false, setBusy: false });
     }, 5000);
   }, [bridgeAvailable, selectedCandidate?.id, view]);
 

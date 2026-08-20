@@ -6,6 +6,7 @@ import {
   applyTerminalInputData,
   resolveTerminalCwd,
   shouldInspectTerminalCwd,
+  terminalCwdInspectionDue,
   terminalCommand,
   terminalDisplayTitle,
   terminalShellEnvironment,
@@ -165,6 +166,13 @@ describe("terminal cwd validation", () => {
       shell: "/bin/zsh",
       serviceLabel: "dev",
     })).toBe(false);
+  });
+
+  it("limits cwd inspection frequency without slowing foreground checks", () => {
+    expect(terminalCwdInspectionDue({ lastInspectedAt: null, now: 10_000, intervalMs: 5000 })).toBe(true);
+    expect(terminalCwdInspectionDue({ lastInspectedAt: 10_000, now: 14_999, intervalMs: 5000 })).toBe(false);
+    expect(terminalCwdInspectionDue({ lastInspectedAt: 10_000, now: 15_000, intervalMs: 5000 })).toBe(true);
+    expect(terminalCwdInspectionDue({ lastInspectedAt: null, now: 10_000, intervalMs: 0 })).toBe(false);
   });
 
   it("rejects directories outside configured projects", async () => {

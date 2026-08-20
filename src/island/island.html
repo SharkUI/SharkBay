@@ -71,7 +71,7 @@ html, body { background: transparent; overflow: hidden; height: 100%; -webkit-ap
 .pill-tile.stopped { background: #febc2e; }
 .pill-tile.approval {
   background: #ff5f57;
-  animation: pulse 0.7s ease-in-out infinite alternate;
+  animation: pulse 0.7s steps(8, end) infinite alternate;
 }
 .pill-tile.unknown { background: #888; }
 @keyframes pulse { from { opacity: 0.35; } to { opacity: 1; } }
@@ -118,7 +118,7 @@ html, body { background: transparent; overflow: hidden; height: 100%; -webkit-ap
   /* several short highlights; blurred so each is a soft gradient blob, not a hard line */
   stroke-dasharray: 5 19;
   filter: blur(2.5px);
-  animation: glowFlow var(--glow-flow-dur, 2.2s) linear infinite;
+  animation: glowFlow var(--glow-flow-dur, 2.2s) steps(var(--glow-flow-steps, 26), end) infinite;
 }
 body.glow-on #glowRing { opacity: 1; }
 @keyframes glowFlow {
@@ -344,7 +344,12 @@ function notifySessionTransitions(nextTabs) {
 
 function updateMarkState(key = aggregateState(tabs)) {
   // Nothing to show when there are no sessions.
-  if (!tabs.length) { sharkMark.style.display = "none"; document.body.classList.remove("glow-on"); return; }
+  if (!tabs.length) {
+    sharkMark.style.display = "none";
+    document.body.classList.remove("glow-on");
+    markAnimation.stop();
+    return;
+  }
   sharkMark.style.display = "block";
   const color = WAVE_COLORS[key];
   sharkMark.style.setProperty("--mark-color", color);
@@ -357,14 +362,18 @@ function updateMarkState(key = aggregateState(tabs)) {
     glowRing.style.setProperty("--glow-color", color);
     // red (approval) highlight flows 100% faster than yellow (stopped)
     glowRing.style.setProperty("--glow-flow-dur", key === "approval" ? "1.1s" : "2.2s");
+    glowRing.style.setProperty("--glow-flow-steps", key === "approval" ? "13" : "26");
   }
   document.body.classList.toggle("glow-on", glow);
+  if (!isOpen() && !document.hidden) markAnimation.start();
+  else markAnimation.stop();
 }
 
 // Traveling sine waves (fixed x endpoints) + a fin that swims and flips on turnaround
-(function animate() {
+const markAnimation = (() => {
   const wave1 = document.getElementById("wave1");
   const wave2 = document.getElementById("wave2");
+  const FRAME_INTERVAL_MS = 1000 / 12;
   const X0 = 3, X1 = 61;          // fixed left/right x endpoints
   const STEP = 1;                 // sample spacing in viewBox units
   const AMP = 1.3;                // wave amplitude (smaller = gentler waves)
@@ -390,7 +399,11 @@ function updateMarkState(key = aggregateState(tabs)) {
   // time so its swim speeds up/slows down with state without phase jumps.
   let finT = 0;
   let prev = null;
+  let timerId = null;
+  let running = false;
+
   function frame(now) {
+    if (!running) return;
     if (prev === null) prev = now;
     const dt = (now - prev) / 1000;
     prev = now;
@@ -409,10 +422,26 @@ function updateMarkState(key = aggregateState(tabs)) {
       `translate(${tx.toFixed(2)} 0) translate(${FIN_CX} 0) scale(${dir} 1) translate(${-FIN_CX} 0)`
     );
 
-    requestAnimationFrame(frame);
   }
-  requestAnimationFrame(frame);
+
+  return {
+    start() {
+      if (running) return;
+      running = true;
+      prev = null;
+      frame(performance.now());
+      timerId = setInterval(() => frame(performance.now()), FRAME_INTERVAL_MS);
+    },
+    stop() {
+      running = false;
+      prev = null;
+      if (timerId !== null) clearInterval(timerId);
+      timerId = null;
+    },
+  };
 })();
+
+document.addEventListener("visibilitychange", () => updateMarkState());
 
 function isOpen() { return islandEl.classList.contains("opened"); }
 
