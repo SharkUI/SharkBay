@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.2] — 2026-08-22
+
+### Added
+- A project-local semantic interface design skill now guides UI and interaction work from stable user mental models through rendered verification.
+
+### Changed
+- Reasonix replaces CodeWhale throughout agent detection, installation, launch options, product icons, Task Protocol bootstrap, session restore, Review selection, and status hooks. Reasonix support includes YOLO mode and preserves existing user hook configuration.
+- Persistent runtime overhead is lower through active-repository sync limits, coalesced teamwork syncs, throttled terminal working-directory inspection, selected-project-only refresh, and reduced island animation frame rates.
+
+### Fixed
+- Codex task sessions now use the exact launch-scoped session identifier, improving task ownership links and restored-session targeting.
+
 ## [0.3.1] — 2026-07-15
 
 ### Added
