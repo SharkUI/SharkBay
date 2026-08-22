@@ -42,7 +42,7 @@ When a supported agent is launched from SharkBay and protocol is installed, Shar
 
 - Codex: positional prompt
 - Claude: positional prompt
-- DeepSeek: positional prompt
+- Reasonix: prompt submitted after the interactive TUI starts
 - Gemini: `-i <prompt>`
 - Qwen: `-i <prompt>`
 - Kiro: `chat <prompt>`

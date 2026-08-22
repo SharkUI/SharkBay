@@ -385,7 +385,7 @@ function agentLabel(agentId: string): string {
   if (agentId === "claude") return "Claude Code";
   if (agentId === "gemini") return "Gemini CLI";
   if (agentId === "kiro") return "Kiro CLI";
-  if (agentId === "codewhale") return "CodeWhale";
+  if (agentId === "reasonix") return "Reasonix";
   if (agentId === "qwen") return "Qwen Code";
   if (agentId === "opencode") return "OpenCode";
   if (agentId === "cursor") return "Cursor CLI";
@@ -397,7 +397,7 @@ function agentShortLabel(agentId: string): string {
   if (agentId === "claude") return "Cl";
   if (agentId === "gemini") return "G";
   if (agentId === "kiro") return "K";
-  if (agentId === "codewhale") return "D";
+  if (agentId === "reasonix") return "Rx";
   if (agentId === "qwen") return "Q";
   if (agentId === "opencode") return "O";
   if (agentId === "cursor") return "Cu";

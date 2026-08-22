@@ -107,13 +107,11 @@ describe("harness install", () => {
     expect(sessionHelper.mode & 0o111).not.toBe(0);
     const sessionHelperText = await fs.readFile(path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"), "utf8");
     expect(sessionHelperText).toContain("*kiro*)");
-    expect(sessionHelperText).toContain("*codewhale*|*deepseek*)");
-    expect(sessionHelperText).toContain(".codewhale/audit.log");
     expect(sessionHelperText).toContain("*opencode*)");
     expect(sessionHelperText).toContain(".local\\/share\\/opencode\\/log");
     expect(sessionHelperText).toContain("SHARKBAY_RESTORED_SESSION_ID");
-    expect(sessionHelperText).toContain("*claude*|*gemini*|*qwen*)");
-    expect(sessionHelperText).toContain("codex|claude|codewhale|gemini|kiro|opencode|qwen");
+    expect(sessionHelperText).toContain("*claude*|*gemini*|*qwen*|*reasonix*)");
+    expect(sessionHelperText).toContain("codex|claude|gemini|kiro|opencode|qwen|reasonix");
     const artifactHelper = await fs.stat(path.join(repo, ".sharkbay", "harness", "open-artifact.sh"));
     expect(artifactHelper.mode & 0o111).not.toBe(0);
     const artifactHelperText = await fs.readFile(path.join(repo, ".sharkbay", "harness", "open-artifact.sh"), "utf8");
@@ -131,30 +129,16 @@ describe("harness install", () => {
     expect(exclude).not.toContain("/CLAUDE.md");
   });
 
-  it("resolves CodeWhale session id from the audit log", async () => {
-    const root = await makeTempRoot("harness-deepseek-session");
+  it("resolves Reasonix session id from the launch environment", async () => {
+    const root = await makeTempRoot("harness-reasonix-session");
     const repo = await createRealGitRepoFixture(root);
     const workspace = await fs.realpath(repo);
     await installHarness(repo, harnessOptions);
 
-    const home = path.join(root, "home");
     const sessionId = "5129eadb-161a-40de-8b6a-764d2176f724";
-    await writeText(path.join(home, ".codewhale", "audit.log"), [
-      '{"ts":"2026-05-21T14:34:59.403154+00:00","event":"tool.approval.auto_approve","details":{"tool_name":"exec_shell","session_id":"old-session","mode":"AGENT"}}',
-      `{"ts":"2026-05-21T14:35:06.441658+00:00","event":"tool.approval.auto_approve","details":{"tool_name":"exec_shell","approval_key":"shell:bash","session_id":"${sessionId}","mode":"AGENT"}}`,
-      "",
-    ].join("\n"));
-    await writeJson(path.join(home, ".codewhale", "sessions", `${sessionId}.json`), {
-      metadata: {
-        id: sessionId,
-        workspace,
-        updated_at: "2026-05-21T14:35:06Z",
-      },
-    });
-
-    const { stdout } = await execFileAsync("sh", [path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"), "codewhale"], {
+    const { stdout } = await execFileAsync("sh", [path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"), "reasonix"], {
       cwd: workspace,
-      env: { ...process.env, HOME: home, SHARKBAY_RESTORED_SESSION_ID: "" },
+      env: { ...process.env, SHARKBAY_RESTORED_SESSION_ID: "", SHARKBAY_SESSION_ID: sessionId },
     });
 
     expect(stdout.trim()).toBe(sessionId);
@@ -613,9 +597,10 @@ describe("harness install", () => {
       injected: true,
       initialCommand: expect.stringContaining("kiro-cli chat 'I'\\''m working in SharkBay Task Protocol mode"),
     });
-    await expect(prepareAgentLaunch(repo, "codewhale", "codewhale")).resolves.toMatchObject({
+    const reasonixResult = await prepareAgentLaunch(repo, "reasonix", "reasonix");
+    expect(reasonixResult).toMatchObject({
       injected: true,
-      initialCommand: "codewhale",
+      initialCommand: expect.stringMatching(/^SHARKBAY_SESSION_ID='[^']+' reasonix$/),
     });
     await expect(prepareAgentLaunch(repo, "opencode", "opencode")).resolves.toMatchObject({
       injected: true,

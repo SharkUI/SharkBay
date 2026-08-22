@@ -33,8 +33,7 @@ const initialCommandMaxDelayMs = 900;
 const staleSubmittedCommandMs = 2000;
 const delayedBootstrapWriteMs = 2000;
 const delayedBootstrapSubmitMs = 30;
-const codeWhaleDelayedBootstrapSubmitMs = 250;
-const interactiveForegroundProcesses = new Set(["btop", "claude", "codex", "codewhale", "htop", "top"]);
+const interactiveForegroundProcesses = new Set(["btop", "claude", "codex", "htop", "reasonix", "top"]);
 
 type CwdInspector = (pid: number) => Promise<string | null>;
 
@@ -124,7 +123,7 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
         reviewPrompt: reviewPromptText,
         artifactPrompt: artifactPromptText,
       });
-      if (launch.injected && (input.agentId === "codewhale" || input.agentId === "opencode") && launch.initialCommand === initialCommand) {
+      if (launch.injected && (input.agentId === "reasonix" || input.agentId === "opencode")) {
         delayedBootstrapPrompt = launch.bootstrapPrompt ?? null;
       }
       initialCommand = launch.initialCommand;
@@ -242,12 +241,9 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
       const timer = setTimeout(() => {
         if (session.status === "running") {
           ptyProcess.write(`${"\b".repeat(100)}${prompt}`);
-          const submitDelayMs = input.agentId === "codewhale"
-            ? codeWhaleDelayedBootstrapSubmitMs
-            : delayedBootstrapSubmitMs;
           const submitTimer = setTimeout(() => {
             if (session.status === "running") ptyProcess.write("\r");
-          }, submitDelayMs);
+          }, delayedBootstrapSubmitMs);
           submitTimer.unref?.();
         }
       }, delayedBootstrapWriteMs);

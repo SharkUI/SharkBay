@@ -692,7 +692,7 @@ codex
 claude
 gemini
 kiro-cli
-deepseek
+reasonix
 qwen
 qwen-code
 opencode

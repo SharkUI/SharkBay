@@ -30,7 +30,7 @@ macOS on Apple Silicon (arm64).
 
 Launch and manage multiple AI coding agents from one workspace.
 
-Supported agents: **Claude Code** · **Codex** · **Gemini** · **Kiro** · **CodeWhale** · **Qwen** · **OpenCode** · **Cursor CLI**
+Supported agents: **Claude Code** · **Codex** · **Gemini** · **Kiro** · **Reasonix** · **Qwen** · **OpenCode** · **Cursor CLI**
 
 ### Agent Status
 

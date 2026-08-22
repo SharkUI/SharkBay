@@ -5593,12 +5593,12 @@ const allAgentCliDefinitions: AgentCliDefinition[] = [
   { id: "cursor", label: "Cursor CLI", shortLabel: "Cu" },
   { id: "gemini", label: "Gemini CLI", shortLabel: "G" },
   { id: "kiro", label: "Kiro CLI", shortLabel: "K" },
-  { id: "codewhale", label: "CodeWhale", shortLabel: "D" },
+  { id: "reasonix", label: "Reasonix", shortLabel: "Rx" },
   { id: "qwen", label: "Qwen Code", shortLabel: "Q" },
   { id: "opencode", label: "OpenCode", shortLabel: "O" },
 ];
 
-const hookSupportedAgents = new Set(["claude", "codex", "cursor", "gemini", "kiro", "qwen", "codewhale", "opencode"]);
+const hookSupportedAgents = new Set(["claude", "codex", "cursor", "gemini", "kiro", "qwen", "reasonix", "opencode"]);
 
 type AgentLaunchOption = { flag: string; label: string; description: string; type: "toggle" };
 
@@ -5618,8 +5618,8 @@ const agentLaunchOptions: Record<string, AgentLaunchOption[]> = {
   kiro: [
     { flag: "--trust-all-tools", label: "Trust all tools", description: "Allows the model to use any tool to run commands without asking for confirmation", type: "toggle" },
   ],
-  codewhale: [
-    { flag: "--approval-policy auto", label: "Full auto", description: "Run all commands without approval", type: "toggle" },
+  reasonix: [
+    { flag: "--yolo", label: "YOLO mode", description: "Auto-approve all tool actions", type: "toggle" },
   ],
   qwen: [],
   opencode: [],
@@ -6553,14 +6553,14 @@ function AgentCliIcon({ agent }: { agent: AgentCli }) {
   if (agent.id === "claude") return <ClaudeCodeIcon />;
   if (agent.id === "gemini") return <GeminiCliIcon />;
   if (agent.id === "kiro") return <KiroIcon />;
-  if (agent.id === "codewhale") return <CodeWhaleIcon />;
+  if (agent.id === "reasonix") return <ReasonixIcon />;
   if (agent.id === "qwen") return <QwenIcon />;
   if (agent.id === "opencode") return <OpenCodeIcon />;
   if (agent.id === "cursor") return <CursorIcon />;
   return <span aria-hidden="true" className="agent-cli-monogram">{agent.shortLabel}</span>;
 }
 
-// Agent logo paths mirror the LobeHub Icons set; session cards use colored variants
+// Agent logo paths use recognizable product marks; session cards use colored variants
 // while toolbar and settings icons stay monochrome through AgentCliIcon.
 function AgentLogoIcon({ agentId, fallback, size = 16 }: { agentId: string; fallback?: string; size?: number }) {
   const normalized = agentId.trim().toLowerCase();
@@ -6568,7 +6568,7 @@ function AgentLogoIcon({ agentId, fallback, size = 16 }: { agentId: string; fall
   if (normalized === "claude") return <ClaudeCodeLogoColorIcon size={size} />;
   if (normalized === "gemini") return <GeminiCliLogoColorIcon size={size} />;
   if (normalized === "kiro") return <KiroLogoColorIcon size={size} />;
-  if (normalized === "codewhale" || normalized === "deepseek") return <CodeWhaleLogoColorIcon size={size} />;
+  if (normalized === "reasonix") return <ReasonixLogoColorIcon size={size} />;
   if (normalized === "qwen") return <QwenLogoColorIcon size={size} />;
   if (normalized === "opencode") return <OpenCodeLogoColorIcon size={size} />;
   if (normalized === "cursor") return <CursorLogoColorIcon size={size} />;
@@ -6621,10 +6621,10 @@ function KiroLogoColorIcon({ size }: { size: number }) {
   );
 }
 
-function CodeWhaleLogoColorIcon({ size }: { size: number }) {
+function ReasonixLogoColorIcon({ size }: { size: number }) {
   return (
-    <svg aria-hidden="true" className="agent-logo-icon" fillRule="evenodd" height={size} viewBox="0 0 24 24" width={size}>
-      <path d="M23.748 4.482c-.254-.124-.364.113-.512.234-.051.039-.094.09-.137.136-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.156-.708-.311-.955-.65-.172-.241-.219-.51-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.093.172.187.129.323-.082.28-.18.552-.266.833-.055.179-.137.217-.329.14a5.526 5.526 0 01-1.736-1.18c-.857-.828-1.631-1.742-2.597-2.458a11.365 11.365 0 00-.689-.471c-.985-.957.13-1.743.388-1.836.27-.098.093-.432-.779-.428-.872.004-1.67.295-2.687.684a3.055 3.055 0 01-.465.137 9.597 9.597 0 00-2.883-.102c-1.885.21-3.39 1.102-4.497 2.623C.082 8.606-.231 10.684.152 12.85c.403 2.284 1.569 4.175 3.36 5.653 1.858 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.133-.284 4.994-1.86.47.234.962.327 1.78.397.63.059 1.236-.03 1.705-.128.735-.156.684-.837.419-.961-2.155-1.004-1.682-.595-2.113-.926 1.096-1.296 2.746-2.642 3.392-7.003.05-.347.007-.565 0-.845-.004-.17.035-.237.23-.256a4.173 4.173 0 001.545-.475c1.396-.763 1.96-2.015 2.093-3.517.02-.23-.004-.467-.247-.588zM11.581 18c-2.089-1.642-3.102-2.183-3.52-2.16-.392.024-.321.471-.235.763.09.288.207.486.371.739.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.167-1.361-.802-2.5-1.86-3.301-3.307-.774-1.393-1.224-2.887-1.298-4.482-.02-.386.093-.522.477-.592a4.696 4.696 0 011.529-.039c2.132.312 3.946 1.265 5.468 2.774.868.86 1.525 1.887 2.202 2.891.72 1.066 1.494 2.082 2.48 2.914.348.292.625.514.891.677-.802.09-2.14.11-3.054-.614zm1-6.44a.306.306 0 01.415-.287.302.302 0 01.2.288.306.306 0 01-.31.307.303.303 0 01-.304-.308zm3.11 1.596c-.2.081-.399.151-.59.16a1.245 1.245 0 01-.798-.254c-.274-.23-.47-.358-.552-.758a1.73 1.73 0 01.016-.588c.07-.327-.008-.537-.239-.727-.187-.156-.426-.199-.688-.199a.559.559 0 01-.254-.078c-.11-.054-.2-.19-.114-.358.028-.054.16-.186.192-.21.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.391.451.462.576.685.914.176.265.336.537.445.848.067.195-.019.354-.25.452z" fill="#4D6BFE" />
+    <svg aria-hidden="true" className="agent-logo-icon" height={size} viewBox="245 70 235 245" width={size}>
+      <ReasonixMark fill="#0153E5" />
     </svg>
   );
 }
@@ -6689,11 +6689,22 @@ function KiroIcon() {
   );
 }
 
-function CodeWhaleIcon() {
+function ReasonixIcon() {
   return (
-    <svg aria-hidden="true" fill="currentColor" fillRule="evenodd" height="16" viewBox="0 0 24 24" width="16">
-      <path d="M23.748 4.482c-.254-.124-.364.113-.512.234-.051.039-.094.09-.137.136-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.156-.708-.311-.955-.65-.172-.241-.219-.51-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.093.172.187.129.323-.082.28-.18.552-.266.833-.055.179-.137.217-.329.14a5.526 5.526 0 01-1.736-1.18c-.857-.828-1.631-1.742-2.597-2.458a11.365 11.365 0 00-.689-.471c-.985-.957.13-1.743.388-1.836.27-.098.093-.432-.779-.428-.872.004-1.67.295-2.687.684a3.055 3.055 0 01-.465.137 9.597 9.597 0 00-2.883-.102c-1.885.21-3.39 1.102-4.497 2.623C.082 8.606-.231 10.684.152 12.85c.403 2.284 1.569 4.175 3.36 5.653 1.858 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.133-.284 4.994-1.86.47.234.962.327 1.78.397.63.059 1.236-.03 1.705-.128.735-.156.684-.837.419-.961-2.155-1.004-1.682-.595-2.113-.926 1.096-1.296 2.746-2.642 3.392-7.003.05-.347.007-.565 0-.845-.004-.17.035-.237.23-.256a4.173 4.173 0 001.545-.475c1.396-.763 1.96-2.015 2.093-3.517.02-.23-.004-.467-.247-.588zM11.581 18c-2.089-1.642-3.102-2.183-3.52-2.16-.392.024-.321.471-.235.763.09.288.207.486.371.739.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.167-1.361-.802-2.5-1.86-3.301-3.307-.774-1.393-1.224-2.887-1.298-4.482-.02-.386.093-.522.477-.592a4.696 4.696 0 011.529-.039c2.132.312 3.946 1.265 5.468 2.774.868.86 1.525 1.887 2.202 2.891.72 1.066 1.494 2.082 2.48 2.914.348.292.625.514.891.677-.802.09-2.14.11-3.054-.614zm1-6.44a.306.306 0 01.415-.287.302.302 0 01.2.288.306.306 0 01-.31.307.303.303 0 01-.304-.308zm3.11 1.596c-.2.081-.399.151-.59.16a1.245 1.245 0 01-.798-.254c-.274-.23-.47-.358-.552-.758a1.73 1.73 0 01.016-.588c.07-.327-.008-.537-.239-.727-.187-.156-.426-.199-.688-.199a.559.559 0 01-.254-.078c-.11-.054-.2-.19-.114-.358.028-.054.16-.186.192-.21.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.391.451.462.576.685.914.176.265.336.537.445.848.067.195-.019.354-.25.452z" />
+    <svg aria-hidden="true" height="16" viewBox="245 70 235 245" width="16">
+      <ReasonixMark fill="currentColor" />
     </svg>
+  );
+}
+
+function ReasonixMark({ fill }: { fill: string }) {
+  return (
+    <>
+      <path d="M369.75,185.3c2.09,1.76,4.98,2.41,7.95,1.06,1.18-.54,1.96-1.91,1.47-3.25-3.92-10.71-14.97-18.54-19.38-12.48-.54.74-.52,1.7-.11,2.29.32.47.97.57,1.82.4,2.68-.56,6.02,1.31,5.7,4.3-.33,3.12.3,5.79,2.56,7.69Z" fill={fill} />
+      <path d="M434.28,204.78c10.12-11.32,16.46-25.01,18.67-40.07,5.04-32.93-11.31-63.01-42.11-75.75-10.83-4.35-21.95-6.2-33.76-6.09l-114.5.03v219.42s56.29-.04,56.29-.04v-77.17c-1.86-.69-3.15-1.27-3.15-1.27-12.24-5.59-21.6-15.29-26.74-27.44-6.56-15.51-4.54-32.9,5.78-46.12,10.28-12.84,24.31-16.92,40.41-14.67,5.95.83,12.3-6.15,24.4-4.81.81.09,1.63.7,1.71,1.18.28,1.65-4.4,2.54-4.4,7.05,0,1.9.85,4.1,2.65,5.36,6.17,4.33,11.51,9.19,17.1,14.22,2.72,2.44,11.93,9.31,14.27,3.72,1.37-3.26,2.27-6.68,3.18-10.15.45-1.72-.5-2.74-1.89-3.56-9.5-5.63-13.08-17.35-9.37-27.74.36-1,1.29-1.49,2.08-1.52,3.19-.14,1.49,5.78,9.38,8.21,7.49,2.31,7.71,8.53,11.35,6.05,8.48-5.78,11.54-1.05,19.41-8.46.81-.76,2.2-.82,3.04-.23.52.36.97,1.29.93,2.38-.23,6.26-2.67,12.24-6.95,16.84-8.09,8.69-14.89,4.53-15.33,10.62-1.29,17.86-7.13,35.69-19.81,48.66-.41.42-.65,1.01-.58,1.41.07.42.57.83,1.12,1.01l10.68,3.63c1.51.51,2.6,1.87,2.41,3.31-.17,1.26-1.17,2.37-2.61,2.85-7.84,2.59-16.26,2.14-24.24-.27-10.56,8.89-23.54,13.48-37.68,12.93l20.53,28.34,33.49,45.73,66.85-.09-56.68-76.53c13.19-3.89,24.78-10.87,34.07-20.94Z" fill={fill} />
+      <circle cx="362.14" cy="177.19" fill={fill} r="1.58" />
+      <path d="M300.31,167.85c-3.53.43-5.65,2.96-5.31,6.74,2.39,26.35,26.7,47.92,53.94,42.72,5.8-1.11,11.08-3.41,15.36-7.74-9.27-7.98-13.79-16.12-21.41-24.13-10.91-11.47-26.43-19.54-42.58-17.59Z" fill={fill} />
+    </>
   );
 }
 

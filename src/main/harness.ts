@@ -53,34 +53,6 @@ const AGENT_SESSION_ID_SCRIPT = [
   "    echo \"kiro session id not found\" >&2",
   "    exit 1",
   "    ;;",
-  "  *codewhale*|*deepseek*)",
-  "    audit=\"$HOME/.codewhale/audit.log\"",
-  "    if [ ! -f \"$audit\" ]; then",
-  "      echo \"codewhale audit log not found\" >&2",
-  "      exit 1",
-  "    fi",
-  "    latest_event=\"$(",
-  "      tail -n 100 \"$audit\" |",
-  "        awk '/\"session_id\"[[:space:]]*:/ { line=$0 } END { if (line) print line }'",
-  "    )\"",
-  "    session_id=\"$(printf '%s\\n' \"$latest_event\" | sed -n 's/.*\"session_id\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p')\"",
-  "    if [ -z \"$session_id\" ]; then",
-  "      echo \"codewhale session id not found\" >&2",
-  "      exit 1",
-  "    fi",
-  "    meta=\"$HOME/.codewhale/sessions/$session_id.json\"",
-  "    if [ ! -f \"$meta\" ]; then",
-  "      echo \"codewhale session metadata not found\" >&2",
-  "      exit 1",
-  "    fi",
-  "    workspace=\"$(sed -n 's/.*\"workspace\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p' \"$meta\" 2>/dev/null | head -n 1)\"",
-  "    if [ \"$workspace\" != \"$PWD\" ]; then",
-  "      echo \"codewhale session workspace mismatch\" >&2",
-  "      exit 1",
-  "    fi",
-  "    printf '%s\\n' \"$session_id\"",
-  "    exit 0",
-  "    ;;",
   "  *opencode*)",
   "    pid=\"$PPID\"",
   "    opencode_pid=\"\"",
@@ -123,7 +95,7 @@ const AGENT_SESSION_ID_SCRIPT = [
   "    echo \"opencode session id not found\" >&2",
   "    exit 1",
   "    ;;",
-  "  *claude*|*gemini*|*qwen*)",
+  "  *claude*|*gemini*|*qwen*|*reasonix*)",
   "    if [ -z \"${SHARKBAY_SESSION_ID:-}\" ]; then",
   "      echo \"SHARKBAY_SESSION_ID not set\" >&2",
   "      exit 1",
@@ -138,7 +110,7 @@ const AGENT_SESSION_ID_SCRIPT = [
   "    fi",
   "    ;;",
   "  *)",
-  "    echo \"usage: $0 codex|claude|codewhale|gemini|kiro|opencode|qwen\" >&2",
+  "    echo \"usage: $0 codex|claude|gemini|kiro|opencode|qwen|reasonix\" >&2",
   "    exit 64",
   "    ;;",
   "esac",
@@ -778,7 +750,7 @@ async function hasSharkbayHarnessDir(repoPath: string): Promise<boolean> {
 function agentBootstrapArgs(agentId: string, prompt: string): string[] | null {
   const normalized = agentId.trim().toLowerCase();
   if (normalized === "codex" || normalized === "claude") return [prompt];
-  if (normalized === "codewhale") return [];
+  if (normalized === "reasonix") return [];
   if (normalized === "gemini" || normalized === "qwen") return ["-i", prompt];
   if (normalized === "kiro") return [prompt];
   if (normalized === "opencode") return [];
@@ -788,9 +760,10 @@ function agentBootstrapArgs(agentId: string, prompt: string): string[] | null {
 
 function withLaunchSessionId(agentId: string, command: string): string {
   const normalized = agentId.trim().toLowerCase();
-  if (normalized !== "claude" && normalized !== "gemini" && normalized !== "qwen") return command;
+  if (normalized !== "claude" && normalized !== "gemini" && normalized !== "qwen" && normalized !== "reasonix") return command;
   if (/--resume\b|--continue\b/u.test(command)) return command;
   const sessionId = randomUUID();
+  if (normalized === "reasonix") return `SHARKBAY_SESSION_ID=${shellQuote(sessionId)} ${command}`;
   return `SHARKBAY_SESSION_ID=${shellQuote(sessionId)} ${appendShellArgs(command, ["--session-id", sessionId])}`;
 }
 

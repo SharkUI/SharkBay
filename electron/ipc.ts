@@ -112,7 +112,7 @@ import { SessionPromptStore } from "../src/main/hooks/prompt-store.js";
 import { ClaudeConnector, CodexConnector, QwenConnector } from "../src/main/hooks/connectors/claude-family.js";
 import { GeminiConnector } from "../src/main/hooks/connectors/gemini.js";
 import { KiroConnector } from "../src/main/hooks/connectors/kiro.js";
-import { CodeWhaleConnector } from "../src/main/hooks/connectors/codewhale.js";
+import { ReasonixConnector } from "../src/main/hooks/connectors/reasonix.js";
 import { OpenCodeConnector } from "../src/main/hooks/connectors/opencode.js";
 import { CursorConnector } from "../src/main/hooks/connectors/cursor.js";
 import type { AgentConnector } from "../src/main/hooks/types.js";
@@ -172,7 +172,7 @@ const hookConnectors = new Map<string, AgentConnector>([
   ["claude", new ClaudeConnector()],
   ["codex", new CodexConnector()],
   ["qwen", new QwenConnector()],
-  ["codewhale", new CodeWhaleConnector()],
+  ["reasonix", new ReasonixConnector()],
   ["gemini", new GeminiConnector()],
   ["kiro", new KiroConnector()],
   ["opencode", new OpenCodeConnector()],

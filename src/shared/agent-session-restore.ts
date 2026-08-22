@@ -1,6 +1,6 @@
 import type { AgentCli } from "./types.js";
 
-export type AgentSessionRestoreAgentId = "codex" | "claude" | "gemini" | "kiro" | "codewhale" | "qwen" | "opencode" | "cursor";
+export type AgentSessionRestoreAgentId = "codex" | "claude" | "gemini" | "kiro" | "reasonix" | "qwen" | "opencode" | "cursor";
 
 export type AgentSessionRestoreCommand = {
   agentId: AgentSessionRestoreAgentId;
@@ -24,7 +24,7 @@ const restoreDefinitions: AgentSessionRestoreDefinition[] = [
   { id: "kiro", label: "Kiro CLI", shortLabel: "K", defaultCommand: "kiro-cli", match: /\bkiro\b/u },
   { id: "claude", label: "Claude Code", shortLabel: "Cl", defaultCommand: "claude", match: /\bclaude\b/u },
   { id: "gemini", label: "Gemini CLI", shortLabel: "G", defaultCommand: "gemini", match: /\bgemini\b/u },
-  { id: "codewhale", label: "CodeWhale", shortLabel: "D", defaultCommand: "codewhale", match: /\bcodewhale\b|\bcode\s*whale\b|\bdeepseek\b/u },
+  { id: "reasonix", label: "Reasonix", shortLabel: "Rx", defaultCommand: "reasonix", match: /\breasonix\b/u },
   { id: "qwen", label: "Qwen Code", shortLabel: "Q", defaultCommand: "qwen", match: /\bqwen\b|\bqianwen\b/u },
   { id: "opencode", label: "OpenCode", shortLabel: "O", defaultCommand: "opencode", match: /\bopen\s*code\b|\bopencode\b/u },
   { id: "cursor", label: "Cursor CLI", shortLabel: "Cu", defaultCommand: "cursor-agent", match: /\bcursor\b/u },
@@ -72,7 +72,7 @@ function restoreCommand(agentId: AgentSessionRestoreAgentId, executable: string,
   if (agentId === "claude") return `${restoredSessionEnv} ${commandWithFlags} --resume ${id}`;
   if (agentId === "gemini" || agentId === "qwen") return `${restoredSessionEnv} ${commandWithFlags} --resume ${id}`;
   if (agentId === "kiro") return `${restoredSessionEnv} ${command} chat ${flags ? `${flags} ` : ""}--resume-id ${id}`;
-  if (agentId === "codewhale") return `${restoredSessionEnv} ${commandWithFlags} resume ${id}`;
+  if (agentId === "reasonix") return `${restoredSessionEnv} ${commandWithFlags} --resume`;
   if (agentId === "cursor") return `${restoredSessionEnv} ${commandWithFlags} --resume ${id}`;
   return `${restoredSessionEnv} ${commandWithFlags} --session ${id}`;
 }

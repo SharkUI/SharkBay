@@ -97,7 +97,7 @@ describe("ReviewRunManager", () => {
     const task = taskFixture(repo);
     const created: TerminalCreateInput[] = [];
     const deps = managerDeps(repo, task, created, async () => null);
-    deps.inspectTerminal = async () => ({ session: parentSession(repo, "codewhale"), projectRoot: repo, hasPendingInput: false });
+    deps.inspectTerminal = async () => ({ session: parentSession(repo, "reasonix"), projectRoot: repo, hasPendingInput: false });
     const manager = new ReviewRunManager(deps);
 
     const sameAgent = await manager.start({
@@ -106,8 +106,8 @@ describe("ReviewRunManager", () => {
       origin: "agent",
       parentTerminalSessionId: "term-parent",
     });
-    expect(sameAgent.run.agentId).toBe("codewhale");
-    expect(created[0]?.agentId).toBe("codewhale");
+    expect(sameAgent.run.agentId).toBe("reasonix");
+    expect(created[0]?.agentId).toBe("reasonix");
     await manager.cancel(sameAgent.run.id, "term-parent");
 
     const crossAgent = await manager.start({
@@ -204,7 +204,7 @@ describe("ReviewRunManager", () => {
     const started = await manager.start({
       repoPath: repo,
       taskId: task.taskId,
-      agentId: "codewhale",
+      agentId: "reasonix",
       origin: "agent",
       parentTerminalSessionId: "term-parent",
     });
@@ -219,7 +219,7 @@ describe("ReviewRunManager", () => {
     });
     await expect(waitFor(() => manager.status(started.run.id).notifiedAt)).resolves.toBeTruthy();
     expect(notifyCalls).toBe(2);
-    expect(notifications[0]).toContain(`Review \`${started.run.id}\` by codewhale failed`);
+    expect(notifications[0]).toContain(`Review \`${started.run.id}\` by reasonix failed`);
     expect(notifications[0]).toContain(`review.sh status --run ${started.run.id}`);
     await expect(waitForMissing(path.join(repo, ".sharkbay", "reviews", "TASK01-TEST01.md"))).resolves.toBe(true);
     manager.dispose();
@@ -256,7 +256,7 @@ function managerDeps(
     scanTasks: async () => [task],
     listAgentClis: async () => [
       { id: "opencode", label: "OpenCode", command: "opencode", executablePath: "/usr/local/bin/opencode", shortLabel: "OC" },
-      { id: "codewhale", label: "CodeWhale", command: "codewhale", executablePath: "/usr/local/bin/codewhale", shortLabel: "CW" },
+      { id: "reasonix", label: "Reasonix", command: "reasonix", executablePath: "/usr/local/bin/reasonix", shortLabel: "Rx" },
       { id: "claude", label: "Claude Code", command: "claude", executablePath: "/usr/local/bin/claude", shortLabel: "CC" },
     ],
     createTerminal: async (input) => {

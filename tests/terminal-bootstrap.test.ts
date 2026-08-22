@@ -35,7 +35,7 @@ describe("terminal bootstrap submission", () => {
 
   it.each([
     { agentId: "opencode", submitDelayMs: 30 },
-    { agentId: "codewhale", submitDelayMs: 250 },
+    { agentId: "reasonix", submitDelayMs: 30 },
   ] as const)("submits a $agentId review prompt with a separate delayed Enter", async ({ agentId, submitDelayMs }) => {
     const runtime = await makeTestRuntime(`terminal-${agentId}-bootstrap-config`);
     const root = await makeTempRoot(`terminal-${agentId}-bootstrap-root`);

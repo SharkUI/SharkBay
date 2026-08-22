@@ -35,7 +35,7 @@ const agentDefinitions = [
   { id: "claude", command: "claude" },
   { id: "gemini", command: "gemini" },
   { id: "kiro", command: "kiro-cli" },
-  { id: "codewhale", command: "codewhale" },
+  { id: "reasonix", command: "reasonix" },
   { id: "qwen", command: "qwen" },
   { id: "opencode", command: "opencode" },
   { id: "cursor", command: "cursor-agent" },
@@ -92,7 +92,7 @@ export function createAgentInstallRecipes(): InstallRecipe[] {
       }],
       verification: { command: "kiro-cli", args: ["--version"] },
     },
-    npmGlobalRecipe("codewhale", "Install CodeWhale with npm", "npm install -g codewhale"),
+    npmGlobalRecipe("reasonix", "Install Reasonix with npm", "npm install -g reasonix"),
     npmGlobalRecipe("qwen", "Install Qwen Code with npm", "npm install -g @qwen-code/qwen-code"),
     npmGlobalRecipe("opencode", "Install OpenCode with npm", "npm install -g opencode-ai"),
     {
