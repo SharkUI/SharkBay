@@ -12,13 +12,15 @@ agent: Codex GPT-5.6
 sessionId: 01a01de3-9a94-7851-8987-56a12a3b7352
 branch: codex/replace-codewhale-with-reasonix
 createdAt: 2026-08-20T06:51:02Z
-updatedAt: 2026-08-20T07:05:01Z
-completedAt: 2026-08-20T07:05:01Z
+updatedAt: 2026-08-22T03:11:36Z
+completedAt: 2026-08-22T03:11:36Z
+commits:
+  - 031d5fecb1c683a4262355b9f758549ed0031dba
 ---
 
 ## Summary
 
-Hard-replaced SharkBay's CodeWhale integration with Reasonix across CLI detection and installation, product UI, launch/bootstrap behavior, hooks, session restore, documentation, and tests. Active code and current documentation contain no CodeWhale/DeepSeek compatibility paths; only immutable historical release notes remain in `CHANGELOG.md`.
+Hard-replaced SharkBay's CodeWhale integration with Reasonix across CLI detection and installation, product UI, launch/bootstrap behavior, hooks, session restore, documentation, and tests, then committed and fast-forwarded the feature branch into `main`. Active code and current documentation contain no CodeWhale/DeepSeek compatibility paths; only immutable historical release notes remain in `CHANGELOG.md`.
 
 ## Files
 
@@ -43,6 +45,7 @@ Hard-replaced SharkBay's CodeWhale integration with Reasonix across CLI detectio
 - tests/terminal-bootstrap.test.ts
 - .gitignore
 - .deepseek/instructions.md (untracked legacy residue removed)
+- .codewhale/state/subagents.v1.lock (untracked legacy residue removed)
 - docs/execution-target-profiles.md
 - docs/tasks.md
 
@@ -55,6 +58,8 @@ Hard-replaced SharkBay's CodeWhale integration with Reasonix across CLI detectio
 - Added a native Reasonix hook connector that preserves user hooks, maps lifecycle/tool/attention events, and receives a SharkBay launch-scoped session id from the shared hook bridge.
 - Added Reasonix bootstrap and restore handling: prompt injection waits for the TUI, new launches export `SHARKBAY_SESSION_ID`, and restore opens Reasonix's native `--resume` picker.
 - Removed the CodeWhale connector, env-based bridge script, audit-log session lookup, tests, `.deepseek/` ignore rule, and the previously ignored local `.deepseek/instructions.md` residue.
+- Removed a zero-byte `.codewhale/state/subagents.v1.lock` that appeared before commit; it was untracked local residue and was not included in the commit.
+- Committed the Reasonix hard replacement and fast-forwarded `codex/replace-codewhale-with-reasonix` into local `main`; both branch refs now point to `031d5fecb1c683a4262355b9f758549ed0031dba`.
 
 ## Verification
 
@@ -65,10 +70,14 @@ Hard-replaced SharkBay's CodeWhale integration with Reasonix across CLI detectio
 - Whitespace: `git diff --check` (passed).
 - CodeGraph residual audit: `codegraph query CodeWhale --limit 100` (no results).
 - Active-tree residual audit: `rg -i 'codewhale|deepseek'` excluding `.sharkbay/`, dependencies, build output, and historical `CHANGELOG.md` (no matches); filename scan also returned no matches.
+- Commit verification: `git diff --cached --check` passed before `031d5fecb1c683a4262355b9f758549ed0031dba` was created.
+- Merge verification: `git diff --exit-code main codex/replace-codewhale-with-reasonix` returned no differences; `git merge-base --is-ancestor 031d5fecb1c683a4262355b9f758549ed0031dba main` succeeded; working tree is clean.
 
 ## Notes
 
 - Task was created on `main` before switching branches, as required by the SharkBay protocol.
 - Implementation branch: `codex/replace-codewhale-with-reasonix`.
 - Current local Reasonix is v1.17.9; do not upgrade global tooling without separate authorization.
-- The implementation remains uncommitted on the feature branch; only the user's pre-existing changes were committed as explicitly requested.
+- User requested committing the implementation and merging the feature branch back into `main`.
+- Committed the Reasonix hard replacement on the feature branch as `031d5fecb1c683a4262355b9f758549ed0031dba`.
+- Local `main` is three commits ahead of `origin/main`; no push was requested or performed.
