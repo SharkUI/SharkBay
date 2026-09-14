@@ -5,12 +5,14 @@ import { prependPathDirectories, resolveCommandPath, resolveCommandSearchPaths }
 
 const execFileAsync = promisify(execFile);
 
-const LIST_LIMIT = 10;
+const LIST_LIMIT = 3;
 
 const EMPTY_INFO: GitHubInfo = {
   available: false,
   issues: [],
+  issueCount: 0,
   pullRequests: [],
+  pullRequestCount: 0,
   latestRelease: null,
 };
 
@@ -26,12 +28,15 @@ export async function readGitHubInfo(repoPath: string): Promise<GitHubInfo> {
   }
   const envPath = prependPathDirectories(process.env.PATH, searchPaths);
 
-  // Guard: confirms gh is authenticated and the repo is on GitHub.
-  const repoView = await gh(repoPath, ["repo", "view", "--json", "nameWithOwner"], ghPath, envPath).catch(() => null);
+  // Guard and full open counts, independent of the limited lists below.
+  const repoView = await gh(repoPath, ["repo", "view", "--json", "issues,pullRequests"], ghPath, envPath)
+    .then((raw) => JSON.parse(raw) as { issues: { totalCount: number }; pullRequests: { totalCount: number } })
+    .catch(() => null);
   if (repoView === null) {
     return EMPTY_INFO;
   }
 
+  // gh issue/pr list default to newest-created first.
   const [issuesRaw, prsRaw, releaseRaw] = await Promise.all([
     gh(repoPath, [
       "issue", "list", "--state", "open", "--limit", String(LIST_LIMIT),
@@ -50,7 +55,9 @@ export async function readGitHubInfo(repoPath: string): Promise<GitHubInfo> {
   return {
     available: true,
     issues: parseGitHubIssues(issuesRaw),
+    issueCount: repoView.issues.totalCount,
     pullRequests: parseGitHubPullRequests(prsRaw),
+    pullRequestCount: repoView.pullRequests.totalCount,
     latestRelease: parseLatestGitHubRelease(releaseRaw),
   };
 }

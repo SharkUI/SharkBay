@@ -292,7 +292,9 @@ export type GitHubRelease = {
 export type GitHubInfo = {
   available: boolean;
   issues: GitHubIssue[];
+  issueCount: number;
   pullRequests: GitHubPullRequest[];
+  pullRequestCount: number;
   latestRelease: GitHubRelease | null;
 };
 

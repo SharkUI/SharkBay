@@ -4703,11 +4703,11 @@ function GitHubCards({ info, setToast, onOpenBrowserTab }: { info: GitHubInfo | 
         <section className="subpanel github-card">
           <div className="panel-title-row compact-title-row">
             <h4>Open Pull Requests</h4>
-            <span className="form-note">{pullRequests.length}</span>
+            <span className="form-note">{info.pullRequestCount}</span>
           </div>
           <div className="github-row-list">
             {pullRequests.map((pr) => (
-              <button className="github-row" key={pr.number} type="button" title={pr.title} onClick={() => open(pr.url)}>
+              <button className="github-row github-pr-row" key={pr.number} type="button" title={pr.title} onClick={() => open(pr.url)}>
                 <span className="github-row-number">#{pr.number}</span>
                 <span className="github-row-title">{pr.title}</span>
                 <span className="github-row-meta">
@@ -4724,7 +4724,7 @@ function GitHubCards({ info, setToast, onOpenBrowserTab }: { info: GitHubInfo | 
         <section className="subpanel github-card">
           <div className="panel-title-row compact-title-row">
             <h4>Open Issues</h4>
-            <span className="form-note">{issues.length}</span>
+            <span className="form-note">{info.issueCount}</span>
           </div>
           <div className="github-row-list">
             {issues.map((issue) => (

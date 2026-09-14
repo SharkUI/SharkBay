@@ -1,9 +1,77 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   parseGitHubIssues,
   parseGitHubPullRequests,
   parseLatestGitHubRelease,
+  readGitHubInfo,
 } from "../src/main/github.js";
+
+const { execFileAsync, resolveCommandPath } = vi.hoisted(() => ({
+  execFileAsync: vi.fn(),
+  resolveCommandPath: vi.fn(),
+}));
+
+vi.mock("node:child_process", async () => {
+  const { promisify } = await import("node:util");
+  return { execFile: Object.assign(vi.fn(), { [promisify.custom]: execFileAsync }) };
+});
+
+vi.mock("../src/main/command-path.js", () => ({
+  resolveCommandPath,
+  resolveCommandSearchPaths: async () => ["/opt/homebrew/bin"],
+  prependPathDirectories: () => "/opt/homebrew/bin:/usr/bin",
+}));
+
+describe("GitHub sidebar data", () => {
+  beforeEach(() => {
+    execFileAsync.mockReset();
+    resolveCommandPath.mockReset().mockResolvedValue("/opt/homebrew/bin/gh");
+  });
+
+  it("requests the latest three open items while retaining full repository totals", async () => {
+    execFileAsync.mockImplementation(async (_command: string, args: string[]) => {
+      if (args[0] === "repo") {
+        expect(args).toEqual(["repo", "view", "--json", "issues,pullRequests"]);
+        return { stdout: JSON.stringify({ issues: { totalCount: 27 }, pullRequests: { totalCount: 14 } }) };
+      }
+      if (args[0] === "release") return { stdout: "[]" };
+      expect(args.slice(1, 6)).toEqual(["list", "--state", "open", "--limit", "3"]);
+      return { stdout: JSON.stringify([30, 29, 28].map((number) => ({
+        number,
+        title: `${args[0]} ${number}`,
+        createdAt: `2026-06-${number}T00:00:00Z`,
+        url: `https://github.com/owner/repo/${args[0] === "pr" ? "pull" : "issues"}/${number}`,
+      }))) };
+    });
+
+    const info = await readGitHubInfo("/project");
+    expect(info).toMatchObject({ available: true, issueCount: 27, pullRequestCount: 14 });
+    expect(info.issues.map((issue) => issue.number)).toEqual([30, 29, 28]);
+    expect(info.pullRequests.map((pr) => pr.number)).toEqual([30, 29, 28]);
+    expect(execFileAsync).toHaveBeenCalledTimes(4);
+  });
+
+  it("keeps PRs available when issue listing fails", async () => {
+    execFileAsync.mockImplementation(async (_command: string, args: string[]) => {
+      if (args[0] === "repo") return { stdout: '{"issues":{"totalCount":5},"pullRequests":{"totalCount":1}}' };
+      if (args[0] === "issue") throw new Error("Issue query failed");
+      if (args[0] === "pr") return { stdout: '[{"number":19,"url":"https://github.com/owner/repo/pull/19"}]' };
+      return { stdout: "[]" };
+    });
+
+    const info = await readGitHubInfo("/project");
+    expect(info).toMatchObject({ available: true, issues: [], issueCount: 5, pullRequestCount: 1 });
+    expect(info.pullRequests.map((pr) => pr.number)).toEqual([19]);
+  });
+
+  it("returns zero totals when gh is unavailable", async () => {
+    resolveCommandPath.mockResolvedValue(null);
+    expect(await readGitHubInfo("/project")).toEqual({
+      available: false, issues: [], issueCount: 0, pullRequests: [], pullRequestCount: 0, latestRelease: null,
+    });
+    expect(execFileAsync).not.toHaveBeenCalled();
+  });
+});
 
 describe("github JSON parsing", () => {
   it("parses open issues with author login and label names", () => {

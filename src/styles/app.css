@@ -2355,11 +2355,24 @@ button.project-file-toggle:focus-visible {
   justify-self: end;
 }
 
+.github-pr-row {
+  grid-template-columns: auto minmax(0, 1fr);
+  row-gap: 2px;
+}
+
+.github-pr-row .github-row-meta {
+  grid-column: 2;
+  justify-self: start;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .github-branch {
   color: #6b7678;
   font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   font-size: 10px;
   max-width: 140px;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
