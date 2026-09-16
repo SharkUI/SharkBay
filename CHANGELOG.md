@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.3] — 2026-09-16
+
+### Added
+- Automatic application updates check GitHub Releases at startup and every four hours, download newer stable versions in the background, and install on restart or normal quit. The app menu includes manual update checking, with download progress and retry controls in the sidebar.
+
+### Changed
+- The GitHub sidebar shows the three newest open issues and pull requests, with separate total counts and links to the complete lists.
+
+### Upgrade Note
+- Versions before 0.3.3 need one manual installation of this release to enable automatic updates for future releases.
+
 ## [0.3.2] — 2026-08-22
 
 ### Added
