@@ -636,6 +636,7 @@ export type TasksChangedEvent = {
 };
 
 export type SharkBayBridge = {
+  updates?: import("../shared/app-updates").AppUpdatesBridge;
   app?: {
     onOpenSettings?: (callback: () => void) => () => void;
     onNewTerminalTab?: (callback: () => void) => () => void;

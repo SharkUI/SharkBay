@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { appChannels } from "../src/shared/app-events.js";
 import { ipcChannels as channels } from "../src/shared/ipc-channels.js";
+import type { AppUpdateState } from "../src/shared/app-updates.js";
 import type { PluginSummary } from "../src/plugins/plugin-host.js";
 import type {
   AgentCli,
@@ -145,6 +146,16 @@ function invoke<Result>(channel: string, payload?: unknown): Promise<Result> {
 }
 
 const sharkBayApi = {
+  updates: {
+    getState: () => invoke<AppUpdateState>(channels.appUpdateGetState),
+    check: () => invoke<AppUpdateState>(channels.appUpdateCheck),
+    install: () => invoke<void>(channels.appUpdateInstall),
+    onChanged: (callback: (state: AppUpdateState) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, state: AppUpdateState) => callback(state);
+      ipcRenderer.on(channels.appUpdateChanged, listener);
+      return () => ipcRenderer.removeListener(channels.appUpdateChanged, listener);
+    },
+  },
   app: {
     onOpenSettings,
     onNewTerminalTab,

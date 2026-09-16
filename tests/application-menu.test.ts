@@ -7,11 +7,24 @@ function submenu(item: MenuItemConstructorOptions): MenuItemConstructorOptions[]
 }
 
 describe("application menu", () => {
+  it.each([true, false])("exposes manual update checking (macOS: %s)", (isMac) => {
+    const checkForUpdates = vi.fn();
+    const template = createApplicationMenuTemplate({
+      appName: "SharkBay", isMac, checkForUpdates,
+      openSettings: vi.fn(), newTerminalTab: vi.fn(), openFind: vi.fn(),
+    });
+    const item = submenu(template[0] ?? {}).find((entry) => entry.label === "Check for Updates...");
+    expect(item).toBeDefined();
+    item?.click?.({} as never, undefined, {} as never);
+    expect(checkForUpdates).toHaveBeenCalledOnce();
+  });
+
   it("puts Settings in the macOS app menu", () => {
     const openSettings = vi.fn();
     const newTerminalTab = vi.fn();
     const template = createApplicationMenuTemplate({
       appName: "SharkBay",
+      checkForUpdates: vi.fn(),
       isMac: true,
       openSettings,
       newTerminalTab,
@@ -30,6 +43,7 @@ describe("application menu", () => {
     const newTerminalTab = vi.fn();
     const template = createApplicationMenuTemplate({
       appName: "SharkBay",
+      checkForUpdates: vi.fn(),
       isMac: true,
       openSettings: vi.fn(),
       newTerminalTab,
@@ -47,6 +61,7 @@ describe("application menu", () => {
   it("keeps Settings reachable from File outside macOS", () => {
     const template = createApplicationMenuTemplate({
       appName: "SharkBay",
+      checkForUpdates: vi.fn(),
       isMac: false,
       openSettings: vi.fn(),
       newTerminalTab: vi.fn(),
@@ -66,6 +81,7 @@ describe("application menu", () => {
     const newTerminalTab = vi.fn();
     const template = createApplicationMenuTemplate({
       appName: "SharkBay",
+      checkForUpdates: vi.fn(),
       isMac: false,
       openSettings: vi.fn(),
       newTerminalTab,
@@ -83,6 +99,7 @@ describe("application menu", () => {
     const openFind = vi.fn();
     const template = createApplicationMenuTemplate({
       appName: "SharkBay",
+      checkForUpdates: vi.fn(),
       isMac: true,
       openSettings: vi.fn(),
       newTerminalTab: vi.fn(),

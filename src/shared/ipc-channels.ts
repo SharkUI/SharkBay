@@ -1,4 +1,8 @@
 export const ipcChannels = {
+  appUpdateGetState: "appUpdate:getState",
+  appUpdateCheck: "appUpdate:check",
+  appUpdateInstall: "appUpdate:install",
+  appUpdateChanged: "appUpdate:changed",
   listRoots: "config:listRoots",
   pickProjectFolder: "config:pickProjectFolder",
   addProject: "config:addProject",

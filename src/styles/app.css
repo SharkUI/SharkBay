@@ -5731,23 +5731,45 @@ body.is-resizing-columns .app-shell[data-theme="morning"] .column-resizer::befor
   left: 12px;
   bottom: 10px;
   z-index: 90;
-  padding: 0;
-  font: 9px/1.4 inherit;
-  color: #7a9e93;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 196px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: #344347;
+  background: #f7f5ef;
+  border: 1px solid #d8d4ca;
+  border-radius: 6px;
+}
+
+.update-hint button {
+  padding: 2px 4px;
+  font: inherit;
+  color: #4a7c6f;
   background: none;
   border: 0;
   cursor: pointer;
 }
 
-.update-hint:hover {
-  color: #4a7c6f;
+.update-hint-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.update-hint button:hover,
+.update-hint button:focus-visible {
   text-decoration: underline;
 }
 
 .app-shell[data-theme="night"] .update-hint {
-  color: #6fa897;
+  color: #d3dcda;
+  background: #192427;
+  border-color: #2e4145;
 }
 
-.app-shell[data-theme="night"] .update-hint:hover {
+.app-shell[data-theme="night"] .update-hint button {
   color: #8ecdb8;
 }

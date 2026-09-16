@@ -3,6 +3,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { flushPromptStore, registerIpcHandlers, shouldAllowBrowserCertificateError, shutdownCore } from "./ipc.js";
 import { createApplicationMenuTemplate } from "../src/main/application-menu.js";
+import electronUpdater from "electron-updater";
+import { AppUpdates } from "../src/main/app-updates.js";
 import { getRuntimeConfigPath, loadAppConfig } from "../src/main/config.js";
 import { appChannels } from "../src/shared/app-events.js";
 import { ipcChannels as channels } from "../src/shared/ipc-channels.js";
@@ -16,6 +18,8 @@ let mainWindow: BrowserWindow | null = null;
 let islandWindow: BrowserWindow | null = null;
 let appearanceTheme: AppearanceTheme = "morning";
 let isQuitting = false;
+let appUpdates: AppUpdates | null = null;
+let installUpdateOnQuit = false;
 
 app.setName("SharkBay");
 
@@ -142,6 +146,13 @@ function installApplicationMenu(): void {
     openSettings: openSettingsFromApplicationMenu,
     newTerminalTab: newTerminalTabFromApplicationMenu,
     openFind: openFindFromApplicationMenu,
+    checkForUpdates: () => {
+      if (!mainWindow || mainWindow.isDestroyed()) mainWindow = createMainWindow();
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+      void appUpdates?.check(true);
+    },
   });
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
@@ -373,6 +384,32 @@ app.whenReady().then(async () => {
     },
   });
 
+  appUpdates = new AppUpdates(electronUpdater.autoUpdater, app.isPackaged, (state) => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isDestroyed()) {
+      mainWindow.webContents.send(channels.appUpdateChanged, state);
+    }
+    if (isQuitting && cleanupComplete && state.status === "error") app.quit();
+  });
+  const assertUpdateSender = (event: Electron.IpcMainInvokeEvent) => {
+    if (event.sender !== mainWindow?.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) {
+      throw new Error("Application updates are only available from the main window.");
+    }
+  };
+  ipcMain.handle(channels.appUpdateGetState, (event) => {
+    assertUpdateSender(event);
+    return appUpdates!.getState();
+  });
+  ipcMain.handle(channels.appUpdateCheck, (event) => {
+    assertUpdateSender(event);
+    return appUpdates!.check(true);
+  });
+  ipcMain.handle(channels.appUpdateInstall, (event) => {
+    assertUpdateSender(event);
+    if (appUpdates!.getState().status !== "ready" || isQuitting) return;
+    installUpdateOnQuit = true;
+    app.quit();
+  });
+
   installApplicationMenu();
   installDockIcon();
 
@@ -386,6 +423,7 @@ app.whenReady().then(async () => {
 
   mainWindow = createMainWindow();
   islandWindow = createIslandWindow(config);
+  appUpdates.start();
 
   mainWindow.on("focus", () => {
     if (process.platform === "darwin" && app.dock) app.dock.setBadge("");
@@ -410,6 +448,7 @@ app.on("window-all-closed", () => {
 });
 
 let cleanupComplete = false;
+let cleanupStarted = false;
 
 app.on("before-quit", (event) => {
   isQuitting = true;
@@ -426,12 +465,19 @@ app.on("before-quit", (event) => {
   // core utility process has been shut down cleanly, so no codegraph process
   // group is orphaned (issue #15).
   event.preventDefault();
+  if (cleanupStarted) return;
+  cleanupStarted = true;
+  appUpdates?.stop();
   const cleanupDone = shutdownCore().catch(() => {
     // Best-effort: fall through to quit even if cleanup failed.
   });
   const cleanupTimeout = new Promise<void>((resolve) => setTimeout(resolve, 4000));
   void Promise.race([cleanupDone, cleanupTimeout]).finally(() => {
     cleanupComplete = true;
-    app.quit();
+    if (installUpdateOnQuit && appUpdates?.getState().status === "ready") {
+      appUpdates.install();
+    } else {
+      app.quit();
+    }
   });
 });

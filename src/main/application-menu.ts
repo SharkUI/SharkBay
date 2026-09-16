@@ -6,6 +6,7 @@ export type ApplicationMenuOptions = {
   openSettings: () => void;
   newTerminalTab: () => void;
   openFind: () => void;
+  checkForUpdates: () => void;
 };
 
 function createNewTerminalTabItem(newTerminalTab: () => void): MenuItemConstructorOptions {
@@ -89,9 +90,11 @@ export function createApplicationMenuTemplate({
   openSettings,
   newTerminalTab,
   openFind,
+  checkForUpdates,
 }: ApplicationMenuOptions): MenuItemConstructorOptions[] {
   const settingsItem = createSettingsItem(openSettings);
   const newTerminalTabItem = createNewTerminalTabItem(newTerminalTab);
+  const updateItem = { label: "Check for Updates...", click: checkForUpdates };
 
   if (isMac) {
     return [
@@ -99,6 +102,7 @@ export function createApplicationMenuTemplate({
         label: appName,
         submenu: [
           { role: "about" },
+          updateItem,
           { type: "separator" },
           settingsItem,
           { type: "separator" },
@@ -118,7 +122,7 @@ export function createApplicationMenuTemplate({
   return [
     {
       label: "File",
-      submenu: [newTerminalTabItem, { type: "separator" }, settingsItem, { type: "separator" }, { role: "quit" }],
+      submenu: [newTerminalTabItem, { type: "separator" }, settingsItem, updateItem, { type: "separator" }, { role: "quit" }],
     },
     ...createSharedMenus(newTerminalTab, openFind).slice(1),
   ];

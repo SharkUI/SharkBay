@@ -7,6 +7,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import defaultProjectIconUrl from "./assets/shark-fin.png";
 import { CodeEditor } from "./code-editor";
+import { UpdateHint } from "./update-hint";
 import { colorSchemes, getColorScheme } from "./color-schemes";
 import { promptSearchKeys } from "./prompt-search";
 import { buildAgentSessionRestoreCommand, inferAgentSessionRestoreAgent, type AgentSessionRestoreCommand } from "../shared/agent-session-restore";
@@ -1053,39 +1054,8 @@ export function App() {
         </div>
       </main>
       {toast ? <ToastBanner toast={toast} onClose={() => setToast(null)} /> : null}
-      <UpdateHint />
+      <UpdateHint updates={window.sharkBay?.updates} />
     </div>
-  );
-}
-
-declare const __APP_VERSION__: string;
-
-function UpdateHint() {
-  const [release, setRelease] = useState<{ tag: string; url: string } | null>(null);
-
-  useEffect(() => {
-    fetch("https://api.github.com/repos/SharkUI/SharkBay/releases/latest")
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
-        if (!data) return;
-        const tag = (data.tag_name as string).replace(/^v/, "");
-        if (tag === __APP_VERSION__) return;
-        const published = new Date(data.published_at as string).getTime();
-        if (Date.now() - published < 48 * 60 * 60 * 1000) return;
-        setRelease({ tag, url: data.html_url as string });
-      })
-      .catch(() => {});
-  }, []);
-
-  if (!release) return null;
-  return (
-    <button
-      className="update-hint"
-      type="button"
-      onClick={() => { void getBridge().shell?.openExternal?.({ url: release.url }); }}
-    >
-      💡 v{release.tag} available
-    </button>
   );
 }
 

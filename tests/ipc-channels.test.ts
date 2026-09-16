@@ -4,6 +4,10 @@ import { ipcChannels } from "../src/shared/ipc-channels.js";
 describe("IPC channels", () => {
   it("exposes only the current generic workbench channels", () => {
     expect(ipcChannels).toEqual({
+      appUpdateGetState: "appUpdate:getState",
+      appUpdateCheck: "appUpdate:check",
+      appUpdateInstall: "appUpdate:install",
+      appUpdateChanged: "appUpdate:changed",
       listRoots: "config:listRoots",
       pickProjectFolder: "config:pickProjectFolder",
       addProject: "config:addProject",
