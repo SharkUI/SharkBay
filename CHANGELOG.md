@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.4] — 2026-09-17
+
+### Added
+- Projects with no open tabs now show direct Terminal and installed-Agent launchers plus GitHub, Harness, and Hooks readiness with setup actions.
+
+### Changed
+- New project workspaces remain available for setup and launch instead of opening an empty terminal automatically.
+
+### Removed
+- The legacy Site interface, generation pipeline, and Site-specific dependencies and tests have been removed. Existing generated Site output remains untouched.
+
 ## [0.3.3] — 2026-09-16
 
 ### Added
