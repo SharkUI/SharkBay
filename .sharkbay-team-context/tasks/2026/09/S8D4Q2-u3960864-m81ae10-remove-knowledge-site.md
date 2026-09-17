@@ -12,12 +12,14 @@ agent: Codex GPT-6
 sessionId: 01a0ae8b-74cf-7132-97b0-3651af9b8f75
 branch: main
 createdAt: 2026-09-17T09:05:07Z
-updatedAt: 2026-09-17T09:12:21Z
-completedAt: 2026-09-17T09:12:21Z
+updatedAt: 2026-09-17T09:17:49Z
+completedAt: 2026-09-17T09:17:49Z
+commits:
+  - eedfe58afe77b6bb17af013aa4a9fd9ca1bac9ba
 ---
 
 ## Summary
-Removed Knowledge Site UI, generation, IPC/bridge/types, exclusive marked dependency, and Site-specific tests/documentation while preserving Artifact, Review, sharing, browser behavior, task management, team synchronization, existing Site output, and legacy Artifact path support. Built a verified macOS arm64 v0.3.3 local test app at release/site-removal/mac-arm64/SharkBay.app.
+Removed Knowledge Site UI, generation, IPC/bridge/types, exclusive marked dependency, and Site-specific tests/documentation while preserving Artifact, Review, sharing, browser behavior, task management, team synchronization, existing Site output, and legacy Artifact path support; committed as eedfe58a. Built a verified macOS arm64 v0.3.3 local test app at release/site-removal/mac-arm64/SharkBay.app.
 
 ## Files
 - src/renderer/App.tsx
@@ -52,6 +54,8 @@ Removed Knowledge Site UI, generation, IPC/bridge/types, exclusive marked depend
 - Reopened at the user's request to create a local .app test package from these changes. Use npm run pack with output release/site-removal, keeping existing release packages and /Applications/SharkBay.app untouched.
 - Reviewed packaging context PK9F2S-u3960864-m81ae10 and R6U3P8-u3960864-m81ae10; the existing pack script produces an ad-hoc signed local build without Developer ID signing/notarization.
 - Created the local test app successfully without changing version metadata, committing, publishing, or replacing the installed application.
+- Reopened at the user's explicit request to commit the verified Site removal. The worktree still contains exactly the same 14 scoped source/documentation/dependency/test changes, with no pre-existing staged changes.
+- Committed the 14 approved files on main as eedfe58afe77b6bb17af013aa4a9fd9ca1bac9ba (Remove Knowledge Site feature); local task records and test app remain untracked/ignored as intended.
 
 ## Verification
 - CodeGraph affected-file lookup returned no test mappings; selected regression suites explicitly for IPC, renderer workflow, browser, harness, task/artifact/review helpers, review orchestration, and team sync.
@@ -70,9 +74,11 @@ Removed Knowledge Site UI, generation, IPC/bridge/types, exclusive marked depend
 - Inspected packaged app.asar: no Knowledge Site module/API/UI or marked package; Artifact sharing, share popover, tasks, and harness modules retained.
 - Packaged executable smoke test with ELECTRON_RUN_AS_NODE=1 passed: Electron 29.4.6, arm64, bundled better-sqlite3 successfully executed SELECT 1 in an in-memory database.
 - Final git diff --check passed; packaging introduced no additional tracked project changes.
+- git diff --cached --check passed before committing; git show confirmed the expected 14-file scope, and git status --short was empty after the commit. Reused the already-passing tests/build/package checks because the implementation was unchanged.
 
 ## Notes
 - Keep .sharkbay/team-context/ read-only. Do not delete existing .sharkbay/site/ output or source docs, tasks, artifacts, or reviews.
 - Preserve file:// browser support and legacy .sharkbay/site/artifacts/ compatibility.
-- Preserve historical CHANGELOG and task records. No commit requested.
+- Preserve historical CHANGELOG and task records.
 - The running installed SharkBay version still has its old Site generator. Source/build changes do not replace the installed app; its background regeneration may continue until an updated app is run.
+- User subsequently authorized a local commit; no push or release requested.
