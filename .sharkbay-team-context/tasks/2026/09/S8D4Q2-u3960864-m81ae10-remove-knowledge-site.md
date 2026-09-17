@@ -12,12 +12,12 @@ agent: Codex GPT-6
 sessionId: 01a0ae8b-74cf-7132-97b0-3651af9b8f75
 branch: main
 createdAt: 2026-09-17T09:05:07Z
-updatedAt: 2026-09-17T09:09:52Z
-completedAt: 2026-09-17T09:09:52Z
+updatedAt: 2026-09-17T09:12:21Z
+completedAt: 2026-09-17T09:12:21Z
 ---
 
 ## Summary
-Removed Knowledge Site UI, static generation, automatic post-sync generation, IPC/bridge/types, exclusive marked dependency, and Site-specific tests/documentation. Artifact, Review, sharing, browser behavior, task management, team synchronization, existing Site output, and legacy Artifact path support remain intact.
+Removed Knowledge Site UI, generation, IPC/bridge/types, exclusive marked dependency, and Site-specific tests/documentation while preserving Artifact, Review, sharing, browser behavior, task management, team synchronization, existing Site output, and legacy Artifact path support. Built a verified macOS arm64 v0.3.3 local test app at release/site-removal/mac-arm64/SharkBay.app.
 
 ## Files
 - src/renderer/App.tsx
@@ -37,6 +37,7 @@ Removed Knowledge Site UI, static generation, automatic post-sync generation, IP
 - .sharkbay/tasks/S8D4Q2-u3960864-m81ae10-remove-knowledge-site.md
 - dist-electron/src/main/knowledge-site.{js,js.map,d.ts,d.ts.map} (remove stale ignored build output)
 - dist-electron/tests/knowledge-site.test.{js,js.map,d.ts,d.ts.map} (remove stale ignored build output)
+- release/site-removal/mac-arm64/SharkBay.app (local test package)
 
 ## Work
 - Confirmed scope with the user: remove Site UI, generator, post-sync generation, IPC/bridge/types, exclusive marked dependency, Site tests, and current documentation references.
@@ -48,6 +49,9 @@ Removed Knowledge Site UI, static generation, automatic post-sync generation, IP
 - Reviewed the full non-generated diff: exactly the 14 planned project files changed. Shared Artifact/Review/browser/sharing behavior, historical records, and existing generated site files are preserved.
 - TypeScript build retains compiled files for deleted sources; cleaning only the eight stale Site generator/test build outputs so they cannot be included by a later package build.
 - Removed all eight stale ignored Site build outputs; completed the scoped removal without a commit or replacing the installed app.
+- Reopened at the user's request to create a local .app test package from these changes. Use npm run pack with output release/site-removal, keeping existing release packages and /Applications/SharkBay.app untouched.
+- Reviewed packaging context PK9F2S-u3960864-m81ae10 and R6U3P8-u3960864-m81ae10; the existing pack script produces an ad-hoc signed local build without Developer ID signing/notarization.
+- Created the local test app successfully without changing version metadata, committing, publishing, or replacing the installed application.
 
 ## Verification
 - CodeGraph affected-file lookup returned no test mappings; selected regression suites explicitly for IPC, renderer workflow, browser, harness, task/artifact/review helpers, review orchestration, and team sync.
@@ -61,6 +65,11 @@ Removed Knowledge Site UI, static generation, automatic post-sync generation, IP
 - Artifacts, reviews, and read-only team context match their pre-change content digests. The initial full preservation assertion failed for existing Site output: all 50 files remain, but the already-running installed app regenerated pages at 17:07:53 local time and included this new task. Tests use temporary repositories; this task did not invoke the generator or remove Site output.
 - Final diff boundary assertion passed: exactly the 14 approved tracked files changed. AST comparisons confirm openBrowserProjectTab, BrowserSurface, and tryHandleArtifactMessage are unchanged. Sharing, harness, task scanning, browser engine, task helpers, and historical CHANGELOG have no diff.
 - After cleanup, compiled output search found no remaining Knowledge Site implementation/API/UI references; git diff --check passed. The installed app was not relaunched or visually revalidated against these source changes.
+- npm run pack -- --config.directories.output=release/site-removal passed; bundle reports version 0.3.3 and an arm64 executable.
+- codesign --verify --deep --strict release/site-removal/mac-arm64/SharkBay.app passed.
+- Inspected packaged app.asar: no Knowledge Site module/API/UI or marked package; Artifact sharing, share popover, tasks, and harness modules retained.
+- Packaged executable smoke test with ELECTRON_RUN_AS_NODE=1 passed: Electron 29.4.6, arm64, bundled better-sqlite3 successfully executed SELECT 1 in an in-memory database.
+- Final git diff --check passed; packaging introduced no additional tracked project changes.
 
 ## Notes
 - Keep .sharkbay/team-context/ read-only. Do not delete existing .sharkbay/site/ output or source docs, tasks, artifacts, or reviews.
