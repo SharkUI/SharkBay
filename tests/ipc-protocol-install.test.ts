@@ -33,6 +33,23 @@ vi.mock("../src/main/harness.js", async () => {
 const execFileAsync = promisify(execFile);
 
 describe("protocol install", () => {
+  it("installs local Harness for a GitHub remote without gh authentication", async () => {
+    const { installProtocol } = await import("../electron/ipc.js");
+    const { resolveGitHubIdentity, checkRepoPermission } = await import("../src/main/harness.js");
+    const root = await makeTempRoot("ipc-protocol-unauthenticated");
+    await execFileAsync("git", ["init"], { cwd: root });
+    await execFileAsync("git", ["remote", "add", "origin", "https://github.com/upstream/project.git"], { cwd: root });
+    vi.mocked(resolveGitHubIdentity).mockRejectedValueOnce(new Error("gh is unavailable or signed out"));
+    vi.mocked(checkRepoPermission).mockClear();
+
+    const status = await installProtocol(root);
+
+    expect(status).toMatchObject({ installed: true, harnessInstalled: true, syncEnabled: false, repo: "upstream/project" });
+    expect(status.githubLogin).toBeUndefined();
+    expect(checkRepoPermission).not.toHaveBeenCalled();
+    expect(await fs.readFile(path.join(root, ".sharkbay/harness/protocol.md"), "utf8")).toContain("upstream/project");
+  });
+
   it("falls back to local-only install for read-only GitHub remotes", async () => {
     const { installProtocol } = await import("../electron/ipc.js");
     const root = await makeTempRoot("ipc-protocol-install");

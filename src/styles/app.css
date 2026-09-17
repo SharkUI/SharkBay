@@ -4172,6 +4172,107 @@ button.project-file-toggle:focus-visible {
   visibility: visible;
 }
 
+.terminal-space:has(.project-start) {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.project-start {
+  --start-muted: #63706c;
+  --start-ready: #427657;
+  --start-control: #ebe7de;
+  --start-border: #d6d0c4;
+  --start-hover: #e1dbcf;
+  --start-focus: #4b7e88;
+  display: grid;
+  place-items: center;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
+  color: #263235;
+}
+
+.app-shell:is([data-theme="morning"], [data-theme="night"]) .project-start {
+  --start-muted: #9fb0ac;
+  --start-ready: #93c8a3;
+  --start-control: #223235;
+  --start-border: #31474b;
+  --start-hover: #2d4448;
+  --start-focus: #8fc1bb;
+  color: #d9e5df;
+}
+
+.project-start-content {
+  width: min(100%, 360px);
+}
+
+.project-start-launchers {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.project-start button {
+  user-select: none;
+  padding: 4px 10px;
+  color: inherit;
+  background: var(--start-control);
+  border: 1px solid var(--start-border);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.project-start button:hover:not(:disabled) { background: var(--start-hover); }
+.project-start button:active:not(:disabled) { border-color: var(--start-focus); }
+.project-start button:focus-visible {
+  outline: 2px solid var(--start-focus);
+  outline-offset: 2px;
+}
+
+.project-start .project-start-launcher {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  min-width: 80px;
+  padding: 12px 10px;
+}
+
+.project-start-icon,
+.project-start-icon svg,
+.project-start-icon .agent-cli-monogram {
+  display: block;
+  width: 30px;
+  height: 30px;
+}
+
+.project-start-icon .agent-cli-monogram {
+  display: grid;
+  font-size: 16px;
+}
+
+.project-start-icon svg[fill="none"] {
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.project-start-row {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  font-size: 12px;
+}
+
+.project-start-muted { color: var(--start-muted); }
+.project-start .is-ready { color: var(--start-ready); }
+
 .search-overlay {
   position: absolute;
   top: 8px;

@@ -12,6 +12,7 @@ import {
 } from "../src/main/config.js";
 import { cloneProject } from "../src/main/project-clone.js";
 import { createWorktree } from "../src/main/worktree.js";
+import { readProjectSetupStatus } from "../src/main/project-setup.js";
 import type {
   AgentCli,
   AgentProjectStatusEvent,
@@ -55,6 +56,7 @@ import type {
   ProjectConfigInput,
   ProjectScanInput,
   ProjectDetail,
+  ProjectSetupStatus,
   ProjectFilesInput,
   ProjectFilesResult,
   ReadFileInput,
@@ -472,7 +474,8 @@ export async function installProtocol(repoPath: string): Promise<ProtocolStatus>
   // If git + GitHub remote available, do full install with team sync
   const repo = gitMeta.isGitRepository ? githubRepoFromRemote(gitMeta.remoteOrigin) : null;
   if (repo) {
-    const identity = await resolveGitHubIdentity();
+    const identity = await resolveGitHubIdentity().catch(() => null);
+    if (!identity) return installLocalOnlyProtocol(repoPath, gitMeta, machineId, null, repo);
     const permission = await checkRepoPermission(repo, identity.login);
     if (permission !== "admin" && permission !== "write") return installLocalOnlyProtocol(repoPath, gitMeta, machineId, identity, repo, permission);
 
@@ -514,7 +517,7 @@ async function installLocalOnlyProtocol(
   repoPath: string,
   gitMeta: Awaited<ReturnType<typeof readGitMetadata>>,
   machineId: string,
-  resolvedIdentity: { login: string; id: number } | null = null,
+  resolvedIdentity: { login: string; id: number } | null | undefined = undefined,
   repo?: string,
   permission?: string,
 ): Promise<ProtocolStatus> {
@@ -522,7 +525,7 @@ async function installLocalOnlyProtocol(
   let identity: { login: string; id: number } | null = null;
   if (resolvedIdentity) {
     identity = resolvedIdentity;
-  } else {
+  } else if (resolvedIdentity === undefined) {
     try { identity = await resolveGitHubIdentity(); } catch { /* gh CLI may not be available */ }
   }
   await installHarness(repoPath, {
@@ -1085,6 +1088,10 @@ export async function registerIpcHandlers(
   handle<{ projectUri: string }, ProjectDetail>(channels.getProjectDetail, (payload) =>
     requireCore().call("getProjectDetail", [runtime, payload])
   );
+  handle<{ repoPath: string }, ProjectSetupStatus>(channels.projectSetupStatus, async (payload) => {
+    const repoPath = await resolveProtocolRepoPath(runtime, payload.repoPath);
+    return readProjectSetupStatus(repoPath, hookConnectors);
+  });
   handle<{ projectUri: string }, GitHubInfo>(channels.readProjectGitHub, (payload) =>
     requireCore().call("readProjectGitHub", [runtime, payload])
   );

@@ -21,6 +21,7 @@ describe("IPC channels", () => {
       scanProjects: "projects:scan",
       getProjectDetail: "projects:getDetail",
       readProjectGitHub: "projects:getGitHub",
+      projectSetupStatus: "projects:getSetupStatus",
       listProjectFiles: "projects:listFiles",
       readProjectFile: "files:read",
       writeProjectFile: "files:write",

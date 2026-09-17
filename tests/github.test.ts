@@ -4,6 +4,7 @@ import {
   parseGitHubPullRequests,
   parseLatestGitHubRelease,
   readGitHubInfo,
+  readGitHubCliStatus,
 } from "../src/main/github.js";
 
 const { execFileAsync, resolveCommandPath } = vi.hoisted(() => ({
@@ -70,6 +71,34 @@ describe("GitHub sidebar data", () => {
       available: false, issues: [], issueCount: 0, pullRequests: [], pullRequestCount: 0, latestRelease: null,
     });
     expect(execFileAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe("GitHub CLI setup", () => {
+  beforeEach(() => { execFileAsync.mockReset(); resolveCommandPath.mockReset(); });
+
+  it("offers Homebrew installation when gh is missing, quoting the resolved executable", async () => {
+    resolveCommandPath.mockImplementation(async (command: string) => command === "brew" ? "/tools/owner's bin/brew" : null);
+    expect(await readGitHubCliStatus()).toEqual({ state: "missing", command: "'/tools/owner'\\''s bin/brew' install gh" });
+    expect(execFileAsync).not.toHaveBeenCalled();
+  });
+
+  it("leaves installation to the official site when Homebrew is unavailable", async () => {
+    resolveCommandPath.mockResolvedValue(null);
+    expect(await readGitHubCliStatus()).toEqual({ state: "missing", command: null });
+  });
+
+  it("checks authentication with the resolved CLI, without exposing its output", async () => {
+    resolveCommandPath.mockResolvedValue("/opt/homebrew/bin/gh");
+    execFileAsync.mockResolvedValue({ stdout: "account details", stderr: "" });
+    expect(await readGitHubCliStatus()).toEqual({ state: "ready", command: null });
+    expect(execFileAsync).toHaveBeenCalledWith("/opt/homebrew/bin/gh", ["auth", "status", "--hostname", "github.com"], { timeout: 8000 });
+  });
+
+  it("offers login when gh is installed but authentication fails", async () => {
+    resolveCommandPath.mockResolvedValue("/opt/homebrew/bin/gh");
+    execFileAsync.mockRejectedValue(new Error("not logged in"));
+    expect(await readGitHubCliStatus()).toEqual({ state: "signed-out", command: "'/opt/homebrew/bin/gh' auth login --hostname github.com --web" });
   });
 });
 

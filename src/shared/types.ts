@@ -881,6 +881,12 @@ export type TaskViewModel = {
   readOnly: boolean;
 };
 
+export type ProjectSetupStatus = {
+  github: { state: "missing" | "signed-out" | "ready"; command: string | null };
+  harness: { installed: boolean; updateRequired: boolean };
+  hooks: Record<string, boolean>;
+};
+
 export type ProtocolStatus = {
   installed: boolean;
   harnessInstalled: boolean;

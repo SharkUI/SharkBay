@@ -1,11 +1,26 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { GitHubInfo, GitHubIssue, GitHubPullRequest, GitHubRelease } from "../shared/types.js";
+import type { GitHubInfo, GitHubIssue, GitHubPullRequest, GitHubRelease, ProjectSetupStatus } from "../shared/types.js";
 import { prependPathDirectories, resolveCommandPath, resolveCommandSearchPaths } from "./command-path.js";
 
 const execFileAsync = promisify(execFile);
 
 const LIST_LIMIT = 3;
+
+export async function readGitHubCliStatus(): Promise<ProjectSetupStatus["github"]> {
+  const ghPath = await resolveCommandPath("gh");
+  const quote = (value: string) => `'${value.replace(/'/g, "'\\''")}'`;
+  if (!ghPath) {
+    const brewPath = await resolveCommandPath("brew");
+    return { state: "missing", command: brewPath ? `${quote(brewPath)} install gh` : null };
+  }
+  try {
+    await execFileAsync(ghPath, ["auth", "status", "--hostname", "github.com"], { timeout: 8000 });
+    return { state: "ready", command: null };
+  } catch {
+    return { state: "signed-out", command: `${quote(ghPath)} auth login --hostname github.com --web` };
+  }
+}
 
 const EMPTY_INFO: GitHubInfo = {
   available: false,

@@ -8,6 +8,7 @@ import "@xterm/xterm/css/xterm.css";
 import defaultProjectIconUrl from "./assets/shark-fin.png";
 import { CodeEditor } from "./code-editor";
 import { UpdateHint } from "./update-hint";
+import { ProjectStart } from "./project-start";
 import { colorSchemes, getColorScheme } from "./color-schemes";
 import { promptSearchKeys } from "./prompt-search";
 import { buildAgentSessionRestoreCommand, inferAgentSessionRestoreAgent, type AgentSessionRestoreCommand } from "../shared/agent-session-restore";
@@ -1556,7 +1557,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const [terminalSpacesRestored, setTerminalSpacesRestored] = useState(false);
   const spacesRef = useRef<Record<string, TerminalSpace>>({});
   const taskProjectPathsRef = useRef(new Set<string>());
-  const creatingProjects = useRef(new Set<string>());
   const pendingTerminalOutput = useRef(new Map<string, string>());
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoredSpaces = useRef(false);
@@ -2051,13 +2051,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       return { ...current, [candidate.id]: { projectId: candidate.id, projectName: displayProjectName ?? candidate.name, uri: candidate.uri, displayPath: candidate.displayPath, tabs: [], activeId: null, serviceUrl: null } };
     });
     if (isVisible) requestProjectTabFocus(candidate.id);
-    if (!terminalSpacesRestored) return;
-    const existing = spacesRef.current[candidate.id];
-    if (!isVisible) return;
-    if (existing?.tabs.length) return;
-    if (creatingProjects.current.has(candidate.id)) return;
-    creatingProjects.current.add(candidate.id);
-    void openProjectTab(candidate.id, candidate.uri, displayProjectName ?? candidate.name, candidate.displayPath, true).finally(() => { creatingProjects.current.delete(candidate.id); });
   }, [bridgeAvailable, candidate?.id, candidate?.uri, isVisible, terminalSpacesRestored]);
 
   async function openCurrentProjectTab() {
@@ -2596,8 +2589,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       <div className="terminal-space-stack">
         {Object.values(spaces).map((space) => (
           <div className={cx("terminal-space", space.projectId === activeProjectId && "is-active")} key={space.projectId}>
-            <div className="terminal-tabs">
-              {space.tabs.length ? (
+            {space.tabs.length ? <div className="terminal-tabs">
                 <div className="terminal-tab-list" role="tablist">
                   {space.tabs.map((tab) => {
                     const tabId = tabIdForTab(tab);
@@ -2639,7 +2631,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                     );
                   })}
                 </div>
-              ) : null}
               <button aria-label="New terminal tab" className="icon-button terminal-tab-add" disabled={!canCreate} title="New terminal tab" type="button" onClick={() => void openCurrentProjectTab()}><PlusIcon /></button>
               <button aria-label="Open browser" className="icon-button terminal-tab-add terminal-browser-button" disabled={!canCreate} title="Browser" type="button" onClick={() => void openBrowserProjectTab()}><GlobeIcon /></button>
               {agentClis.map((agent) => (
@@ -2647,8 +2638,20 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                   <AgentCliIcon agent={agent} />
                 </button>
               ))}
-            </div>
+            </div> : null}
             <div className="xterm-surface-stack">
+              {!space.tabs.length && space.projectId === candidate?.id && canCreate && terminalSpacesRestored && isVisible ? (
+                <ProjectStart
+                  key={space.uri}
+                  repoPath={localPathFromProjectUri(space.uri)!}
+                  agents={agentClis}
+                  bridge={getBridge()}
+                  renderLaunchIcon={(agent) => agent ? <AgentCliIcon agent={agent} /> : <TerminalIcon />}
+                  onLaunch={(agent) => agent ? openAgentProjectTab(agent) : openCurrentProjectTab()}
+                  onCommand={(command) => openProjectTab(space.projectId, space.uri, space.projectName, space.displayPath, false, { initialCommand: command, initialCommandTitle: "GitHub setup" })}
+                  onError={(message) => setToast({ tone: "error", message })}
+                />
+              ) : null}
               {space.tabs.map((tab) => {
                 const active = isVisible && space.projectId === activeProjectId && tabIdForTab(tab) === space.activeId;
                 const focusRequest = active && tabFocusRequest?.projectId === space.projectId ? tabFocusRequest.nonce : 0;
@@ -2687,7 +2690,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
           </div>
         ) : null}
       </div>
-      <PromptInputBar
+      {selectedSpace?.tabs.length ? <PromptInputBar
         projectId={selectedSpace?.projectId ?? null}
         sessionId={selectedActiveTerminal?.session.id ?? null}
         agentHookSessionId={agentHookSessionId}
@@ -2716,7 +2719,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
             if (found) break;
           }
         }}
-      />
+      /> : null}
     </div>
   );
 });

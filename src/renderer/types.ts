@@ -660,6 +660,7 @@ export type SharkBayBridge = {
     setTerminalAppearance?: (input: { colorScheme?: string | null; fontFamily?: string | null; fontSize?: number | null; lineHeight?: number | null }) => Promise<AppConfig>;
   };
   projects?: {
+    getSetupStatus?: (input: { repoPath: string }) => Promise<import("../shared/types").ProjectSetupStatus>;
     scan?: () => Promise<ScanResult | ProjectCandidate[]>;
     getDetail?: (input: { projectUri: string }) => Promise<ProjectDetail>;
     getGitHub?: (input: { projectUri: string }) => Promise<GitHubInfo>;

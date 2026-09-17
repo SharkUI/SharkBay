@@ -39,6 +39,7 @@ import type {
   ProjectConfigInput,
   ProjectScanInput,
   ProjectDetail,
+  ProjectSetupStatus,
   GitHubInfo,
   ProjectFilesInput,
   ProjectFilesResult,
@@ -178,6 +179,7 @@ const sharkBayApi = {
     setTerminalAppearance: (input: TerminalAppearanceInput) => invoke<AppConfig>(channels.setTerminalAppearance, input)
   },
   projects: {
+    getSetupStatus: (input: { repoPath: string }) => invoke<ProjectSetupStatus>(channels.projectSetupStatus, input),
     scan: (input?: ProjectScanInput) => invoke<ScanProjectsResult>(channels.scanProjects, input),
     getDetail: (input: { projectUri: string }) => invoke<ProjectDetail>(channels.getProjectDetail, input),
     getGitHub: (input: { projectUri: string }) => invoke<GitHubInfo>(channels.readProjectGitHub, input),
