@@ -17,6 +17,8 @@ import type {
   AgentCli,
   AgentProjectStatusEvent,
   ArtifactReadyEvent,
+  ArtifactRun,
+  ArtifactRunStartedEvent,
   AppConfig,
   AppearanceTheme,
   AppearanceThemeInput,
@@ -98,7 +100,7 @@ import { TokenUsageCollector } from "../src/main/token-usage-collector.js";
 import { BrowserManager } from "../src/main/browser-tabs.js";
 import { readGitMetadata } from "../src/main/git.js";
 import { resolveRepoPath } from "../src/main/path-safety.js";
-import { checkRepoPermission, ensureLocalExclude, generateMachineId, getHarnessUpdateStatus, getLocalHarnessIdentity, getMachineId, installHarness, isGitWorktree, isHarnessInstalled, reserveReviewPath, resolveGitHubIdentity, uninstallHarness, updateHarnessFiles } from "../src/main/harness.js";
+import { checkRepoPermission, ensureLocalExclude, generateMachineId, getHarnessUpdateStatus, getLocalHarnessIdentity, getMachineId, installHarness, isGitWorktree, isHarnessInstalled, reserveArtifactPath, reserveReviewPath, resolveGitHubIdentity, uninstallHarness, updateHarnessFiles } from "../src/main/harness.js";
 import { deleteTeamContextBranch, hasLocalContextBranch, TeamworkSync } from "../src/main/teamwork-sync.js";
 import { scanTasks, watchTasks } from "../src/main/tasks.js";
 import { shareLocalArtifact, type ShareArtifactInput, type ShareArtifactResult } from "../src/main/share-artifact.js";
@@ -118,6 +120,7 @@ import { CursorConnector } from "../src/main/hooks/connectors/cursor.js";
 import type { AgentConnector } from "../src/main/hooks/types.js";
 import { TerminalApprovalDetector } from "../src/main/hooks/terminal-approval-detector.js";
 import { ReviewRunManager } from "../src/main/review-runs.js";
+import { ArtifactRunManager } from "../src/main/artifact-runs.js";
 import { ReviewControlServer, type ReviewControlRequest } from "../src/main/review-control-server.js";
 import { parseHookSessions } from "../src/main/hooks/sessions.js";
 import { TelegramService, type TelegramServiceDeps, type MachineIdentity } from "../src/main/telegram/service.js";
@@ -149,6 +152,7 @@ export type IpcCallbacks = {
 
 let core: CoreClient | null = null;
 let reviewRunManager: ReviewRunManager | null = null;
+let artifactRunManager: ArtifactRunManager | null = null;
 let reviewControlServer: ReviewControlServer | null = null;
 let tokenUsageDb: TokenUsageDb | null = null;
 let telegramService: TelegramService | null = null;
@@ -278,6 +282,11 @@ function requireReviewRunManager(): ReviewRunManager {
   return reviewRunManager;
 }
 
+function requireArtifactRunManager(): ArtifactRunManager {
+  if (!artifactRunManager) throw new Error("Artifact orchestration is not initialized");
+  return artifactRunManager;
+}
+
 function registerCreatedTerminal(session: TerminalSession): void {
   if (session.pid != null && session.agentId) terminalPidToId.set(session.pid, session.id);
   if (session.agentId === "kiro") {
@@ -287,6 +296,27 @@ function registerCreatedTerminal(session: TerminalSession): void {
 }
 
 async function ensureReviewOrchestration(runtime: IpcRuntime): Promise<void> {
+  if (!artifactRunManager) {
+    artifactRunManager = new ArtifactRunManager({
+      resolveRepoPath: (value) => resolveProtocolRepoPath(runtime, localPathFromUri(value)),
+      scanTasks,
+      listAgentClis: (cwdUri) => requireCore().call("listAgentClis", [runtime, { cwdUri }]),
+      createTerminal: async (input) => {
+        const session = await requireCore().call("createTerminal", [runtime, input]);
+        registerCreatedTerminal(session);
+        return session;
+      },
+      inspectTerminal: (sessionId) => requireCore().call("inspectTerminal", [sessionId]),
+      notifyTerminal: (sessionId, text) => requireCore().call("notifyTerminal", [{ sessionId, text }]),
+      reserveArtifactPath,
+      onStarted: (event: ArtifactRunStartedEvent) => {
+        BrowserWindow.getAllWindows().forEach((window) => window.webContents.send(channels.artifactRunStarted, event));
+      },
+      onReady: (event: ArtifactReadyEvent) => {
+        BrowserWindow.getAllWindows().forEach((window) => window.webContents.send(channels.openArtifact, event));
+      },
+    });
+  }
   if (!reviewRunManager) {
     reviewRunManager = new ReviewRunManager({
       resolveRepoPath: (value) => resolveProtocolRepoPath(runtime, localPathFromUri(value)),
@@ -321,6 +351,26 @@ async function ensureReviewOrchestration(runtime: IpcRuntime): Promise<void> {
 }
 
 async function handleReviewControlRequest(request: ReviewControlRequest): Promise<unknown> {
+  if (request.method === "artifact-start") {
+    const callerTerminalSessionId = requiredControlString(request.params, "callerTerminalSessionId", "parentTerminalSessionId");
+    const agentId = optionalControlString(request.params, "agentId");
+    const event = await requireArtifactRunManager().start({
+      repoPath: requiredControlString(request.params, "repoPath"),
+      taskId: requiredControlString(request.params, "taskId"),
+      ...(agentId ? { agentId } : {}),
+      parentTerminalSessionId: callerTerminalSessionId,
+    });
+    return controlArtifactRun(event.run);
+  }
+  if (request.method === "artifact-complete") {
+    const run = await requireArtifactRunManager().complete({
+      runId: requiredControlString(request.params, "runId"),
+      artifactPath: requiredControlString(request.params, "artifactPath"),
+      callerTerminalSessionId: optionalControlString(request.params, "callerTerminalSessionId"),
+      completionToken: optionalControlString(request.params, "completionToken"),
+    });
+    return controlArtifactRun(run);
+  }
   const manager = requireReviewRunManager();
   const callerTerminalSessionId = request.method === "complete"
     ? optionalControlString(request.params, "callerTerminalSessionId")
@@ -349,6 +399,10 @@ async function handleReviewControlRequest(request: ReviewControlRequest): Promis
   const timeout = Number(request.params.timeoutMs ?? 300_000);
   if (!Number.isFinite(timeout) || timeout <= 0) throw new Error("wait timeout must be a positive number");
   return manager.wait(runId, callerTerminalSessionId, Math.min(timeout, 3_600_000)).then((run) => controlReviewRun(run, callerTerminalSessionId));
+}
+
+function controlArtifactRun(run: ArtifactRun): ArtifactRun & { runId: string } {
+  return { ...run, runId: run.id };
 }
 
 function controlReviewRun(run: ReviewRun, callerTerminalSessionId: string, reviewerResponse = false): ReviewRun & { runId: string } {
@@ -399,6 +453,8 @@ export async function shutdownCore(): Promise<void> {
   await telegramService?.stop().catch(() => {});
   reviewRunManager?.dispose();
   reviewRunManager = null;
+  artifactRunManager?.dispose();
+  artifactRunManager = null;
   await reviewControlServer?.stop().catch(() => {});
   reviewControlServer = null;
   await core?.dispose();
@@ -887,6 +943,7 @@ export async function registerIpcHandlers(
   });
   core.on("terminalExit", (event) => {
     reviewRunManager?.handleTerminalExit(event.sessionId);
+    artifactRunManager?.handleTerminalExit(event.sessionId);
     terminalApprovalDetector.untrack(event.sessionId);
     telegramService?.feedTerminalExit(event.sessionId);
     for (const [pid, id] of terminalPidToId) {

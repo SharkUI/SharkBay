@@ -89,6 +89,10 @@ describe("harness install", () => {
     expect(protocol).toContain("prefer CodeGraph over `rg`, `grep`, or broad file reads");
     expect(protocol).toContain("codegraph query <symbol-or-name>");
     expect(protocol).toContain('Use `codegraph context "what you need to understand"` only for initial');
+    expect(protocol).toContain("## Agent-Initiated Artifact");
+    expect(protocol).toContain(".sharkbay/harness/artifact.sh start --task-id <task-id>");
+    expect(protocol).toContain("reserved artifact path immediately");
+    expect(protocol).toContain("opens the page in its built-in\nbrowser");
     expect(protocol).toContain("## Agent-Initiated Review");
     expect(protocol).toContain(".sharkbay/harness/review.sh start --task-id <task-id>");
     expect(protocol).toContain("Without `--agent`, SharkBay uses the same agent as the parent terminal.");
@@ -118,6 +122,11 @@ describe("harness install", () => {
     expect(artifactHelperText).toContain("open_artifact");
     expect(artifactHelperText).toContain("sharkbay-hook");
     expect(artifactHelperText).toContain("hook-socket-path");
+    const artifactControl = await fs.stat(path.join(repo, ".sharkbay", "harness", "artifact.sh"));
+    expect(artifactControl.mode & 0o111).not.toBe(0);
+    const artifactControlText = await fs.readFile(path.join(repo, ".sharkbay", "harness", "artifact.sh"), "utf8");
+    expect(artifactControlText).toContain("artifact-$command");
+    expect(artifactControlText).toContain("sharkbay-review-control");
     const reviewHelper = await fs.stat(path.join(repo, ".sharkbay", "harness", "review.sh"));
     expect(reviewHelper.mode & 0o111).not.toBe(0);
     const reviewHelperText = await fs.readFile(path.join(repo, ".sharkbay", "harness", "review.sh"), "utf8");
@@ -361,6 +370,7 @@ describe("harness install", () => {
       "Keep Files and Work updated while working; finish by filling Summary and Verification; record the commit hash if a commit is produced.",
       "Treat `.sharkbay/team-context/` as read-only.",
       "If `AGENTS.md` exists at the project root, also read it and follow its instructions.",
+      "SharkBay supports asynchronous agent-initiated artifacts; see `Agent-Initiated Artifact` in `.sharkbay/harness/protocol.md` before starting one.",
       "SharkBay supports asynchronous agent-initiated reviews; see `Agent-Initiated Review` in `.sharkbay/harness/protocol.md` before starting one.",
     ].join(" "));
     expect(bootstrapPrompt({ codeGraphEnabled: true, locale: "en" })).not.toContain("review.sh start");
@@ -444,7 +454,7 @@ describe("harness install", () => {
   });
 
   it("builds an artifact-generation prompt", () => {
-    const base = { taskId: "SHR4K2-u3960864-m81ae10", sourcePath: ".sharkbay/tasks/SHR4K2.md", artifactPath: ".sharkbay/artifacts/SHR4K2-ABC123.html" };
+    const base = { taskId: "SHR4K2-u3960864-m81ae10", sourcePath: ".sharkbay/tasks/SHR4K2.md", artifactPath: ".sharkbay/artifacts/SHR4K2-ABC123.html", runId: "artifact-test", completionToken: "artifact-capability" };
 
     const prompt = artifactPrompt({ ...base, status: "completed" }, { codeGraphEnabled: true, locale: "en" });
     expect(prompt).toContain("task-artifact session");
@@ -455,8 +465,8 @@ describe("harness install", () => {
     // Writes only to the reserved artifact path.
     expect(prompt).toContain(".sharkbay/artifacts/SHR4K2-ABC123.html");
     expect(prompt).toContain("never touch files under `.sharkbay/team-context/`");
-    // Final step: run the harness script to open the artifact in the built-in browser.
-    expect(prompt).toContain(".sharkbay/harness/open-artifact.sh .sharkbay/artifacts/SHR4K2-ABC123.html");
+    // Agent-initiated runs complete through the control path so the file is validated and the parent is notified.
+    expect(prompt).toContain("artifact.sh complete --run artifact-test --artifact .sharkbay/artifacts/SHR4K2-ABC123.html --completion-token artifact-capability");
     expect(prompt).toContain("built-in browser");
     // Records the artifact back into the task file under an Artifacts section.
     expect(prompt).toContain("## Artifacts");
@@ -466,6 +476,9 @@ describe("harness install", () => {
     expect(noPath).toContain(".sharkbay/artifacts/<task-tag>-<name>.html");
     expect(noPath).toContain(".sharkbay/harness/open-artifact.sh <path>");
     expect(noPath).not.toContain("CodeGraph is installed and configured");
+
+    const guiPrompt = artifactPrompt({ ...base, runId: undefined, completionToken: undefined, status: "completed" }, { locale: "en" });
+    expect(guiPrompt).toContain(".sharkbay/harness/open-artifact.sh .sharkbay/artifacts/SHR4K2-ABC123.html");
 
     const zh = artifactPrompt({ ...base, status: "active" }, { locale: "zh-CN" });
     expect(zh).toContain("Respond in");

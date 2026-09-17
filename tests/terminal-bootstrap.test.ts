@@ -73,4 +73,43 @@ describe("terminal bootstrap submission", () => {
       manager.close({ sessionId: session.id });
     }
   });
+
+  it.each(["opencode", "reasonix"] as const)("submits a %s Artifact prompt with its reserved path and completion command", async (agentId) => {
+    const runtime = await makeTestRuntime(`terminal-${agentId}-artifact-config`);
+    const root = await makeTempRoot(`terminal-${agentId}-artifact-root`);
+    const repo = await createGitRepoFixture(root, `Terminal${agentId}ArtifactRepo`);
+    await fs.mkdir(path.join(repo, ".sharkbay", "harness"), { recursive: true });
+    await fs.writeFile(path.join(repo, ".sharkbay", "harness", "protocol.md"), "test protocol\n");
+    await writeJson(getRuntimeConfigPath(runtime), {
+      schemaVersion: 1,
+      configuredRoots: [],
+      configuredProjects: [repo],
+      updatedAt: "2026-09-17",
+    });
+
+    const manager = new TerminalManager({ inspectIntervalMs: 0 });
+    const session = await manager.create(runtime, {
+      cwdUri: toLocalProjectUri(repo),
+      agentId,
+      initialCommand: agentId,
+      artifact: {
+        taskId: "ARTIFACT-u1-m1",
+        status: "active",
+        artifactPath: ".sharkbay/artifacts/ARTIFACT-TEST01.html",
+        runId: "artifact-test",
+        completionToken: "artifact-capability",
+      },
+    });
+
+    try {
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(ptyMock.writes[0]).toContain("I'm starting a task-artifact session:");
+      expect(ptyMock.writes[0]).toContain("artifact.sh complete --run artifact-test");
+      expect(ptyMock.writes[0]).toContain(".sharkbay/artifacts/ARTIFACT-TEST01.html");
+      await vi.advanceTimersByTimeAsync(30);
+      expect(ptyMock.writes[1]).toBe("\r");
+    } finally {
+      manager.close({ sessionId: session.id });
+    }
+  });
 });

@@ -631,7 +631,7 @@ export type TerminalCreateInput = {
   service?: { id: string; label: string; command: string };
   protocolBootstrap?: { codeGraphEnabled?: boolean };
   review?: { taskId: string; status: string; sourcePath?: string; agentLabel?: string; reviewPath?: string; runId?: string; completionToken?: string };
-  artifact?: { taskId: string; status: string; sourcePath?: string; agentLabel?: string };
+  artifact?: { taskId: string; status: string; sourcePath?: string; agentLabel?: string; artifactPath?: string; runId?: string; completionToken?: string };
   cols?: number;
   rows?: number;
 };
@@ -699,6 +699,28 @@ export type ArtifactReadyEvent = {
   path: string;
   /** Absolute path of the project root the artifact belongs to. */
   repo: string;
+};
+
+export type ArtifactRunStatus = "running" | "completed" | "failed";
+
+export type ArtifactRun = {
+  id: string;
+  repoPath: string;
+  taskId: string;
+  agentId: string;
+  parentTerminalSessionId: string;
+  artifactTerminalSessionId: string;
+  artifactPath: string;
+  status: ArtifactRunStatus;
+  createdAt: string;
+  completedAt?: string;
+  notifiedAt?: string;
+  error?: string;
+};
+
+export type ArtifactRunStartedEvent = {
+  run: ArtifactRun;
+  session: TerminalSession;
 };
 
 export type TerminalUpdateEvent = {

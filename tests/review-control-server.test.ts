@@ -64,11 +64,44 @@ describe("ReviewControlServer", () => {
         },
       }));
 
+      const artifactStart = await execFileAsync(server.clientPath, [
+        "artifact-start",
+        "--repo", "/tmp/project",
+        "--agent", "reasonix",
+        "--task-id", "TASK01-u1-m1",
+      ], { env: { ...process.env, SHARKBAY_TERMINAL_SESSION_ID: "term-parent" } });
+      expect(JSON.parse(artifactStart.stdout)).toEqual({ id: "review-test", status: "running" });
+      expect(requests[2]).toEqual(expect.objectContaining({
+        method: "artifact-start",
+        params: {
+          repoPath: "/tmp/project",
+          taskId: "TASK01-u1-m1",
+          agentId: "reasonix",
+          parentTerminalSessionId: "term-parent",
+        },
+      }));
+
+      await execFileAsync(server.clientPath, [
+        "artifact-complete",
+        "--run", "artifact-test",
+        "--artifact", ".sharkbay/artifacts/TASK01-TEST01.html",
+        "--completion-token", "artifact-capability",
+      ], { env: { ...process.env, SHARKBAY_TERMINAL_SESSION_ID: "term-artifact" } });
+      expect(requests[3]).toEqual(expect.objectContaining({
+        method: "artifact-complete",
+        params: {
+          runId: "artifact-test",
+          artifactPath: ".sharkbay/artifacts/TASK01-TEST01.html",
+          callerTerminalSessionId: "term-artifact",
+          completionToken: "artifact-capability",
+        },
+      }));
+
       const status = await execFileAsync(server.clientPath, ["status", "review-test"], {
         env: { ...process.env, SHARKBAY_TERMINAL_SESSION_ID: "term-parent" },
       });
       expect(JSON.parse(status.stdout)).toEqual({ id: "review-test", status: "running" });
-      expect(requests[2]).toEqual(expect.objectContaining({
+      expect(requests[4]).toEqual(expect.objectContaining({
         method: "status",
         params: { runId: "review-test", callerTerminalSessionId: "term-parent" },
       }));
@@ -79,7 +112,7 @@ describe("ReviewControlServer", () => {
         "--report", ".sharkbay/reviews/TASK01-TEST01.md",
         "--completion-token", "reviewer-capability",
       ], { env: { ...process.env, SHARKBAY_TERMINAL_SESSION_ID: "" } });
-      expect(requests[3]).toEqual(expect.objectContaining({
+      expect(requests[5]).toEqual(expect.objectContaining({
         method: "complete",
         params: expect.objectContaining({
           runId: "review-test",

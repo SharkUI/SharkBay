@@ -115,7 +115,7 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
       }
       let artifactPromptText: string | undefined;
       if (input.artifact) {
-        const artifactPath = await reserveArtifactPath(spec.projectRoot, input.artifact.taskId);
+        const artifactPath = input.artifact.artifactPath ?? await reserveArtifactPath(spec.projectRoot, input.artifact.taskId);
         artifactPromptText = artifactPrompt({ ...input.artifact, artifactPath }, { codeGraphEnabled });
       }
       const launch = await prepareAgentLaunch(spec.projectRoot, input.agentId, initialCommand, {

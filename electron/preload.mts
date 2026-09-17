@@ -68,6 +68,7 @@ import type {
   TerminalSession,
   TerminalUpdateEvent,
   ArtifactReadyEvent,
+  ArtifactRunStartedEvent,
   TasksGetInput,
   ProtocolInstallInput,
   ProtocolStatus,
@@ -222,6 +223,11 @@ const sharkBayApi = {
       const listener = (_event: Electron.IpcRendererEvent, payload: ArtifactReadyEvent) => callback(payload);
       ipcRenderer.on(channels.openArtifact, listener);
       return () => ipcRenderer.removeListener(channels.openArtifact, listener);
+    },
+    onArtifactStarted: (callback: (event: ArtifactRunStartedEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: ArtifactRunStartedEvent) => callback(payload);
+      ipcRenderer.on(channels.artifactRunStarted, listener);
+      return () => ipcRenderer.removeListener(channels.artifactRunStarted, listener);
     }
   },
   reviews: {

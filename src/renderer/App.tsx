@@ -42,6 +42,7 @@ import type {
   TerminalDataEvent,
   TerminalExitEvent,
   ArtifactReadyEvent,
+  ArtifactRunStartedEvent,
   TerminalCreateInput,
   TerminalSession,
   TerminalUpdateEvent,
@@ -1928,9 +1929,10 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     const offData = terminal.onData((event) => appendTerminalOutput(event));
     const offExit = terminal.onExit((event) => markTerminalExit(event));
     const offUpdate = terminal.onUpdate ? terminal.onUpdate((event) => updateTerminalSession(event)) : () => undefined;
+    const offArtifactStarted = terminal.onArtifactStarted?.((event) => attachAutomatedArtifactRun(event)) ?? (() => undefined);
     const offReviewStarted = getBridge().reviews?.onStarted?.((event) => attachAutomatedReviewRun(event)) ?? (() => undefined);
     const offReviewUpdated = getBridge().reviews?.onUpdated?.((event) => updateReviewRun(event)) ?? (() => undefined);
-    return () => { offData(); offExit(); offUpdate(); offReviewStarted(); offReviewUpdated(); };
+    return () => { offData(); offExit(); offUpdate(); offArtifactStarted(); offReviewStarted(); offReviewUpdated(); };
   }, [bridgeAvailable]);
 
   useEffect(() => {
@@ -2311,6 +2313,16 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     attachTerminalSession(targetSpace.projectId, targetSpace.uri, targetSpace.projectName, targetSpace.displayPath, event.session, {
       activate: false,
       reviewRun: event.run,
+    });
+  }
+
+  function attachAutomatedArtifactRun(event: ArtifactRunStartedEvent): void {
+    const parent = findTerminalTabWithSpace(spacesRef.current, event.run.parentTerminalSessionId);
+    const projectSpace = Object.values(spacesRef.current).find((space) => space.uri === event.session.cwdUri);
+    const targetSpace = parent?.space ?? projectSpace;
+    if (!targetSpace) return;
+    attachTerminalSession(targetSpace.projectId, targetSpace.uri, targetSpace.projectName, targetSpace.displayPath, event.session, {
+      activate: false,
     });
   }
 

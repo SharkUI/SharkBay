@@ -199,6 +199,23 @@ const REVIEW_SCRIPT = [
   "",
   "exec \"$client\" \"$command\" \"$@\" --repo \"$repo_root\"",
 ].join("\n") + "\n";
+
+const ARTIFACT_SCRIPT = [
+  "#!/bin/sh",
+  "set -eu",
+  "",
+  "command=\"${1:-}\"",
+  "[ -n \"$command\" ] || { echo 'Usage: artifact.sh <start|complete> [options]' >&2; exit 2; }",
+  "shift",
+  "case \"$command\" in start|complete) ;; *) echo \"Unknown artifact command: $command\" >&2; exit 2 ;; esac",
+  "",
+  "script_dir=\"$(cd \"$(dirname \"$0\")\" && pwd)\"",
+  "repo_root=\"$(cd \"$script_dir/../..\" && pwd)\"",
+  "client=\"$HOME/Library/Application Support/SharkBay/bin/sharkbay-review-control\"",
+  "[ -x \"$client\" ] || { echo 'SharkBay Artifact control client is unavailable' >&2; exit 1; }",
+  "",
+  "exec \"$client\" \"artifact-$command\" \"$@\" --repo \"$repo_root\"",
+].join("\n") + "\n";
 const BOOTSTRAP_INTRO = [
   "I'm working in SharkBay Task Protocol mode for this project.",
   "Please read `.sharkbay/harness/protocol.md` first and follow it for the rest of this session.",
@@ -211,6 +228,7 @@ const BOOTSTRAP_TASK_PROMPT = [
   "Keep Files and Work updated while working; finish by filling Summary and Verification; record the commit hash if a commit is produced.",
   "Treat `.sharkbay/team-context/` as read-only.",
   "If `AGENTS.md` exists at the project root, also read it and follow its instructions.",
+  "SharkBay supports asynchronous agent-initiated artifacts; see `Agent-Initiated Artifact` in `.sharkbay/harness/protocol.md` before starting one.",
   "SharkBay supports asynchronous agent-initiated reviews; see `Agent-Initiated Review` in `.sharkbay/harness/protocol.md` before starting one.",
 ];
 
@@ -259,6 +277,8 @@ export type ArtifactPromptInput = {
   sourcePath?: string;
   artifactPath?: string;
   agentLabel?: string;
+  runId?: string;
+  completionToken?: string;
 };
 
 export function reviewPrompt(review: ReviewPromptInput, options: BootstrapPromptOptions = {}): string {
@@ -350,8 +370,10 @@ export function artifactPrompt(artifact: ArtifactPromptInput, options: Bootstrap
   const recordInstruction = artifact.artifactPath
     ? `Once the page is written, record it: append a one-line entry to this task's local record file under \`.sharkbay/tasks/\` (the file whose name begins with \`${artifact.taskId.split("-")[0]}\`) inside a \`## Artifacts\` section — create that section at the end of the file if it does not exist. Use the format \`- \\\`${artifact.artifactPath}\\\` — <one-line description of what the page shows> (<timestamp>)\`, where <timestamp> is the output of \`date -u +%Y-%m-%dT%H:%M:%SZ\`. Append only; do not edit other sections.`
     : null;
-  const openInstruction = artifact.artifactPath
-    ? `As the very last step, after the page is written and recorded, run \`.sharkbay/harness/open-artifact.sh ${artifact.artifactPath}\` from the project root to open it in SharkBay's built-in browser, then tell me the artifact path.`
+  const openInstruction = artifact.artifactPath && artifact.runId
+    ? `As the very last step, after the page is written and recorded, run \`.sharkbay/harness/artifact.sh complete --run ${artifact.runId} --artifact ${artifact.artifactPath}${artifact.completionToken ? ` --completion-token ${artifact.completionToken}` : ""}\`. SharkBay will validate the reserved page, open it in the built-in browser, and notify the parent agent; do not skip this command.`
+    : artifact.artifactPath
+      ? `As the very last step, after the page is written and recorded, run \`.sharkbay/harness/open-artifact.sh ${artifact.artifactPath}\` from the project root to open it in SharkBay's built-in browser, then tell me the artifact path.`
     : "As the very last step, after the page is fully written, run `.sharkbay/harness/open-artifact.sh <path>` from the project root (passing the path you wrote) to open it in SharkBay's built-in browser, then tell me the artifact path.";
   return [
     "I'm starting a task-artifact session: your job is to produce a web page that showcases this task's deliverable.",
@@ -465,6 +487,11 @@ function managedHarnessFiles(options: ProtocolOptions): ManagedHarnessFile[] {
     {
       path: ".sharkbay/harness/open-artifact.sh",
       content: OPEN_ARTIFACT_SCRIPT,
+      executable: true,
+    },
+    {
+      path: ".sharkbay/harness/artifact.sh",
+      content: ARTIFACT_SCRIPT,
       executable: true,
     },
     {
@@ -895,6 +922,25 @@ prefer CodeGraph over \`rg\`, \`grep\`, or broad file reads:
 
 Use \`codegraph context "what you need to understand"\` only for initial
 exploration when no clear symbol or file is known.
+
+## Agent-Initiated Artifact
+
+SharkBay can run any installed supported agent asynchronously to create a
+self-contained HTML page that presents an existing task's deliverable. Start an
+Artifact from a SharkBay-managed agent terminal:
+
+\`.sharkbay/harness/artifact.sh start --task-id <task-id>\`
+
+Without \`--agent\`, SharkBay uses the same agent as the parent terminal. Pass
+\`--agent <agent-id>\` to select another installed supported agent. The command
+returns a run id and reserved artifact path immediately. SharkBay opens the
+Artifact agent in a background tab in the current application instance.
+
+When generation completes, SharkBay validates and opens the page in its built-in
+browser, then injects a completion prompt into the original parent agent
+terminal. The parent agent should review the page and continue the task. If the
+Artifact terminal exits before completion, SharkBay notifies the parent agent so
+it can retry.
 
 ## Agent-Initiated Review
 

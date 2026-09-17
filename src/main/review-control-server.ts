@@ -6,7 +6,7 @@ import path from "node:path";
 
 const maxRequestBytes = 1024 * 1024;
 
-export type ReviewControlMethod = "start" | "status" | "wait" | "cancel" | "complete";
+export type ReviewControlMethod = "start" | "status" | "wait" | "cancel" | "complete" | "artifact-start" | "artifact-complete";
 
 export type ReviewControlRequest = {
   requestId: string;
@@ -105,7 +105,8 @@ function writeResponse(socket: net.Socket, response: Record<string, unknown>): v
 }
 
 function isReviewControlMethod(value: unknown): value is ReviewControlMethod {
-  return value === "start" || value === "status" || value === "wait" || value === "cancel" || value === "complete";
+  return value === "start" || value === "status" || value === "wait" || value === "cancel" || value === "complete"
+    || value === "artifact-start" || value === "artifact-complete";
 }
 
 export function reviewControlClientScript(): string {
@@ -131,7 +132,7 @@ if (!values.run && !values["run-id"] && positional[0]) values.run = positional[0
 
 const callerTerminalSessionId = resolveCallerTerminalSessionId();
 let params;
-if (command === "start") {
+if (command === "start" || command === "artifact-start") {
   params = {
     repoPath: required("repo"),
     taskId: required("task-id"),
@@ -145,6 +146,13 @@ if (command === "start") {
     callerTerminalSessionId,
     completionToken: values["completion-token"] || "",
   };
+} else if (command === "artifact-complete") {
+  params = {
+    runId: requiredRun(),
+    artifactPath: required("artifact"),
+    callerTerminalSessionId,
+    completionToken: values["completion-token"] || "",
+  };
 } else if (command === "status" || command === "cancel") {
   params = { runId: requiredRun(), callerTerminalSessionId };
 } else if (command === "wait") {
@@ -154,7 +162,7 @@ if (command === "start") {
     timeoutMs: values["timeout-ms"] ? Number(values["timeout-ms"]) : (values.timeout ? Number(values.timeout) * 1000 : undefined),
   };
 } else {
-  fail("Usage: sharkbay-review-control <start|status|wait|cancel|complete> [options]");
+  fail("Usage: sharkbay-review-control <start|status|wait|cancel|complete|artifact-start|artifact-complete> [options]");
 }
 
 const supportDir = path.dirname(path.dirname(__filename));
@@ -174,7 +182,7 @@ socket.on("error", () => fail("SharkBay is not running"));
 socket.on("end", () => {
   try {
     const parsed = JSON.parse(response.trim());
-    if (!parsed.ok) fail(parsed.error || "Review control request failed");
+    if (!parsed.ok) fail(parsed.error || (command.startsWith("artifact-") ? "Artifact control request failed" : "Review control request failed"));
     process.stdout.write(JSON.stringify(parsed.result) + "\\n");
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
@@ -222,7 +230,8 @@ function resolveCallerTerminalSessionId() {
 }
 
 function fail(message) {
-  process.stderr.write("sharkbay review: " + message + "\\n");
+  const scope = command && command.startsWith("artifact-") ? "artifact" : "review";
+  process.stderr.write("sharkbay " + scope + ": " + message + "\\n");
   process.exit(1);
 }
 `;

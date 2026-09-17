@@ -400,6 +400,26 @@ export type ArtifactReadyEvent = {
   repo: string;
 };
 
+export type ArtifactRun = {
+  id: string;
+  repoPath: string;
+  taskId: string;
+  agentId: string;
+  parentTerminalSessionId: string;
+  artifactTerminalSessionId: string;
+  artifactPath: string;
+  status: "running" | "completed" | "failed";
+  createdAt: string;
+  completedAt?: string;
+  notifiedAt?: string;
+  error?: string;
+};
+
+export type ArtifactRunStartedEvent = {
+  run: ArtifactRun;
+  session: TerminalSession;
+};
+
 export type TerminalUpdateEvent = {
   session: TerminalSession;
 };
@@ -688,6 +708,7 @@ export type SharkBayBridge = {
     onExit?: (callback: (event: TerminalExitEvent) => void) => () => void;
     onUpdate?: (callback: (event: TerminalUpdateEvent) => void) => () => void;
     onArtifactReady?: (callback: (event: ArtifactReadyEvent) => void) => () => void;
+    onArtifactStarted?: (callback: (event: ArtifactRunStartedEvent) => void) => () => void;
   };
   reviews?: {
     start?: (input: ReviewStartInput) => Promise<ReviewRunStartedEvent>;

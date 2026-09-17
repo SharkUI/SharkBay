@@ -37,6 +37,7 @@ describe("IPC channels", () => {
       terminalUpdate: "terminal:update",
       terminalExit: "terminal:exit",
       openArtifact: "terminal:openArtifact",
+      artifactRunStarted: "artifacts:started",
       startReview: "reviews:start",
       cancelReview: "reviews:cancel",
       reviewRunStarted: "reviews:started",
