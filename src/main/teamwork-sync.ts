@@ -2,7 +2,6 @@ import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { readdir, readFile, mkdir, writeFile, unlink } from "node:fs/promises";
 import { join, dirname } from "node:path";
-import { generateKnowledgeSite } from "./knowledge-site.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -136,8 +135,6 @@ export class TeamworkSync {
 
       this.lastSyncAt = new Date().toISOString();
       this.lastError = null;
-      // Regenerate knowledge site if sources changed
-      void generateKnowledgeSite(this.repoPath).catch(() => {});
       return { fetched, pushed, error: null };
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);

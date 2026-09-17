@@ -41,7 +41,6 @@ import type {
   InstallToolInput,
   InstallToolResult,
   InstallRecipe,
-  KnowledgeSiteResult,
   ListInstallRecipesInput,
   DeleteFileInput,
   DeleteFileResult,
@@ -100,7 +99,6 @@ import { resolveRepoPath } from "../src/main/path-safety.js";
 import { checkRepoPermission, ensureLocalExclude, generateMachineId, getHarnessUpdateStatus, getLocalHarnessIdentity, getMachineId, installHarness, isGitWorktree, isHarnessInstalled, reserveReviewPath, resolveGitHubIdentity, uninstallHarness, updateHarnessFiles } from "../src/main/harness.js";
 import { deleteTeamContextBranch, hasLocalContextBranch, TeamworkSync } from "../src/main/teamwork-sync.js";
 import { scanTasks, watchTasks } from "../src/main/tasks.js";
-import { generateKnowledgeSite, getKnowledgeSitePath } from "../src/main/knowledge-site.js";
 import { shareLocalArtifact, type ShareArtifactInput, type ShareArtifactResult } from "../src/main/share-artifact.js";
 import { showSharePopover, type ShowSharePopoverInput } from "../src/main/share-popover.js";
 import { spawnCoreClient, type CoreClient } from "./core-client.js";
@@ -1335,16 +1333,6 @@ export async function registerIpcHandlers(
     activateSyncRepo(repoPath);
     await updateHarnessFiles(repoPath);
     return getProtocolStatus(repoPath);
-  });
-
-  handle<{ repoPath: string }, KnowledgeSiteResult>(channels.knowledgeSiteGenerate, async (payload) => {
-    const repoPath = await resolveProtocolRepoPath(runtime, payload.repoPath);
-    return generateKnowledgeSite(repoPath);
-  });
-
-  handle<{ repoPath: string }, string>(channels.knowledgeSiteGetPath, async (payload) => {
-    const repoPath = await resolveProtocolRepoPath(runtime, payload.repoPath);
-    return getKnowledgeSitePath(repoPath);
   });
 
   handle<{ periodDays?: number } | undefined, UsageSummary>(channels.usageGetSummary, async (payload) => {

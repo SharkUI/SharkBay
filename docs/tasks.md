@@ -48,7 +48,7 @@ When a supported agent is launched from SharkBay and protocol is installed, Shar
 - Kiro: `chat <prompt>`
 - OpenCode: `--prompt <prompt>`
 
-SharkBay does not silently rewrite installed harness files during agent launch. The `TASKS` tab compares managed harness files such as `.sharkbay/harness/protocol.md` and `.sharkbay/harness/agent-session-id.sh` with the current generated source. If a managed file is missing or changed, the `TASKS` tab shows a prompt above Knowledge Site; the user must click Update Harness before SharkBay overwrites or adds those files.
+SharkBay does not silently rewrite installed harness files during agent launch. The `TASKS` tab compares managed harness files such as `.sharkbay/harness/protocol.md` and `.sharkbay/harness/agent-session-id.sh` with the current generated source. If a managed file is missing or changed, the `TASKS` tab shows a prompt above the task list; the user must click Update Harness before SharkBay overwrites or adds those files.
 
 ## Task Files
 

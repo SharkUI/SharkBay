@@ -749,10 +749,6 @@ export type SharkBayBridge = {
     revokeUser?: (input: { telegramUserId: number }) => Promise<TelegramConfigView>;
     onStatusChanged?: (callback: (view: TelegramConfigView) => void) => () => void;
   };
-  knowledgeSite?: {
-    generate?: (input: { repoPath: string }) => Promise<{ generated: boolean; sitePath: string; reason?: string }>;
-    getPath?: (input: { repoPath: string }) => Promise<string>;
-  };
   usage?: {
     getSummary?: (input?: { periodDays?: number }) => Promise<UsageSummaryView>;
     getReport?: (input: UsageReportFilterView) => Promise<UsageReportResultView>;

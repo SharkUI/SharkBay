@@ -3977,7 +3977,7 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [reviewMenu, setReviewMenu] = useState<{ taskId: string; x: number; y: number; withOpen: boolean } | null>(null);
   const reviewMenuRef = useRef<HTMLDivElement | null>(null);
-  const [busyAction, setBusyAction] = useState<"install" | "site" | "harness" | null>(null);
+  const [busyAction, setBusyAction] = useState<"install" | "harness" | null>(null);
   const selected = useMemo(
     () => selectedTaskId ? tasks.find((task) => task.taskId === selectedTaskId) ?? null : null,
     [selectedTaskId, tasks],
@@ -4043,23 +4043,6 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
       setStatus(nextStatus);
       setToast({ tone: "success", message: "Protocol installed." });
       await onRefresh();
-    } catch (error) {
-      setToast({ tone: "error", message: asMessage(error) });
-    } finally {
-      setBusyAction(null);
-    }
-  }
-
-  async function openKnowledgeSite() {
-    if (!repoPath) return;
-    setBusyAction("site");
-    try {
-      const generate = getBridge().knowledgeSite?.generate;
-      const getPath = getBridge().knowledgeSite?.getPath;
-      if (!generate || !getPath) throw new Error("Knowledge Site API is not available.");
-      await generate({ repoPath });
-      const sitePath = await getPath({ repoPath });
-      await onOpenBrowserTab(`file://${sitePath}`);
     } catch (error) {
       setToast({ tone: "error", message: asMessage(error) });
     } finally {
@@ -4222,20 +4205,6 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
             </div>
           </section>
         ) : null
-      ) : null}
-
-      {status?.installed ? (
-        <section className="subpanel confirm-panel protocol-action-card">
-          <div>
-            <h4>Knowledge Site</h4>
-            <p className="summary-text">Browse project docs and team task history as a local site.</p>
-          </div>
-          <div className="button-row">
-            <button className="button compact" disabled={busyAction !== null} type="button" onClick={() => void openKnowledgeSite()}>
-              {busyAction === "site" ? "Opening" : "Open Site"}
-            </button>
-          </div>
-        </section>
       ) : null}
 
       <div className="queue-list task-list-direct">

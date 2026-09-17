@@ -29,7 +29,6 @@ import type {
   InstallToolInput,
   InstallToolResult,
   InstallRecipe,
-  KnowledgeSiteResult,
   ListInstallRecipesInput,
   DiagnosticsSnapshot,
   InstallLogEvent,
@@ -315,10 +314,6 @@ const sharkBayApi = {
       ipcRenderer.on(channels.telegramStatusChanged, listener);
       return () => ipcRenderer.removeListener(channels.telegramStatusChanged, listener);
     },
-  },
-  knowledgeSite: {
-    generate: (input: { repoPath: string }) => invoke<KnowledgeSiteResult>(channels.knowledgeSiteGenerate, input),
-    getPath: (input: { repoPath: string }) => invoke<string>(channels.knowledgeSiteGetPath, input)
   },
   usage: {
     getSummary: (input?: { periodDays?: number }) => invoke<UsageSummary>(channels.usageGetSummary, input),

@@ -67,8 +67,6 @@ describe("IPC channels", () => {
       protocolSyncNow: "protocol:syncNow",
       protocolUpdateHarness: "protocol:updateHarness",
       protocolTasksChanged: "protocol:tasksChanged",
-      knowledgeSiteGenerate: "knowledgeSite:generate",
-      knowledgeSiteGetPath: "knowledgeSite:getPath",
       listAgentClis: "agents:listClis",
       listInstallRecipes: "agents:listInstallRecipes",
       installTool: "agents:installTool",

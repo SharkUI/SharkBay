@@ -86,10 +86,6 @@ Branch name, dirty state, changed files, and recent reflog activity — all visi
 
 Built-in CodeMirror editor with syntax highlighting for 20+ languages. Open, edit, and save project files in tabs — Cmd+S to save, dirty state tracking, 5 MB file support.
 
-### Knowledge Site
-
-Auto-generated HTML site from project docs and team task history — readable, browsable context for humans and agents alike.
-
 ## Documentation
 
 - [Product notes](docs/product.md)

@@ -942,12 +942,6 @@ export type TasksChangedEvent = {
   tasks: TaskViewModel[];
 };
 
-export type KnowledgeSiteResult = {
-  generated: boolean;
-  sitePath: string;
-  reason?: string;
-};
-
 export type UsageSummary = {
   totalInputTokens: number;
   totalOutputTokens: number;
