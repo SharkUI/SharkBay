@@ -9,7 +9,7 @@ import type {
   AppConfig,
   AppearanceThemeInput,
   CaffeinateActiveInput,
-  CaffeinateWhenTerminalWorkingInput,
+  CaffeinateModeInput,
   StatusChangeNotificationsInput,
   TerminalAppearanceInput,
   BrowserActionInput,
@@ -176,7 +176,7 @@ const sharkBayApi = {
     createWorktree: (input: CreateWorktreeInput) => invoke<CreateWorktreeResult>(channels.createWorktree, input),
     setAppearanceTheme: (input: AppearanceThemeInput) => invoke<AppConfig>(channels.setAppearanceTheme, input),
     setStatusChangeNotifications: (input: StatusChangeNotificationsInput) => invoke<AppConfig>(channels.setStatusChangeNotifications, input),
-    setCaffeinateWhenTerminalWorking: (input: CaffeinateWhenTerminalWorkingInput) => invoke<AppConfig>(channels.setCaffeinateWhenTerminalWorking, input),
+    setCaffeinateMode: (input: CaffeinateModeInput) => invoke<AppConfig>(channels.setCaffeinateMode, input),
     setTerminalAppearance: (input: TerminalAppearanceInput) => invoke<AppConfig>(channels.setTerminalAppearance, input)
   },
   projects: {

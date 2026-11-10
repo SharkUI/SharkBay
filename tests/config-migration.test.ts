@@ -1,13 +1,13 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { createDefaultConfig, getRuntimeConfigPath, loadAppConfig, setCaffeinateWhenTerminalWorking, setTerminalAppearance } from "../src/main/config.js";
+import { createDefaultConfig, getRuntimeConfigPath, loadAppConfig, setCaffeinateMode, setTerminalAppearance } from "../src/main/config.js";
 import { createGitRepoFixture, makeTestRuntime, writeJson } from "./helpers.js";
 
 describe("config migration", () => {
   it("defaults new configs to the Morning appearance", () => {
     expect(createDefaultConfig().appearanceTheme).toBe("morning");
-    expect(createDefaultConfig().caffeinateWhenTerminalWorkingEnabled).toBe(false);
+    expect(createDefaultConfig().caffeinateMode).toBe("auto");
   });
 
   it("persists missing modern config fields and preserves local roots", async () => {
@@ -31,20 +31,26 @@ describe("config migration", () => {
       disabledPluginIds: [],
       appearanceTheme: "night",
       statusChangeNotificationsEnabled: true,
-      caffeinateWhenTerminalWorkingEnabled: false,
+      caffeinateMode: "auto",
     }));
     expect(persisted.configuredProjects).toEqual([project]);
     expect(persisted.disabledPluginIds).toEqual([]);
   });
 
-  it("persists caffeinate while terminal working setting", async () => {
-    const runtime = await makeTestRuntime("config-caffeinate-terminal-working");
+  it.each(["off", "on", "auto"] as const)("persists caffeinate mode %s", async (mode) => {
+    const runtime = await makeTestRuntime("config-caffeinate-mode");
+    const configured = await setCaffeinateMode(runtime, { mode });
+    expect(configured.caffeinateMode).toBe(mode);
+    expect((await loadAppConfig(getRuntimeConfigPath(runtime))).caffeinateMode).toBe(mode);
+  });
 
-    const configured = await setCaffeinateWhenTerminalWorking(runtime, { enabled: true });
-    expect(configured.caffeinateWhenTerminalWorkingEnabled).toBe(true);
-
-    const loaded = await loadAppConfig(getRuntimeConfigPath(runtime));
-    expect(loaded.caffeinateWhenTerminalWorkingEnabled).toBe(true);
+  it.each([[false, "off"], [true, "auto"]] as const)("migrates legacy caffeinate %s to %s", async (enabled, mode) => {
+    const runtime = await makeTestRuntime("config-caffeinate-legacy");
+    await writeJson(getRuntimeConfigPath(runtime), { caffeinateWhenTerminalWorkingEnabled: enabled });
+    expect((await loadAppConfig(getRuntimeConfigPath(runtime))).caffeinateMode).toBe(mode);
+    const persisted = JSON.parse(await fs.readFile(getRuntimeConfigPath(runtime), "utf8"));
+    expect(persisted.caffeinateMode).toBe(mode);
+    expect(persisted).not.toHaveProperty("caffeinateWhenTerminalWorkingEnabled");
   });
 
   it("preserves manually disabled status change notifications", async () => {

@@ -1,3 +1,5 @@
+import type { CaffeinateMode } from "./caffeinate.js";
+
 export type AppearanceTheme = "day" | "night" | "morning";
 
 export type AppConfig = {
@@ -10,7 +12,7 @@ export type AppConfig = {
   statusChangeNotificationsEnabled: boolean;
   agentStatusCompletionSoundEnabled: boolean;
   agentStatusApprovalSoundEnabled: boolean;
-  caffeinateWhenTerminalWorkingEnabled: boolean;
+  caffeinateMode: CaffeinateMode;
   terminalColorScheme?: string;
   terminalFontFamily?: string;
   terminalFontSize?: number;
@@ -75,8 +77,8 @@ export type StatusChangeNotificationsInput = {
   approvalEnabled?: boolean;
 };
 
-export type CaffeinateWhenTerminalWorkingInput = {
-  enabled: boolean;
+export type CaffeinateModeInput = {
+  mode: CaffeinateMode;
 };
 
 export type TerminalAppearanceInput = {

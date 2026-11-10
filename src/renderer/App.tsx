@@ -11,6 +11,7 @@ import { UpdateHint } from "./update-hint";
 import { ProjectStart } from "./project-start";
 import { colorSchemes, getColorScheme } from "./color-schemes";
 import { promptSearchKeys } from "./prompt-search";
+import { isCaffeinateActive, normalizeCaffeinateMode, type CaffeinateMode } from "../shared/caffeinate";
 import { codexActivityWithHook, codexTerminalActivity } from "./codex-input-state";
 import { buildAgentSessionRestoreCommand, inferAgentSessionRestoreAgent, type AgentSessionRestoreCommand } from "../shared/agent-session-restore";
 import type {
@@ -822,8 +823,9 @@ export function App() {
   const [terminalLineHeight, setTerminalLineHeight] = useState<number | null>(null);
   const [agentStatusCompletionSoundEnabled, setAgentStatusCompletionSoundEnabled] = useState(true);
   const [agentStatusApprovalSoundEnabled, setAgentStatusApprovalSoundEnabled] = useState(true);
-  const [caffeinateWhenTerminalWorkingEnabled, setCaffeinateWhenTerminalWorkingEnabled] = useState(false);
   const [terminalWorking, setTerminalWorking] = useState(false);
+  const [caffeinateMode, setCaffeinateMode] = useState<CaffeinateMode>("auto");
+  const caffeinateActive = isCaffeinateActive(caffeinateMode, terminalWorking);
   const refreshInFlight = useRef(false);
 
   const bridgeAvailable = typeof window !== "undefined" && Boolean(window.sharkBay);
@@ -852,7 +854,7 @@ export function App() {
         const legacyStatusSoundsEnabled = rootConfig.statusChangeNotificationsEnabled !== false;
         setAgentStatusCompletionSoundEnabled(rootConfig.agentStatusCompletionSoundEnabled ?? legacyStatusSoundsEnabled);
         setAgentStatusApprovalSoundEnabled(rootConfig.agentStatusApprovalSoundEnabled ?? legacyStatusSoundsEnabled);
-        setCaffeinateWhenTerminalWorkingEnabled(rootConfig.caffeinateWhenTerminalWorkingEnabled === true);
+        setCaffeinateMode(normalizeCaffeinateMode(rootConfig.caffeinateMode));
         setConfiguredProjects(rootConfig.configuredProjects ?? []);
         setProjectAliases(rootConfig.projectAliases ?? {});
       }
@@ -928,10 +930,10 @@ export function App() {
     if (!bridgeAvailable) return;
     const handler = getBridge().terminal?.setCaffeinateActive;
     if (!handler) return;
-    void handler({ active: caffeinateWhenTerminalWorkingEnabled && terminalWorking }).catch((error) => {
+    void handler({ active: caffeinateActive }).catch((error) => {
       setToast({ tone: "error", message: asMessage(error) });
     });
-  }, [bridgeAvailable, caffeinateWhenTerminalWorkingEnabled, terminalWorking]);
+  }, [bridgeAvailable, caffeinateActive]);
 
   useEffect(() => {
     if (!bridgeAvailable) return;
@@ -940,18 +942,11 @@ export function App() {
     };
   }, [bridgeAvailable]);
 
-  async function changeCaffeinateWhenTerminalWorking(enabled: boolean) {
-    const previous = caffeinateWhenTerminalWorkingEnabled;
-    setCaffeinateWhenTerminalWorkingEnabled(enabled);
-    const handler = getBridge().config?.setCaffeinateWhenTerminalWorking;
-    try {
-      if (!handler) throw new Error("Caffeinate settings are not exposed by the preload API.");
-      const config = await handler({ enabled });
-      setCaffeinateWhenTerminalWorkingEnabled(config.caffeinateWhenTerminalWorkingEnabled === true);
-    } catch (error) {
-      setCaffeinateWhenTerminalWorkingEnabled(previous);
-      throw error;
-    }
+  async function changeCaffeinateMode(mode: CaffeinateMode) {
+    const handler = getBridge().config?.setCaffeinateMode;
+    if (!handler) throw new Error("Keep awake modes are not exposed by the preload API.");
+    const config = await handler({ mode });
+    setCaffeinateMode(normalizeCaffeinateMode(config.caffeinateMode));
   }
 
   return (
@@ -971,8 +966,9 @@ export function App() {
               terminalFontSize={terminalFontSize}
               terminalLineHeight={terminalLineHeight}
               onTerminalWorkingChange={setTerminalWorking}
-              caffeinateEnabled={caffeinateWhenTerminalWorkingEnabled}
-              onCaffeinateChange={changeCaffeinateWhenTerminalWorking}
+              caffeinateActive={caffeinateActive}
+              caffeinateMode={caffeinateMode}
+              onCaffeinateModeChange={changeCaffeinateMode}
               
               scanErrors={scanErrors}
               selectedCandidate={selectedCandidate}
@@ -1017,7 +1013,6 @@ export function App() {
                 onRemoveProject={async (path) => { await removeProject(path); await refreshProjects({ showToast: true }); }}
                 agentStatusCompletionSoundEnabled={agentStatusCompletionSoundEnabled}
                 agentStatusApprovalSoundEnabled={agentStatusApprovalSoundEnabled}
-                caffeinateWhenTerminalWorkingEnabled={caffeinateWhenTerminalWorkingEnabled}
                 onStatusChangeNotificationsChange={async (input) => {
                   const previousCompletion = agentStatusCompletionSoundEnabled;
                   const previousApproval = agentStatusApprovalSoundEnabled;
@@ -1036,7 +1031,6 @@ export function App() {
                     throw error;
                   }
                 }}
-                onCaffeinateWhenTerminalWorkingChange={changeCaffeinateWhenTerminalWorking}
                 onThemeChange={async (theme) => {
                   const config = await updateAppearanceTheme(theme);
                   setAppearanceTheme(normalizeAppearanceTheme(config.appearanceTheme));
@@ -1073,19 +1067,19 @@ function ToastBanner({ toast, onClose }: { toast: Toast; onClose: () => void }) 
   );
 }
 
-function SidebarStatusBar({ caffeinateEnabled, disabled, onCaffeinateChange, setToast }: {
-  caffeinateEnabled: boolean;
-  disabled: boolean;
-  onCaffeinateChange: (enabled: boolean) => Promise<void>;
+function SidebarStatusBar({ caffeinateActive, caffeinateMode, onCaffeinateModeChange, setToast }: {
+  caffeinateActive: boolean;
+  caffeinateMode: CaffeinateMode;
+  onCaffeinateModeChange: (mode: CaffeinateMode) => Promise<void>;
   setToast: (toast: Toast) => void;
 }) {
   const [saving, setSaving] = useState(false);
+  const label = caffeinateActive ? "Keep awake: active" : "Keep awake: inactive";
 
-  async function toggleCaffeinate() {
-    if (saving) return;
+  async function changeMode(mode: CaffeinateMode) {
     setSaving(true);
     try {
-      await onCaffeinateChange(!caffeinateEnabled);
+      await onCaffeinateModeChange(mode);
     } catch (error) {
       setToast({ tone: "error", message: asMessage(error) });
     } finally {
@@ -1094,20 +1088,25 @@ function SidebarStatusBar({ caffeinateEnabled, disabled, onCaffeinateChange, set
   }
 
   return (
-    <div className="sidebar-status-bar" role="group" aria-label="Status controls">
-      <button
-        className="icon-button sidebar-status-button"
-        type="button"
-        aria-label="Keep awake while agents work"
-        aria-pressed={caffeinateEnabled}
-        title="Keep awake while agents work"
-        disabled={disabled || saving}
-        onClick={() => void toggleCaffeinate()}
-      >
-        <svg width="16.8" height="16.8" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M5 9h12v7a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4V9ZM17 10h1a3 3 0 1 1 0 6h-1M4 22h15M8 3v3M12 2v4M16 3v3" />
-        </svg>
-      </button>
+    <div className="sidebar-status-bar">
+      <span className="sidebar-status-control" title={label}>
+        <span className="sidebar-status-button" data-active={caffeinateActive} aria-hidden="true">
+          <svg width="16.8" height="16.8" viewBox="0 0 24 24" fill="none">
+            <path d="M5 9h12v7a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4V9ZM17 10h1a3 3 0 1 1 0 6h-1M4 22h15M8 3v3M12 2v4M16 3v3" />
+          </svg>
+        </span>
+        <select
+          className="sidebar-status-select"
+          aria-label="Keep awake mode"
+          value={caffeinateMode}
+          disabled={saving}
+          onChange={(event) => void changeMode(event.target.value as CaffeinateMode)}
+        >
+          <option value="off">Off</option>
+          <option value="on">On</option>
+          <option value="auto">Auto</option>
+        </select>
+      </span>
     </div>
   );
 }
@@ -1132,8 +1131,9 @@ function DashboardView({
   onRenameProject,
   onUninstallProtocol,
   onTerminalWorkingChange,
-  caffeinateEnabled,
-  onCaffeinateChange,
+  caffeinateActive,
+  caffeinateMode,
+  onCaffeinateModeChange,
   terminalColorScheme,
   terminalFontFamily,
   terminalFontSize,
@@ -1159,8 +1159,9 @@ function DashboardView({
   onRenameProject: (uri: string, name: string) => Promise<void>;
   onUninstallProtocol: (repoPath: string, cleanTeamContext?: boolean) => Promise<void>;
   onTerminalWorkingChange: (working: boolean) => void;
-  caffeinateEnabled: boolean;
-  onCaffeinateChange: (enabled: boolean) => Promise<void>;
+  caffeinateActive: boolean;
+  caffeinateMode: CaffeinateMode;
+  onCaffeinateModeChange: (mode: CaffeinateMode) => Promise<void>;
   terminalColorScheme: string | null;
   terminalFontFamily: string | null;
   terminalFontSize: number | null;
@@ -1451,9 +1452,9 @@ function DashboardView({
           )}
         </div>
         <SidebarStatusBar
-          caffeinateEnabled={caffeinateEnabled}
-          disabled={!bridgeAvailable}
-          onCaffeinateChange={onCaffeinateChange}
+          caffeinateActive={caffeinateActive}
+          caffeinateMode={caffeinateMode}
+          onCaffeinateModeChange={onCaffeinateModeChange}
           setToast={setToast}
         />
       </section>
@@ -5216,14 +5217,12 @@ function removeExpandedProjectDirectory(paths: Set<string>, directoryPath: strin
   return next;
 }
 
-function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, candidates, scanErrors, initialSection, setToast, onBack, onRemoveProject, agentStatusCompletionSoundEnabled, agentStatusApprovalSoundEnabled, caffeinateWhenTerminalWorkingEnabled, onStatusChangeNotificationsChange, onCaffeinateWhenTerminalWorkingChange, onThemeChange, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, onTerminalAppearanceChange }: {
+function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, candidates, scanErrors, initialSection, setToast, onBack, onRemoveProject, agentStatusCompletionSoundEnabled, agentStatusApprovalSoundEnabled, onStatusChangeNotificationsChange, onThemeChange, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, onTerminalAppearanceChange }: {
   appearanceTheme: AppearanceTheme; configuredProjects: string[];  bridgeAvailable: boolean; candidates: ProjectCandidate[]; scanErrors: string[]; initialSection?: SettingsSection; setToast: (toast: Toast) => void;
   onBack: () => void; onRemoveProject: (path: string) => Promise<void>;
   agentStatusCompletionSoundEnabled: boolean;
   agentStatusApprovalSoundEnabled: boolean;
-  caffeinateWhenTerminalWorkingEnabled: boolean;
   onStatusChangeNotificationsChange: (input: { completionEnabled?: boolean; approvalEnabled?: boolean }) => Promise<void>;
-  onCaffeinateWhenTerminalWorkingChange: (enabled: boolean) => Promise<void>;
   onThemeChange: (theme: AppearanceTheme) => Promise<void>;
   terminalColorScheme: string | null; terminalFontFamily: string | null; terminalFontSize: number | null; terminalLineHeight: number | null;
   onTerminalAppearanceChange: (opts: { colorScheme?: string | null; fontFamily?: string | null; fontSize?: number | null; lineHeight?: number | null }) => Promise<void>;
@@ -5263,10 +5262,8 @@ function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, ca
             <GeneralSettingsPanel
               agentStatusCompletionSoundEnabled={agentStatusCompletionSoundEnabled}
               agentStatusApprovalSoundEnabled={agentStatusApprovalSoundEnabled}
-              caffeinateWhenTerminalWorkingEnabled={caffeinateWhenTerminalWorkingEnabled}
               setToast={setToast}
               onStatusChangeNotificationsChange={onStatusChangeNotificationsChange}
-              onCaffeinateWhenTerminalWorkingChange={onCaffeinateWhenTerminalWorkingChange}
             />
           </div>
           <div className="settings-section-panel" hidden={activeSection !== "agent-clis"}>
@@ -5295,16 +5292,13 @@ function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, ca
   );
 }
 
-function GeneralSettingsPanel({ agentStatusCompletionSoundEnabled, agentStatusApprovalSoundEnabled, caffeinateWhenTerminalWorkingEnabled, setToast, onStatusChangeNotificationsChange, onCaffeinateWhenTerminalWorkingChange }: {
+function GeneralSettingsPanel({ agentStatusCompletionSoundEnabled, agentStatusApprovalSoundEnabled, setToast, onStatusChangeNotificationsChange }: {
   agentStatusCompletionSoundEnabled: boolean;
   agentStatusApprovalSoundEnabled: boolean;
-  caffeinateWhenTerminalWorkingEnabled: boolean;
   setToast: (toast: Toast) => void;
   onStatusChangeNotificationsChange: (input: { completionEnabled?: boolean; approvalEnabled?: boolean }) => Promise<void>;
-  onCaffeinateWhenTerminalWorkingChange: (enabled: boolean) => Promise<void>;
 }) {
   const [savingSound, setSavingSound] = useState<AgentStatusSoundKind | null>(null);
-  const [savingCaffeinate, setSavingCaffeinate] = useState(false);
 
   async function toggleSound(kind: AgentStatusSoundKind) {
     if (savingSound) return;
@@ -5327,34 +5321,8 @@ function GeneralSettingsPanel({ agentStatusCompletionSoundEnabled, agentStatusAp
     }
   }
 
-  async function toggleCaffeinate() {
-    if (savingCaffeinate) return;
-    setSavingCaffeinate(true);
-    try {
-      await onCaffeinateWhenTerminalWorkingChange(!caffeinateWhenTerminalWorkingEnabled);
-    } catch (error) {
-      setToast({ tone: "error", message: asMessage(error) });
-    } finally {
-      setSavingCaffeinate(false);
-    }
-  }
-
   return (
     <section className="workflow-panel">
-      <h5 className="settings-subsection-title">Power</h5>
-      <div className="settings-sound-controls">
-        <div className="settings-toggle-row">
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={caffeinateWhenTerminalWorkingEnabled}
-              disabled={savingCaffeinate}
-              onChange={() => void toggleCaffeinate()}
-            />
-            <span>Caffeinate while terminals are working</span>
-          </label>
-        </div>
-      </div>
       <h5 className="settings-subsection-title">Sounds</h5>
       <div className="settings-sound-controls">
         <div className="settings-toggle-row">

@@ -6,7 +6,7 @@ import {
   removeConfiguredProject,
   renameProject,
   setAppearanceTheme,
-  setCaffeinateWhenTerminalWorking,
+  setCaffeinateMode,
   setStatusChangeNotificationsEnabled,
   setTerminalAppearance,
 } from "../src/main/config.js";
@@ -24,7 +24,7 @@ import type {
   AppearanceTheme,
   AppearanceThemeInput,
   CaffeinateActiveInput,
-  CaffeinateWhenTerminalWorkingInput,
+  CaffeinateModeInput,
   StatusChangeNotificationsInput,
   TerminalAppearanceInput,
   CodeGraphProjectStatus,
@@ -1117,8 +1117,8 @@ export async function registerIpcHandlers(
       return config;
     })
   );
-  handle<CaffeinateWhenTerminalWorkingInput, AppConfig>(channels.setCaffeinateWhenTerminalWorking, (payload) =>
-    setCaffeinateWhenTerminalWorking(runtime, payload)
+  handle<CaffeinateModeInput, AppConfig>(channels.setCaffeinateMode, (payload) =>
+    setCaffeinateMode(runtime, payload)
   );
   handle<TerminalAppearanceInput, AppConfig>(channels.setTerminalAppearance, (payload) =>
     setTerminalAppearance(runtime, payload)
