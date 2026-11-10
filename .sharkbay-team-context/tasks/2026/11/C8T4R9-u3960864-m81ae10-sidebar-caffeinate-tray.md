@@ -12,14 +12,14 @@ agent: Codex GPT-6
 sessionId: 01a18b5b-5a33-7260-893d-1df9d521d78a
 branch: main
 createdAt: 2026-10-30T05:52:37Z
-updatedAt: 2026-11-10T08:07:52Z
-completedAt: 2026-11-10T08:07:52Z
+updatedAt: 2026-11-10T08:22:02Z
+completedAt: 2026-11-10T08:22:02Z
 commits:
   - 62ce562587978efc98b5db790a2c53b84a4fe229
 ---
 
 ## Summary
-已在左侧栏底部增加咖啡杯状态栏和项目列表渐隐。按用户最新规则，咖啡杯自动跟随全部项目的 tab：任一 working 即呈按下态并启用 macOS caffeinate，全部非 working 则松开并释放；移除手动切换与 General 旧开关，保留现有尺寸及对齐。
+已在左侧栏底部增加咖啡杯下拉菜单和项目列表渐隐。最终支持关闭、启用、自动启用三种持久化模式，咖啡杯按下态反映当前防休眠是否生效；自动模式由全部项目任一 tab 的 working 状态驱动，保留已有尺寸及左侧对齐。
 
 ## Files
 - .sharkbay/tasks/C8T4R9-u3960864-m81ae10-sidebar-caffeinate-tray.md
@@ -28,6 +28,15 @@ commits:
 - electron/ipc.ts
 - src/main/caffeinate.ts
 - tests/caffeinate.test.ts
+- src/shared/caffeinate.ts
+- src/shared/types.ts
+- src/shared/ipc-channels.ts
+- src/renderer/types.ts
+- src/main/config.ts
+- electron/preload.mts
+- tests/config-migration.test.ts
+- tests/ipc-channels.test.ts
+- tests/caffeinate-mode.test.ts
 
 ## Work
 - 已读取协议、根目录 AGENTS.md、界面设计技能及团队上下文。
@@ -52,6 +61,10 @@ commits:
 - 最新用户规则：咖啡杯改为自动状态指示，任一 tab working 即按下并防休眠，全部非 working 即松开并释放；移除手动切换与 General 中的旧开关，避免持久化配置阻止自动行为。复用所有项目现有 tab 工作状态汇总，保持并行 Codex 状态修改。
 - 验证计划：检查多 tab 工作汇总、两态真实渲染和自动 IPC 激活/释放；运行类型检查与现有进程生命周期测试。
 
+- 用户最新更正：保留手动控制，改为咖啡杯下拉菜单选择关闭 / 启用 / 自动启用；按下态表示实际生效，菜单选中态表示模式。新增配置默认自动，旧布尔设置 false→off、true→auto，保存模式并保持 tab 汇总。计划验证三模式真值表、配置迁移与真实菜单。
+
+- 三模式实现使用原生 select 菜单，保持纯图标底栏和系统键盘行为；配置及 preload/IPC 同步升级到 caffeinateMode，移除旧布尔 API，迁移读取兼容旧设置。
+
 ## Verification
 - 初次定向测试发现测试断言 API 与现有 Vitest 版本不兼容，已修正；类型检查同时发现 afterEach 返回值问题，已修正。
 - `npm test -- tests/caffeinate.test.ts tests/config-migration.test.ts tests/ipc-channels.test.ts tests/ipc-protocol-install.test.ts`：4 个文件、12 项测试全部通过。
@@ -74,6 +87,10 @@ commits:
 - 自动状态最终检查：`npm run typecheck`、`git diff --check` 通过；caffeinate、codex-input-state、renderer-workflow 三个测试文件共 26 项通过。
 - 从当前 TypeScript AST 提取实际 tab 汇总与 caffeinate effect 执行断言：多项目及非活动 tab 的 working 生效，approval/stopped 不阻止其他 working，无 tab 为 false，IPC 自动发送 false→true→false，renderer 不再读取旧配置开关。
 - 从实际组件源码生成临时 Electron fixture，检查非活动→working→停止时咖啡杯外观及可访问状态同步；未运行真实 agent 执行回合。预览及服务已关闭，本轮未提交。
+
+- 三模式最终验证：caffeinate-mode、caffeinate、config-migration、ipc-channels、ipc-protocol-install 共 5 个测试文件、23 项测试通过；`npm run typecheck`、`npm run build`、`git diff --check` 通过。
+- 独立配置的真实 Electron 窗口：Auto 无 working 保持松开；点击咖啡杯显示 Off/On/Auto 原生菜单；选择 On 后无工作 tab 仍按下，确认配置保存和原生 caffeinate 单进程启动，重新加载仍为 On；键盘选 Off 后松开并确认进程释放。自动模式有/无 working 的真值表通过单元测试，既有多项目工作汇总保持不变。
+- CodeGraph affected 未返回相关测试，因此手动执行上述相关测试。预览及 Vite 已停止；本轮未提交。
 
 ## Notes
 - 相关先前任务：C7F2N9-u3960864-m81ae10，已有 working 状态聚合与 Electron powerSaveBlocker。
