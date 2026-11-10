@@ -12,13 +12,13 @@ agent: Codex GPT-6
 sessionId: 01a18b67-b8c9-7431-a5e8-0e7336ccf752
 branch: main
 createdAt: 2026-11-10T05:37:03Z
-updatedAt: 2026-11-10T06:24:09Z
-completedAt: 2026-11-10T06:24:09Z
+updatedAt: 2026-11-10T08:06:51Z
+completedAt: 2026-11-10T08:06:51Z
 ---
 
 ## Summary
 
-已按 Codex live terminal 补足标签、项目与 Island 状态：待回答显示 approval，执行显示 working（包含后台终端计数），结束显示 stopped，并补齐 Interrupt hook。按用户最终要求保留项目汇总优先级 approval > stopped > working。
+已补齐 Codex Interrupt hook 与 live terminal 状态：待回答显示 approval，执行显示 working（包含后台终端计数），结束显示 stopped。stopped 标签聚焦后立即确认为已查看，标签、项目与 Island 同步清除提醒，下一轮活动后重新允许停止提醒；项目汇总保持 approval > stopped > working。
 
 ## Files
 
@@ -50,6 +50,11 @@ completedAt: 2026-11-10T06:24:09Z
 - 真实窗口确认活动 Codex 标签为 working、同项目旧标签为 stopped，项目因既有优先级显示 stopped；读取相关团队任务 R7K4M9-u3960864-m81ae10 后，用户明确要求保留 approval > stopped > working，未修改汇总实现。
 - 用户明确更正：Codex 待回答问题应显示 approval，覆盖此前本任务的 stopped 假设；提问展开/折叠都按同一规则处理。
 - 已允许进度行包含 background terminal(s) 等附加计数，并保留原有项目优先级；当前项目显示 stopped 可来自另一个 stopped 标签，不能据此认定活动标签误判。
+- 用户进一步明确：聚焦 stopped 标签表示已查看，应清除该提醒；本次重新打开原任务，覆盖 Codex live-screen 与 hook 两条来源，保持 approval/working 及汇总优先级不变。
+- 参考团队任务 S6K9Q2-u3960864-m81ae10、Q7K4N8-u3960864-m81ae10、V8KR2T-u3960864-m81ae10；最新用户要求覆盖旧的 stopped 延迟清除约定，仍须避免后台或无焦点窗口误清除。
+- 计划：补 stopped 焦点确认回归 → 最小接入焦点与状态派生 → 验证新活动恢复提醒、相关检查及实际渲染。
+- 实现按终端保存 stopped 的已查看标记，聚焦标签、返回项目/窗口或直接操作终端时确认；统一作用于 hook、Codex live-screen 和 Review 状态，新的 working/approval 会重新允许后续 stopped 提醒，关闭标签会清理标记。
+- 使用隔离 Electron/Vite 渲染真实 TerminalPane/xterm，模拟 preload 和受控窗口焦点；修复前确认点击 stopped 后标签、项目和 Island 均未清除，修复后 23 项状态流检查通过。未操作实际 agent 会话。
 
 ## Verification
 
@@ -68,6 +73,10 @@ completedAt: 2026-11-10T06:24:09Z
 - 带 background terminal(s) 及多项附加计数的三个回归样例修复前均失败；放宽后 17 项针对性测试、typecheck、build、diff check 通过。
 - 按最终提问语义更新断言，修复前 stopped → approval 回归失败，修复后 codex-input-state、hooks-connectors、renderer-workflow 共 25 项通过。
 - 最终 npm run typecheck、npm run build、git diff --check 通过。此次未替换或重启运行中的 App。
+- stopped 聚焦回归：隔离真实组件的 23 项渲染断言通过，覆盖空闲重绘、重复切换、下一轮工作/提问重新提醒、窗口失焦/恢复、项目切换、隐藏 workspace、hook-only 与 Review 标签；焦点状态受控模拟。
+- 本次 npm test -- tests/codex-input-state.test.ts tests/hooks-connectors.test.ts tests/renderer-workflow.test.ts：25 项通过；npm run typecheck、npm run build 通过。
+- 已检查最终真实渲染截图，确认已查看标签为 unknown、其他 working 标签保留绿灯、项目汇总恢复 working；本任务涉及文件 git diff --check 通过。并行改动 src/styles/app.css 的 EOF 空行不属于本任务，未修改。
+- 隔离 Electron 窗口已退出，临时 Vite 服务已停止；没有替换或重启已安装的 SharkBay App。
 
 ## Notes
 
@@ -76,3 +85,4 @@ completedAt: 2026-11-10T06:24:09Z
 - Native terminal status 是现有 hook 状态的本地显示补充，不伪造 Codex session id 或持久化猜测关联；当前识别 Codex 0.167.0 的英文 live footer，后续上游更改提示时应同步 helper 和回归样例。
 - 官方参考：https://learn.chatgpt.com/docs/hooks 。异步提问不代表回合结束，PostToolUse 不能当作用户已回答。
 - 最终状态约定：待回答问题与权限请求为 approval，执行为 working，结束为 stopped；项目汇总保持 approval > stopped > working，各终端保留自身状态。
+- stopped 表示尚未查看的停止提醒：用户聚焦该标签即清为 unknown；已聚焦期间新出现的停止仍提醒，窗口失焦或 workspace 隐藏时不自动确认；下次 working/approval 后再停止可重新提醒。

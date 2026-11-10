@@ -12,14 +12,14 @@ agent: Codex GPT-6
 sessionId: 01a18b5b-5a33-7260-893d-1df9d521d78a
 branch: main
 createdAt: 2026-10-30T05:52:37Z
-updatedAt: 2026-11-10T06:43:10Z
-completedAt: 2026-11-10T06:43:10Z
+updatedAt: 2026-11-10T08:07:52Z
+completedAt: 2026-11-10T08:07:52Z
 commits:
   - 62ce562587978efc98b5db790a2c53b84a4fe229
 ---
 
 ## Summary
-已在左侧栏底部增加固定图标状态栏和两态咖啡杯，复用持久化设置，仅在 SharkBay agent session 正在 working 时启动 macOS caffeinate，停止工作、关闭开关或退出应用时释放。界面保持纯图标，无新增辅助标题或说明；按用户反馈收紧底栏、移除分割线；最新调整将咖啡杯放大至 16.8px、按钮外框放大至 26.4px 并与项目卡片左边缘对齐，项目列表底部加入渐隐。
+已在左侧栏底部增加咖啡杯状态栏和项目列表渐隐。按用户最新规则，咖啡杯自动跟随全部项目的 tab：任一 working 即呈按下态并启用 macOS caffeinate，全部非 working 则松开并释放；移除手动切换与 General 旧开关，保留现有尺寸及对齐。
 
 ## Files
 - .sharkbay/tasks/C8T4R9-u3960864-m81ae10-sidebar-caffeinate-tray.md
@@ -49,6 +49,9 @@ commits:
 
 - 已创建提交 62ce562587978efc98b5db790a2c53b84a4fe229 并推送 origin/main；其他并行任务的修改保留在工作区。
 
+- 最新用户规则：咖啡杯改为自动状态指示，任一 tab working 即按下并防休眠，全部非 working 即松开并释放；移除手动切换与 General 中的旧开关，避免持久化配置阻止自动行为。复用所有项目现有 tab 工作状态汇总，保持并行 Codex 状态修改。
+- 验证计划：检查多 tab 工作汇总、两态真实渲染和自动 IPC 激活/释放；运行类型检查与现有进程生命周期测试。
+
 ## Verification
 - 初次定向测试发现测试断言 API 与现有 Vitest 版本不兼容，已修正；类型检查同时发现 afterEach 返回值问题，已修正。
 - `npm test -- tests/caffeinate.test.ts tests/config-migration.test.ts tests/ipc-channels.test.ts tests/ipc-protocol-install.test.ts`：4 个文件、12 项测试全部通过。
@@ -67,6 +70,10 @@ commits:
 - 提交前从 Git index 导出独立快照（排除其他未暂存修改），`npm run typecheck` 和 4 个文件共 12 项定向测试通过；`git diff --cached --check` 通过。
 
 - `git push origin main` 成功；`git rev-list --left-right --count HEAD...origin/main` 为 0/0。
+
+- 自动状态最终检查：`npm run typecheck`、`git diff --check` 通过；caffeinate、codex-input-state、renderer-workflow 三个测试文件共 26 项通过。
+- 从当前 TypeScript AST 提取实际 tab 汇总与 caffeinate effect 执行断言：多项目及非活动 tab 的 working 生效，approval/stopped 不阻止其他 working，无 tab 为 false，IPC 自动发送 false→true→false，renderer 不再读取旧配置开关。
+- 从实际组件源码生成临时 Electron fixture，检查非活动→working→停止时咖啡杯外观及可访问状态同步；未运行真实 agent 执行回合。预览及服务已关闭，本轮未提交。
 
 ## Notes
 - 相关先前任务：C7F2N9-u3960864-m81ae10，已有 working 状态聚合与 Electron powerSaveBlocker。
