@@ -53,3 +53,16 @@ For multi-step tasks, state a brief plan:
 ```
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+## 5. Preserve Project Context
+
+**Product positioning:** SharkBay is a lightweight, GitHub-native development coordination tool for individuals and small teams working with multiple coding-agent CLIs. It extends GitHub Issues and pull requests into isolated local worktree lifecycles—from assignment and execution through delivery, merge, and cleanup. It is not a separate team SaaS, issue tracker, or agent platform.
+
+**Durable product decisions belong in repository context, not session memory.**
+
+- GitHub is SharkBay's only identity, permission, and collaboration system.
+- Do not create SharkBay user accounts or a separate permission model.
+- Do not duplicate GitHub Issues, pull requests, or reviews.
+- Treat local SharkBay state as an execution projection of the GitHub workflow, not as another source of truth.
+- Do not store in a proprietary cloud database any state that can be reconstructed from GitHub and the repository.
+- Record non-obvious product decisions in durable repository context and load them before starting work.
