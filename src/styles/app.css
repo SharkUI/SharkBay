@@ -579,6 +579,7 @@ body.is-resizing-columns * {
   overflow-x: hidden;
   overflow-y: auto;
   padding-right: 2px;
+  padding-bottom: 28px;
   scrollbar-width: none;
 }
 
@@ -5873,4 +5874,58 @@ body.is-resizing-columns .app-shell[data-theme="morning"] .column-resizer::befor
 
 .app-shell[data-theme="night"] .update-hint button {
   color: #8ecdb8;
+}
+
+.sidebar-status-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding: 2px 0;
+}
+
+.sidebar-status-bar::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  left: 0;
+  z-index: 1;
+  height: 28px;
+  background: linear-gradient(to bottom, transparent, #f4f1eb);
+  pointer-events: none;
+}
+
+.app-shell[data-theme="night"] .sidebar-status-bar::before {
+  background: linear-gradient(to bottom, transparent, #101719);
+}
+
+.sidebar-status-button {
+  width: 26.4px;
+  height: 26.4px;
+}
+
+.sidebar-status-button[aria-pressed="true"] {
+  color: #2f6253;
+  background: #dce9df;
+  border-color: #b4cebd;
+  box-shadow: inset 0 1px 2px rgba(31, 55, 42, 0.12);
+}
+
+.app-shell[data-theme="night"] .sidebar-status-button {
+  color: #9badaa;
+  background: transparent;
+  border-color: transparent;
+}
+
+.app-shell[data-theme="night"] .sidebar-status-button[aria-pressed="true"] {
+  color: #b8e6c5;
+  background: #2a483b;
+  border-color: #4b6d58;
+}
+
+.sidebar-status-button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }

@@ -931,7 +931,9 @@ export function App() {
     if (!bridgeAvailable) return;
     const handler = getBridge().terminal?.setCaffeinateActive;
     if (!handler) return;
-    void handler({ active: caffeinateWhenTerminalWorkingEnabled && terminalWorking }).catch(() => {});
+    void handler({ active: caffeinateWhenTerminalWorkingEnabled && terminalWorking }).catch((error) => {
+      setToast({ tone: "error", message: asMessage(error) });
+    });
   }, [bridgeAvailable, caffeinateWhenTerminalWorkingEnabled, terminalWorking]);
 
   useEffect(() => {
@@ -940,6 +942,20 @@ export function App() {
       void getBridge().terminal?.setCaffeinateActive?.({ active: false })?.catch(() => {});
     };
   }, [bridgeAvailable]);
+
+  async function changeCaffeinateWhenTerminalWorking(enabled: boolean) {
+    const previous = caffeinateWhenTerminalWorkingEnabled;
+    setCaffeinateWhenTerminalWorkingEnabled(enabled);
+    const handler = getBridge().config?.setCaffeinateWhenTerminalWorking;
+    try {
+      if (!handler) throw new Error("Caffeinate settings are not exposed by the preload API.");
+      const config = await handler({ enabled });
+      setCaffeinateWhenTerminalWorkingEnabled(config.caffeinateWhenTerminalWorkingEnabled === true);
+    } catch (error) {
+      setCaffeinateWhenTerminalWorkingEnabled(previous);
+      throw error;
+    }
+  }
 
   return (
     <div className="app-shell" data-theme={appearanceTheme}>
@@ -958,6 +974,8 @@ export function App() {
               terminalFontSize={terminalFontSize}
               terminalLineHeight={terminalLineHeight}
               onTerminalWorkingChange={setTerminalWorking}
+              caffeinateEnabled={caffeinateWhenTerminalWorkingEnabled}
+              onCaffeinateChange={changeCaffeinateWhenTerminalWorking}
               
               scanErrors={scanErrors}
               selectedCandidate={selectedCandidate}
@@ -1021,19 +1039,7 @@ export function App() {
                     throw error;
                   }
                 }}
-                onCaffeinateWhenTerminalWorkingChange={async (enabled) => {
-                  const previous = caffeinateWhenTerminalWorkingEnabled;
-                  setCaffeinateWhenTerminalWorkingEnabled(enabled);
-                  const handler = getBridge().config?.setCaffeinateWhenTerminalWorking;
-                  try {
-                    if (!handler) throw new Error("Caffeinate settings are not exposed by the preload API.");
-                    const config = await handler({ enabled });
-                    setCaffeinateWhenTerminalWorkingEnabled(config.caffeinateWhenTerminalWorkingEnabled === true);
-                  } catch (error) {
-                    setCaffeinateWhenTerminalWorkingEnabled(previous);
-                    throw error;
-                  }
-                }}
+                onCaffeinateWhenTerminalWorkingChange={changeCaffeinateWhenTerminalWorking}
                 onThemeChange={async (theme) => {
                   const config = await updateAppearanceTheme(theme);
                   setAppearanceTheme(normalizeAppearanceTheme(config.appearanceTheme));
@@ -1070,6 +1076,45 @@ function ToastBanner({ toast, onClose }: { toast: Toast; onClose: () => void }) 
   );
 }
 
+function SidebarStatusBar({ caffeinateEnabled, disabled, onCaffeinateChange, setToast }: {
+  caffeinateEnabled: boolean;
+  disabled: boolean;
+  onCaffeinateChange: (enabled: boolean) => Promise<void>;
+  setToast: (toast: Toast) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+
+  async function toggleCaffeinate() {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await onCaffeinateChange(!caffeinateEnabled);
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="sidebar-status-bar" role="group" aria-label="Status controls">
+      <button
+        className="icon-button sidebar-status-button"
+        type="button"
+        aria-label="Keep awake while agents work"
+        aria-pressed={caffeinateEnabled}
+        title="Keep awake while agents work"
+        disabled={disabled || saving}
+        onClick={() => void toggleCaffeinate()}
+      >
+        <svg width="16.8" height="16.8" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M5 9h12v7a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4V9ZM17 10h1a3 3 0 1 1 0 6h-1M4 22h15M8 3v3M12 2v4M16 3v3" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 function DashboardView({
   appearanceTheme,
   bridgeAvailable,
@@ -1090,6 +1135,8 @@ function DashboardView({
   onRenameProject,
   onUninstallProtocol,
   onTerminalWorkingChange,
+  caffeinateEnabled,
+  onCaffeinateChange,
   terminalColorScheme,
   terminalFontFamily,
   terminalFontSize,
@@ -1115,6 +1162,8 @@ function DashboardView({
   onRenameProject: (uri: string, name: string) => Promise<void>;
   onUninstallProtocol: (repoPath: string, cleanTeamContext?: boolean) => Promise<void>;
   onTerminalWorkingChange: (working: boolean) => void;
+  caffeinateEnabled: boolean;
+  onCaffeinateChange: (enabled: boolean) => Promise<void>;
   terminalColorScheme: string | null;
   terminalFontFamily: string | null;
   terminalFontSize: number | null;
@@ -1404,6 +1453,12 @@ function DashboardView({
             </div>
           )}
         </div>
+        <SidebarStatusBar
+          caffeinateEnabled={caffeinateEnabled}
+          disabled={!bridgeAvailable}
+          onCaffeinateChange={onCaffeinateChange}
+          setToast={setToast}
+        />
       </section>
 
       <div aria-label="Resize project column" aria-orientation="vertical" className="column-resizer" role="separator" tabIndex={0}

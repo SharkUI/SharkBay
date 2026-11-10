@@ -12,7 +12,7 @@ import type { AppConfig, AppearanceTheme } from "../src/shared/types.js";
 
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = dirname(currentFile);
-const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? "http://127.0.0.1:5173";
+const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? "http://127.0.0.1:5184";
 
 let mainWindow: BrowserWindow | null = null;
 let islandWindow: BrowserWindow | null = null;

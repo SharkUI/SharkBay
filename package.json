@@ -8,7 +8,7 @@
   "main": "dist-electron/electron/main.js",
   "scripts": {
     "postinstall": "electron-rebuild -f -w better-sqlite3",
-    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"tsc -p tsconfig.node.json --watch --preserveWatchOutput\" \"wait-on tcp:5173 dist-electron/electron/main.js && electron .\"",
+    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"tsc -p tsconfig.node.json --watch --preserveWatchOutput\" \"wait-on tcp:5184 dist-electron/electron/main.js && electron .\"",
     "typecheck": "tsc -p tsconfig.renderer.json --noEmit && tsc -p tsconfig.node.json --noEmit",
     "lint": "npm run typecheck",
     "test": "vitest run",
