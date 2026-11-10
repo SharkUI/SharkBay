@@ -12,8 +12,8 @@ agent: Codex GPT-6
 sessionId: 01a18b5b-5a33-7260-893d-1df9d521d78a
 branch: main
 createdAt: 2026-10-30T05:52:37Z
-updatedAt: 2026-11-10T08:22:02Z
-completedAt: 2026-11-10T08:22:02Z
+updatedAt: 2026-11-10T09:38:10Z
+completedAt: 2026-11-10T09:38:10Z
 commits:
   - 62ce562587978efc98b5db790a2c53b84a4fe229
 ---
@@ -65,6 +65,8 @@ commits:
 
 - 三模式实现使用原生 select 菜单，保持纯图标底栏和系统键盘行为；配置及 preload/IPC 同步升级到 caffeinateMode，移除旧布尔 API，迁移读取兼容旧设置。
 
+- 用户截图中的黑框来自新增 focus-within 外扩 outline；改为仅 select:focus-visible 时显示，并使用内侧偏移避免左侧边缘裁切。验证鼠标选择菜单后无残留外框、键盘聚焦仍有提示。
+
 ## Verification
 - 初次定向测试发现测试断言 API 与现有 Vitest 版本不兼容，已修正；类型检查同时发现 afterEach 返回值问题，已修正。
 - `npm test -- tests/caffeinate.test.ts tests/config-migration.test.ts tests/ipc-channels.test.ts tests/ipc-protocol-install.test.ts`：4 个文件、12 项测试全部通过。
@@ -91,6 +93,8 @@ commits:
 - 三模式最终验证：caffeinate-mode、caffeinate、config-migration、ipc-channels、ipc-protocol-install 共 5 个测试文件、23 项测试通过；`npm run typecheck`、`npm run build`、`git diff --check` 通过。
 - 独立配置的真实 Electron 窗口：Auto 无 working 保持松开；点击咖啡杯显示 Off/On/Auto 原生菜单；选择 On 后无工作 tab 仍按下，确认配置保存和原生 caffeinate 单进程启动，重新加载仍为 On；键盘选 Off 后松开并确认进程释放。自动模式有/无 working 的真值表通过单元测试，既有多项目工作汇总保持不变。
 - CodeGraph affected 未返回相关测试，因此手动执行上述相关测试。预览及 Vite 已停止；本轮未提交。
+
+- 焦点框修复：独立 Electron 中鼠标打开菜单并选 Auto 后确认无残留黑框；Tab / Shift+Tab 聚焦仍有内侧提示且不被左边缘裁切。`git diff --check` 通过；本轮仅调整两个 CSS 规则值，未重复行为测试；预览和服务已停止。
 
 ## Notes
 - 相关先前任务：C7F2N9-u3960864-m81ae10，已有 working 状态聚合与 Electron powerSaveBlocker。
