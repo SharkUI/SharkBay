@@ -11,6 +11,7 @@ import { UpdateHint } from "./update-hint";
 import { ProjectStart } from "./project-start";
 import { colorSchemes, getColorScheme } from "./color-schemes";
 import { promptSearchKeys } from "./prompt-search";
+import { codexActivityWithHook, codexTerminalActivity } from "./codex-input-state";
 import { buildAgentSessionRestoreCommand, inferAgentSessionRestoreAgent, type AgentSessionRestoreCommand } from "../shared/agent-session-restore";
 import type {
   AgentCli,
@@ -725,17 +726,13 @@ function timestampValue(value: string): number {
 
 // Single source of truth for an agent tab's light state. The project pill is
 // aggregated from these per-tab states so the pill color always matches the tab
-// lights. The active tab suppresses stopped/approval only after the delayed
-// clear has fired (managed separately).
+// lights. Acknowledged stopped reminders are cleared before reaching this map.
 function agentTabLightState(
   tab: TerminalTab,
   _isActiveTab: boolean,
   hookStateByTerminalId: Record<string, ProjectActivityState>,
 ): ProjectActivityState | null {
   if (tab.kind !== "terminal" || !tab.session.agentId) return null;
-  if (tab.reviewRun?.status === "running") return "working";
-  if (tab.reviewRun?.status === "completed" || tab.reviewRun?.status === "cancelled") return "stopped";
-  if (tab.reviewRun?.status === "failed") return "approval";
   const state = hookStateByTerminalId[tab.session.id];
   if (!state) return null;
   return state;
@@ -1608,6 +1605,8 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   onTerminalWorkingChange: (working: boolean) => void;
 }>(function TerminalPane({ appearanceTheme, agentClis, agentClisReady, bridgeAvailable, browserLayoutKey, candidate, hookStateBySessionId, projectAliases, isVisible, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onAgentSessionClear, onRunningServiceProjectIdsChange, onProjectActivityChange, onTerminalWorkingChange }, ref) {
   const [spaces, setSpaces] = useState<Record<string, TerminalSpace>>({});
+  const [codexActivityByTerminalId, setCodexActivityByTerminalId] = useState<Record<string, ProjectActivityState>>({});
+  const [acknowledgedStoppedTerminalIds, setAcknowledgedStoppedTerminalIds] = useState<Set<string>>(() => new Set());
   const [taskTitlesByProjectPath, setTaskTitlesByProjectPath] = useState<Record<string, Record<string, string>>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [terminalSpacesRestored, setTerminalSpacesRestored] = useState(false);
@@ -1625,6 +1624,30 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
   const tabDragRef = useRef<{ projectId: string; tabId: string; pointerId: number } | null>(null);
   const agentSessionToTerminalRef = useRef<Record<string, string>>({});
+  useEffect(() => {
+    const tabs = Object.values(spaces).flatMap((space) => space.tabs)
+      .filter((tab): tab is TerminalShellTab => tab.kind === "terminal" && tab.session.agentId === "codex" && tab.session.status === "running");
+    const update = () => {
+      const activity: Record<string, ProjectActivityState> = {};
+      for (const tab of tabs) {
+        const buffer = tab.terminal.buffer.active;
+        const lines: string[] = [];
+        for (let row = 0; row < tab.terminal.rows; row++) {
+          const line = buffer.getLine(buffer.baseY + row);
+          if (!line) continue;
+          const text = line.translateToString(false);
+          if (line.isWrapped && lines.length > 0) lines[lines.length - 1] += text;
+          else lines.push(text);
+        }
+        const state = codexTerminalActivity(lines);
+        if (state) activity[tab.session.id] = state;
+      }
+      setCodexActivityByTerminalId((current) => sameActivityMap(current, activity) ? current : activity);
+    };
+    const subscriptions = tabs.map((tab) => tab.terminal.onWriteParsed(update));
+    update();
+    return () => { subscriptions.forEach((subscription) => subscription.dispose()); };
+  }, [spaces]);
   const cacheTaskTitles = useCallback((repoPath: string, tasks: TaskViewModel[]) => {
     setTaskTitlesByProjectPath((current) => ({
       ...current,
@@ -1633,17 +1656,18 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   }, []);
   const hookSnapshotByTerminalId = useMemo(() => {
     const map = agentSessionToTerminalRef.current;
+    for (const [sid, entry] of Object.entries(hookStateBySessionId)) {
+      if (entry.terminalSessionId) {
+        map[sid] = entry.terminalSessionId;
+      }
+    }
     const runningTabsByProjectAgent = new Map<string, string[]>();
     for (const space of Object.values(spaces)) {
       for (const tab of space.tabs) {
         if (tab.kind !== "terminal" || !tab.session.agentId || tab.session.status !== "running") continue;
+        if (tab.hookSessionId) map[tab.hookSessionId] = tab.session.id;
         const key = `${space.projectId}\0${tab.session.agentId}`;
         runningTabsByProjectAgent.set(key, [...(runningTabsByProjectAgent.get(key) ?? []), tab.session.id]);
-      }
-    }
-    for (const [sid, entry] of Object.entries(hookStateBySessionId)) {
-      if (entry.terminalSessionId) {
-        map[sid] = entry.terminalSessionId;
       }
     }
     const result: Record<string, { sessionId: string; state: ProjectActivityState; timestampMs: number; lastPrompt?: string }> = {};
@@ -1670,13 +1694,38 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       }
     }
   }, [hookStateBySessionId]);
-  const hookStateByTerminalId = useMemo(() => {
+  const terminalActivityByTerminalId = useMemo(() => {
     const result: Record<string, ProjectActivityState> = {};
     for (const [terminalId, snapshot] of Object.entries(hookSnapshotByTerminalId)) {
       result[terminalId] = snapshot.state;
     }
+    for (const [terminalId, state] of Object.entries(codexActivityByTerminalId)) {
+      result[terminalId] = codexActivityWithHook(state, result[terminalId]);
+    }
+    for (const space of Object.values(spaces)) {
+      for (const tab of space.tabs) {
+        if (tab.kind !== "terminal" || !tab.reviewRun) continue;
+        if (tab.reviewRun.status === "running") result[tab.session.id] = "working";
+        else if (tab.reviewRun.status === "completed" || tab.reviewRun.status === "cancelled") result[tab.session.id] = "stopped";
+        else if (tab.reviewRun.status === "failed") result[tab.session.id] = "approval";
+      }
+    }
     return result;
-  }, [hookSnapshotByTerminalId]);
+  }, [hookSnapshotByTerminalId, codexActivityByTerminalId, spaces]);
+  const terminalActivityByTerminalIdRef = useRef(terminalActivityByTerminalId);
+  useEffect(() => {
+    terminalActivityByTerminalIdRef.current = terminalActivityByTerminalId;
+    const terminalIds = new Set(Object.values(spaces).flatMap((space) => space.tabs)
+      .filter((tab): tab is TerminalShellTab => tab.kind === "terminal").map((tab) => tab.session.id));
+    setAcknowledgedStoppedTerminalIds((current) => {
+      const next = new Set([...current].filter((id) => terminalIds.has(id)
+        && terminalActivityByTerminalId[id] !== "working" && terminalActivityByTerminalId[id] !== "approval"));
+      return next.size === current.size ? current : next;
+    });
+  }, [terminalActivityByTerminalId, spaces]);
+  const hookStateByTerminalId = useMemo(() => Object.fromEntries(
+    Object.entries(terminalActivityByTerminalId).filter(([id, state]) => state !== "stopped" || !acknowledgedStoppedTerminalIds.has(id)),
+  ), [terminalActivityByTerminalId, acknowledgedStoppedTerminalIds]);
   const hookSnapshotByTerminalIdRef = useRef(hookSnapshotByTerminalId);
   useEffect(() => { hookSnapshotByTerminalIdRef.current = hookSnapshotByTerminalId; }, [hookSnapshotByTerminalId]);
   useEffect(() => {
@@ -1757,36 +1806,47 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     }
   }, [hookStateByTerminalId, activeProjectId, spaces]);
 
-  // Delayed auto-clear of stopped/approval on the active tab.
-  // Fires 300s after the tab becomes focused; cancelled if the user types
-  // in the prompt input bar (which triggers immediatelyClearActiveTab).
   const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearStoppedTerminalSession = useCallback((terminalId: string): boolean => {
+    if (terminalActivityByTerminalIdRef.current[terminalId] !== "stopped") return false;
+    setAcknowledgedStoppedTerminalIds((current) => current.has(terminalId) ? current : new Set(current).add(terminalId));
+    clearAgentSessionsForTerminal(terminalId);
+    return true;
+  }, [clearAgentSessionsForTerminal]);
   const clearActiveTabForStates = useCallback((states: ProjectActivityState[]): boolean => {
     if (!activeProjectId) return false;
     const space = spaces[activeProjectId];
     const activeTabId = space?.activeId;
     if (!activeTabId) return false;
-    const state = hookSnapshotByTerminalIdRef.current[activeTabId]?.state;
+    const state = terminalActivityByTerminalIdRef.current[activeTabId];
     if (!state || !states.includes(state)) return false;
+    if (state === "stopped") return clearStoppedTerminalSession(activeTabId);
     clearAgentSessionsForTerminal(activeTabId);
     return true;
-  }, [activeProjectId, spaces, clearAgentSessionsForTerminal]);
+  }, [activeProjectId, spaces, clearAgentSessionsForTerminal, clearStoppedTerminalSession]);
 
-  const clearStoppedTerminalSession = useCallback((terminalId: string): boolean => {
-    if (hookSnapshotByTerminalIdRef.current[terminalId]?.state !== "stopped") return false;
-    clearAgentSessionsForTerminal(terminalId);
-    return true;
-  }, [clearAgentSessionsForTerminal]);
+  const clearStoppedTerminalSessionRef = useRef(clearStoppedTerminalSession);
+  useEffect(() => { clearStoppedTerminalSessionRef.current = clearStoppedTerminalSession; }, [clearStoppedTerminalSession]);
+  const focusedTabId = isVisible && activeProjectId ? spaces[activeProjectId]?.activeId : null;
+  useEffect(() => {
+    const acknowledge = () => {
+      if (focusedTabId && document.hasFocus()) clearStoppedTerminalSessionRef.current(focusedTabId);
+    };
+    acknowledge();
+    window.addEventListener("focus", acknowledge);
+    return () => window.removeEventListener("focus", acknowledge);
+  }, [focusedTabId]);
 
   // Clicking a session in the island acknowledges it: clear stopped OR approval
   // for that terminal immediately and cancel any pending delayed auto-clear.
   const clearAttentionTerminalSession = useCallback((terminalId: string): boolean => {
+    if (clearStoppedTerminalSession(terminalId)) return true;
     const state = hookSnapshotByTerminalIdRef.current[terminalId]?.state;
     if (state !== "stopped" && state !== "approval") return false;
     clearAgentSessionsForTerminal(terminalId);
     if (clearTimerRef.current) { clearTimeout(clearTimerRef.current); clearTimerRef.current = null; }
     return true;
-  }, [clearAgentSessionsForTerminal]);
+  }, [clearAgentSessionsForTerminal, clearStoppedTerminalSession]);
 
   const scheduleClear = useCallback(() => {
     if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
@@ -2562,9 +2622,10 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     const nextKind = tabKindForId(spacesRef.current[projectId], tabId);
     onActiveTabKindChange(nextKind);
     requestProjectTabFocus(projectId);
-    // Schedule delayed clear when user focuses a stopped/approval tab
+    if (isVisible && document.hasFocus()) clearStoppedTerminalSession(tabId);
+    // Approval retains its existing delayed-clear behavior.
     const focusedState = hookStateByTerminalId[tabId];
-    if (focusedState === "stopped" || focusedState === "approval") {
+    if (focusedState === "approval") {
       scheduleClear();
     }
     setSpaces((current) => {
@@ -2706,7 +2767,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                 </button>
               ))}
             </div> : null}
-            <div className="xterm-surface-stack">
+            <div className="xterm-surface-stack" onPointerDown={acknowledgeActiveStoppedSession}>
               {!space.tabs.length && space.projectId === candidate?.id && canCreate && terminalSpacesRestored && isVisible ? (
                 <ProjectStart
                   key={space.uri}

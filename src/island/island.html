@@ -255,6 +255,11 @@ const SPEED_FACTORS = {
 };
 let finSpeed = 1.0;
 let lastStateBySessionId = new Map();
+const AUTO_EXPAND_DELAY_MS = 1000;
+const workingSessionIds = new Set();
+const pendingAutoExpand = new Map();
+let automaticallyOpened = false;
+let collapseResizeTimer = null;
 let audioContext = null;
 // Persisted through Settings; the legacy statusChangeNotificationsEnabled value
 // remains as the default when the split sound fields are absent.
@@ -486,31 +491,45 @@ sessionList.addEventListener("click", (e) => {
   if (row && row.dataset.tid) window.island.focusSession(row.dataset.tid);
 });
 
-// Mirror the sound-notification trigger: auto-expand when any session leaves
-// the "working" state (working -> stopped/approval/unknown), so the same
-// moments that play a sound also surface the panel.
-function hasNewAttentionTransition(nextTabs) {
-  // Skip the first snapshot so pre-existing state on startup doesn't expand,
-  // mirroring notifySessionTransitions' gating.
-  if (!lastStateBySessionId.size) return false;
-  for (const tab of nextTabs) {
-    const previousState = lastStateBySessionId.get(tab.sessionId);
-    const nextState = tab.state || "unknown";
-    if (previousState === "working" && nextState !== "working") return true;
+function needsAttention(state) {
+  return state === "stopped" || state === "approval";
+}
+
+// Confirm attention per session so redraw gaps and brief stopped pulses never
+// open the panel. Keep working history across unknown gaps, until a real stop.
+function updateAutoExpansion(nextTabs) {
+  const states = new Map(nextTabs.map(tab => [tab.sessionId, tab.state]));
+  for (const [id, pending] of pendingAutoExpand) {
+    if (states.get(id) === pending.state) continue;
+    clearTimeout(pending.timer);
+    pendingAutoExpand.delete(id);
   }
-  return false;
+  for (const id of workingSessionIds) {
+    if (!states.has(id)) workingSessionIds.delete(id);
+  }
+  for (const { sessionId, state } of nextTabs) {
+    if (state === "working") workingSessionIds.add(sessionId);
+    if (!needsAttention(state) || !workingSessionIds.has(sessionId) || pendingAutoExpand.has(sessionId)) continue;
+    const timer = setTimeout(() => {
+      pendingAutoExpand.delete(sessionId);
+      workingSessionIds.delete(sessionId);
+      if (tabs.some(tab => tab.sessionId === sessionId && tab.state === state) && !isOpen()) open(true);
+    }, AUTO_EXPAND_DELAY_MS);
+    pendingAutoExpand.set(sessionId, { state, timer });
+  }
 }
 
 function handleTabs(newTabs) {
   const nextKey = aggregateState(newTabs);
-  // Capture before notifySessionTransitions updates the state snapshot.
-  const shouldAutoExpand = hasNewAttentionTransition(newTabs);
+  updateAutoExpansion(newTabs);
   notifySessionTransitions(newTabs);
   tabs = newTabs;
   renderPillTiles();
   updateMarkState(nextKey);
-  if (shouldAutoExpand && !isOpen()) open(true);
-  else if (isOpen()) renderSessionList();
+  if (isOpen()) {
+    if (automaticallyOpened && !tabs.some(tab => needsAttention(tab.state))) close();
+    else renderSessionList();
+  }
 }
 
 function handlePreferences(preferences) {
@@ -531,6 +550,9 @@ function panelHeight() {
 }
 
 function open(auto = false) {
+  clearTimeout(collapseResizeTimer);
+  collapseResizeTimer = null;
+  automaticallyOpened = auto;
   const h = panelHeight();
   islandEl.style.height = (NOTCH_HEIGHT + h) + "px";
   window.island.setExpanded(true, NOTCH_HEIGHT + h);
@@ -543,12 +565,22 @@ function open(auto = false) {
 }
 
 function close() {
+  automaticallyOpened = false;
+  for (const [id, pending] of pendingAutoExpand) {
+    clearTimeout(pending.timer);
+    workingSessionIds.delete(id);
+  }
+  pendingAutoExpand.clear();
   islandEl.classList.remove("opened");
   islandEl.classList.add("closed");
   islandEl.style.height = "";
   updateMarkState();
   window.island.cancelAutoCollapse?.();
-  setTimeout(() => window.island.setExpanded(false, 0), 450);
+  clearTimeout(collapseResizeTimer);
+  collapseResizeTimer = setTimeout(() => {
+    collapseResizeTimer = null;
+    window.island.setExpanded(false, 0);
+  }, 450);
 }
 
 islandEl.addEventListener("click", () => {
@@ -563,6 +595,7 @@ let hoverTimer = null;
 islandEl.addEventListener("mouseenter", () => {
   window.island.setIgnoreMouseEvents(false);
   // Hovering means the user is attending to the island: cancel auto-collapse.
+  automaticallyOpened = false;
   window.island.cancelAutoCollapse?.();
   if (islandEl.classList.contains("closed")) hoverTimer = setTimeout(() => open(false), 300);
 });

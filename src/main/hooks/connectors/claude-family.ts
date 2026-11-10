@@ -35,6 +35,7 @@ function normalizeClaudePayload(agentId: string, raw: unknown): UnifiedHookEvent
 
   // Notification with permission-related types → attention
   let event = EVENT_MAP[hookName];
+  if (agentId === "codex" && hookName === "Interrupt") event = "turn_end";
   if (!event && hookName === "Notification") {
     const ntype = typeof r.notification_type === "string" ? r.notification_type : "";
     if (ntype === "permission_prompt") {
@@ -215,7 +216,7 @@ export class CodexConnector extends ClaudeConnector {
     await this.uninstall(); // remove old managed section first
     const content = this.readRawConfig();
     const command = `${shellQuote(hookCliPath)} --source codex`;
-    const hookLines = HOOK_EVENT_SPECS.flatMap((spec) => {
+    const hookLines = [...HOOK_EVENT_SPECS, { name: "Interrupt", matcher: null, timeout: 1 }].flatMap((spec) => {
       const lines = [`[[hooks.${spec.name}]]`];
       if (spec.matcher != null) lines.push(`matcher = ${tomlString(spec.matcher)}`);
       lines.push(`[[hooks.${spec.name}.hooks]]`);

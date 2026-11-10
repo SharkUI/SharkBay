@@ -2,7 +2,8 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { CodexConnector } from "../src/main/hooks/connectors/claude-family.js";
+import { ClaudeConnector, CodexConnector } from "../src/main/hooks/connectors/claude-family.js";
+import { AgentHookStateManager } from "../src/main/hooks/state-manager.js";
 
 describe("hook connectors", () => {
   it("installs Codex hooks using Codex inline TOML matcher groups", async () => {
@@ -39,9 +40,48 @@ describe("hook connectors", () => {
       expect(config).toContain('matcher = "*"');
       expect(config).toContain("[[hooks.PermissionRequest.hooks]]");
       expect(config).toContain("timeout = 86400");
+      expect(config).toContain("[[hooks.Interrupt.hooks]]");
       expect(config).toContain('type = "command"');
       expect(config).toContain(`command = "'${hookPath}' --source codex"`);
     } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("normalizes Codex Interrupt as the end of the active turn", () => {
+    const payload = {
+      hook_event_name: "Interrupt",
+      session_id: "codex-session",
+      turn_id: "interrupted-turn",
+      cwd: "/tmp/sharkbay-project",
+      permission_mode: "default",
+    };
+
+    expect(new CodexConnector().normalize(payload)).toMatchObject({
+      agent: "codex",
+      sessionId: "codex-session",
+      event: "turn_end",
+      cwd: payload.cwd,
+    });
+    expect(new ClaudeConnector().normalize(payload)).toBeNull();
+  });
+
+  it("stops a working Codex session when its turn is interrupted", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "sharkbay-codex-status-"));
+    const manager = new AgentHookStateManager();
+    const states: string[] = [];
+    manager.registerConnector(new CodexConnector());
+    manager.on("stateChange", (event) => states.push(event.state));
+    const payload = { cwd: root, session_id: "codex-session", turn_id: "interrupted-turn" };
+
+    try {
+      manager.handleMessage({ source: "codex", payload: { ...payload, hook_event_name: "UserPromptSubmit" } });
+      manager.handleMessage({ source: "codex", payload: { ...payload, hook_event_name: "Interrupt" } });
+
+      expect(states).toEqual(["working", "stopped"]);
+      expect(manager.getStatus(root, payload.session_id)?.state).toBe("stopped");
+    } finally {
+      manager.dispose();
       await fs.rm(root, { recursive: true, force: true });
     }
   });
