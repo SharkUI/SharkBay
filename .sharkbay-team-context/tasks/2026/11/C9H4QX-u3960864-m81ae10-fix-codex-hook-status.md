@@ -12,13 +12,15 @@ agent: Codex GPT-6
 sessionId: 01a18b67-b8c9-7431-a5e8-0e7336ccf752
 branch: main
 createdAt: 2026-11-10T05:37:03Z
-updatedAt: 2026-11-10T14:01:26Z
-completedAt: 2026-11-10T14:01:26Z
+updatedAt: 2026-11-11T04:00:11Z
+completedAt: 2026-11-11T04:00:11Z
+commits:
+  - 6b048da1fdc78cdbf274eec2fda5f011b8b6b42f
 ---
 
 ## Summary
 
-修正 Codex hook 与 live terminal 的状态合并：用显式会话 ID 关联恢复标签，working hook 不再被输入提示符推断的 stopped 覆盖，并识别长输入及底部空行中的 Working/待回答页脚。待回答为 approval，stopped 聚焦后清除，汇总保持 approval > stopped > working；Island 仍在 stopped/approval 稳定 1000ms 后展开，提醒消失后收起并保留手动查看。
+Codex 状态按当前回合最后的 Working/Worked for 标记识别，完成标记会淘汰可见历史进度，同时保留 hook 工作态以防下一轮重绘误停。待回答为 approval、stopped 聚焦后清除、汇总保持 approval > stopped > working，Island 确认仍为 1000ms；原主体修复已提交推送，本轮完成标记补充修复尚未提交或更新已安装 App。
 
 ## Files
 
@@ -70,6 +72,14 @@ completedAt: 2026-11-10T14:01:26Z
 - 近期相关 hook 日志工作阶段持续为 working；本次 UI 只读查看了终端，遇到用户正在输入后停止交互，未提交、修改或回答其他会话。
 - 已把恢复标签的显式 hookSessionId 优先关联到当前 terminal id（覆盖过期 terminal id），并在合并时保留明确的 working hook；native Working 扫描整个 live screen，footer 识别先去除底部未使用空行，不读 scrollback。
 - 使用双 Electron renderer（真实 TerminalPane/xterm → IPC → 真实 Island HTML）验证源头及联动，修复前在多标签恢复场景复现 working hook 下被误判 stopped；修复后保持输入提示符 1.5 秒也不发布 stopped 或展开 Island。1000ms 展开确认值未进一步增加。
+- 用户授权 commit & push；核对团队任务 C8T4R9-u3960864-m81ae10，咖啡杯三模式等并行修改不属于本任务。准备仅暂存本任务 8 个文件中的相关内容，App.tsx 按 hunk 隔离，并在独立 index 快照上验证后提交、推送 origin/main。
+- 已隔离 App.tsx 的 9 个相关 hunks（移除混合 hunk 中的 caffeinate import），共暂存本任务 8 个文件；剩余 App.tsx 及其他并行改动保持未暂存。远端 main 与本地 HEAD 同步，8 个暂存文件的 blob hash 均与独立验证快照一致。
+- 已创建提交 6b048da1fdc78cdbf274eec2fda5f011b8b6b42f（fix: stabilize Codex status and Island notifications），包含且仅包含本任务 8 个文件的相关修改，准备推送 origin/main。
+- 已成功推送 origin/main，远端 main 确认为 6b048da1fdc78cdbf274eec2fda5f011b8b6b42f；其他并行任务修改仍留在工作区，index 已清空。
+- 用户提供新截图：当前 Codex 已显示 Worked for 49s 与空闲输入框，项目仍为 working；重新打开本任务，确认安装包为上一轮新构建且日志已收到对应 Stop，不能仅归因于结束 hook 丢失。
+- 定位到全 live-screen 扫描只识别 Working，不识别其后的 Worked for 结束标记；可被旧进度行重新判为 working。计划补截图格式回归，按最后一条运行/完成标记判定，再验证结束、下一轮启动与多标签汇总。
+- 已以严格时长格式识别 Worked for 完成标记，逐行扫描时由后出现的状态覆盖旧进度；空闲 prompt 与真实 Stop 随后得到 stopped，下一轮新 Working 或新工作 hook 仍可恢复 working。仅修改 helper 与其回归测试两个文件。
+- 只读核对实际 SharkBay 项目中的当前 Codex 标签及灰色 shell 标签；当前已进入本轮新请求，未把此时的 working 当作上一轮结束截图状态。未输入或提交其他会话内容。
 
 ## Verification
 
@@ -101,10 +111,16 @@ completedAt: 2026-11-10T14:01:26Z
 - 修复后 codex-input-state、island-auto-expand、hooks-connectors、renderer-workflow 共 50 项测试通过；npm run typecheck、npm run build、涉及文件 git diff --check 通过。CodeGraph affected 定位到 codex-input-state 测试。
 - 双 renderer 联动 9 项检查通过：恢复多标签显式 hook 关联、1.5 秒不发布假 stopped/不展开、真实 Stop 达到终端与项目并在 1000ms 后展开、聚焦确认及收起、底部空行中的 pending input 为 approval 且可展开、无 hook 的长页脚标签及其他标签独立保持 working。
 - 本轮测试 Electron 窗口已退出，临时 Vite 服务已停止；没有替换、重启或给运行中实际 agent 会话发送输入。本轮源码构建需由更新后的 App 加载才会生效。
+- 提交前独立 index 快照验证：npm run typecheck、npm run build 通过，npm test 共 65 个文件、412 项测试通过；git diff --cached --check 通过。检查未依赖并行任务的未暂存代码。
+- 推送后验证：git rev-list --left-right --count origin/main...HEAD 为 0/0，git ls-remote origin refs/heads/main 返回本任务完整提交 hash，git diff --cached --name-only 为空。
+- 完成标记修复前，旧 Working + Worked for 49s/1m 18s/2h 3m 4s + 空闲 prompt 的 3 个回归均失败；修复后 4 个相关文件共 55 项测试通过，包含下一轮进度和旧完成页脚暂存时的新 working hook。
+- 本轮 npm run typecheck、npm run build、git diff --check 通过；CodeGraph affected 定位到 codex-input-state 测试。
+- 双 renderer 的真实 TerminalPane/xterm → Island 联动 11 项检查通过，增加截图格式完成重放、全部标签结束时项目/Island 无 working 且全局 working=false，以及新一轮 hook 恢复 working；保留已验证的防瞬停、approval、聚焦确认、1000ms 展开行为。
+- 本轮临时 Electron 窗口与 Vite 已关闭；未更换或重启安装的 App，未新增提交。当前工作区仅 helper 与回归测试两个文件有本轮修改。
 
 ## Notes
 
-- 本任务未请求提交。
+- 用户已授权本任务 commit & push；所有本任务提交记录在 frontmatter commits。
 - .sharkbay/team-context/ 只读。
 - Native terminal status 是现有 hook 状态的本地显示补充，不伪造 Codex session id 或持久化猜测关联；当前识别 Codex 0.167.0 的英文 live footer，后续上游更改提示时应同步 helper 和回归样例。
 - 官方参考：https://learn.chatgpt.com/docs/hooks 。异步提问不代表回合结束，PostToolUse 不能当作用户已回答。
@@ -112,3 +128,4 @@ completedAt: 2026-11-10T14:01:26Z
 - stopped 表示尚未查看的停止提醒：用户聚焦该标签即清为 unknown；已聚焦期间新出现的停止仍提醒，窗口失焦或 workspace 隐藏时不自动确认；下次 working/approval 后再停止可重新提醒。
 - Island 自动展开要求观察过该会话 working，随后 stopped 或 approval 连续保持 1000ms；unknown 只表示状态未知。此延时只用于展开确认，各标签状态和项目汇总仍按实际观测显示。
 - Codex native input prompt 在执行中也可能显示，不能单凭它结束一个 hook 仍明确标为 working 的回合；恢复标签已有 hookSessionId 是精确身份，应优先于旧 terminal id 或单项目唯一标签猜测。此轮覆盖已复现的状态源缺陷，未捕获用户每次闪烁的原始终端字节流。
+- 正常结束不能被 live screen 中更早的 Working 行覆盖：Worked for 标记清除之前的进度证据，之后出现的新 Working 则属于新活动。完成后的空闲画面仍与 hook 状态合并，避免旧完成页脚把刚启动的新回合误判停止。
