@@ -112,3 +112,29 @@ describe("parseHookSessions Kiro sub-agent filtering", () => {
     expect(sessions[0]!.sessionId).toBe(sid);
   });
 });
+
+describe("parseHookSessions Codex app-generated filtering", () => {
+  it.each([
+    { agent: "codex", prompts: ["This is an app-generated request. Generate suggestions."], kept: false },
+    { agent: "codex", prompts: ["  This is an app-generated request. Generate suggestions.\n"], kept: false },
+    { agent: "codex", prompts: ["I'm working in SharkBay Task Protocol mode.", "This is an app-generated request. Generate suggestions."], kept: false },
+    { agent: "codex", prompts: ["Fix the session list"], kept: true },
+    { agent: "codex", prompts: ["# Files mentioned by the user:\napp.ts"], kept: true },
+    { agent: "codex", prompts: ["Explain this: This is an app-generated request"], kept: true },
+    { agent: "claude", prompts: ["This is an app-generated request. Generate suggestions."], kept: true },
+  ])("kept=$kept for $agent with $prompts", ({ agent, prompts, kept }) => {
+    const repo = fs.mkdtempSync(path.join(tmp, "repo-"));
+    const logPath = path.join(repo, ".sharkbay", "logs", "hooks.log");
+    fs.mkdirSync(path.dirname(logPath), { recursive: true });
+    fs.writeFileSync(logPath, prompts.map((prompt) => JSON.stringify({
+      timestamp: "2026-01-01T00:00:00Z",
+      source: agent,
+      payload: { session_id: "session-001" },
+      normalized: { agent, sessionId: "session-001", event: "prompt", prompt },
+    })).join("\n"));
+
+    const sessions = parseHookSessions(repo);
+    expect(sessions).toHaveLength(kept ? 1 : 0);
+    if (kept) expect(sessions[0]!.promptCount).toBe(prompts.length);
+  });
+});

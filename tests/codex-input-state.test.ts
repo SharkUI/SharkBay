@@ -88,6 +88,39 @@ describe("Codex terminal activity without a resolved hook session", () => {
     ])).toBe("stopped");
   });
 
+  it.each(["Worked for 49s • 00:26", "Worked for 1m 18s", "Worked for 2h 3m 4s · 12:34"])(
+    "lets the latest completion banner supersede older progress: %s", (completed) => {
+      const state = codexTerminalActivity([
+        "• Working (24s • esc to interrupt)",
+        "The task is complete.",
+        completed,
+        "↳ Recap: completed work",
+        "Next: load the new build",
+        "› Ask Codex to do anything",
+        "GPT-6.1-Sol xhigh · ~/Projects/SharkBay",
+      ]);
+      expect(state).toBe("stopped");
+      expect(codexActivityWithHook(state!, "stopped")).toBe("stopped");
+    },
+  );
+
+  it("uses a new progress indicator after an earlier turn completed", () => {
+    expect(codexTerminalActivity([
+      "Worked for 49s • 00:26",
+      "› Continue with the next task",
+      "• Working (2s • esc to interrupt)",
+      "› Ask Codex to do anything",
+    ])).toBe("working");
+  });
+
+  it("preserves a fresh working hook while the old completion footer is still being redrawn", () => {
+    const state = codexTerminalActivity([
+      "Worked for 49s • 00:26",
+      "› Ask Codex to do anything",
+    ]);
+    expect(codexActivityWithHook(state!, "working")).toBe("working");
+  });
+
   it("keeps working when queued input pushes the progress indicator above the last eight lines", () => {
     expect(codexTerminalActivity([
       "• Working (24s • esc to interrupt)",

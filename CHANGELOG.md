@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.5] — 2026-11-13
+
+### Added
+- Agent-initiated Artifacts can asynchronously create a self-contained HTML deliverable for a task, open it in the built-in browser, and notify the originating agent when ready.
+- A sidebar keep-awake control offers Off, On, and Auto modes; Auto keeps the Mac awake while an agent is working.
+
+### Changed
+- Island waits three seconds for a stable stopped or approval state before automatically expanding, reducing transient notifications.
+- The project list fades at its scroll edges.
+
+### Fixed
+- Codex completion banners supersede older progress indicators so finished turns stop showing as working, while fresh working hooks remain authoritative.
+- App-generated Codex suggestion sessions no longer appear in the session list.
+
 ## [0.3.4] — 2026-09-17
 
 ### Added

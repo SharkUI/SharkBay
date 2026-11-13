@@ -1,6 +1,6 @@
 {
   "name": "sharkbay",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "private": true,
   "description": "A local macOS control panel for software projects.",
   "license": "GPL-3.0-only",

@@ -69,7 +69,7 @@ describe("Island automatic expansion", () => {
   it("does not expand for a pre-existing stopped session on startup", () => {
     const island = islandHarness();
     island.tabs([tab("stopped")]);
-    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(3000);
     expect(island.opened()).toBe(false);
   });
 
@@ -77,7 +77,7 @@ describe("Island automatic expansion", () => {
     const island = islandHarness();
     island.tabs([tab("working")]);
     island.tabs([tab("unknown")]);
-    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(3000);
     expect(island.setExpanded).not.toHaveBeenCalled();
   });
 
@@ -85,17 +85,17 @@ describe("Island automatic expansion", () => {
     const island = islandHarness();
     island.tabs([tab("working")]);
     island.tabs([tab("stopped")]);
-    vi.advanceTimersByTime(750);
+    vi.advanceTimersByTime(2500);
     island.tabs([tab(next)]);
-    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(3000);
     expect(island.setExpanded).not.toHaveBeenCalled();
   });
 
-  it.each(["stopped", "approval"])("opens only after %s remains stable for 1000ms", (state) => {
+  it.each(["stopped", "approval"])("opens only after %s remains stable for 3000ms", (state) => {
     const island = islandHarness();
     island.tabs([tab("working")]);
     island.tabs([tab(state)]);
-    vi.advanceTimersByTime(999);
+    vi.advanceTimersByTime(2999);
     expect(island.opened()).toBe(false);
     vi.advanceTimersByTime(1);
     expect(island.opened()).toBe(true);
@@ -107,7 +107,7 @@ describe("Island automatic expansion", () => {
     island.tabs([tab("stopped")]);
     vi.advanceTimersByTime(100);
     island.tabs([]);
-    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(3000);
     expect(island.setExpanded).not.toHaveBeenCalled();
   });
 
@@ -117,7 +117,7 @@ describe("Island automatic expansion", () => {
     island.tabs([tab("stopped")]);
     vi.advanceTimersByTime(300);
     island.tabs([{ ...tab("stopped"), lastPrompt: "Updated task title" }]);
-    vi.advanceTimersByTime(700);
+    vi.advanceTimersByTime(2700);
     expect(island.opened()).toBe(true);
   });
 
@@ -125,11 +125,11 @@ describe("Island automatic expansion", () => {
     const island = islandHarness();
     island.tabs([tab("working", "first"), tab("working", "second")]);
     island.tabs([tab("stopped", "first"), tab("working", "second")]);
-    vi.advanceTimersByTime(950);
+    vi.advanceTimersByTime(2950);
     island.tabs([tab("working", "first"), tab("stopped", "second")]);
     vi.advanceTimersByTime(100);
     island.tabs([tab("working", "first"), tab("working", "second")]);
-    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(3000);
     expect(island.setExpanded).not.toHaveBeenCalled();
   });
 
@@ -138,7 +138,7 @@ describe("Island automatic expansion", () => {
     island.tabs([tab("working")]);
     island.tabs([tab("unknown")]);
     island.tabs([tab("stopped")]);
-    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(3000);
     expect(island.opened()).toBe(true);
   });
 
@@ -146,11 +146,11 @@ describe("Island automatic expansion", () => {
     const island = islandHarness();
     island.tabs([tab("working")]);
     island.tabs([tab("stopped")]);
-    vi.advanceTimersByTime(900);
+    vi.advanceTimersByTime(2900);
     island.tabs([tab("approval")]);
     vi.advanceTimersByTime(100);
     expect(island.opened()).toBe(false);
-    vi.advanceTimersByTime(900);
+    vi.advanceTimersByTime(2900);
     expect(island.opened()).toBe(true);
   });
 
@@ -158,7 +158,7 @@ describe("Island automatic expansion", () => {
     const island = islandHarness();
     island.tabs([tab("working", "done"), tab("working", "running")]);
     island.tabs([tab("stopped", "done"), tab("working", "running")]);
-    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(3000);
     expect(island.opened()).toBe(true);
     island.tabs([tab("unknown", "done"), tab("working", "running")]);
     expect(island.opened()).toBe(false);
@@ -178,7 +178,7 @@ describe("Island automatic expansion", () => {
     const island = islandHarness();
     island.tabs([tab("working")]);
     island.tabs([tab("stopped")]);
-    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(3000);
     island.hover();
     island.tabs([tab("working")]);
     expect(island.opened()).toBe(true);
@@ -191,7 +191,7 @@ describe("Island automatic expansion", () => {
     island.openManually();
     island.collapse();
     island.tabs([tab("stopped")]);
-    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(3000);
     expect(island.opened()).toBe(false);
   });
 

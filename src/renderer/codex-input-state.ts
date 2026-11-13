@@ -20,8 +20,14 @@ export function codexTerminalActivity(screenLines: readonly string[]): CodexActi
   if (codexHasPendingInput(screenLines)) return "approval";
   const lines = liveLines(screenLines);
   // Queued or multiline input can put the live progress indicator well above
-  // the footer. The caller supplies the live screen, never scrollback rows.
-  if (lines.some((line) => /\besc to interrupt\)(?:\s*[·•].*)?\s*$/i.test(line))) return "working";
+  // the footer. A later completion banner retires any older progress line.
+  // The caller supplies the live screen, never scrollback rows.
+  let working = false;
+  for (const line of lines) {
+    if (/\besc to interrupt\)(?:\s*[·•].*)?\s*$/i.test(line)) working = true;
+    else if (/^Worked for \d+(?:\.\d+)?[hms](?:\s+\d+(?:\.\d+)?[hms])*(?:\s*[·•].*)?$/i.test(line)) working = false;
+  }
+  if (working) return "working";
   if (lines.slice(-8).some((line) => /^[›❯](?:\s|$)/.test(line))) return "stopped";
   return null;
 }

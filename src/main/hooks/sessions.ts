@@ -111,6 +111,7 @@ export function parseHookSessions(repoPath: string): HookSession[] {
     if (data.title === null && transcriptPath) {
       data.title = readTranscriptTitle(transcriptPath);
     }
+    if (data.agentId === "codex" && data.title?.startsWith("This is an app-generated request")) continue;
     result.push({ sessionId, ...data });
   }
 
