@@ -2530,8 +2530,10 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       return;
     }
     try {
-      if (match?.tab.kind === "browser") await closeBrowser(tabId);
-      else if (match?.tab.kind === "terminal" && match.tab.reviewRun?.status === "running" && cancelReview) {
+      if (match?.tab.kind === "browser") {
+        await closeBrowser(tabId);
+        removeTab(tabId, match);
+      } else if (match?.tab.kind === "terminal" && match.tab.reviewRun?.status === "running" && cancelReview) {
         await cancelReview({ runId: match.tab.reviewRun.id });
       } else await closeTerminal(tabId);
     } catch (error) {
