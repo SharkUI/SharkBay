@@ -12,7 +12,7 @@ agent: Codex GPT-6
 sessionId: 01a1d9cf-7921-7ed0-99b9-953d9df652d5
 branch: main
 createdAt: 2026-11-14T12:01:48Z
-updatedAt: 2026-11-14T12:51:45Z
+updatedAt: 2026-11-14T12:55:26Z
 completedAt: 2026-11-14T12:51:45Z
 commits:
   - 85fb1ce53d1c92614a86f66101dea0a51998f09e
@@ -63,6 +63,7 @@ commits:
 - 用户截图反馈：全屏 Projects 退出应使用左上角返回箭头。将原标题后的关闭叉号替换为标题前的返回按钮，保持关闭及焦点恢复行为。
 - 用户授权提交移动适配。工作区另有 B4C7K2-u3960864-m81ae10 浏览器标签关闭修复：暂存时排除 App.tsx 中对应 closeBrowser/removeTab 片段及 tests/browser-tab-close.test.ts，只提交本任务内容。
 - 已提交 99a411d87b13a00f6366435697ea911fb64596bb（feat: adapt WebUI for mobile screens），共六个文件；其他任务的共享文件片段与测试未暂存，未推送。
+- 用户后续授权一并提交其余修复并 push；浏览器关闭修复在任务 B4C7K2-u3960864-m81ae10 记录提交 2776244。本任务的基线和移动适配提交已随 origin/main 成功推送。
 
 ## Verification
 - 基线 `git diff --check`、`npm run typecheck`、`npx vitest run tests/runtime-packaging.test.ts` 通过。
@@ -85,6 +86,7 @@ commits:
 - 已检查 `/tmp/sharkbay-mobile-fullscreen-projects.png` 与最新终端截图；本轮未产生提交，隔离测试实例已关闭。
 - 本轮类型检查、Vite 构建和 `git diff --check` 通过；`/tmp/sharkbay-mobile-projects-back-verify.mjs` 验证 320/390/844/1024px 全屏、返回箭头在标题前、无关闭叉号、返回后的焦点和同一终端保持，均通过。已检查截图 `/tmp/sharkbay-mobile-projects-back.png`，未提交。
 - 提交前 `git diff --cached --check` 通过；校验暂存文件集合为本任务六个文件，并检查暂存 App.tsx 未包含浏览器关闭修复。提交后仅保留 B4C7K2-u3960864-m81ae10 的 App.tsx 片段及 tests/browser-tab-close.test.ts。
+- `git push origin main` 成功；远端 HEAD 2776244202cd4228a6df5491d10468c77f32100a 与本地一致，工作区干净。
 
 ## Notes
-- .sharkbay/team-context/ 只读。移动适配已按用户要求提交，未推送。
+- .sharkbay/team-context/ 只读。移动适配已按用户要求提交并推送。
