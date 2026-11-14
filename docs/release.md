@@ -178,4 +178,6 @@ Local builds use ad-hoc signing unless signing and notarization credentials are 
 
 `pack` and `dist` now run `prepare:runtime` after the build. The staged runtime includes ordinary Node, its license, the lockfile-resolved production dependencies, `dist-runtime/` and `dist/renderer/`, and is copied outside ASAR to `Resources/runtime`. Electron only connects to this service; do not rebuild runtime dependencies for Electron ABI.
 
+Keep the separate `extraResources` mapping from `.runtime-bundle/node_modules` to `runtime/node_modules`: Electron Builder skips a resource source's root `node_modules` directory when copying its parent. After packaging, run `node scripts/verify-packaged-runtime.mjs` to verify the actual app's runtime startup and terminal lifecycle with an isolated profile.
+
 Use a target-native build machine and verify the packaged runtime's SQLite/PTY startup. Closing/updating the desktop client must not stop active runtime sessions. Runtime protocol changes require coordinated client/runtime versions; incompatible connections must fail explicitly. An active runtime is never silently replaced during client startup. Existing installed desktop versions still own their old backend and must be stopped before migrating daily usage to the shared-runtime release.

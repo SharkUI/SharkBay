@@ -133,6 +133,10 @@
       {
         "from": ".runtime-bundle",
         "to": "runtime"
+      },
+      {
+        "from": ".runtime-bundle/node_modules",
+        "to": "runtime/node_modules"
       }
     ],
     "asarUnpack": [

@@ -385,6 +385,14 @@ body.is-resizing-columns * {
   padding-top: 30px;
 }
 
+.dashboard-grid.is-web .project-panel {
+  padding-top: var(--workbench-edge-inset);
+}
+
+.dashboard-grid.is-web .project-window-drag-strip {
+  display: none;
+}
+
 .detail-panel {
   display: flex;
   flex-direction: column;
@@ -793,6 +801,7 @@ body.is-resizing-columns * {
 }
 
 .project-panel-title {
+  margin-right: auto;
   color: #5f6c6e;
   font-size: 12px;
   font-weight: 800;
@@ -5886,11 +5895,11 @@ body.is-resizing-columns .app-shell[data-theme="morning"] .column-resizer::befor
   padding: 2px 0;
 }
 
-.sidebar-status-bar::before {
+.project-panel::after {
   content: "";
   position: absolute;
   right: 0;
-  bottom: calc(100% + 10px);
+  bottom: 40.4px;
   left: 0;
   z-index: 1;
   height: 28px;
@@ -5898,7 +5907,7 @@ body.is-resizing-columns .app-shell[data-theme="morning"] .column-resizer::befor
   pointer-events: none;
 }
 
-.app-shell[data-theme="night"] .sidebar-status-bar::before {
+.app-shell[data-theme="night"] .project-panel::after {
   background: linear-gradient(to bottom, transparent, #101719);
 }
 

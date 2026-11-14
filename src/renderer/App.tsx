@@ -9,6 +9,7 @@ import defaultProjectIconUrl from "./assets/shark-fin.png";
 import { CodeEditor } from "./code-editor";
 import { UpdateHint } from "./update-hint";
 import { ProjectStart } from "./project-start";
+import { RuntimeStatus } from "./bridge/runtime-status";
 import { colorSchemes, getColorScheme } from "./color-schemes";
 import { promptSearchKeys } from "./prompt-search";
 import { isCaffeinateActive, normalizeCaffeinateMode, type CaffeinateMode } from "../shared/caffeinate";
@@ -1053,7 +1054,8 @@ function SidebarStatusBar({ caffeinateActive, caffeinateMode, onCaffeinateModeCh
 
   return (
     <div className="sidebar-status-bar">
-      <span className="sidebar-status-control" title={label}>
+      {getBridge().runtime ? <RuntimeStatus runtime={getBridge().runtime!} /> : null}
+      {getBridge().terminal?.setCaffeinateActive ? <span className="sidebar-status-control" title={label}>
         <span className="sidebar-status-button" data-active={caffeinateActive} aria-hidden="true">
           <svg width="16.8" height="16.8" viewBox="0 0 24 24" fill="none">
             <path d="M5 9h12v7a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4V9ZM17 10h1a3 3 0 1 1 0 6h-1M4 22h15M8 3v3M12 2v4M16 3v3" />
@@ -1070,7 +1072,7 @@ function SidebarStatusBar({ caffeinateActive, caffeinateMode, onCaffeinateModeCh
           <option value="on">On</option>
           <option value="auto">Auto</option>
         </select>
-      </span>
+      </span> : null}
     </div>
   );
 }
@@ -1372,14 +1374,15 @@ function DashboardView({
   const browserLayoutKey = `${projectColumnWidth}:${detailPanelHidden ? "browser" : "panel"}`;
 
   return (
-    <div className={cx("dashboard-grid", detailPanelHidden && "is-detail-hidden")} ref={gridRef} style={gridStyle}>
+    <div className={cx("dashboard-grid", detailPanelHidden && "is-detail-hidden", getBridge().runtime?.host === "web" && "is-web")} ref={gridRef} style={gridStyle}>
       <section className="project-panel">
         <div className="project-window-drag-strip" aria-hidden="true" />
         <div className="project-panel-header">
           <span className="project-panel-title">Projects</span>
-          {getBridge().config?.pickProjectFolder ? <button aria-label="Add project" className="icon-button" title="Add project" type="button" onClick={openAddProjectModal}>
+          <button aria-label="Add project" className="icon-button" title="Add project" type="button" onClick={openAddProjectModal}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-          </button> : null}
+          </button>
+          <button aria-label="Settings" className="icon-button" title="Settings" type="button" onClick={onOpenSettings}><SettingsGearIcon /></button>
         </div>
         {scanErrors.length ? (
           <div className="inline-errors">
@@ -1405,16 +1408,16 @@ function DashboardView({
             <div className="empty-state compact-title-row" style={{ padding: "24px 16px" }}>
               <strong>No projects</strong>
               <span>Add a project directory to get started.</span>
-              {getBridge().config?.pickProjectFolder ? <button className="button" type="button" style={{ marginTop: "12px" }} onClick={openAddProjectModal}>Add Project</button> : null}
+              <button className="button" type="button" style={{ marginTop: "12px" }} onClick={openAddProjectModal}>Add Project</button>
             </div>
           )}
         </div>
-        {getBridge().terminal?.setCaffeinateActive ? <SidebarStatusBar
+        <SidebarStatusBar
           caffeinateActive={caffeinateActive}
           caffeinateMode={caffeinateMode}
           onCaffeinateModeChange={onCaffeinateModeChange}
           setToast={setToast}
-        /> : null}
+        />
       </section>
 
       <div aria-label="Resize project column" aria-orientation="vertical" className="column-resizer" role="separator" tabIndex={0}
@@ -1500,7 +1503,7 @@ function DashboardView({
               </div>
               <button aria-label="Close" className="icon-button" disabled={Boolean(addingProject)} type="button" onClick={closeAddProjectModal}><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
             </div>
-            <div className="add-project-body">
+            {getBridge().config?.pickProjectFolder ? <div className="add-project-body">
               <section className="add-project-section">
                 <div className="add-project-copy">
                   <h4>Local Directory</h4>
@@ -1532,7 +1535,10 @@ function DashboardView({
                 </div>
                 <p className="add-project-note">Clone into a parent folder you choose, then add the cloned project.</p>
               </form>
-            </div>
+            </div> : <div className="add-project-body">
+              <p>项目位于 SharkBay 运行主机上。在主机终端添加项目，然后刷新项目列表。</p>
+              <code>npm run start:runtime -- --project /absolute/path/to/project</code>
+            </div>}
           </section>
         </div>
       ) : null}
