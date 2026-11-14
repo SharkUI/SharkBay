@@ -133,5 +133,6 @@ export interface ExecutionProvider {
   notifyTerminal(input: TerminalNotificationInput): TerminalNotificationResult;
   resizeTerminal(input: TerminalResizeInput): TerminalSession;
   closeTerminal(input: TerminalCloseInput): TerminalSession;
+  listTerminalSessions(): TerminalSession[];
   closeAllTerminalSessions(): void;
 }

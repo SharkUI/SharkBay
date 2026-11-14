@@ -1,16 +1,20 @@
 # Architecture
 
-SharkBay is an Electron app with a TypeScript main process, React renderer, preload bridge, and shared IPC contracts.
+SharkBay has one independent Node application runtime, a shared React workbench, and Electron/browser clients. GitHub remains the only identity, permission, and collaboration system.
 
 ## Process Model
 
 - `electron/main.ts` creates the main `BrowserWindow`, loads the Vite dev server in development, and loads `dist/renderer/index.html` in packaged builds.
 - `electron/preload.mts` exposes the constrained `window.sharkBay` bridge.
-- `electron/ipc.ts` registers all main-process IPC handlers and broadcasts runtime events.
+- `electron/ipc.ts` forwards business commands to the existing runtime over a user-private local socket. BrowserView, dialogs, sharing and desktop power controls remain in Electron.
+- `electron/runtime-client.ts` discovers the runtime or starts the bundled ordinary Node executable. Desktop shutdown disconnects the client; it does not stop runtime-owned PTYs or watchers.
+- `src/server/main.ts` owns profile locking, initialization and shutdown; `http-server.ts` serves the workbench and authenticated HTTP/WS.
+- `src/runtime/application-runtime.ts` owns Core, tasks, Hooks, Review/Artifact, Telegram and usage. Only this process writes their state.
+- `src/runtime/control-server.ts` exposes owner-only local administration and the same application commands to Electron. Protocol handshake and profile locking prevent two owners; browser network commands cannot register arbitrary host projects.
 - `src/renderer/main.tsx` renders `App` into `index.html`.
 - `src/renderer/App.tsx` contains the current UI shell and most renderer components.
 
-The main window runs with context isolation enabled and node integration disabled. The preload bridge is the renderer's only direct path into main-process capabilities.
+The main window runs with context isolation enabled and node integration disabled. The preload bridge is the renderer's only direct path into desktop capabilities. Browser clients instead use `src/renderer/bridge/web-bridge.ts`; both transports execute the same validated application contract. Desktop IPC channel names remain in `ipc-channels.ts`; public runtime commands/events live in `application-api.ts` and `application-events.ts`.
 
 ## IPC Surface
 
@@ -38,7 +42,7 @@ Renderer-facing data types are mirrored in `src/renderer/types.ts`; stricter sha
 | `src/main/project-icons.ts` | Resolve local project icon candidates and favicon fallbacks. |
 | `src/main/dev-services.ts` | Discover runnable development services. |
 | `src/main/terminal.ts` | Manage PTY sessions and terminal titles. |
-| `src/main/pty.ts` | Runtime-detecting PTY facade (`@lydell/node-pty` on Node/Electron, `bun-pty` on Bun). |
+| `src/main/pty.ts` | Ordinary Node PTY facade (`@lydell/node-pty`); Electron does not load PTY or SQLite modules. |
 | `src/main/browser-tabs.ts` | Manage embedded Electron `BrowserView` tabs. |
 | `src/main/agent-clis.ts` | Discover agent CLIs and watch Codex/Claude transcript status. |
 | `src/main/harness.ts, tasks.ts, teamwork-sync.ts` | Install protocol harness, parse tasks, and sync context records. |
@@ -57,7 +61,10 @@ The renderer currently uses React hooks rather than a separate state library.
 
 ## Runtime Data
 
-- Electron app config: `app.getPath("userData")/config.json`.
+- Shared profile: `~/.sharkbay/runtime/`, optionally selected with `SHARKBAY_RUNTIME_DATA_DIR` or runtime CLI `--data-dir`. Config and data locks have one owner.
+- The default config is copied from the existing helper config on first start; `--config`/`SHARKBAY_CONFIG_PATH` can select an existing explicit config.
+- Browser/Electron refresh enumerates runtime sessions and attaches complete headless terminal snapshots. It never launches replacement Agents automatically.
+- A single client controls each PTY; other clients observe and can explicitly take over. Runtime stop ends PTYs; closing/crashing a client does not.
 - Legacy/helper config default: `~/.sharkbay/config.json` when config helpers are called outside Electron runtime.
 - Renderer layout state: `localStorage` keys for project/detail column widths.
 - Browser session storage: Electron partition `persist:sharkbay-browser`.
@@ -67,7 +74,7 @@ The renderer currently uses React hooks rather than a separate state library.
 
 ## Path And Execution Safety
 
-Path safety is enforced in the main process. Renderer-supplied paths are re-resolved against persisted configured projects before filesystem, Git, file-tree, terminal, or Protocol operations run.
+Path safety is enforced in the shared runtime. Renderer-supplied paths are re-resolved against persisted configured projects before filesystem, Git, file-tree, terminal, or Protocol operations run.
 
 Key boundaries:
 
@@ -75,7 +82,7 @@ Key boundaries:
 - file tree listing rejects unsafe directory paths and only marks contained, known text-like files as editable.
 - terminal cwd is resolved through the same allowed-project boundary.
 - BrowserView navigation accepts only `http:` and `https:` URLs; invalid or unsafe schemes become `about:blank`.
-- Teamwork launch bootstrap is prepared in the main process after cwd safety checks and Teamwork install detection.
+- Teamwork launch bootstrap is prepared in the runtime after cwd safety checks and Teamwork install detection.
 - Teamwork context cleanup is restricted to the repository owner.
 
 ## External Commands
@@ -91,13 +98,16 @@ SharkBay shells out to local tools for user-visible project workflows:
 ## Packaging
 
 - The package entry is `dist-electron/electron/main.js`.
-- `npm run build` compiles main-process TypeScript and builds the renderer.
+- `npm run build` separately builds the ordinary Node runtime, Electron client and shared renderer. Runtime import-graph checks reject Electron dependencies.
 - Vite uses `base: "./"` so packaged `file://` renderer assets resolve correctly.
 - Electron Builder includes `dist/renderer`, `dist-electron`, `package.json`, and `resources/`.
-- `@lydell/node-pty` and its platform-specific prebuild packages are unpacked from ASAR; no rebuild step is required because the prebuilds use N-API.
+- `npm run prepare:runtime` stages the current ordinary Node binary, Node license, production dependencies, runtime and renderer outside ASAR; Electron Builder includes this directory as `Resources/runtime`.
+- Electron native dependency rebuilding is disabled: SQLite/PTY belong to the bundled Node environment. Build on the target OS/architecture; do not copy a development `node_modules` across platforms.
 
 `tsconfig.node.json` currently includes tests in the Node build output. Review packaged contents before release if artifact size or source exposure matters.
 
 ## Tests
 
 Vitest tests cover main-process helpers and pure renderer workflow behavior, including scanner, Git parsing, path safety, terminal logic, browser URL normalization, Teamwork harness/sync/tasks, IPC channels, and build config. There is no broad React DOM/component test suite yet.
+
+The integration boundary and acceptance plan are recorded in [Shared runtime plan](shared-runtime-plan.md).

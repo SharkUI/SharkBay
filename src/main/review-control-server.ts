@@ -23,7 +23,7 @@ export class ReviewControlServer {
   private server: net.Server | null = null;
   private readonly sockets = new Set<net.Socket>();
 
-  constructor(private readonly userDataPath: string, private readonly handle: ReviewControlHandler) {
+  constructor(userDataPath: string, private readonly handle: ReviewControlHandler) {
     this.clientPath = path.join(userDataPath, "bin", "sharkbay-review-control");
     this.socketPathFile = path.join(userDataPath, "review-control-socket-path");
     const uid = typeof process.getuid === "function" ? process.getuid() : "user";

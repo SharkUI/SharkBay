@@ -5,18 +5,6 @@ import { promisify } from "node:util";
 import { describe, expect, it, vi } from "vitest";
 import { makeTempRoot } from "./helpers.js";
 
-vi.mock("electron", () => ({
-  app: { getPath: vi.fn(() => "") },
-  BrowserView: vi.fn(),
-  BrowserWindow: { getAllWindows: vi.fn(() => []) },
-  clipboard: { writeText: vi.fn() },
-  dialog: { showOpenDialog: vi.fn() },
-  ipcMain: { handle: vi.fn(), removeHandler: vi.fn() },
-  screen: { getPrimaryDisplay: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1000, height: 800 } })) },
-  shell: { openExternal: vi.fn() },
-  utilityProcess: { fork: vi.fn() },
-}));
-
 vi.mock("../src/main/harness.js", async () => {
   const actual = await vi.importActual<typeof import("../src/main/harness.js")>("../src/main/harness.js");
   return {
@@ -34,9 +22,10 @@ const execFileAsync = promisify(execFile);
 
 describe("protocol install", () => {
   it("installs local Harness for a GitHub remote without gh authentication", async () => {
-    const { installProtocol } = await import("../electron/ipc.js");
+    const { createTaskRuntime } = await import("../src/runtime/task-runtime.js");
+    const { installProtocol } = createTaskRuntime(() => {});
     const { resolveGitHubIdentity, checkRepoPermission } = await import("../src/main/harness.js");
-    const root = await makeTempRoot("ipc-protocol-unauthenticated");
+    const root = await makeTempRoot("task-protocol-unauthenticated");
     await execFileAsync("git", ["init"], { cwd: root });
     await execFileAsync("git", ["remote", "add", "origin", "https://github.com/upstream/project.git"], { cwd: root });
     vi.mocked(resolveGitHubIdentity).mockRejectedValueOnce(new Error("gh is unavailable or signed out"));
@@ -51,8 +40,9 @@ describe("protocol install", () => {
   });
 
   it("falls back to local-only install for read-only GitHub remotes", async () => {
-    const { installProtocol } = await import("../electron/ipc.js");
-    const root = await makeTempRoot("ipc-protocol-install");
+    const { createTaskRuntime } = await import("../src/runtime/task-runtime.js");
+    const { installProtocol } = createTaskRuntime(() => {});
+    const root = await makeTempRoot("task-protocol-install");
     const repo = path.join(root, "Emby.Plugins.JavScraper");
     await fs.mkdir(repo, { recursive: true });
     await execFileAsync("git", ["init"], { cwd: repo });

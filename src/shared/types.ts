@@ -21,10 +21,12 @@ export type AppConfig = {
   updatedAt: string;
 };
 
-export type IpcRuntimeLike = {
+export type RuntimePaths = Readonly<{
   userDataPath: string;
   configPath?: string;
-};
+}>;
+
+export type IpcRuntimeLike = RuntimePaths;
 
 export type RootConfigInput = {
   path?: string;
@@ -639,6 +641,8 @@ export type TerminalCreateInput = {
 };
 
 export type TerminalSession = {
+  cols?: number;
+  rows?: number;
   id: string;
   cwdUri: string;
   currentCwdUri?: string;
@@ -684,6 +688,10 @@ export type TerminalNotificationResult = {
 };
 
 export type TerminalDataEvent = {
+  sequence?: number;
+  reset?: boolean;
+  cols?: number;
+  rows?: number;
   sessionId: string;
   data: string;
   stream: "stdout" | "stderr";
@@ -726,6 +734,7 @@ export type ArtifactRunStartedEvent = {
 };
 
 export type TerminalUpdateEvent = {
+  reason?: "created" | "closed";
   session: TerminalSession;
 };
 
@@ -1050,3 +1059,9 @@ export type TelegramSetTokenResult = { ok: boolean; botUsername?: string; messag
 export type TelegramSetEnabledInput = { enabled: boolean };
 export type TelegramRevokeUserInput = { telegramUserId: number };
 export type TelegramPairCodeResult = { code: string; expiresAt: number };
+
+export type PluginSummary = {
+  id: string; name: string; version: string; publisher: string;
+  source: "bundled" | "installed"; trustState: PluginTrustState; enabled: boolean;
+  contributes: { machineDetectors: number; projectDetectors: number; installRecipes: number };
+};

@@ -350,6 +350,7 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
       },
     });
     this.terminalProviders.set(session.id, provider);
+    this.emit("terminalUpdate", { session, reason: "created" });
     return session;
   }
 
@@ -370,7 +371,16 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
   }
 
   closeTerminal(input: TerminalCloseInput): TerminalSession | null {
-    return this.terminalProviders.get(input.sessionId)?.closeTerminal(input) ?? null;
+    const provider = this.terminalProviders.get(input.sessionId)
+      ?? this.providers.list().find((entry) => entry.listTerminalSessions().some((session) => session.id === input.sessionId));
+    this.terminalProviders.delete(input.sessionId);
+    const session = provider?.closeTerminal(input) ?? null;
+    if (session) this.emit("terminalUpdate", { session, reason: "closed" });
+    return session;
+  }
+
+  listTerminalSessions(): TerminalSession[] {
+    return this.providers.list().flatMap((provider) => provider.listTerminalSessions());
   }
 
   closeAllTerminalSessions(): void {

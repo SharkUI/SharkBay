@@ -71,13 +71,19 @@ export class CursorConnector implements AgentConnector {
     this.writeConfig(config);
   }
 
-  async status(): Promise<ConnectorStatus> {
+  async status(expectedHookCliPath?: string): Promise<ConnectorStatus> {
     if (!(await this.detect())) return "agent_missing";
     const config = this.readConfig();
     const hooks = config.hooks as Record<string, unknown[]> | undefined;
     if (!hooks) return "not_installed";
     const hasManaged = HOOK_EVENTS.some((e) => Array.isArray(hooks[e]) && hooks[e].some((h: any) => h?._managedBy === MANAGED_MARKER));
-    return hasManaged ? "installed" : "not_installed";
+    if (!hasManaged) return "not_installed";
+    if (expectedHookCliPath) {
+      const expected = `${shellQuote(expectedHookCliPath)} --source cursor`;
+      const managed = Object.values(hooks).flat().filter((h: any) => h?._managedBy === MANAGED_MARKER);
+      if (!managed.every((h: any) => h.command === expected)) return "outdated";
+    }
+    return "installed";
   }
 
   normalize(raw: unknown): UnifiedHookEvent | null {

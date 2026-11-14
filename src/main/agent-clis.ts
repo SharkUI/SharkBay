@@ -86,6 +86,7 @@ export class AgentSessionWatcher extends EventEmitter<AgentSessionWatcherEvents>
   private timer: ReturnType<typeof setTimeout> | null = null;
   private running = false;
   private scanning = false;
+  private activeScan: Promise<boolean> | null = null;
   private usageCollector: TokenUsageCollector | null = null;
   private discoveredFiles: AgentLogFile[] = [];
   private lastDiscoveryAt = 0;
@@ -120,12 +121,13 @@ export class AgentSessionWatcher extends EventEmitter<AgentSessionWatcherEvents>
     this.scheduleNextScan(0);
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     this.running = false;
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = null;
     }
+    await this.activeScan;
   }
 
   async scan(): Promise<void> {
@@ -136,13 +138,15 @@ export class AgentSessionWatcher extends EventEmitter<AgentSessionWatcherEvents>
     if (!this.running || this.timer) return;
     this.timer = setTimeout(() => {
       this.timer = null;
-      void this.runScheduledScan();
+      void this.runScheduledScan().catch((error) => { console.error("Agent session scan:", error); this.scheduleNextScan(this.idlePollIntervalMs); });
     }, delayMs);
     this.timer.unref?.();
   }
 
   private async runScheduledScan(): Promise<void> {
-    const hadActivity = await this.scanOnce();
+    this.activeScan = this.scanOnce();
+    let hadActivity: boolean;
+    try { hadActivity = await this.activeScan; } finally { this.activeScan = null; }
     const now = Date.now();
     if (hadActivity) this.lastActivityAt = now;
     const delayMs = agentSessionWatcherPollInterval({

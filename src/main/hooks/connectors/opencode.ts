@@ -60,7 +60,7 @@ export class OpenCodeConnector implements AgentConnector {
     } catch {}
   }
 
-  async status(): Promise<ConnectorStatus> {
+  async status(expectedHookCliPath?: string): Promise<ConnectorStatus> {
     if (!(await this.detect())) return "agent_missing";
     try {
       fs.accessSync(this.pluginEntry);
@@ -69,7 +69,12 @@ export class OpenCodeConnector implements AgentConnector {
       const hasManaged = plugins.some(
         (p: unknown) => (typeof p === "string" && p === "./plugins/sharkbay") || (Array.isArray(p) && p[0] === "./plugins/sharkbay"),
       );
-      return hasManaged ? "installed" : "not_installed";
+      if (!hasManaged) return "not_installed";
+      if (expectedHookCliPath) {
+        const socketPathFile = path.join(path.dirname(path.dirname(expectedHookCliPath)), "hook-socket-path");
+        if (!fs.readFileSync(this.pluginEntry, "utf8").includes(`const SOCKET_PATH_FILE = ${JSON.stringify(socketPathFile)};`)) return "outdated";
+      }
+      return "installed";
     } catch {
       return "not_installed";
     }

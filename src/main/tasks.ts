@@ -1,37 +1,8 @@
+import type { TaskViewModel } from "../shared/types.js";
+export type { TaskViewModel } from "../shared/types.js";
 import { readFile, readdir } from "node:fs/promises";
 import { watch, type FSWatcher } from "node:fs";
 import { join } from "node:path";
-
-export type TaskViewModel = {
-  taskId: string;
-  taskTag: string;
-  title: string;
-  mode: "quick" | "task";
-  status: "active" | "paused" | "completed" | "blocked" | "abandoned";
-  sync: "local" | "pending" | "synced" | "failed";
-  owner: { githubLogin: string; githubUserId?: number; avatarUrl?: string };
-  agent?: string;
-  sessionId?: string;
-  machine?: string;
-  createdAt?: string;
-  updatedAt?: string;
-  completedAt?: string;
-  commit?: string;
-  commits?: string[];
-  files?: string[];
-  summary?: string;
-  verification?: string;
-  work?: string;
-  notes?: string;
-  artifacts?: string;
-  reviews?: string;
-  sourcePath: string;
-  frontmatter: Record<string, string>;
-  bodyMarkdown: string;
-  rawMarkdown: string;
-  sourceKind: "local-md" | "team-md";
-  readOnly: boolean;
-};
 
 export async function parseTaskFile(filePath: string): Promise<TaskViewModel | null> {
   let raw: string;

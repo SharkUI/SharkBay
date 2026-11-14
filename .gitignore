@@ -13,3 +13,6 @@ yarn-error.log*
 pnpm-debug.log*
 *.tsbuildinfo
 .sharkbay/
+
+dist-runtime/
+.runtime-bundle/

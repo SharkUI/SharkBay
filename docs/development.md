@@ -6,7 +6,7 @@
 - Node.js `>=20.11`
 - npm
 - Git
-- Native build tooling for Electron native modules
+- Native build tooling if Node native module prebuilds are unavailable
 - GitHub CLI `gh` only for protocol install/sync flows
 
 ## Setup
@@ -21,7 +21,22 @@ npm install
 npm run dev
 ```
 
-The dev command runs Vite on `127.0.0.1:5173`, watches the Electron/main TypeScript build, waits for both outputs, and starts Electron.
+The dev command builds the Node runtime, runs Vite on `127.0.0.1:5184`, watches Electron TypeScript and starts Electron. Electron discovers/starts one independent runtime, using ordinary Node during development and the bundled Node in packaged builds.
+
+The File menu's **Open in Browser** action opens a short-lived connection link to the same runtime. Browser refresh and desktop reconnect attach existing terminals.
+
+For standalone browser use:
+
+```bash
+npm run build
+npm run start:runtime
+# Register a host project when starting or connecting:
+npm run start:runtime -- --project /absolute/path/to/project
+# Explicitly stop the runtime and its terminals:
+npm run start:runtime -- --stop
+```
+
+Closing Electron leaves the runtime alive. After changing host/runtime code, explicitly stop it, rebuild, then start the client again; an already-running process does not hot-reload compiled modules. Do this only when its Agent sessions can end. A client with an incompatible protocol is refused rather than replacing the active service.
 
 ## Checks
 
@@ -39,7 +54,7 @@ See [Testing](testing.md) for the current test suite and [Release and packaging]
 
 ## Native Module Rebuilds
 
-The PTY layer (`@lydell/node-pty` for Node/Electron, `bun-pty` for Bun) ships N-API prebuilt binaries, so no rebuild step is required after Electron or Node upgrades — a plain `npm install` is enough.
+The independent Node runtime loads `@lydell/node-pty` and `better-sqlite3`; Electron loads neither. Install dependencies with the ordinary Node version used to run/build the runtime. The previous Electron ABI postinstall rebuild has been removed.
 
 ## Packaging
 
@@ -72,7 +87,8 @@ Release-specific details live in [Release and packaging](release.md).
 
 During development, SharkBay writes runtime data outside the repository:
 
-- Electron userData `config.json` for configured projects and theme.
+- Shared profile `~/.sharkbay/runtime/` for config, usage and helper CLIs. First startup copies `~/.sharkbay/config.json` when available; an explicit config can be selected.
+- Electron userData for Chromium/desktop settings, separate from runtime state.
 - BrowserView partition data for embedded browser tabs.
 - Codex/Claude transcript reads from the user's home directory.
 
@@ -85,3 +101,14 @@ When protocol is installed for a project, SharkBay writes repo-local `.sharkbay/
 - For renderer workflow helper changes, update `tests/renderer-workflow.test.ts`.
 - For packaging changes, run `npm run build`; use `npm run pack` when native modules, resources, or Electron Builder config changed.
 - For protocol changes, run the protocol harness/sync/task tests and inspect generated local files in a temporary repository.
+
+## Isolated shared-client verification
+
+```bash
+npm run verify:webui
+npm run verify:shared
+```
+
+`verify:shared` uses a temporary profile/config and Git fixture, ordinary Node, an isolated Electron userData directory and Chrome profile. It creates a terminal from the desktop UI, observes/takes control in the browser, reloads without creating a replacement PTY, checks client termination survival, then explicitly stops the runtime. It does not enable global Hooks or send Agent prompts. Chrome defaults to the macOS application path; `SHARKBAY_TEST_CHROME` can select another binary. Screenshots are kept in ignored `.sharkbay/validation/shared-runtime/` for visual inspection.
+
+For manual isolation, set `SHARKBAY_RUNTIME_DATA_DIR` and `SHARKBAY_ELECTRON_DATA_DIR` to separate directories and `SHARKBAY_CONFIG_PATH` to an existing fixture config. Do not point test instances at repositories or Agent settings managed by the daily desktop app.

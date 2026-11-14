@@ -1,0 +1,22 @@
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import path from "node:path";
+
+if (process.versions.electron) throw new Error("Prepare the runtime with ordinary Node, not Electron");
+const root = process.cwd();
+const target = path.join(root, ".runtime-bundle");
+await rm(target, { recursive: true, force: true });
+await mkdir(path.join(target, "bin"), { recursive: true });
+await cp(process.execPath, path.join(target, "bin", process.platform === "win32" ? "node.exe" : "node"));
+await cp("dist-runtime", path.join(target, "dist-runtime"), { recursive: true });
+await mkdir(path.join(target, "dist"), { recursive: true });
+await cp("dist/renderer", path.join(target, "dist/renderer"), { recursive: true });
+await cp("package.json", path.join(target, "package.json"));
+await cp("package-lock.json", path.join(target, "package-lock.json"));
+await cp("LICENSE", path.join(target, "LICENSE"));
+const nodeLicense = await readFile(new URL("../LICENSE", `file://${process.execPath}`)).catch(() => undefined);
+if (nodeLicense) await writeFile(path.join(target, "NODE-LICENSE"), nodeLicense);
+else throw new Error("Node license was not found next to the Node installation; include it before distributing the runtime");
+if (!process.env.npm_execpath) throw new Error("Run this command through npm run prepare:runtime");
+execFileSync(process.execPath, [process.env.npm_execpath, "ci", "--omit=dev", "--no-audit", "--no-fund"], { cwd: target, stdio: "inherit" });
+console.log("RUNTIME_BUNDLE_OK ordinary Node, production dependencies, runtime and WebUI");

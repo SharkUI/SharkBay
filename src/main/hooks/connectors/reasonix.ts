@@ -90,12 +90,13 @@ export class ReasonixConnector implements AgentConnector {
     this.writeConfig(config);
   }
 
-  async status(): Promise<ConnectorStatus> {
+  async status(expectedHookCliPath?: string): Promise<ConnectorStatus> {
     if (!(await this.detect())) return "agent_missing";
     const hooks = readHooks(this.readConfig());
-    return Object.values(hooks).some((entries) => Array.isArray(entries) && entries.some(isManagedHook))
-      ? "installed"
-      : "not_installed";
+    const managed = Object.values(hooks).flat().filter(isManagedHook);
+    if (!managed.length) return "not_installed";
+    if (expectedHookCliPath && !managed.every((entry: any) => entry.command === `${shellQuote(expectedHookCliPath)} --source reasonix`)) return "outdated";
+    return "installed";
   }
 
   normalize(raw: unknown): UnifiedHookEvent | null {

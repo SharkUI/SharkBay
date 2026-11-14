@@ -7,6 +7,7 @@ export type ApplicationMenuOptions = {
   newTerminalTab: () => void;
   openFind: () => void;
   checkForUpdates: () => void;
+  openInBrowser?: () => void;
 };
 
 function createNewTerminalTabItem(newTerminalTab: () => void): MenuItemConstructorOptions {
@@ -33,10 +34,10 @@ function createSettingsItem(openSettings: () => void): MenuItemConstructorOption
   };
 }
 
-function createSharedMenus(newTerminalTab: () => void, openFind: () => void): MenuItemConstructorOptions[] {
+function createSharedMenus(newTerminalTab: () => void, openFind: () => void, openInBrowser?: () => void): MenuItemConstructorOptions[] {
   const fileMenu: MenuItemConstructorOptions = {
     label: "File",
-    submenu: [createNewTerminalTabItem(newTerminalTab)],
+    submenu: [createNewTerminalTabItem(newTerminalTab), ...(openInBrowser ? [{ label: "Open in Browser", click: openInBrowser }] : [])],
   };
 
   const editMenu: MenuItemConstructorOptions = {
@@ -91,6 +92,7 @@ export function createApplicationMenuTemplate({
   newTerminalTab,
   openFind,
   checkForUpdates,
+  openInBrowser,
 }: ApplicationMenuOptions): MenuItemConstructorOptions[] {
   const settingsItem = createSettingsItem(openSettings);
   const newTerminalTabItem = createNewTerminalTabItem(newTerminalTab);
@@ -115,15 +117,15 @@ export function createApplicationMenuTemplate({
           { role: "quit" },
         ],
       },
-      ...createSharedMenus(newTerminalTab, openFind),
+      ...createSharedMenus(newTerminalTab, openFind, openInBrowser),
     ];
   }
 
   return [
     {
       label: "File",
-      submenu: [newTerminalTabItem, { type: "separator" }, settingsItem, updateItem, { type: "separator" }, { role: "quit" }],
+      submenu: [newTerminalTabItem, ...(openInBrowser ? [{ label: "Open in Browser", click: openInBrowser }] : []), { type: "separator" }, settingsItem, updateItem, { type: "separator" }, { role: "quit" }],
     },
-    ...createSharedMenus(newTerminalTab, openFind).slice(1),
+    ...createSharedMenus(newTerminalTab, openFind, openInBrowser).slice(1),
   ];
 }

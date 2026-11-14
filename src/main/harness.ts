@@ -1,3 +1,5 @@
+import type { GitHubIdentity, HarnessFileIssue, HarnessUpdateStatus } from "../shared/types.js";
+export type { GitHubIdentity, HarnessFileIssue, HarnessUpdateStatus } from "../shared/types.js";
 import { access, chmod, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
@@ -147,7 +149,7 @@ const AGENT_SESSION_ID_SCRIPT = [
 
 // Deployed to .sharkbay/harness/open-artifact.sh. Invoked by an agent when it
 // finishes generating a task artifact, to ask SharkBay to open the resulting
-// HTML in its built-in browser. Sends the request over the existing hook socket
+// HTML in an isolated browser preview. Sends the request over the existing hook socket
 // via the deployed `sharkbay-hook` CLI; fail-open (exit 0) if anything is
 // missing so it never blocks the agent.
 const OPEN_ARTIFACT_SCRIPT = [
@@ -168,9 +170,7 @@ const OPEN_ARTIFACT_SCRIPT = [
   "",
   "[ -f \"$artifact\" ] || exit 0",
   "",
-  "support_dir=\"$HOME/Library/Application Support/SharkBay\"",
-  "hook_cli=\"$support_dir/bin/sharkbay-hook\"",
-  "[ -f \"$support_dir/hook-socket-path\" ] || exit 0",
+  "hook_cli=\"${SHARKBAY_HOOK_CLIENT:-$HOME/.sharkbay/runtime/bin/sharkbay-hook}\"",
   "[ -x \"$hook_cli\" ] || exit 0",
   "",
   "# Minimal JSON string escaping (backslash and double-quote).",
@@ -194,7 +194,7 @@ const REVIEW_SCRIPT = [
   "",
   "script_dir=\"$(cd \"$(dirname \"$0\")\" && pwd)\"",
   "repo_root=\"$(cd \"$script_dir/../..\" && pwd)\"",
-  "client=\"$HOME/Library/Application Support/SharkBay/bin/sharkbay-review-control\"",
+  "client=\"${SHARKBAY_REVIEW_CONTROL_CLIENT:-$HOME/.sharkbay/runtime/bin/sharkbay-review-control}\"",
   "[ -x \"$client\" ] || { echo 'SharkBay Review control client is unavailable' >&2; exit 1; }",
   "",
   "exec \"$client\" \"$command\" \"$@\" --repo \"$repo_root\"",
@@ -211,7 +211,7 @@ const ARTIFACT_SCRIPT = [
   "",
   "script_dir=\"$(cd \"$(dirname \"$0\")\" && pwd)\"",
   "repo_root=\"$(cd \"$script_dir/../..\" && pwd)\"",
-  "client=\"$HOME/Library/Application Support/SharkBay/bin/sharkbay-review-control\"",
+  "client=\"${SHARKBAY_REVIEW_CONTROL_CLIENT:-$HOME/.sharkbay/runtime/bin/sharkbay-review-control}\"",
   "[ -x \"$client\" ] || { echo 'SharkBay Artifact control client is unavailable' >&2; exit 1; }",
   "",
   "exec \"$client\" \"artifact-$command\" \"$@\" --repo \"$repo_root\"",
@@ -371,10 +371,10 @@ export function artifactPrompt(artifact: ArtifactPromptInput, options: Bootstrap
     ? `Once the page is written, record it: append a one-line entry to this task's local record file under \`.sharkbay/tasks/\` (the file whose name begins with \`${artifact.taskId.split("-")[0]}\`) inside a \`## Artifacts\` section — create that section at the end of the file if it does not exist. Use the format \`- \\\`${artifact.artifactPath}\\\` — <one-line description of what the page shows> (<timestamp>)\`, where <timestamp> is the output of \`date -u +%Y-%m-%dT%H:%M:%SZ\`. Append only; do not edit other sections.`
     : null;
   const openInstruction = artifact.artifactPath && artifact.runId
-    ? `As the very last step, after the page is written and recorded, run \`.sharkbay/harness/artifact.sh complete --run ${artifact.runId} --artifact ${artifact.artifactPath}${artifact.completionToken ? ` --completion-token ${artifact.completionToken}` : ""}\`. SharkBay will validate the reserved page, open it in the built-in browser, and notify the parent agent; do not skip this command.`
+    ? `As the very last step, after the page is written and recorded, run \`.sharkbay/harness/artifact.sh complete --run ${artifact.runId} --artifact ${artifact.artifactPath}${artifact.completionToken ? ` --completion-token ${artifact.completionToken}` : ""}\`. SharkBay will validate the reserved page, offer an isolated browser preview, and notify the parent agent; do not skip this command.`
     : artifact.artifactPath
-      ? `As the very last step, after the page is written and recorded, run \`.sharkbay/harness/open-artifact.sh ${artifact.artifactPath}\` from the project root to open it in SharkBay's built-in browser, then tell me the artifact path.`
-    : "As the very last step, after the page is fully written, run `.sharkbay/harness/open-artifact.sh <path>` from the project root (passing the path you wrote) to open it in SharkBay's built-in browser, then tell me the artifact path.";
+      ? `As the very last step, after the page is written and recorded, run \`.sharkbay/harness/open-artifact.sh ${artifact.artifactPath}\` from the project root to offer an isolated preview link in SharkBay, then tell me the artifact path.`
+    : "As the very last step, after the page is fully written, run `.sharkbay/harness/open-artifact.sh <path>` from the project root (passing the path you wrote) to offer an isolated preview link in SharkBay, then tell me the artifact path.";
   return [
     "I'm starting a task-artifact session: your job is to produce a web page that showcases this task's deliverable.",
     "This project tracks work as SharkBay task records under `.sharkbay/tasks/` (team records, read-only, under `.sharkbay/team-context/tasks/`).",
@@ -413,11 +413,6 @@ export async function reserveArtifactPath(repoPath: string, taskId: string): Pro
   throw new Error("Could not allocate a unique artifact path.");
 }
 
-export type GitHubIdentity = {
-  login: string;
-  id: number;
-  avatarUrl: string;
-};
 
 type ProtocolOptions = {
   githubLogin: string;
@@ -433,15 +428,7 @@ type ManagedHarnessFile = {
   executable?: boolean;
 };
 
-export type HarnessFileIssue = {
-  path: string;
-  reason: "missing" | "changed";
-};
 
-export type HarnessUpdateStatus = {
-  required: boolean;
-  files: HarnessFileIssue[];
-};
 
 export type HarnessLocalIdentity = {
   githubLogin?: string;
@@ -543,10 +530,6 @@ export async function installHarness(
   }
 }
 
-export async function assertHarnessInstallable(repoPath: string): Promise<void> {
-  await assertIsGitWorktree(repoPath);
-}
-
 export async function isGitWorktree(repoPath: string): Promise<boolean> {
   try {
     const { stdout } = await execFileAsync("git", ["-C", repoPath, "rev-parse", "--is-inside-work-tree"], { timeout: 3_000 });
@@ -554,11 +537,6 @@ export async function isGitWorktree(repoPath: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-async function assertIsGitWorktree(repoPath: string): Promise<void> {
-  if (await isGitWorktree(repoPath)) return;
-  throw new Error("Protocol harness requires a Git repository. Run git init in this folder before installing.");
 }
 
 export async function isHarnessInstalled(repoPath: string): Promise<boolean> {
@@ -587,13 +565,13 @@ export async function getLocalHarnessIdentity(repoPath: string): Promise<Harness
   };
 }
 
-export type ProtocolUninstallResult = {
+type HarnessUninstallResult = {
   removedPaths: string[];
   skippedPaths: string[];
   excludeRemovedLines: string[];
 };
 
-export async function uninstallHarness(repoPath: string): Promise<ProtocolUninstallResult> {
+export async function uninstallHarness(repoPath: string): Promise<HarnessUninstallResult> {
   const removedPaths: string[] = [];
   const skippedPaths: string[] = [];
 
@@ -936,8 +914,8 @@ Without \`--agent\`, SharkBay uses the same agent as the parent terminal. Pass
 returns a run id and reserved artifact path immediately. SharkBay opens the
 Artifact agent in a background tab in the current application instance.
 
-When generation completes, SharkBay validates and opens the page in its built-in
-browser, then injects a completion prompt into the original parent agent
+When generation completes, SharkBay validates the page and offers an isolated browser
+preview link, then injects a completion prompt into the original parent agent
 terminal. The parent agent should review the page and continue the task. If the
 Artifact terminal exits before completion, SharkBay notifies the parent agent so
 it can retry.

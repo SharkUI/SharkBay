@@ -54,7 +54,7 @@ export interface AgentConnector {
   detect(): Promise<boolean>;
   install(hookCliPath: string, socketPath: string): Promise<void>;
   uninstall(): Promise<void>;
-  status(): Promise<ConnectorStatus>;
+  status(expectedHookCliPath?: string): Promise<ConnectorStatus>;
   normalize(raw: unknown): UnifiedHookEvent | null;
 }
 

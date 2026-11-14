@@ -422,3 +422,5 @@ function today(): string {
 function now(): string {
   return new Date().toISOString();
 }
+
+export const loadRuntimeConfig = getConfiguredRoots;

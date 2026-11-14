@@ -1,4 +1,5 @@
 export const ipcChannels = {
+  runtimeHello: "runtime:hello", runtimeList: "runtime:list", runtimeAttach: "runtime:attach", runtimeClaim: "runtime:claim", runtimeConnect: "runtime:connect", runtimeConnection: "runtime:connection", runtimeNotice: "runtime:notice", terminalControl: "terminal:control",
   appUpdateGetState: "appUpdate:getState",
   appUpdateCheck: "appUpdate:check",
   appUpdateInstall: "appUpdate:install",

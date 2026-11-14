@@ -1,8 +1,29 @@
-import { describe, expect, it } from "vitest";
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { describe, expect, it, vi } from "vitest";
 import { codexTotalUsageKey, isTranscriptFileUnchanged, TokenUsageCollector, type CollectorSessionState } from "../src/main/token-usage-collector.js";
 import type { TokenEvent, TokenUsageDb } from "../src/main/token-usage-db.js";
 
 describe("token usage collector", () => {
+  it("cancels historical backfill between files while retaining collected events", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "sharkbay-usage-stop-"));
+    const home = vi.spyOn(os, "homedir").mockReturnValue(root);
+    const cancellation = new AbortController();
+    const events: TokenEvent[] = [], indexed: string[] = [];
+    try {
+      const logs = path.join(root, ".claude", "projects", "fixture"); await fs.mkdir(logs, { recursive: true });
+      const line = JSON.stringify({ type: "assistant", message: { usage: { input_tokens: 5, output_tokens: 2 } } }) + "\n";
+      await fs.writeFile(path.join(logs, "one.jsonl"), line); await fs.writeFile(path.join(logs, "two.jsonl"), line);
+      const collector = new TokenUsageCollector({
+        insertBatch: (items: TokenEvent[]) => events.push(...items), getFileIndex: () => null, getLastOffset: () => 0,
+        setFileIndex: (file: string) => { indexed.push(file); cancellation.abort(); },
+      } as unknown as TokenUsageDb);
+      await collector.backfill(cancellation.signal); collector.flush();
+      expect(indexed).toHaveLength(1); expect(events).toHaveLength(1);
+      expect(events[0]?.inputTokens).toBe(5);
+    } finally { home.mockRestore(); await fs.rm(root, { recursive: true, force: true }); }
+  });
   it("deduplicates Codex token counts when total usage does not advance", () => {
     const events: TokenEvent[] = [];
     const collector = new TokenUsageCollector({

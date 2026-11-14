@@ -11,7 +11,7 @@ import * as fs from "node:fs";
 import * as net from "node:net";
 import * as path from "node:path";
 
-import type { HookBridgeMessage, UnifiedHookEvent } from "./types.js";
+import type { HookBridgeMessage } from "./types.js";
 
 export type HookBridgeEvents = {
   event: [HookBridgeMessage];
@@ -29,6 +29,7 @@ export type HookBridgeOptions = {
 
 export class HookBridge extends EventEmitter<HookBridgeEvents> {
   private server: net.Server | null = null;
+  private readonly connections = new Set<net.Socket>();
   private socketPath: string = "";
   private socketPathFile: string;
   private readonly socketDir: string;
@@ -62,14 +63,18 @@ export class HookBridge extends EventEmitter<HookBridgeEvents> {
       server.once("error", reject);
     });
     this.server = server;
+    fs.chmodSync(this.socketPath, 0o600);
 
     fs.writeFileSync(this.socketPathFile, this.socketPath, "utf8");
   }
 
   async stop(): Promise<void> {
     if (this.server) {
-      this.server.close();
+      const server = this.server;
       this.server = null;
+      for (const connection of this.connections) connection.destroy();
+      this.connections.clear();
+      await new Promise<void>((done) => server.close(() => done()));
     }
     try { fs.unlinkSync(this.socketPath); } catch {}
     try { fs.unlinkSync(this.socketPathFile); } catch {}
@@ -121,8 +126,14 @@ setTimeout(() => process.exit(0), 5000).unref();
   }
 
   private handleConnection(conn: net.Socket): void {
+    this.connections.add(conn);
+    conn.once("close", () => this.connections.delete(conn));
+    conn.setTimeout(5000, () => conn.destroy());
     let data = "";
-    conn.on("data", (chunk) => { data += chunk.toString(); });
+    conn.on("data", (chunk) => {
+      data += chunk.toString();
+      if (Buffer.byteLength(data) > 1024 * 1024) conn.destroy();
+    });
     conn.on("end", () => {
       conn.destroy();
       const line = data.trim();

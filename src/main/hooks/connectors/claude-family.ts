@@ -155,13 +155,19 @@ export class ClaudeConnector implements AgentConnector {
     this.writeConfig(config);
   }
 
-  async status(): Promise<ConnectorStatus> {
+  async status(expectedHookCliPath?: string): Promise<ConnectorStatus> {
     if (!(await this.detect())) return "agent_missing";
     const config = this.readConfig();
     const hooks = config.hooks as Record<string, unknown[]> | undefined;
     if (!hooks) return "not_installed";
     const hasManaged = HOOK_EVENT_SPECS.some((spec) => { const arr = hooks[spec.name]; return Array.isArray(arr) && arr.some((h: any) => h?._managedBy === MANAGED_MARKER); });
-    return hasManaged ? "installed" : "not_installed";
+    if (!hasManaged) return "not_installed";
+    if (expectedHookCliPath) {
+      const expected = `${shellQuote(expectedHookCliPath)} --source ${this.id}`;
+      const managed = Object.values(hooks).flat().filter((h: any) => h?._managedBy === MANAGED_MARKER);
+      if (!managed.every((h: any) => Array.isArray(h.hooks) && h.hooks.every((hook: any) => hook.command === expected))) return "outdated";
+    }
+    return "installed";
   }
 
   normalize(raw: unknown): UnifiedHookEvent | null {
@@ -238,10 +244,12 @@ export class CodexConnector extends ClaudeConnector {
     this.writeRawConfig(cleaned.trim() + "\n");
   }
 
-  override async status(): Promise<ConnectorStatus> {
+  override async status(expectedHookCliPath?: string): Promise<ConnectorStatus> {
     if (!(await this.detect())) return "agent_missing";
     const content = this.readRawConfig();
-    return content.includes(this.sectionStart) ? "installed" : "not_installed";
+    if (!content.includes(this.sectionStart)) return "not_installed";
+    if (expectedHookCliPath && !content.includes(`command = ${tomlString(`${shellQuote(expectedHookCliPath)} --source codex`)}`)) return "outdated";
+    return "installed";
   }
 
   private readRawConfig(): string {

@@ -33,8 +33,9 @@ GitHub Releases feed configured in `package.json`. The app checks at startup
 and every four hours, downloads newer stable versions in the background, and
 offers **Restart to update** or **Later**. Later defers installation until a
 normal application quit; closing the macOS window only hides it. Explicit
-update restarts run the existing terminal/core cleanup before invoking the
-installer. Development builds do not check or install updates.
+update restarts disconnect the desktop client before invoking the installer;
+the shared Node runtime and its terminals keep running. Stop that runtime
+explicitly before activating an incompatible runtime upgrade. Development builds do not check or install updates.
 
 **Check for Updates...** is available in the macOS app menu (File on other
 platforms). It also brings a previously dismissed ready update back into view.
@@ -108,7 +109,7 @@ The package entry is `dist-electron/electron/main.js`.
 
 ## Native Modules
 
-The PTY layer is provided by `@lydell/node-pty` (Node.js / Electron) or `bun-pty` (Bun). Both ship N-API prebuilt binaries via platform-specific optional packages, so no `electron-rebuild` step is required. Electron Builder unpacks `@lydell/node-pty` and its platform packages from ASAR.
+The independent ordinary Node runtime loads `@lydell/node-pty` and `better-sqlite3` from `Contents/Resources/runtime/node_modules`. Electron does not load these modules. `npm run prepare:runtime` installs production dependencies for the build host Node version and architecture; build each target on a matching host. The runtime binary, dependencies, compiled service and WebUI are copied outside ASAR.
 
 ## Resources
 
@@ -172,3 +173,9 @@ Local builds use ad-hoc signing unless signing and notarization credentials are 
 ## Known Packaging Note
 
 `tsconfig.node.json` currently includes `tests/**/*.ts`, and Electron Builder includes all of `dist-electron/**/*`. Review packaged contents before a public release if compiled tests should be excluded.
+
+## Shared runtime package
+
+`pack` and `dist` now run `prepare:runtime` after the build. The staged runtime includes ordinary Node, its license, the lockfile-resolved production dependencies, `dist-runtime/` and `dist/renderer/`, and is copied outside ASAR to `Resources/runtime`. Electron only connects to this service; do not rebuild runtime dependencies for Electron ABI.
+
+Use a target-native build machine and verify the packaged runtime's SQLite/PTY startup. Closing/updating the desktop client must not stop active runtime sessions. Runtime protocol changes require coordinated client/runtime versions; incompatible connections must fail explicitly. An active runtime is never silently replaced during client startup. Existing installed desktop versions still own their old backend and must be stopped before migrating daily usage to the shared-runtime release.

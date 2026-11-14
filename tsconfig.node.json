@@ -4,8 +4,14 @@
     "composite": true,
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": ["ES2022"],
-    "types": ["node", "electron", "vitest/globals"],
+    "lib": [
+      "ES2022"
+    ],
+    "types": [
+      "node",
+      "electron",
+      "vitest/globals"
+    ],
     "rootDir": ".",
     "outDir": "dist-electron",
     "sourceMap": true,
@@ -28,6 +34,10 @@
     "src/shared/**/*.ts",
     "tests/**/*.ts",
     "vite.config.ts",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "src/runtime/**/*.ts",
+    "src/server/**/*.ts",
+    "src/renderer/bridge/web-bridge.ts",
+    "src/renderer/types.ts"
   ]
 }

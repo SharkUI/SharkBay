@@ -10,37 +10,7 @@ export type SafeRepoPath = {
 
 export function isPathInside(parent: string, child: string): boolean {
   const relative = path.relative(parent, child);
-  return relative === "" || (!!relative && !relative.startsWith("..") && !path.isAbsolute(relative));
-}
-
-export async function resolveConfiguredRoots(configuredRoots: string[]): Promise<RootScanResult[]> {
-  const seen = new Set<string>();
-  const results: RootScanResult[] = [];
-
-  for (const inputPath of configuredRoots) {
-    const absolute = path.resolve(inputPath);
-    try {
-      const real = await fs.realpath(absolute);
-      const stat = await fs.stat(real);
-      if (!stat.isDirectory()) {
-        results.push({ inputPath, path: null, available: false, error: "Configured root is not a directory" });
-        continue;
-      }
-      if (!seen.has(real)) {
-        seen.add(real);
-        results.push({ inputPath, path: real, available: true, error: null });
-      }
-    } catch (error) {
-      results.push({
-        inputPath,
-        path: null,
-        available: false,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  return results;
+  return relative === "" || (!!relative && relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
 }
 
 export async function resolveRepoPath(repoPath: string, _configuredRoots: string[], configuredProjects?: string[]): Promise<SafeRepoPath> {
@@ -82,7 +52,7 @@ export async function resolveReadableRepoFile(
   relativePath: string,
   configuredProjects?: string[],
 ): Promise<string> {
-  if (path.isAbsolute(relativePath) || relativePath.split(path.sep).includes("..")) {
+  if (!relativePath || path.normalize(relativePath) === "." || /[\0\r\n]/.test(relativePath) || path.isAbsolute(relativePath) || relativePath.split(/[\\/]/).includes("..")) {
     throw new Error("Relative file path is unsafe");
   }
 
@@ -95,7 +65,19 @@ export async function resolveReadableRepoFile(
     }
   } catch (error) {
     if (typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === "ENOENT") {
-      return filePath;
+      let parent = path.dirname(filePath);
+      for (;;) {
+        try {
+          const realParent = await fs.realpath(parent);
+          if (!isPathInside(safeRepo.repoPath, realParent) || !isPathInside(safeRepo.containingRoot, realParent)) {
+            throw new Error("Repository file is outside the allowed boundary");
+          }
+          return path.join(realParent, path.relative(parent, filePath));
+        } catch (parentError) {
+          if ((parentError as NodeJS.ErrnoException).code !== "ENOENT") throw parentError;
+          parent = path.dirname(parent);
+        }
+      }
     }
     throw error;
   }
@@ -105,4 +87,34 @@ export async function resolveReadableRepoFile(
     throw new Error("Repository file is outside the allowed boundary");
   }
   return realFile;
+}
+
+export async function resolveConfiguredRoots(configuredRoots: string[]): Promise<RootScanResult[]> {
+  const seen = new Set<string>();
+  const results: RootScanResult[] = [];
+
+  for (const inputPath of configuredRoots) {
+    const absolute = path.resolve(inputPath);
+    try {
+      const real = await fs.realpath(absolute);
+      const stat = await fs.stat(real);
+      if (!stat.isDirectory()) {
+        results.push({ inputPath, path: null, available: false, error: "Configured root is not a directory" });
+        continue;
+      }
+      if (!seen.has(real)) {
+        seen.add(real);
+        results.push({ inputPath, path: real, available: true, error: null });
+      }
+    } catch (error) {
+      results.push({
+        inputPath,
+        path: null,
+        available: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return results;
 }

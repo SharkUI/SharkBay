@@ -9,8 +9,7 @@ const mocks = vi.hoisted(() => ({
   updater: null as any,
   windows: [] as any[],
   handlers: new Map<string, (...args: any[]) => any>(),
-  shutdownCore: vi.fn(),
-  flushPromptStore: vi.fn(),
+  disconnectRuntime: vi.fn(),
 }));
 
 vi.mock("electron", async () => {
@@ -38,14 +37,15 @@ vi.mock("electron", async () => {
     Menu: { buildFromTemplate: vi.fn(), setApplicationMenu: vi.fn() },
     nativeImage: { createFromPath: () => ({ isEmpty: () => true }) },
     screen: { getPrimaryDisplay: () => ({ size: { width: 1500 }, workArea: { y: 30 }, bounds: { y: 0, x: 0 } }) },
-    shell: { openExternal: vi.fn() },
+    shell: { openExternal: vi.fn() }, dialog: { showErrorBox: vi.fn() },
   };
 });
 vi.mock("electron-updater", () => ({ default: { get autoUpdater() { return mocks.updater; } } }));
 vi.mock("../electron/ipc.js", () => ({
-  registerIpcHandlers: async () => {}, shouldAllowBrowserCertificateError: () => false,
-  shutdownCore: mocks.shutdownCore, flushPromptStore: mocks.flushPromptStore,
+  openRuntimeInBrowser: vi.fn(), registerIpcHandlers: async () => {}, shouldAllowBrowserCertificateError: () => false,
+  disconnectRuntime: mocks.disconnectRuntime,
 }));
+vi.mock("../electron/runtime-client.js", () => ({ ensureRuntime: async () => ({ call: async () => ({ appearanceTheme: "day" }) }) }));
 vi.mock("../src/main/config.js", () => ({
   getRuntimeConfigPath: () => "/tmp/sharkbay-update-test.json",
   loadAppConfig: async () => ({ appearanceTheme: "day" }),
@@ -59,10 +59,9 @@ beforeEach(async () => {
   vi.spyOn(process, "once").mockReturnValue(process);
   mocks.windows = [];
   mocks.handlers.clear();
-  mocks.shutdownCore.mockReset();
-  mocks.flushPromptStore.mockReset();
+  mocks.disconnectRuntime.mockReset();
   mocks.app = Object.assign(new EventEmitter(), {
-    isPackaged: true, setName: vi.fn(), whenReady: () => Promise.resolve(),
+    isPackaged: true, setName: vi.fn(), setPath: vi.fn(), requestSingleInstanceLock: () => true, whenReady: () => Promise.resolve(),
     getPath: () => "/tmp/sharkbay-update-test", getLocale: () => "en", getAppPath: () => "/app",
     quit: vi.fn(), dock: { setBadge: vi.fn() },
   });
@@ -95,16 +94,15 @@ describe("update installation and app exit", () => {
     expect(mocks.updater.quitAndInstall).not.toHaveBeenCalled();
   });
 
-  it("waits for core cleanup before installing and ignores repeated quit events", async () => {
+  it("waits for desktop cleanup before installing and ignores repeated quit events", async () => {
     let finish!: () => void;
-    mocks.shutdownCore.mockReturnValue(new Promise<void>((resolve) => { finish = resolve; }));
+    mocks.disconnectRuntime.mockReturnValue(new Promise<void>((resolve) => { finish = resolve; }));
     mocks.updater.emit("update-downloaded", { version: "0.3.3" });
     mocks.handlers.get(ipcChannels.appUpdateInstall)!(mainSender());
     const event = { preventDefault: vi.fn() };
     mocks.app.emit("before-quit", event);
     mocks.app.emit("before-quit", event);
-    expect(mocks.shutdownCore).toHaveBeenCalledOnce();
-    expect(mocks.flushPromptStore).toHaveBeenCalled();
+    expect(mocks.disconnectRuntime).toHaveBeenCalledOnce();
     expect(mocks.updater.quitAndInstall).not.toHaveBeenCalled();
     finish();
     await vi.advanceTimersByTimeAsync(0);
@@ -115,7 +113,7 @@ describe("update installation and app exit", () => {
   });
 
   it("preserves normal quit and bounds cleanup time", async () => {
-    mocks.shutdownCore.mockReturnValue(new Promise(() => {}));
+    mocks.disconnectRuntime.mockReturnValue(new Promise(() => {}));
     mocks.app.emit("before-quit", { preventDefault: vi.fn() });
     await vi.advanceTimersByTimeAsync(4000);
     expect(mocks.app.quit).toHaveBeenCalledOnce();

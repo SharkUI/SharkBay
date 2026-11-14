@@ -1,8 +1,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { getConfiguredRoots } from "./config.js";
+import { loadRuntimeConfig } from "./config.js";
 import { isPathInside, resolveProjectUri } from "./path-safety.js";
-import type { IpcRuntimeLike, ProjectFileTreeItem, ProjectFilesInput, ProjectFilesResult } from "../shared/types.js";
+import type { RuntimePaths, ProjectFileTreeItem, ProjectFilesInput, ProjectFilesResult } from "../shared/types.js";
 
 const editableExtensions = new Set([
   ".c",
@@ -50,9 +50,9 @@ const editableFilenames = new Set([
   "Makefile",
 ]);
 
-export async function listProjectFiles(runtime: IpcRuntimeLike, input: ProjectFilesInput): Promise<ProjectFilesResult> {
+export async function listProjectFiles(runtime: RuntimePaths, input: ProjectFilesInput): Promise<ProjectFilesResult> {
   try {
-    const config = input.configuredRoots ? null : await getConfiguredRoots(runtime);
+    const config = input.configuredRoots ? null : await loadRuntimeConfig(runtime);
     const configuredRoots = input.configuredRoots ?? config?.configuredRoots ?? [];
     const configuredProjects = input.configuredProjects ?? config?.configuredProjects ?? [];
     const safeRepo = await resolveProjectUri(input.projectUri, configuredRoots, configuredProjects);

@@ -1,11 +1,11 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, screen, shell } from "electron";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { flushPromptStore, registerIpcHandlers, shouldAllowBrowserCertificateError, shutdownCore } from "./ipc.js";
+import { openRuntimeInBrowser, registerIpcHandlers, shouldAllowBrowserCertificateError, disconnectRuntime } from "./ipc.js";
 import { createApplicationMenuTemplate } from "../src/main/application-menu.js";
 import electronUpdater from "electron-updater";
 import { AppUpdates } from "../src/main/app-updates.js";
-import { getRuntimeConfigPath, loadAppConfig } from "../src/main/config.js";
+import { ensureRuntime } from "./runtime-client.js";
 import { appChannels } from "../src/shared/app-events.js";
 import { ipcChannels as channels } from "../src/shared/ipc-channels.js";
 import type { AppConfig, AppearanceTheme } from "../src/shared/types.js";
@@ -22,6 +22,10 @@ let appUpdates: AppUpdates | null = null;
 let installUpdateOnQuit = false;
 
 app.setName("SharkBay");
+if (process.env.SHARKBAY_ELECTRON_DATA_DIR) app.setPath("userData", process.env.SHARKBAY_ELECTRON_DATA_DIR);
+const ownsWindow = app.requestSingleInstanceLock();
+if (!ownsWindow) app.quit();
+app.on("second-instance", () => { mainWindow?.show(); mainWindow?.focus(); });
 
 app.on("certificate-error", (event, webContents, url, _error, _certificate, callback) => {
   if (shouldAllowBrowserCertificateError(webContents, url)) {
@@ -146,6 +150,7 @@ function installApplicationMenu(): void {
     openSettings: openSettingsFromApplicationMenu,
     newTerminalTab: newTerminalTabFromApplicationMenu,
     openFind: openFindFromApplicationMenu,
+    openInBrowser: () => { void openRuntimeInBrowser().catch(console.error); },
     checkForUpdates: () => {
       if (!mainWindow || mainWindow.isDestroyed()) mainWindow = createMainWindow();
       if (mainWindow.isMinimized()) mainWindow.restore();
@@ -362,14 +367,11 @@ function createIslandWindow(config: Pick<AppConfig, "statusChangeNotificationsEn
   return window;
 }
 
-app.whenReady().then(async () => {
+if (ownsWindow) app.whenReady().then(async () => {
   process.env.SHARKBAY_LOCALE = app.getLocale();
 
-  const runtime = {
-    userDataPath: app.getPath("userData"),
-    configPath: process.env.SHARKBAY_CONFIG_PATH,
-  };
-  const config = await loadAppConfig(getRuntimeConfigPath(runtime));
+  const runtime = await ensureRuntime();
+  const config = await runtime.call<AppConfig>("config.get");
   appearanceTheme = config.appearanceTheme;
 
   await registerIpcHandlers(runtime, {
@@ -437,6 +439,9 @@ app.whenReady().then(async () => {
       mainWindow.focus();
     }
   });
+}).catch((error) => {
+  dialog.showErrorBox("Unable to connect to SharkBay runtime", error instanceof Error ? error.message : String(error));
+  app.quit();
 });
 
 app.on("window-all-closed", () => {
@@ -457,18 +462,16 @@ app.on("before-quit", (event) => {
     islandWindow.destroy();
     islandWindow = null;
   }
-  flushPromptStore();
 
   if (cleanupComplete) return;
 
-  // Defer the actual quit until background CodeGraph jobs are cancelled and the
-  // core utility process has been shut down cleanly, so no codegraph process
-  // group is orphaned (issue #15).
+  // Only desktop resources and the client connection are closed here.
+  // The independent runtime and its PTYs remain available to browser clients.
   event.preventDefault();
   if (cleanupStarted) return;
   cleanupStarted = true;
   appUpdates?.stop();
-  const cleanupDone = shutdownCore().catch(() => {
+  const cleanupDone = disconnectRuntime().catch(() => {
     // Best-effort: fall through to quit even if cleanup failed.
   });
   const cleanupTimeout = new Promise<void>((resolve) => setTimeout(resolve, 4000));

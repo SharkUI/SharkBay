@@ -179,7 +179,8 @@ export class TokenUsageCollector {
     return null;
   }
 
-  async backfill(): Promise<void> {
+  async backfill(signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) return;
     const claudeRoot = path.join(os.homedir(), ".claude", "projects");
     const codexRoot = path.join(os.homedir(), ".codex", "sessions");
     const kiroRoot = path.join(os.homedir(), ".kiro", "sessions", "cli");
@@ -188,16 +189,19 @@ export class TokenUsageCollector {
     const codexFiles = await discoverCodexFiles(codexRoot);
 
     for (const filePath of claudeFiles) {
-      await this.backfillFile(filePath, "claude");
+      if (signal?.aborted) return;
+      await this.backfillFile(filePath, "claude", signal);
     }
     for (const filePath of codexFiles) {
-      await this.backfillFile(filePath, "codex");
+      if (signal?.aborted) return;
+      await this.backfillFile(filePath, "codex", signal);
     }
-    await this.backfillKiroSessions(kiroRoot);
+    await this.backfillKiroSessions(kiroRoot, signal);
     this.flush();
   }
 
-  private async backfillFile(filePath: string, agentId: string): Promise<void> {
+  private async backfillFile(filePath: string, agentId: string, signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) return;
     // Cheap stat-based short-circuit: if the file's size and mtime are unchanged
     // since the last scan, there is no new content to index — skip the readFile
     // entirely. This keeps full history (events already in the DB are retained)
@@ -215,7 +219,7 @@ export class TokenUsageCollector {
 
     let content: string;
     try {
-      const buf = await fs.readFile(filePath);
+      const buf = await fs.readFile(filePath, { signal });
       if (buf.length <= lastOffset) {
         this.db.setFileIndex(filePath, stat.mtimeMs, stat.size);
         return;
@@ -231,7 +235,7 @@ export class TokenUsageCollector {
     // If resuming mid-file, we need session context from earlier lines
     if (lastOffset > 0 && agentId === "claude") {
       try {
-        const headBuf = await fs.readFile(filePath);
+        const headBuf = await fs.readFile(filePath, { signal });
         const head = headBuf.slice(0, lastOffset).toString("utf8");
         for (const line of head.split("\n")) {
           this.updateSessionContext(line, session, agentId);
@@ -254,7 +258,8 @@ export class TokenUsageCollector {
     this.db.setFileIndex(filePath, stat.mtimeMs, stat.size);
   }
 
-  private async backfillKiroSessions(root: string): Promise<void> {
+  private async backfillKiroSessions(root: string, signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) return;
     let entries;
     try {
       entries = await fs.readdir(root, { withFileTypes: true });
@@ -263,6 +268,7 @@ export class TokenUsageCollector {
     }
 
     for (const entry of entries) {
+      if (signal?.aborted) return;
       if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
       const filePath = path.join(root, entry.name);
 
@@ -280,7 +286,7 @@ export class TokenUsageCollector {
 
       let content: string;
       try {
-        content = await fs.readFile(filePath, "utf8");
+        content = await fs.readFile(filePath, { encoding: "utf8", signal });
       } catch {
         continue;
       }

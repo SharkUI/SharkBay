@@ -4,6 +4,7 @@ import { ipcChannels } from "../src/shared/ipc-channels.js";
 describe("IPC channels", () => {
   it("exposes only the current generic workbench channels", () => {
     expect(ipcChannels).toEqual({
+      runtimeHello: "runtime:hello", runtimeList: "runtime:list", runtimeAttach: "runtime:attach", runtimeClaim: "runtime:claim", runtimeConnect: "runtime:connect", runtimeConnection: "runtime:connection", runtimeNotice: "runtime:notice", terminalControl: "terminal:control",
       appUpdateGetState: "appUpdate:getState",
       appUpdateCheck: "appUpdate:check",
       appUpdateInstall: "appUpdate:install",

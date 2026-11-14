@@ -2,10 +2,37 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { ClaudeConnector, CodexConnector } from "../src/main/hooks/connectors/claude-family.js";
+import { ClaudeConnector, CodexConnector, QwenConnector } from "../src/main/hooks/connectors/claude-family.js";
 import { AgentHookStateManager } from "../src/main/hooks/state-manager.js";
 
+import { GeminiConnector } from "../src/main/hooks/connectors/gemini.js";
+import { KiroConnector } from "../src/main/hooks/connectors/kiro.js";
+import { CursorConnector } from "../src/main/hooks/connectors/cursor.js";
+import { ReasonixConnector } from "../src/main/hooks/connectors/reasonix.js";
+import { OpenCodeConnector } from "../src/main/hooks/connectors/opencode.js";
+
 describe("hook connectors", () => {
+  it.each([ClaudeConnector, CodexConnector, QwenConnector, GeminiConnector, KiroConnector, CursorConnector, ReasonixConnector, OpenCodeConnector])("detects hooks targeting an older runtime (%s)", async (Connector) => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "sharkbay-hook-migration-"));
+    const connector = new Connector();
+    Object.assign(connector, {
+      configPath: path.join(root, connector.id === "codex" ? "config.toml" : "settings.json"),
+      configDir: root, agentsDir: root,
+      pluginDir: path.join(root, "plugins", "sharkbay"),
+      pluginEntry: path.join(root, "plugins", "sharkbay", "index.js"),
+    });
+    const current = path.join(root, "current profile", "bin", "sharkbay-hook");
+    try {
+      await connector.install(path.join(root, "old", "bin", "sharkbay-hook"));
+      expect(await connector.status()).toBe("installed");
+      expect(await connector.status(current)).toBe("outdated");
+      await connector.install(current);
+      expect(await connector.status(current)).toBe("installed");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("installs Codex hooks using Codex inline TOML matcher groups", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "sharkbay-codex-hooks-"));
     const configPath = path.join(root, "config.toml");

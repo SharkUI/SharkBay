@@ -216,7 +216,6 @@ const projectColumnStorageKey = "sharkbay.projectColumnWidth.v2";
 const selectedProjectStorageKey = "sharkbay:selected-project:v1";
 const minBrowserColumnWidth = 360;
 const terminalSpacesStorageKey = "sharkbay:terminal-spaces:v1";
-const persistedTerminalOutputMaxChars = 120_000;
 const terminalColumnMinWidthFor = (detailHidden: boolean) => detailHidden ? minBrowserColumnWidth : minTerminalColumnWidth;
 const detailTabs: Array<{ id: DetailTab; label: string; localOnly?: boolean }> = [
   { id: "sessions", label: "Sessions", localOnly: true },
@@ -358,42 +357,6 @@ function writeStoredSelectedProjectId(projectId: string): void {
   }
 }
 
-function compactTerminalOutput(value: string): string {
-  return value.length > persistedTerminalOutputMaxChars ? value.slice(-persistedTerminalOutputMaxChars) : value;
-}
-
-function snapshotTerminalBuffer(terminal: XTerm): string {
-  try {
-    const buffer = terminal.buffer.normal ?? terminal.buffer.active;
-    const lines: string[] = [];
-    for (let index = 0; index < buffer.length; index += 1) {
-      lines.push(buffer.getLine(index)?.translateToString(true) ?? "");
-    }
-    return compactTerminalOutput(lines.join("\r\n").trimEnd());
-  } catch {
-    return "";
-  }
-}
-
-function stripAlternateScreenBlocks(value: string): string {
-  return value.replace(/\u001b\[\?(?:47|1047|1049)h[\s\S]*?(?:\u001b\[\?(?:47|1047|1049)l|$)/g, "");
-}
-
-function cleanRestoredTerminalOutput(value: string): string {
-  const lines = stripAlternateScreenBlocks(value)
-    .replace(/\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g, "")
-    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
-    .replace(/\u001b[()][0-2AB]/g, "")
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n")
-    .split("\n")
-    .filter((line) => line.trim() !== "%");
-  while (lines.length && !lines[lines.length - 1]?.trim()) lines.pop();
-  const lastLine = lines[lines.length - 1]?.trimEnd() ?? "";
-  if (/\s[%#$>]\s*$/u.test(lastLine)) lines.pop();
-  return compactTerminalOutput(lines.join("\r\n").trimEnd());
-}
-
 function readPersistedTerminalSpaces(): PersistedTerminalSpaces | null {
   try {
     const raw = window.localStorage.getItem(terminalSpacesStorageKey);
@@ -426,7 +389,7 @@ function writePersistedTerminalSpaces(spaces: Record<string, TerminalSpace>, hoo
               kind: "terminal",
               key,
               cwdUri: tab.session.currentCwdUri ?? tab.session.cwdUri,
-              output: tab.session.agentId ? undefined : snapshotTerminalBuffer(tab.terminal),
+              output: undefined,
               title: tab.session.agentId ? tab.session.title : undefined,
               agentId: tab.session.agentId,
               hookSessionId,
@@ -617,6 +580,7 @@ async function sendTerminalInput(sessionId: string, data: string): Promise<void>
 }
 
 async function resizeTerminal(sessionId: string, cols: number, rows: number): Promise<void> {
+  if (getBridge().runtime && !getBridge().runtime!.canControl(sessionId)) return;
   if (!validTerminalResizeDimensions(cols, rows)) return;
   const handler = getBridge().terminal?.resize;
   if (!handler) throw new Error("Terminal resize is not exposed by the preload API.");
@@ -1186,7 +1150,6 @@ function DashboardView({
   const [hookActivityByProjectId, setHookActivityByProjectId] = useState<Record<string, ProjectActivityState>>({});
   const [hookStateBySessionId, setHookStateBySessionId] = useState<Record<string, HookSessionStateEntry>>({});
   const [agentClis, setAgentClis] = useState<AgentCli[]>([]);
-  const [agentClisReady, setAgentClisReady] = useState(false);
   const [agentListVersion, setAgentListVersion] = useState(0);
   const [agentStatusByProjectPath, setAgentStatusByProjectPath] = useState<AgentStatusByProjectPath>({});
   const [activeTerminalTabKind, setActiveTerminalTabKind] = useState<ActiveTerminalTabKind>(null);
@@ -1340,28 +1303,23 @@ function DashboardView({
   useEffect(() => {
     if (!bridgeAvailable) return;
     let cancelled = false;
-    setAgentClisReady(false);
     const listClis = getBridge().agents?.listClis;
     if (!listClis) {
-      setAgentClisReady(true);
       return;
     }
     const targetId = selectedCandidate?.providerId ?? "local";
     const cached = agentClisByTargetRef.current[targetId];
     if (cached) {
       setAgentClis(cached);
-      setAgentClisReady(true);
     }
     void listClis({ cwdUri: selectedCandidate?.uri })
       .then((clis) => {
         if (cancelled) return;
         agentClisByTargetRef.current[targetId] = clis;
         setAgentClis(clis);
-        setAgentClisReady(true);
       })
       .catch((error) => {
         if (cancelled) return;
-        setAgentClisReady(true);
         setToast({ tone: "error", message: asMessage(error) });
       });
     return () => { cancelled = true; };
@@ -1419,9 +1377,9 @@ function DashboardView({
         <div className="project-window-drag-strip" aria-hidden="true" />
         <div className="project-panel-header">
           <span className="project-panel-title">Projects</span>
-          <button aria-label="Add project" className="icon-button" title="Add project" type="button" onClick={openAddProjectModal}>
+          {getBridge().config?.pickProjectFolder ? <button aria-label="Add project" className="icon-button" title="Add project" type="button" onClick={openAddProjectModal}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-          </button>
+          </button> : null}
         </div>
         {scanErrors.length ? (
           <div className="inline-errors">
@@ -1447,16 +1405,16 @@ function DashboardView({
             <div className="empty-state compact-title-row" style={{ padding: "24px 16px" }}>
               <strong>No projects</strong>
               <span>Add a project directory to get started.</span>
-              <button className="button" type="button" style={{ marginTop: "12px" }} onClick={openAddProjectModal}>Add Project</button>
+              {getBridge().config?.pickProjectFolder ? <button className="button" type="button" style={{ marginTop: "12px" }} onClick={openAddProjectModal}>Add Project</button> : null}
             </div>
           )}
         </div>
-        <SidebarStatusBar
+        {getBridge().terminal?.setCaffeinateActive ? <SidebarStatusBar
           caffeinateActive={caffeinateActive}
           caffeinateMode={caffeinateMode}
           onCaffeinateModeChange={onCaffeinateModeChange}
           setToast={setToast}
-        />
+        /> : null}
       </section>
 
       <div aria-label="Resize project column" aria-orientation="vertical" className="column-resizer" role="separator" tabIndex={0}
@@ -1469,7 +1427,6 @@ function DashboardView({
           ref={terminalPaneRef}
           appearanceTheme={appearanceTheme}
           agentClis={agentClis}
-          agentClisReady={agentClisReady}
           browserLayoutKey={browserLayoutKey}
           candidate={selectedCandidate}
           hookStateBySessionId={hookStateBySessionId}
@@ -1586,7 +1543,6 @@ function DashboardView({
 const TerminalPane = forwardRef<TerminalPaneHandle, {
   appearanceTheme: AppearanceTheme;
   agentClis: AgentCli[];
-  agentClisReady: boolean;
   bridgeAvailable: boolean;
   candidate: ProjectCandidate | null;
   hookStateBySessionId: Record<string, HookSessionStateEntry>;
@@ -1604,19 +1560,19 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   onRunningServiceProjectIdsChange: (projectIds: Set<string>) => void;
   onProjectActivityChange: (activityByProjectId: Record<string, ProjectActivityState>) => void;
   onTerminalWorkingChange: (working: boolean) => void;
-}>(function TerminalPane({ appearanceTheme, agentClis, agentClisReady, bridgeAvailable, browserLayoutKey, candidate, hookStateBySessionId, projectAliases, isVisible, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onAgentSessionClear, onRunningServiceProjectIdsChange, onProjectActivityChange, onTerminalWorkingChange }, ref) {
+}>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, browserLayoutKey, candidate, hookStateBySessionId, projectAliases, isVisible, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onAgentSessionClear, onRunningServiceProjectIdsChange, onProjectActivityChange, onTerminalWorkingChange }, ref) {
   const [spaces, setSpaces] = useState<Record<string, TerminalSpace>>({});
   const [codexActivityByTerminalId, setCodexActivityByTerminalId] = useState<Record<string, ProjectActivityState>>({});
   const [acknowledgedStoppedTerminalIds, setAcknowledgedStoppedTerminalIds] = useState<Set<string>>(() => new Set());
   const [taskTitlesByProjectPath, setTaskTitlesByProjectPath] = useState<Record<string, Record<string, string>>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [terminalSpacesRestored, setTerminalSpacesRestored] = useState(false);
+  const [, refreshRuntimeControl] = useState(0);
   const spacesRef = useRef<Record<string, TerminalSpace>>({});
   const taskProjectPathsRef = useRef(new Set<string>());
   const pendingTerminalOutput = useRef(new Map<string, string>());
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoredSpaces = useRef(false);
-  const restoredAgentSessionsAwaitingActivityRef = useRef<Set<string>>(new Set());
   const followBottomUntil = useRef(new Map<string, number>());
   const focusRequestNonce = useRef(0);
   const [tabFocusRequest, setTabFocusRequest] = useState<{ projectId: string; nonce: number } | null>(null);
@@ -1673,7 +1629,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     }
     const result: Record<string, { sessionId: string; state: ProjectActivityState; timestampMs: number; lastPrompt?: string }> = {};
     for (const [sid, entry] of Object.entries(hookStateBySessionId)) {
-      if (entry.state === "stopped" && restoredAgentSessionsAwaitingActivityRef.current.has(sid)) continue;
       let termId = map[sid];
       if (!termId && entry.state === "working") {
         const candidates = runningTabsByProjectAgent.get(`${entry.projectId}\0${entry.agentId}`);
@@ -1688,13 +1643,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     }
     return result;
   }, [hookStateBySessionId, spaces]);
-  useEffect(() => {
-    for (const [sid, entry] of Object.entries(hookStateBySessionId)) {
-      if (entry.state === "working" || entry.state === "approval") {
-        restoredAgentSessionsAwaitingActivityRef.current.delete(sid);
-      }
-    }
-  }, [hookStateBySessionId]);
   const terminalActivityByTerminalId = useMemo(() => {
     const result: Record<string, ProjectActivityState> = {};
     for (const [terminalId, snapshot] of Object.entries(hookSnapshotByTerminalId)) {
@@ -1909,7 +1857,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   }, [spaces, hookStateByTerminalId, onProjectActivityChange, onTerminalWorkingChange]);
 
   const selectedSpace = candidate?.id ? spaces[candidate.id] ?? null : null;
-  const canCreate = bridgeAvailable && Boolean(candidate?.uri) && (candidate?.providerKind === "local");
+  const canCreate = bridgeAvailable && Boolean(candidate?.uri) && (candidate?.providerKind === "local") && (!getBridge().runtime || getBridge().runtime!.connection() === "connected");
   const services = candidate?.services ?? [];
 
   useEffect(() => {
@@ -2058,108 +2006,42 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   }, [bridgeAvailable]);
 
   useEffect(() => {
-    if (!bridgeAvailable || !agentClisReady || restoredSpaces.current) return;
+    const runtime = getBridge().runtime;
+    if (!bridgeAvailable || !runtime) return;
+    let active = true;
+    const sync = (terminals: import("../shared/application-api").RuntimeTerminal[]) => {
+      if (!active) return;
+      const ids = new Set(terminals.map((entry) => entry.session.id));
+      for (const space of Object.values(spacesRef.current)) for (const tab of space.tabs) {
+        if (tab.kind === "terminal" && !ids.has(tab.session.id)) removeTab(tab.session.id, findTabWithSpace(spacesRef.current, tab.session.id));
+      }
+      for (const entry of terminals) {
+        const exists = findTerminalTab(spacesRef.current, entry.session.id);
+        if (!exists) attachTerminalSession(entry.projectUri, entry.projectUri, entry.projectName, entry.displayPath, entry.session, { activate: false });
+        if (!exists) runtime.attachTerminal(entry.session.id);
+      }
+      restoredSpaces.current = true; setTerminalSpacesRestored(true);
+    };
+    const offTerminals = runtime.onTerminalsChanged(sync);
+    const offControl = runtime.onControl(() => refreshRuntimeControl((value) => value + 1));
+    const offConnection = runtime.onConnection((state) => { refreshRuntimeControl((value) => value + 1); if (state === "connected") void runtime.listTerminals().then((terminals) => { sync(terminals); for (const entry of terminals) runtime.attachTerminal(entry.session.id); }).catch(() => {}); });
+    const offNotice = runtime.onNotice((message) => setToast({ tone: "error", message }));
+    void runtime.listTerminals().then(sync).catch((error) => setToast({ tone: "error", message: asMessage(error) }));
+    return () => { active = false; offTerminals(); offControl(); offConnection(); offNotice(); };
+  }, [bridgeAvailable]);
+
+  useEffect(() => {
+    if (!bridgeAvailable || restoredSpaces.current) return;
     const persisted = readPersistedTerminalSpaces();
-    if (!persisted?.spaces.length) {
-      restoredSpaces.current = true;
-      setTerminalSpacesRestored(true);
-      return;
-    }
-    const snapshot = persisted;
     restoredSpaces.current = true;
-
-    async function restoreSpaces() {
-      for (const space of snapshot.spaces) {
+    void (async () => {
+      for (const space of persisted?.spaces ?? []) for (const tab of space.tabs) {
         if (!restoreMountedRef.current) return;
-        setSpaces((current) => {
-          if (current[space.projectId]) return current;
-          return {
-            ...current,
-            [space.projectId]: {
-              projectId: space.projectId,
-              projectName: space.projectName,
-              uri: space.uri,
-              displayPath: space.displayPath,
-              tabs: [],
-              activeId: null,
-              serviceUrl: space.serviceUrl,
-            },
-          };
-        });
-
-        const restoredIds = new Map<string, string>();
-        for (const tab of space.tabs) {
-          if (!restoreMountedRef.current) return;
-          if (tab.kind === "browser") {
-            const browserId = await openBrowserTab(space.projectId, space.uri, space.projectName, space.displayPath, tab.url, false);
-            if (browserId) restoredIds.set(tab.key, browserId);
-            continue;
-          }
-          if (tab.kind === "editor") {
-            await openEditorTab(space.uri, space.projectName, space.displayPath, tab.relativePath, false);
-            restoredIds.set(tab.key, `editor:${space.uri}:${tab.relativePath}`);
-            continue;
-          }
-
-          let terminalId: string | null = null;
-          if (tab.service) {
-            terminalId = await openProjectTab(space.projectId, tab.cwdUri, space.projectName, space.displayPath, true, {
-              initialCommand: tab.service.command,
-              service: tab.service,
-              restoredOutput: tab.output,
-              activate: false,
-            });
-          } else if (tab.agentId) {
-            const restore = tab.hookSessionId ? buildAgentSessionRestoreCommand({
-              agentName: tab.agentId,
-              sessionId: tab.hookSessionId,
-              availableAgents: agentClisRef.current,
-              launchFlags: getAgentLaunchFlagsForRestore(tab.agentId),
-            }) : null;
-            if (restore) {
-              restoredAgentSessionsAwaitingActivityRef.current.add(restore.hookSessionId);
-              terminalId = await openProjectTab(space.projectId, space.uri, space.projectName, space.displayPath, true, {
-                agentId: tab.agentId,
-                initialCommand: restore.command,
-                initialCommandTitle: tab.title ?? restore.title,
-                hookSessionId: tab.hookSessionId,
-                activate: false,
-              });
-            }
-          } else {
-            terminalId = await openProjectTab(space.projectId, tab.cwdUri, space.projectName, space.displayPath, true, {
-              restoredOutput: tab.output,
-              activate: false,
-            });
-            if (!terminalId && tab.cwdUri !== space.uri) {
-              terminalId = await openProjectTab(space.projectId, space.uri, space.projectName, space.displayPath, true, {
-                restoredOutput: tab.output,
-                activate: false,
-              });
-            }
-          }
-          if (terminalId) restoredIds.set(tab.key, terminalId);
-        }
-
-        const activeId = (space.activeKey ? restoredIds.get(space.activeKey) : null) ?? restoredIds.values().next().value ?? null;
-        if (activeId) {
-          setSpaces((current) => {
-            const existing = current[space.projectId];
-            if (!existing) return current;
-            return { ...current, [space.projectId]: { ...existing, activeId, serviceUrl: space.serviceUrl } };
-          });
-          setActiveProjectId((current) => current ?? space.projectId);
-        }
+        if (tab.kind === "editor") await openEditorTab(space.uri, space.projectName, space.displayPath, tab.relativePath, false);
+        if (tab.kind === "browser" && getBridge().browser) await openBrowserTab(space.projectId, space.uri, space.projectName, space.displayPath, tab.url, false);
       }
-      flushTerminalSpacesSnapshot();
-      if (restoreMountedRef.current) {
-        setActiveProjectId(candidateRef.current?.id ?? snapshot.spaces[0]?.projectId ?? null);
-        setTerminalSpacesRestored(true);
-      }
-    }
-
-    void restoreSpaces();
-  }, [agentClisReady, bridgeAvailable, flushTerminalSpacesSnapshot]);
+    })();
+  }, [bridgeAvailable]);
 
   useEffect(() => {
     if (!candidate?.uri || !bridgeAvailable) { if (!candidate) setActiveProjectId(null); return; }
@@ -2374,11 +2256,11 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     }
   }
 
-  async function openProjectTab(projectId: string, cwdUri: string, projectName: string, displayPath: string, quiet = false, options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "initialCommandTitle" | "service" | "review" | "artifact"> & { hookSessionId?: string; restoredOutput?: string; activate?: boolean } = {}): Promise<string | null> {
+  async function openProjectTab(projectId: string, cwdUri: string, projectName: string, displayPath: string, quiet = false, options: Pick<TerminalCreateInput, "agentId" | "initialCommand" | "initialCommandTitle" | "service" | "review" | "artifact"> & { hookSessionId?: string; activate?: boolean } = {}): Promise<string | null> {
     try {
-      const { hookSessionId, restoredOutput, activate = true, ...createOptions } = options;
+      const { hookSessionId, activate = true, ...createOptions } = options;
       const session = await createTerminal(cwdUri, projectName, createOptions);
-      return attachTerminalSession(projectId, cwdUri, projectName, displayPath, session, { activate, hookSessionId, restoredOutput });
+      return attachTerminalSession(projectId, cwdUri, projectName, displayPath, session, { activate, hookSessionId });
     } catch (error) {
       if (!quiet) setToast({ tone: "error", message: asMessage(error) });
       return null;
@@ -2391,14 +2273,10 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     projectName: string,
     displayPath: string,
     session: TerminalSession,
-    options: { activate: boolean; hookSessionId?: string; restoredOutput?: string; reviewRun?: ReviewRun },
+    options: { activate: boolean; hookSessionId?: string; reviewRun?: ReviewRun },
   ): string {
     if (findTerminalTab(spacesRef.current, session.id)) return session.id;
     const terminal = createXTerm(session.id, appearanceTheme, setToast, (url) => void openBrowserTab(projectId, cwdUri, projectName, displayPath, url), () => clearStoppedTerminalSession(session.id), { colorScheme: terminalColorScheme, fontFamily: terminalFontFamily, fontSize: terminalFontSize, lineHeight: terminalLineHeight });
-    if (options.restoredOutput) {
-      const restored = cleanRestoredTerminalOutput(options.restoredOutput);
-      if (restored) terminal.instance.write(compactTerminalOutput(`${restored}\r\n`));
-    }
     const tab: TerminalTab = {
       kind: "terminal",
       session,
@@ -2414,9 +2292,10 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     setSpaces((current) => {
       const existing = current[projectId] ?? { projectId, projectName, uri: cwdUri, displayPath, tabs: [], activeId: null, serviceUrl: null };
       if (existing.tabs.some((item) => item.kind === "terminal" && item.session.id === session.id)) return current;
-      return { ...current, [projectId]: { ...existing, projectName, uri: cwdUri, displayPath, tabs: [...existing.tabs, tab], activeId: options.activate ? session.id : existing.activeId } };
+      return { ...current, [projectId]: { ...existing, projectName, uri: cwdUri, displayPath, tabs: [...existing.tabs, tab], activeId: options.activate ? session.id : existing.activeId ?? session.id } };
     });
     if (options.activate) setActiveProjectId(projectId);
+    if (getBridge().runtime) setTimeout(() => getBridge().runtime?.attachTerminal(session.id), 0);
     return session.id;
   }
 
@@ -2447,6 +2326,13 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   }
 
   async function openBrowserTab(projectId: string, uri: string, projectName: string, displayPath: string, initialUrl: string, activate = true): Promise<string | null> {
+    if (!getBridge().browser) {
+      if (initialUrl && initialUrl !== "about:blank") {
+        const url = initialUrl.startsWith("file:") ? getBridge().runtime?.previewUrl(initialUrl) ?? initialUrl : initialUrl;
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+      return null;
+    }
     try {
       const browser = await createBrowser(initialUrl);
       const tab: TerminalTab = { kind: "browser", browser, addressValue: browser.url === "about:blank" ? "" : browser.url };
@@ -2475,6 +2361,10 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     if (!tab) {
       bufferPendingTerminalOutput(event);
       return;
+    }
+    if (event.reset) {
+      tab.terminal.reset();
+      if (event.cols && event.rows) tab.terminal.resize(event.cols, event.rows);
     }
     writeTerminalOutputToTab(event.sessionId, tab, event.data);
   }
@@ -2594,7 +2484,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       } else await closeTerminal(tabId);
     } catch (error) {
       setToast({ tone: "error", message: asMessage(error) });
-    } finally {
       removeTab(tabId, match);
     }
   }
@@ -2701,6 +2590,8 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
           <h3>{terminalHeading}</h3>
           <div className="path-line">{selectedSpace?.displayPath ?? candidate?.displayPath ?? "Select a project"}</div>
         </div>
+        {getBridge().runtime?.connection() !== "connected" ? <span role="status">运行时连接已断开</span> : null}
+        {selectedActiveTerminal && getBridge().runtime && !getBridge().runtime!.canControl(selectedActiveTerminal.session.id) ? <button className="service-pill" type="button" disabled={getBridge().runtime!.connection() !== "connected"} onClick={() => void getBridge().runtime!.takeControl(selectedActiveTerminal.session.id).catch((error) => setToast({ tone: "error", message: asMessage(error) }))}>接管终端</button> : null}
         {services.length ? (
           <div className="service-actions" aria-label="Project services">
             {services.map((service) => {
@@ -2761,7 +2652,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                   })}
                 </div>
               <button aria-label="New terminal tab" className="icon-button terminal-tab-add" disabled={!canCreate} title="New terminal tab" type="button" onClick={() => void openCurrentProjectTab()}><PlusIcon /></button>
-              <button aria-label="Open browser" className="icon-button terminal-tab-add terminal-browser-button" disabled={!canCreate} title="Browser" type="button" onClick={() => void openBrowserProjectTab()}><GlobeIcon /></button>
+              {getBridge().browser ? <button aria-label="Open browser" className="icon-button terminal-tab-add terminal-browser-button" disabled={!canCreate} title="Browser" type="button" onClick={() => void openBrowserProjectTab()}><GlobeIcon /></button> : null}
               {agentClis.map((agent) => (
                 <button aria-label={agent.label} className="icon-button terminal-tab-add terminal-agent-button" disabled={!canCreate} key={agent.id} title={agent.label} type="button" onClick={() => void openAgentProjectTab(agent)}>
                   <AgentCliIcon agent={agent} />
@@ -2808,7 +2699,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
           <div className="terminal-space is-active terminal-empty-space">
             <div className="terminal-tabs">
               <button aria-label="New terminal tab" className="icon-button terminal-tab-add" disabled={!canCreate} title="New terminal tab" type="button" onClick={() => void openCurrentProjectTab()}><PlusIcon /></button>
-              <button aria-label="Open browser" className="icon-button terminal-tab-add terminal-browser-button" disabled={!canCreate} title="Browser" type="button" onClick={() => void openBrowserProjectTab()}><GlobeIcon /></button>
+              {getBridge().browser ? <button aria-label="Open browser" className="icon-button terminal-tab-add terminal-browser-button" disabled={!canCreate} title="Browser" type="button" onClick={() => void openBrowserProjectTab()}><GlobeIcon /></button> : null}
               {agentClis.map((agent) => (
                 <button aria-label={agent.label} className="icon-button terminal-tab-add terminal-agent-button" disabled={!canCreate} key={agent.id} title={agent.label} type="button" onClick={() => void openAgentProjectTab(agent)}>
                   <AgentCliIcon agent={agent} />
@@ -2823,7 +2714,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
         projectId={selectedSpace?.projectId ?? null}
         sessionId={selectedActiveTerminal?.session.id ?? null}
         agentHookSessionId={agentHookSessionId}
-        disabled={!selectedActiveTerminal}
+        disabled={!selectedActiveTerminal || Boolean(getBridge().runtime && !getBridge().runtime!.canControl(selectedActiveTerminal.session.id))}
         focusRequest={promptFocusRequest}
         isAgentSession={Boolean(selectedActiveTerminal?.session.agentId)}
         onTerminalFocusRequest={() => selectedActiveTerminal?.terminal.focus()}
@@ -3018,6 +2909,14 @@ function BrowserSurface({
 
 function XTermSurface({ active, focusRequest, onResize, onCloseSearch, showSearch, tab }: { active: boolean; focusRequest: number; onResize: (cols: number, rows: number) => void; onCloseSearch: () => void; showSearch: boolean; tab: TerminalShellTab }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const runtime = getBridge().runtime;
+  useEffect(() => {
+    if (!runtime) return;
+    const update = () => { tab.terminal.options.disableStdin = !runtime.canControl(tab.session.id); };
+    update();
+    const offControl = runtime.onControl(update), offConnection = runtime.onConnection(update);
+    return () => { offControl(); offConnection(); };
+  }, [runtime, tab]);
   const openedRef = useRef(false);
   const onResizeRef = useRef(onResize);
   const [linkMenu, setLinkMenu] = useState<{ url: string; x: number; y: number } | null>(null);

@@ -7,6 +7,7 @@ import viteConfig from "../vite.config.js";
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const packageJson = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf-8")) as {
   build: {
+    npmRebuild: boolean;
     files: string[];
     extraResources: Array<{ from: string; to: string }>;
     asarUnpack: string[];
@@ -57,11 +58,13 @@ describe("build config", () => {
     expect(packageJson.build.asarUnpack).not.toContain("node_modules/better-sqlite3/**/*");
   });
 
-  it("copies only runtime dock icon resources", () => {
+  it("copies dock icons and the independent Node runtime", () => {
+    expect(packageJson.build.npmRebuild).toBe(false);
     expect(packageJson.build.extraResources).toEqual([
       { from: "resources/shark-morning.png", to: "resources/shark-morning.png" },
       { from: "resources/shark-day.png", to: "resources/shark-day.png" },
       { from: "resources/shark-night.png", to: "resources/shark-night.png" },
+      { from: ".runtime-bundle", to: "runtime" },
     ]);
   });
 

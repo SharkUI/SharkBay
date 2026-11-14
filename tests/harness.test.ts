@@ -92,7 +92,7 @@ describe("harness install", () => {
     expect(protocol).toContain("## Agent-Initiated Artifact");
     expect(protocol).toContain(".sharkbay/harness/artifact.sh start --task-id <task-id>");
     expect(protocol).toContain("reserved artifact path immediately");
-    expect(protocol).toContain("opens the page in its built-in\nbrowser");
+    expect(protocol).toContain("offers an isolated browser\npreview link");
     expect(protocol).toContain("## Agent-Initiated Review");
     expect(protocol).toContain(".sharkbay/harness/review.sh start --task-id <task-id>");
     expect(protocol).toContain("Without `--agent`, SharkBay uses the same agent as the parent terminal.");
@@ -121,7 +121,7 @@ describe("harness install", () => {
     const artifactHelperText = await fs.readFile(path.join(repo, ".sharkbay", "harness", "open-artifact.sh"), "utf8");
     expect(artifactHelperText).toContain("open_artifact");
     expect(artifactHelperText).toContain("sharkbay-hook");
-    expect(artifactHelperText).toContain("hook-socket-path");
+    expect(artifactHelperText).toContain("SHARKBAY_HOOK_CLIENT");
     const artifactControl = await fs.stat(path.join(repo, ".sharkbay", "harness", "artifact.sh"));
     expect(artifactControl.mode & 0o111).not.toBe(0);
     const artifactControlText = await fs.readFile(path.join(repo, ".sharkbay", "harness", "artifact.sh"), "utf8");
@@ -467,7 +467,7 @@ describe("harness install", () => {
     expect(prompt).toContain("never touch files under `.sharkbay/team-context/`");
     // Agent-initiated runs complete through the control path so the file is validated and the parent is notified.
     expect(prompt).toContain("artifact.sh complete --run artifact-test --artifact .sharkbay/artifacts/SHR4K2-ABC123.html --completion-token artifact-capability");
-    expect(prompt).toContain("built-in browser");
+    expect(prompt).toContain("isolated browser preview");
     // Records the artifact back into the task file under an Artifacts section.
     expect(prompt).toContain("## Artifacts");
     expect(prompt).toContain("date -u +%Y-%m-%dT%H:%M:%SZ");

@@ -1,4 +1,4 @@
-import type { CaffeinateMode } from "../shared/caffeinate";
+import type { CaffeinateMode } from "../shared/caffeinate.js";
 
 export type AppearanceTheme = "day" | "night" | "morning";
 
@@ -341,6 +341,8 @@ export type TerminalCreateInput = {
 };
 
 export type TerminalSession = {
+  cols?: number;
+  rows?: number;
   id: string;
   cwdUri: string;
   currentCwdUri?: string;
@@ -386,6 +388,10 @@ export type TerminalNotificationResult = {
 };
 
 export type TerminalDataEvent = {
+  sequence?: number;
+  reset?: boolean;
+  cols?: number;
+  rows?: number;
   sessionId: string;
   data: string;
   stream: "stdout" | "stderr";
@@ -658,7 +664,9 @@ export type TasksChangedEvent = {
 };
 
 export type SharkBayBridge = {
-  updates?: import("../shared/app-updates").AppUpdatesBridge;
+  runtime?: import("./bridge/web-bridge.js").WebRuntimeBridge;
+  artifacts?: { start: (input: { repoPath: string; taskId: string; agentId: string }) => Promise<TerminalSession> };
+  updates?: import("../shared/app-updates.js").AppUpdatesBridge;
   app?: {
     onOpenSettings?: (callback: () => void) => () => void;
     onNewTerminalTab?: (callback: () => void) => () => void;
@@ -669,6 +677,7 @@ export type SharkBayBridge = {
     onFindClosed?: (callback: () => void) => () => void;
   };
   config?: {
+    get?: () => Promise<AppConfig>;
     listRoots?: () => Promise<AppConfig | RootRecord[] | string[]>;
     addProject?: (input: { path?: string; uri?: string }) => Promise<AppConfig | void>;
     cloneProject?: (input: CloneProjectInput) => Promise<CloneProjectResult>;
@@ -682,7 +691,7 @@ export type SharkBayBridge = {
     setTerminalAppearance?: (input: { colorScheme?: string | null; fontFamily?: string | null; fontSize?: number | null; lineHeight?: number | null }) => Promise<AppConfig>;
   };
   projects?: {
-    getSetupStatus?: (input: { repoPath: string }) => Promise<import("../shared/types").ProjectSetupStatus>;
+    getSetupStatus?: (input: { repoPath: string }) => Promise<import("../shared/types.js").ProjectSetupStatus>;
     scan?: () => Promise<ScanResult | ProjectCandidate[]>;
     getDetail?: (input: { projectUri: string }) => Promise<ProjectDetail>;
     getGitHub?: (input: { projectUri: string }) => Promise<GitHubInfo>;

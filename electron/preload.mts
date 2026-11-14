@@ -146,7 +146,39 @@ function invoke<Result>(channel: string, payload?: unknown): Promise<Result> {
   return ipcRenderer.invoke(channel, payload) as Promise<Result>;
 }
 
+let runtimeState: "connected" | "disconnected" = "connected";
+let runtimeClientId = "";
+const runtimeOwners = new Map<string, string | null>();
+const controlListeners = new Set<() => void>();
+const notifyControl = () => controlListeners.forEach((callback) => callback());
+ipcRenderer.on(channels.terminalControl, (_event, value: { sessionId: string; ownerId: string | null }) => { runtimeOwners.set(value.sessionId, value.ownerId); notifyControl(); });
+ipcRenderer.on(channels.runtimeConnection, (_event, value: "connected" | "disconnected") => { runtimeState = value; notifyControl(); });
+const listRuntimeTerminals = async () => {
+  const hello = await ipcRenderer.invoke(channels.runtimeHello); runtimeClientId = hello.clientId;
+  const terminals: import("../src/shared/application-api.js").RuntimeTerminal[] = await ipcRenderer.invoke(channels.runtimeList);
+  runtimeOwners.clear(); for (const terminal of terminals) runtimeOwners.set(terminal.session.id, terminal.ownerId);
+  notifyControl(); return terminals;
+};
+const runtime = {
+  host: "electron" as const,
+  dispose: () => {},
+  connection: () => runtimeState,
+  onConnection: (callback: (state: "connected" | "disconnected") => void) => { callback(runtimeState); const listener = (_event: unknown, state: "connected" | "disconnected") => callback(state); ipcRenderer.on(channels.runtimeConnection, listener); return () => ipcRenderer.removeListener(channels.runtimeConnection, listener); },
+  onControl: (callback: () => void) => { controlListeners.add(callback); return () => controlListeners.delete(callback); },
+  onNotice: (callback: (message: string) => void) => { const listener = (_event: unknown, message: string) => callback(message); ipcRenderer.on(channels.runtimeNotice, listener); return () => ipcRenderer.removeListener(channels.runtimeNotice, listener); },
+  onTerminalsChanged: (callback: (terminals: import("../src/shared/application-api.js").RuntimeTerminal[]) => void) => {
+    const changed = () => { void listRuntimeTerminals().then(callback).catch(() => {}); };
+    ipcRenderer.on(channels.terminalUpdate, changed); ipcRenderer.on(channels.terminalExit, changed);
+    return () => { ipcRenderer.removeListener(channels.terminalUpdate, changed); ipcRenderer.removeListener(channels.terminalExit, changed); };
+  },
+  listTerminals: listRuntimeTerminals,
+  attachTerminal: (sessionId: string) => { void ipcRenderer.invoke(channels.runtimeAttach, { sessionId }).catch((error) => console.error(error.message)); },
+  canControl: (sessionId: string) => runtimeState === "connected" && !!runtimeClientId && runtimeOwners.get(sessionId) === runtimeClientId,
+  takeControl: async (sessionId: string) => { await ipcRenderer.invoke(channels.runtimeClaim, { sessionId }); await listRuntimeTerminals(); await ipcRenderer.invoke(channels.runtimeAttach, { sessionId }); },
+  previewUrl: (url: string) => url,
+};
 const sharkBayApi = {
+  runtime,
   updates: {
     getState: () => invoke<AppUpdateState>(channels.appUpdateGetState),
     check: () => invoke<AppUpdateState>(channels.appUpdateCheck),

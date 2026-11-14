@@ -5,13 +5,13 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import * as pty from "./pty.js";
-import { getConfiguredRoots } from "./config.js";
+import { loadRuntimeConfig } from "./config.js";
 import { resolveProjectUri } from "./path-safety.js";
 import { toLocalProjectUri } from "../core/project-uri.js";
 import { prependPathDirectories, resolveCommandSearchPaths } from "./command-path.js";
 import { prepareAgentLaunch, reserveReviewPath, reserveArtifactPath, reviewPrompt, artifactPrompt } from "./harness.js";
 import type {
-  IpcRuntimeLike,
+  RuntimePaths,
   TerminalCloseInput,
   TerminalControlState,
   TerminalCreateInput,
@@ -100,7 +100,7 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
     this.now = options.now ?? Date.now;
   }
 
-  async create(runtime: IpcRuntimeLike, input: TerminalCreateInput): Promise<TerminalSession> {
+  async create(runtime: RuntimePaths, input: TerminalCreateInput): Promise<TerminalSession> {
     const spec = await this.resolveLaunchSpec(runtime, input.cwdUri);
     let initialCommand = normalizeTerminalCommandLine(input.initialCommand);
     const initialCommandTitle = initialCommand ? normalizeTerminalCommandLine(input.initialCommandTitle) : null;
@@ -253,24 +253,29 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
     return publicSession(session);
   }
 
-  private async resolveLaunchSpec(runtime: IpcRuntimeLike, cwdUri: string): Promise<TerminalLaunchSpec> {
+  private async resolveLaunchSpec(runtime: RuntimePaths, cwdUri: string): Promise<TerminalLaunchSpec> {
     if (!cwdUri?.trim()) {
       throw new Error("Terminal cwd URI is required");
     }
     const resolved = await resolveTerminalCwd(runtime, cwdUri);
     const shell = preferredShell();
     const commandSearchPaths = await resolveCommandSearchPaths();
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      PATH: prependPathDirectories(process.env.PATH, commandSearchPaths),
+      TERM: "xterm-256color",
+      COLORTERM: "truecolor",
+      ...terminalShellEnvironment,
+      SHARKBAY_HOOK_CLIENT: path.join(runtime.userDataPath, "bin", "sharkbay-hook"),
+      SHARKBAY_REVIEW_CONTROL_CLIENT: path.join(runtime.userDataPath, "bin", "sharkbay-review-control"),
+    };
+    // The host may run under a non-color automation console; the PTY is an xterm.
+    delete env.NO_COLOR;
     return {
       cwd: resolved.cwd,
       cwdUri: resolved.cwdUri,
       command: terminalCommand(shell),
-      env: {
-        ...process.env,
-        PATH: prependPathDirectories(process.env.PATH, commandSearchPaths),
-        TERM: process.env.TERM || "xterm-256color",
-        COLORTERM: process.env.COLORTERM || "truecolor",
-        ...terminalShellEnvironment,
-      },
+      env,
       shell,
       projectRoot: resolved.cwd,
     };
@@ -485,11 +490,11 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
   }
 }
 
-export async function resolveTerminalCwd(runtime: IpcRuntimeLike, cwdUri: string): Promise<{ cwd: string; cwdUri: string }> {
+export async function resolveTerminalCwd(runtime: RuntimePaths, cwdUri: string): Promise<{ cwd: string; cwdUri: string }> {
   if (!cwdUri?.trim()) {
     throw new Error("Terminal cwd URI is required");
   }
-  const config = await getConfiguredRoots(runtime);
+  const config = await loadRuntimeConfig(runtime);
   const safeRepo = await resolveProjectUri(cwdUri, config.configuredRoots, config.configuredProjects);
   return { cwd: safeRepo.repoPath, cwdUri: safeRepo.projectUri };
 }
@@ -735,5 +740,7 @@ function publicSession(session: TerminalRecord | TerminalSession): TerminalSessi
     createdAt: session.createdAt,
     agentId: session.agentId,
     service: session.service,
+    cols: "pty" in session ? session.pty.cols : session.cols,
+    rows: "pty" in session ? session.pty.rows : session.rows,
   };
 }

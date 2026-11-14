@@ -299,6 +299,10 @@ export class LocalProvider extends EventEmitter implements ExecutionProvider {
     return this.terminalManager.close(input);
   }
 
+  listTerminalSessions(): TerminalSession[] {
+    return this.terminalManager.list();
+  }
+
   closeAllTerminalSessions(): void {
     this.terminalManager.closeAll();
   }
