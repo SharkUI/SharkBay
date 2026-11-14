@@ -12,14 +12,14 @@ agent: Codex GPT-6
 sessionId: 01a1d9cf-7921-7ed0-99b9-953d9df652d5
 branch: main
 createdAt: 2026-11-14T12:01:48Z
-updatedAt: 2026-11-14T12:46:19Z
-completedAt: 2026-11-14T12:46:19Z
+updatedAt: 2026-11-14T12:50:03Z
+completedAt: 2026-11-14T12:50:03Z
 commits:
   - 85fb1ce53d1c92614a86f66101dea0a51998f09e
 ---
 
 ## Summary
-已提交基线 85fb1ce，完成 WebUI 手机/平板适配、顶部导航和稳定输入区；按追加要求改为三横线入口、全屏 Projects，并在项目名下显示小号路径。改动保留工作区，类型、构建及真实浏览器验证通过。
+已提交基线 85fb1ce，完成 WebUI 手机/平板适配、顶部导航和稳定输入区；三横线打开全屏 Projects，使用左上角返回箭头退出，项目名下显示小号路径。改动保留工作区，类型、构建及真实浏览器验证通过。
 
 ## Files
 - docs/release.md
@@ -59,6 +59,7 @@ commits:
 - 用户追加：左上角改为三横线，Projects 改为全屏选择页，居中项目名下显示小号项目路径。重新打开本任务，最小修改 App/CSS 后验证全屏边界、切换路径及窄屏截断。
 - 工作区新增的 tests/browser-tab-close.test.ts 属于其他工作，保持不动。
 - 全屏 Projects 跟随可视区域并保留安全边距、关闭与焦点返回；移除不再使用的遮罩，顶部路径使用 10px 单行省略并通过 title 保留全文，随项目选择更新。
+- 用户截图反馈：全屏 Projects 退出应使用左上角返回箭头。将原标题后的关闭叉号替换为标题前的返回按钮，保持关闭及焦点恢复行为。
 
 ## Verification
 - 基线 `git diff --check`、`npm run typecheck`、`npx vitest run tests/runtime-packaging.test.ts` 通过。
@@ -79,6 +80,7 @@ commits:
 - 已人工检查浅/深色终端、未接管输入区、详情返回和新增会话菜单截图；实机软键盘限制同上。
 - 最新 `npm run typecheck`、Vite 构建和 `git diff --check` 通过；`/tmp/sharkbay-mobile-projects-verify.mjs` 验证 320/390/844/1024px 的 Projects 精确覆盖视口、关闭/选择、10px 路径位置和全文，以及前述终端/键盘/草稿回归，均通过。
 - 已检查 `/tmp/sharkbay-mobile-fullscreen-projects.png` 与最新终端截图；本轮未产生提交，隔离测试实例已关闭。
+- 本轮类型检查、Vite 构建和 `git diff --check` 通过；`/tmp/sharkbay-mobile-projects-back-verify.mjs` 验证 320/390/844/1024px 全屏、返回箭头在标题前、无关闭叉号、返回后的焦点和同一终端保持，均通过。已检查截图 `/tmp/sharkbay-mobile-projects-back.png`，未提交。
 
 ## Notes
 - .sharkbay/team-context/ 只读。移动适配结果暂留工作区供用户检查，不默认再次提交。
