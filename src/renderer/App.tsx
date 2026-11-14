@@ -10,6 +10,8 @@ import { CodeEditor } from "./code-editor";
 import { UpdateHint } from "./update-hint";
 import { ProjectStart } from "./project-start";
 import { RuntimeStatus } from "./bridge/runtime-status";
+import { useCompactWebLayout, useWebViewport } from "./mobile-layout";
+import { TerminalCreateMenu } from "./terminal-create-menu";
 import { colorSchemes, getColorScheme } from "./color-schemes";
 import { promptSearchKeys } from "./prompt-search";
 import { isCaffeinateActive, normalizeCaffeinateMode, type CaffeinateMode } from "../shared/caffeinate";
@@ -771,6 +773,7 @@ function githubOwnerFromRemote(remoteOrigin: string | null | undefined): string 
 }
 
 export function App() {
+  useWebViewport();
   const [view, setView] = useState<View>("dashboard");
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const [configuredProjects, setConfiguredProjects] = useState<string[]>([]);
@@ -915,7 +918,7 @@ export function App() {
   }
 
   return (
-    <div className="app-shell" data-theme={appearanceTheme}>
+    <div className="app-shell" data-theme={appearanceTheme} data-host={getBridge().runtime?.host ?? "electron"}>
       <main className="workspace">
         <div className="workspace-body">
           <div aria-hidden={view !== "dashboard"} className={cx("view-surface", view !== "dashboard" && "is-hidden")}>
@@ -1027,7 +1030,7 @@ function ToastBanner({ toast, onClose }: { toast: Toast; onClose: () => void }) 
   return (
     <div className={cx("toast-banner", `is-${toast.tone}`)} role="status" aria-live="polite">
       <span>{toast.message}</span>
-      <button aria-label="Dismiss notification" type="button" onClick={onClose}>x</button>
+      <button aria-label="Dismiss notification" type="button" onClick={onClose}><CloseGlyph /></button>
     </div>
   );
 }
@@ -1135,6 +1138,38 @@ function DashboardView({
 }) {
   const gridRef = useRef<HTMLDivElement | null>(null);
   const terminalPaneRef = useRef<TerminalPaneHandle | null>(null);
+  const compact = useCompactWebLayout();
+  const mobile = useCompactWebLayout(767);
+  const [projectsOpen, setProjectsOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const projectPanelRef = useRef<HTMLElement | null>(null);
+  const projectToggleRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!compact || !projectsOpen) return;
+    const panel = projectPanelRef.current;
+    panel?.querySelector<HTMLButtonElement>("button")?.focus();
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.defaultPrevented || document.querySelector(".modal-panel") || panel?.querySelector(".project-context-menu")) return;
+      if (event.key === "Escape") setProjectsOpen(false);
+      if (event.key !== "Tab") return;
+      const buttons = Array.from(panel?.querySelectorAll<HTMLElement>("button:not(:disabled), input, select, [tabindex='0']") ?? []).filter((element) => element.getClientRects().length);
+      const first = buttons[0], last = buttons[buttons.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      projectToggleRef.current?.focus({ preventScroll: true });
+    };
+  }, [compact, projectsOpen]);
+
+  function returnToWorkspace<T>(open: () => Promise<T>) {
+    const result = open();
+    void result.then(() => setDetailsOpen(false)).catch(() => {});
+    return result;
+  }
 
   useEffect(() => {
     if (!bridgeAvailable) return;
@@ -1212,6 +1247,7 @@ function DashboardView({
   }
 
   function persistColumnWidths(projectWidth: number, detailWidth: number, gridWidth = gridRef.current?.getBoundingClientRect().width) {
+    if (compact) return;
     const next = gridWidth
       ? normalizeColumnWidths(projectWidth, detailWidth, gridWidth)
       : { projectWidth: Math.max(minProjectColumnWidth, Math.round(projectWidth)), detailWidth: Math.max(minDetailColumnWidth, Math.round(detailWidth)) };
@@ -1300,7 +1336,7 @@ function DashboardView({
     });
     observer.observe(grid);
     return () => observer.disconnect();
-  }, [detailColumnWidth, detailPanelHidden, projectColumnWidth]);
+  }, [compact, detailColumnWidth, detailPanelHidden, projectColumnWidth]);
 
   useEffect(() => {
     if (!bridgeAvailable) return;
@@ -1374,15 +1410,24 @@ function DashboardView({
   const browserLayoutKey = `${projectColumnWidth}:${detailPanelHidden ? "browser" : "panel"}`;
 
   return (
-    <div className={cx("dashboard-grid", detailPanelHidden && "is-detail-hidden", getBridge().runtime?.host === "web" && "is-web")} ref={gridRef} style={gridStyle}>
-      <section className="project-panel">
+    <div className={cx("dashboard-grid", detailPanelHidden && "is-detail-hidden", getBridge().runtime?.host === "web" && "is-web", projectsOpen && "is-projects-open", detailsOpen && "is-details-open")} ref={gridRef} style={compact ? undefined : gridStyle}>
+      <header className="mobile-workspace-header" ref={(element) => { if (element) element.inert = projectsOpen; }}>
+        {mobile && detailsOpen ? <button aria-label="Back to terminal" className="mobile-navigation-button" type="button" onClick={() => setDetailsOpen(false)}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7" /></svg></button> : <button ref={projectToggleRef} aria-label="Switch project" aria-expanded={projectsOpen} aria-controls="workspace-projects" className="mobile-navigation-button" type="button" onClick={() => setProjectsOpen(true)}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg></button>}
+        <div className="mobile-project-heading">
+          <strong className="truncate">{selectedCandidate ? projectAliases[selectedCandidate.uri] || selectedCandidate.name : "Projects"}</strong>
+          {selectedCandidate ? <small className="truncate" title={selectedCandidate.displayPath}>{selectedCandidate.displayPath}</small> : null}
+        </div>
+        {mobile && detailsOpen ? <span /> : <button aria-label={detailsOpen ? "Hide project details" : "Show project details"} aria-expanded={detailsOpen} aria-controls="workspace-details" className="mobile-navigation-button" disabled={!selectedCandidate || detailPanelHidden} type="button" onClick={() => setDetailsOpen((open) => !open)}><WorkspacePanelIcon /></button>}
+      </header>
+      <section id="workspace-projects" className="project-panel" ref={(element) => { projectPanelRef.current = element; if (element) element.inert = compact && !projectsOpen; }} role={compact && projectsOpen ? "dialog" : undefined} aria-modal={compact && projectsOpen ? true : undefined} aria-label="Projects" aria-hidden={compact && !projectsOpen}>
         <div className="project-window-drag-strip" aria-hidden="true" />
         <div className="project-panel-header">
+          <button aria-label="Back to workspace" className="mobile-navigation-button mobile-only" type="button" onClick={() => setProjectsOpen(false)}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7" /></svg></button>
           <span className="project-panel-title">Projects</span>
           <button aria-label="Add project" className="icon-button" title="Add project" type="button" onClick={openAddProjectModal}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
           </button>
-          <button aria-label="Settings" className="icon-button" title="Settings" type="button" onClick={onOpenSettings}><SettingsGearIcon /></button>
+          <button aria-label="Settings" className="icon-button" title="Settings" type="button" onClick={() => { setProjectsOpen(false); onOpenSettings(); }}><SettingsGearIcon /></button>
         </div>
         {scanErrors.length ? (
           <div className="inline-errors">
@@ -1398,7 +1443,7 @@ function DashboardView({
               runningServiceProjectIds={runningServiceProjectIds}
               projectActivityByProjectId={hookActivityByProjectId}
               selectedId={selectedCandidate?.id ?? null}
-              onSelect={setSelectedId}
+              onSelect={(id) => { setSelectedId(id); setProjectsOpen(false); setDetailsOpen(false); }}
               onRemoveProject={onRemoveProject}
               onRenameProject={onRenameProject}
               onUninstallProtocol={onUninstallProtocol}
@@ -1425,7 +1470,7 @@ function DashboardView({
         onPointerDown={(event) => startColumnResize("project", event)}
       />
 
-      <section className="panel terminal-panel">
+      <section className="panel terminal-panel" aria-hidden={mobile && detailsOpen} ref={(element) => { if (element) element.inert = (compact && projectsOpen) || (mobile && detailsOpen); }}>
         <TerminalPane
           ref={terminalPaneRef}
           appearanceTheme={appearanceTheme}
@@ -1435,7 +1480,7 @@ function DashboardView({
           hookStateBySessionId={hookStateBySessionId}
           projectAliases={projectAliases}
           bridgeAvailable={bridgeAvailable}
-          isVisible={isVisible}
+          isVisible={isVisible && !(compact && projectsOpen) && !(mobile && detailsOpen)}
           terminalColorScheme={terminalColorScheme}
           terminalFontFamily={terminalFontFamily}
           terminalFontSize={terminalFontSize}
@@ -1460,7 +1505,7 @@ function DashboardView({
         onPointerDown={(event) => startColumnResize("detail", event)}
       />
 
-      <section className="detail-panel" aria-hidden={detailPanelHidden}>
+      <section id="workspace-details" className="detail-panel" aria-hidden={detailPanelHidden || (compact && !detailsOpen)} ref={(element) => { if (element) element.inert = compact && (!detailsOpen || projectsOpen); }}>
         {selectedCandidate ? (
           <ProjectDetailPane
             agentClis={agentClis}
@@ -1469,25 +1514,25 @@ function DashboardView({
             setToast={setToast}
             onRefresh={onRefresh}
             onOpenFileInEditor={(relativePath) =>
-              terminalPaneRef.current?.openFileInEditor(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, relativePath) ?? Promise.resolve()
+              returnToWorkspace(() => terminalPaneRef.current?.openFileInEditor(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, relativePath) ?? Promise.resolve())
             }
             onOpenGitDiff={(relativePath, commits) =>
-              terminalPaneRef.current?.openGitDiff(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, relativePath, commits) ?? Promise.resolve()
+              returnToWorkspace(() => terminalPaneRef.current?.openGitDiff(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, relativePath, commits) ?? Promise.resolve())
             }
             onOpenBrowserTab={(url) =>
-              terminalPaneRef.current?.openBrowserTab(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, url) ?? Promise.resolve()
+              returnToWorkspace(() => terminalPaneRef.current?.openBrowserTab(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, url) ?? Promise.resolve())
             }
             onOpenTerminal={(options) =>
-              terminalPaneRef.current?.openAgentSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, options.initialCommand ?? "", options.title ?? "Shell") ?? Promise.resolve()
+              returnToWorkspace(() => terminalPaneRef.current?.openAgentSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, options.initialCommand ?? "", options.title ?? "Shell") ?? Promise.resolve())
             }
             onRestoreAgentSession={(restore) =>
-              terminalPaneRef.current?.openAgentSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, restore.command, restore.title, restore.agentId, restore.hookSessionId) ?? Promise.resolve()
+              returnToWorkspace(() => terminalPaneRef.current?.openAgentSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, restore.command, restore.title, restore.agentId, restore.hookSessionId) ?? Promise.resolve())
             }
             onReviewTask={(agent, review) =>
-              terminalPaneRef.current?.openReviewSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, agent, review) ?? Promise.resolve()
+              returnToWorkspace(() => terminalPaneRef.current?.openReviewSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, agent, review) ?? Promise.resolve())
             }
             onArtifactTask={(agent, artifact) =>
-              terminalPaneRef.current?.openArtifactSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, agent, artifact) ?? Promise.resolve()
+              returnToWorkspace(() => terminalPaneRef.current?.openArtifactSession(selectedCandidate.uri, projectAliases[selectedCandidate.uri] || selectedCandidate.name, agent, artifact) ?? Promise.resolve())
             }
           />
         ) : (
@@ -1567,6 +1612,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   onProjectActivityChange: (activityByProjectId: Record<string, ProjectActivityState>) => void;
   onTerminalWorkingChange: (working: boolean) => void;
 }>(function TerminalPane({ appearanceTheme, agentClis, bridgeAvailable, browserLayoutKey, candidate, hookStateBySessionId, projectAliases, isVisible, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, setToast, onActiveTabKindChange, onAgentListRefreshRequested, onAgentSessionClear, onRunningServiceProjectIdsChange, onProjectActivityChange, onTerminalWorkingChange }, ref) {
+  const compact = useCompactWebLayout();
   const [spaces, setSpaces] = useState<Record<string, TerminalSpace>>({});
   const [codexActivityByTerminalId, setCodexActivityByTerminalId] = useState<Record<string, ProjectActivityState>>({});
   const [acknowledgedStoppedTerminalIds, setAcknowledgedStoppedTerminalIds] = useState<Set<string>>(() => new Set());
@@ -2546,7 +2592,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   }
 
   function handleTabPointerDown(event: ReactPointerEvent<HTMLDivElement>, projectId: string, tabId: string) {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || event.pointerType === "touch") return;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     tabDragRef.current = { projectId, tabId, pointerId: event.pointerId };
@@ -2583,6 +2629,9 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const selectedActiveTerminal = selectedSpace?.tabs.find(
     (tab): tab is TerminalShellTab => tab.kind === "terminal" && tab.session.id === selectedSpace.activeId && tab.session.status === "running",
   ) ?? null;
+  const runtime = getBridge().runtime;
+  const terminalConnected = !runtime || runtime.connection() === "connected";
+  const terminalReadOnly = Boolean(selectedActiveTerminal && runtime && !runtime.canControl(selectedActiveTerminal.session.id));
   const promptFocusRequest = Math.max(selectedSpace && tabFocusRequest?.projectId === selectedSpace.projectId ? tabFocusRequest.nonce : 0, hookPromptFocus);
   const agentHookSessionId = selectedActiveTerminal?.hookSessionId
     ?? (selectedActiveTerminal?.session.id
@@ -2596,8 +2645,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
           <h3>{terminalHeading}</h3>
           <div className="path-line">{selectedSpace?.displayPath ?? candidate?.displayPath ?? "Select a project"}</div>
         </div>
-        {getBridge().runtime?.connection() !== "connected" ? <span role="status">运行时连接已断开</span> : null}
-        {selectedActiveTerminal && getBridge().runtime && !getBridge().runtime!.canControl(selectedActiveTerminal.session.id) ? <button className="service-pill" type="button" disabled={getBridge().runtime!.connection() !== "connected"} onClick={() => void getBridge().runtime!.takeControl(selectedActiveTerminal.session.id).catch((error) => setToast({ tone: "error", message: asMessage(error) }))}>接管终端</button> : null}
         {services.length ? (
           <div className="service-actions" aria-label="Project services">
             {services.map((service) => {
@@ -2652,11 +2699,12 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                           )}
                           <span className="truncate" title={taskTitle}>{tabTitle}{tab.kind === "editor" && tab.content !== tab.savedContent ? " •" : ""}</span>
                         </button>
-                        <button aria-label={`Close ${fullTabTitle}`} className="terminal-tab-close" type="button" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); void closeTab(tabId); }}>x</button>
+                        <button aria-label={`Close ${fullTabTitle}`} className="terminal-tab-close" type="button" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); void closeTab(tabId); }}><CloseGlyph /></button>
                       </div>
                     );
                   })}
                 </div>
+              {compact ? <TerminalCreateMenu agents={agentClis} disabled={!canCreate} renderIcon={(agent) => agent ? <AgentCliIcon agent={agent} /> : <TerminalIcon />} onLaunch={(agent) => agent ? openAgentProjectTab(agent) : openCurrentProjectTab()} onBrowser={getBridge().browser ? openBrowserProjectTab : undefined} /> : null}
               <button aria-label="New terminal tab" className="icon-button terminal-tab-add" disabled={!canCreate} title="New terminal tab" type="button" onClick={() => void openCurrentProjectTab()}><PlusIcon /></button>
               {getBridge().browser ? <button aria-label="Open browser" className="icon-button terminal-tab-add terminal-browser-button" disabled={!canCreate} title="Browser" type="button" onClick={() => void openBrowserProjectTab()}><GlobeIcon /></button> : null}
               {agentClis.map((agent) => (
@@ -2704,6 +2752,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
         {!Object.values(spaces).length ? (
           <div className="terminal-space is-active terminal-empty-space">
             <div className="terminal-tabs">
+              {compact ? <TerminalCreateMenu agents={agentClis} disabled={!canCreate} renderIcon={(agent) => agent ? <AgentCliIcon agent={agent} /> : <TerminalIcon />} onLaunch={(agent) => agent ? openAgentProjectTab(agent) : openCurrentProjectTab()} onBrowser={getBridge().browser ? openBrowserProjectTab : undefined} /> : null}
               <button aria-label="New terminal tab" className="icon-button terminal-tab-add" disabled={!canCreate} title="New terminal tab" type="button" onClick={() => void openCurrentProjectTab()}><PlusIcon /></button>
               {getBridge().browser ? <button aria-label="Open browser" className="icon-button terminal-tab-add terminal-browser-button" disabled={!canCreate} title="Browser" type="button" onClick={() => void openBrowserProjectTab()}><GlobeIcon /></button> : null}
               {agentClis.map((agent) => (
@@ -2716,11 +2765,13 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
           </div>
         ) : null}
       </div>
-      {selectedSpace?.tabs.length ? <PromptInputBar
+      <div className="prompt-input-dock" hidden={!selectedSpace?.tabs.some((tab) => tab.kind === "terminal" && tab.session.id === selectedSpace.activeId)}><PromptInputBar
         projectId={selectedSpace?.projectId ?? null}
         sessionId={selectedActiveTerminal?.session.id ?? null}
         agentHookSessionId={agentHookSessionId}
-        disabled={!selectedActiveTerminal || Boolean(getBridge().runtime && !getBridge().runtime!.canControl(selectedActiveTerminal.session.id))}
+        disabled={!selectedActiveTerminal || terminalReadOnly || !terminalConnected}
+        unavailableReason={!selectedActiveTerminal ? "No active terminal" : runtime?.connection() === "unauthorized" ? "Connection expired. Reopen the host link" : !terminalConnected ? "Reconnecting… Draft preserved" : "Take control to type…"}
+        onTakeControl={selectedActiveTerminal && runtime && terminalReadOnly && terminalConnected ? () => runtime.takeControl(selectedActiveTerminal.session.id).catch((error) => setToast({ tone: "error", message: asMessage(error) })) : undefined}
         focusRequest={promptFocusRequest}
         isAgentSession={Boolean(selectedActiveTerminal?.session.agentId)}
         onTerminalFocusRequest={() => selectedActiveTerminal?.terminal.focus()}
@@ -2745,10 +2796,18 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
             if (found) break;
           }
         }}
-      /> : null}
+      /></div>
     </div>
   );
 });
+
+function WorkspacePanelIcon() {
+  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M15 4v16" /></svg>;
+}
+
+function CloseGlyph() {
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg>;
+}
 
 function ShareIcon() {
   return (
@@ -2945,6 +3004,7 @@ function XTermSurface({ active, focusRequest, onResize, onCloseSearch, showSearc
   useEffect(() => {
     if (!active || !openedRef.current) return;
     const fitAndResize = () => {
+      if (runtime && !runtime.canControl(tab.session.id)) return;
       const dimensions = tab.fitAddon.proposeDimensions();
       if (!dimensions || !validTerminalResizeDimensions(dimensions.cols, dimensions.rows)) return;
       tab.fitAddon.fit();
@@ -2952,12 +3012,14 @@ function XTermSurface({ active, focusRequest, onResize, onCloseSearch, showSearc
     };
     const frame = window.requestAnimationFrame(() => {
       fitAndResize();
-      if (!isUserEditingElsewhere()) tab.terminal.focus();
+      if (!isUserEditingElsewhere() && !window.matchMedia("(pointer: coarse)").matches) tab.terminal.focus();
     });
     const observer = new ResizeObserver(() => fitAndResize());
     if (hostRef.current) observer.observe(hostRef.current);
-    return () => { window.cancelAnimationFrame(frame); observer.disconnect(); };
-  }, [active, focusRequest, tab]);
+    const offControl = runtime?.onControl(fitAndResize);
+    const offConnection = runtime?.onConnection(fitAndResize);
+    return () => { window.cancelAnimationFrame(frame); observer.disconnect(); offControl?.(); offConnection?.(); };
+  }, [active, focusRequest, runtime, tab]);
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
@@ -3291,7 +3353,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) setMenuOpen(null);
     }
     function handleKey(event: globalThis.KeyboardEvent) {
-      if (event.key === "Escape") setMenuOpen(null);
+      if (event.key === "Escape") { event.preventDefault(); setMenuOpen(null); }
     }
     document.addEventListener("pointerdown", handleClick, true);
     document.addEventListener("keydown", handleKey, true);
@@ -3390,9 +3452,9 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
           const displayName = projectAliases[candidate.uri] || candidate.name;
           const isRenaming = renamingId === candidate.id;
           return (
+            <div className="project-row-shell" key={candidate.id}>
             <button
               className={cx("project-row", selectedId === candidate.id && "is-selected")}
-              key={candidate.id}
               onClick={() => onSelect(candidate.id)}
               onContextMenu={(event) => {
                 event.preventDefault();
@@ -3435,6 +3497,8 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
                 ) : null}
               </span>
             </button>
+            <button aria-label={`More actions for ${displayName}`} className="icon-button touch-menu" type="button" onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); openProjectMenu(candidate, rect.left, rect.bottom); }}>…</button>
+            </div>
           );
         })}
       </div>
@@ -4114,7 +4178,7 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
   useEffect(() => {
     if (!reviewMenu) return;
     const dismiss = (event: MouseEvent) => { if (reviewMenuRef.current && !reviewMenuRef.current.contains(event.target as Node)) setReviewMenu(null); };
-    const escape = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") setReviewMenu(null); };
+    const escape = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); setReviewMenu(null); } };
     document.addEventListener("mousedown", dismiss);
     document.addEventListener("keydown", escape);
     return () => { document.removeEventListener("mousedown", dismiss); document.removeEventListener("keydown", escape); };
@@ -4270,6 +4334,7 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
                 </span>
                 <span className={cx("phase-pill", pill.cls)}>{pill.label}</span>
               </button>
+              {status?.installed ? <button aria-label={`More actions for ${task.title}`} className="icon-button touch-menu" type="button" onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); setReviewMenu({ taskId: task.taskId, x: rect.left, y: rect.bottom, withOpen: false }); }}>…</button> : null}
               {restore ? <TaskSessionRestoreCard agentName={task.agent ?? restore.label} restore={restore} onRestore={() => void restoreTaskSession(restore)} /> : null}
             </div>
           );
@@ -4833,7 +4898,7 @@ function FilesDetailTab({ active, candidate, codeGraphStatus, detail, setToast, 
   useEffect(() => {
     if (!fileMenu) return;
     const onMouseDown = (event: MouseEvent) => { if (fileMenuRef.current && !fileMenuRef.current.contains(event.target as Node)) setFileMenu(null); };
-    const onKeyDown = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") setFileMenu(null); };
+    const onKeyDown = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); setFileMenu(null); } };
     document.addEventListener("pointerdown", onMouseDown, true);
     document.addEventListener("keydown", onKeyDown, true);
     return () => { document.removeEventListener("pointerdown", onMouseDown, true); document.removeEventListener("keydown", onKeyDown, true); };
@@ -5036,6 +5101,7 @@ function ProjectFileTreeItemRow({ item, level, expandedDirectories, loadingDirec
             disabled={disabled}
             type="button"
             onDoubleClick={() => void onOpenFile(item)}
+            onClick={() => { if (window.matchMedia("(pointer: coarse)").matches) { if (item.kind === "directory") void onToggleDirectory(item); else void onOpenFile(item); } }}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 if (item.kind === "directory" && expandable) {
@@ -5050,6 +5116,7 @@ function ProjectFileTreeItemRow({ item, level, expandedDirectories, loadingDirec
             <span className="project-file-name">{item.name}</span>
           </button>
         )}
+        <button aria-label={`More actions for ${item.name}`} className="icon-button touch-menu" type="button" onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); onContextMenu(item, rect.left, rect.bottom); }}>…</button>
       </div>
       {showCreateInput ? (
         <div className="project-file-row" style={{ "--file-tree-level": level + 1 } as CSSProperties}>
@@ -6702,6 +6769,8 @@ function PromptInputBar({
   sessionId,
   agentHookSessionId,
   disabled,
+  unavailableReason,
+  onTakeControl,
   focusRequest,
   isAgentSession,
   onTerminalFocusRequest,
@@ -6714,6 +6783,8 @@ function PromptInputBar({
   sessionId: string | null;
   agentHookSessionId: string | null;
   disabled: boolean;
+  unavailableReason: string;
+  onTakeControl?: () => Promise<unknown>;
   focusRequest: number;
   isAgentSession: boolean;
   onTerminalFocusRequest: () => void;
@@ -6722,12 +6793,23 @@ function PromptInputBar({
   onSubmit?: (sessionId: string) => void;
   onRecallHistory?: (text: string | null, direction: "previous" | "next") => void;
 }) {
-  const [value, setValue] = useState("");
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const draftKey = sessionId ?? projectId ?? "";
+  const value = drafts[draftKey] ?? "";
+  const setValue = (next: string) => setDrafts((current) => ({ ...current, [draftKey]: next }));
   const [isComposing, setIsComposing] = useState(false);
   const historyKey = isAgentSession ? (agentHookSessionId ?? sessionId) : (projectId ? `${projectId}:shell` : null);
   const [historyCursor, setHistoryCursor] = useState<{ historyKey: string; index: number; draft: string } | null>(null);
   const historyByKey = useRef<Record<string, string[]>>({});
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    setIsComposing(false);
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (textareaRef.current) resizeTextarea(textareaRef.current);
+  }, [draftKey, value]);
 
   useEffect(() => {
     setHistoryCursor(null);
@@ -6758,7 +6840,7 @@ function PromptInputBar({
   }, [historyKey]);
 
   useEffect(() => {
-    if (disabled || !sessionId) return;
+    if (disabled || !sessionId || window.matchMedia("(pointer: coarse)").matches) return;
     let firstFrame = 0;
     let secondFrame = 0;
     firstFrame = window.requestAnimationFrame(() => {
@@ -6777,7 +6859,7 @@ function PromptInputBar({
   }, [disabled, focusRequest, sessionId]);
 
   function send(data: string) {
-    if (!sessionId) return;
+    if (disabled || !sessionId) return;
     const id = sessionId;
     const fire = getBridge().terminal?.inputFire;
     if (fire) fire({ sessionId: id, data });
@@ -6805,7 +6887,7 @@ function PromptInputBar({
 
   function submit() {
     const text = value;
-    if (!text || !sessionId) return;
+    if (!text || !sessionId || disabled || isComposing) return;
     recordHistory(text);
     if (isAgentSession) {
       getBridge().terminal?.recordPrompt?.({ terminalSessionId: sessionId, text });
@@ -6889,12 +6971,23 @@ function PromptInputBar({
   }
 
   return (
-    <div className={cx("prompt-input-bar", disabled && "is-disabled")} onPointerDown={() => onInteractionCallback?.()}>
+    <>
+    {!disabled ? <div className="mobile-terminal-keys" role="group" aria-label="Terminal keys">
+      {([["Esc", "\u001b"], ["Tab", "\t"], ["Ctrl+C", "\u0003"], ["↑", "\u001b[A"], ["↓", "\u001b[B"], ["←", "\u001b[D"], ["→", "\u001b[C"], ["Enter", "\r"]] as const).map(([label, data]) => (
+        <button className="button compact" key={label} type="button" aria-label={`Terminal ${label}`} onPointerDown={(event) => event.preventDefault()} onClick={() => { onInteractionCallback?.(); send(data); }}>{label}</button>
+      ))}
+    </div> : null}
+    <div className="prompt-input-bar" onPointerDown={() => onInteractionCallback?.()}>
+      <span className="sr-only" role="status">{disabled ? unavailableReason : ""}</span>
       <textarea
         ref={textareaRef}
         className="prompt-input-textarea"
+        aria-label="Terminal prompt"
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
         disabled={disabled}
-        placeholder={disabled ? "No active terminal" : "Type here… Enter to send, Shift+Enter for newline"}
+        placeholder={disabled ? unavailableReason : "Type here… Enter to send, Shift+Enter for newline"}
         rows={1}
         value={value}
         onCompositionStart={() => setIsComposing(true)}
@@ -6906,10 +6999,12 @@ function PromptInputBar({
           setValue(e.target.value);
         }}
       />
-      <button className="prompt-input-send" disabled={disabled || !value} title="Send (Enter)" type="button" onClick={submit}>
+      {onTakeControl ? <button aria-label="接管终端" className="button compact prompt-take-control" type="button" onClick={() => void onTakeControl()}>接管</button> : null}
+      <button aria-label="Send prompt" className="prompt-input-send" disabled={disabled || !value || isComposing} title="Send (Enter)" type="button" onClick={submit}>
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </button>
     </div>
+    </>
   );
 }
 

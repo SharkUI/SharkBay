@@ -65,6 +65,7 @@ describe("build config", () => {
       { from: "resources/shark-day.png", to: "resources/shark-day.png" },
       { from: "resources/shark-night.png", to: "resources/shark-night.png" },
       { from: ".runtime-bundle", to: "runtime" },
+      { from: ".runtime-bundle/node_modules", to: "runtime/node_modules" },
     ]);
   });
 
