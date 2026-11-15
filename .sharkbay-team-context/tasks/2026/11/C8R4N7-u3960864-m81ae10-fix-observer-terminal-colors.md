@@ -12,12 +12,14 @@ agent: Codex GPT-6
 sessionId: 01a1dee0-eb95-7c33-acb0-71cdaec38289
 branch: main
 createdAt: 2026-11-15T11:04:37Z
-updatedAt: 2026-11-15T11:16:39Z
-completedAt: 2026-11-15T11:16:39Z
+updatedAt: 2026-11-15T11:21:17Z
+completedAt: 2026-11-15T11:21:17Z
+commits:
+  - 62928850bd0e414da9b2cc404f758ddeb880fd7b
 ---
 
 ## Summary
-已修复截图对应的主因：观察端同步回调持有初始 Day 外观，改为创建终端时读取最新主题、配色及字体设置；同时修复快照恢复的写队列竞态。真实双端先启动后创建、双向创建/接管及自定义配色验证均通过，未提交。
+已修复观察端初始外观闭包与快照写队列竞态，通过真实双端及相关回归验证。提交 62928850bd0e414da9b2cc404f758ddeb880fd7b 已推送 origin/main；原有启动页 CSS 改动保留。
 
 ## Files
 - src/runtime/terminal-state.ts
@@ -42,6 +44,8 @@ completedAt: 2026-11-15T11:16:39Z
 - attachTerminalSession 改为从最新外观 ref 创建 xterm，覆盖主题、配色、字体、字号和行高，保留现有长生命周期订阅。
 - 将“两端设置加载后新建终端”的真实渲染颜色/字号断言加入现有 shared-runtime 验证脚本，并修正该流程所需的接管按钮查找和刷新新文档等待。
 - 本轮实际确认与动态调色无关，准确根因是初始化闭包；已检查最终浏览器截图，保留用户原有 CSS 改动，所有隔离实例清理完成。
+- 用户授权 commit & push；准备只提交本任务四个源码/验证文件，排除原有 src/styles/app.css 启动页改动，推送 origin/main。
+- 已提交 62928850bd0e414da9b2cc404f758ddeb880fd7b（fix: preserve terminal appearance across observers），四个文件；origin/main 推送成功。
 
 ## Verification
 - 先完成最小复现后执行以下验证。
@@ -58,6 +62,7 @@ completedAt: 2026-11-15T11:16:39Z
 - /tmp/sharkbay-late-attach-colors.mjs 通过 App 和 Web 分别新建、另一端自动同步、双向接管验证；两端均为 #101719。
 - /tmp/sharkbay-custom-attach-colors.mjs 通过两种创建方向，Aura 调色板 #15141b、Menlo 15px 和 1.4 行高均一致，覆盖初始 null 配置闭包导致自定义设置丢失的路径。
 - 最终 git diff --check 通过；未操作用户运行中的 App/runtime 或创建提交。源码和 dist 已更新，现有前端需重新加载以重建错误的本地 xterm。
+- 提交前 git diff --cached --check 通过，暂存集合仅本任务四个文件；git fetch 后 main/origin 为 0/0，git push origin main 成功。
 
 ## Notes
-- .sharkbay/team-context/ 保持只读；本任务未请求提交。
+- .sharkbay/team-context/ 保持只读；本轮用户已授权提交和推送。
