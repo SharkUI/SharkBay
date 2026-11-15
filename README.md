@@ -24,7 +24,19 @@ brew install --cask SharkUI/tap/sharkbay
 
 macOS on Apple Silicon (arm64).
 
+Or download the signed and notarized app from [GitHub Releases](https://github.com/SharkUI/SharkBay/releases/latest).
+
+### New in 0.3.6
+
+Connect the macOS app and a browser to the same live terminal sessions, with a responsive WebUI for phones and tablets. This release also fixes observer terminal colors, browser tab cleanup, and packaged runtime dependencies. See the [changelog](CHANGELOG.md#036--2026-11-15).
+
 ## Features
+
+### Shared Runtime and Browser Access
+
+The macOS app and WebUI connect to one local Node runtime. Open the runtime's connection link in a browser to access your projects and existing terminals; one client controls each terminal while others observe. Closing the desktop client leaves sessions running, and you can take control from another connected client.
+
+The WebUI adapts to phones and tablets with full-screen project navigation, touch terminal keys, and preserved input drafts across reconnects. The packaged app includes Node and its runtime dependencies.
 
 ### Multi-Agent Support
 
@@ -34,7 +46,7 @@ Supported agents: **Claude Code** · **Codex** · **Gemini** · **Kiro** · **Re
 
 ### Agent Status
 
-Real-time hook-based status indicators (working/idle/attention) — see what each agent is doing without switching terminals.
+Real-time hook-based status indicators (working/stopped/approval) — see what each agent is doing without switching terminals.
 
 ### Island Overlay
 
@@ -101,12 +113,14 @@ Built-in CodeMirror editor with syntax highlighting for 20+ languages. Open, edi
 
 Electron · React · TypeScript · Vite · xterm · @lydell/node-pty · CodeMirror
 
-## Requirements
+## Development Requirements
 
 - macOS
 - Node.js >= 20.11
 - Git
 - `gh` CLI (only for team context sync)
+
+Installed releases include their own Node runtime. Coding-agent CLIs use your existing local installations and accounts; GitHub remains the identity and collaboration system for task-context sync.
 
 ## Development
 

@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.6] — 2026-11-15
+
+### Added
+- A shared local Node runtime lets the macOS app and browser WebUI connect to the same projects and live terminal sessions. Closing the desktop client leaves terminals running; each terminal has one controller and read-only observers.
+- The WebUI supports phones and tablets with full-screen project navigation, touch terminal keys, and an input area that stays visible while observing or reconnecting.
+
+### Changed
+- Packaged applications include the Node runtime and its production dependencies, so browser access and terminals work without a separate Node installation.
+
+### Fixed
+- Terminals synchronized to another client use the current theme, color scheme, and font settings instead of initial defaults.
+- Terminal snapshots reset ANSI parser and color state in output order, preventing stale colors during attach, resize, or takeover.
+- Closed browser tabs are removed reliably, and the WebUI restores its project sidebar correctly.
+
+### Upgrade Note
+- When upgrading from the previous desktop-owned backend, finish active work and quit the old app before opening this release. Shared-runtime sessions keep running when the new desktop client closes; use the explicit runtime stop action when you want to end them.
+
 ## [0.3.5] — 2026-11-13
 
 ### Added
