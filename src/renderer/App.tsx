@@ -1621,6 +1621,10 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const [terminalSpacesRestored, setTerminalSpacesRestored] = useState(false);
   const [, refreshRuntimeControl] = useState(0);
   const spacesRef = useRef<Record<string, TerminalSpace>>({});
+  const terminalAppearanceRef = useRef({ appearanceTheme, colorScheme: terminalColorScheme, fontFamily: terminalFontFamily, fontSize: terminalFontSize, lineHeight: terminalLineHeight });
+  useEffect(() => {
+    terminalAppearanceRef.current = { appearanceTheme, colorScheme: terminalColorScheme, fontFamily: terminalFontFamily, fontSize: terminalFontSize, lineHeight: terminalLineHeight };
+  }, [appearanceTheme, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight]);
   const taskProjectPathsRef = useRef(new Set<string>());
   const pendingTerminalOutput = useRef(new Map<string, string>());
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2328,7 +2332,9 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     options: { activate: boolean; hookSessionId?: string; reviewRun?: ReviewRun },
   ): string {
     if (findTerminalTab(spacesRef.current, session.id)) return session.id;
-    const terminal = createXTerm(session.id, appearanceTheme, setToast, (url) => void openBrowserTab(projectId, cwdUri, projectName, displayPath, url), () => clearStoppedTerminalSession(session.id), { colorScheme: terminalColorScheme, fontFamily: terminalFontFamily, fontSize: terminalFontSize, lineHeight: terminalLineHeight });
+    // Runtime subscriptions keep their original callback, so read the latest appearance here.
+    const appearance = terminalAppearanceRef.current;
+    const terminal = createXTerm(session.id, appearance.appearanceTheme, setToast, (url) => void openBrowserTab(projectId, cwdUri, projectName, displayPath, url), () => clearStoppedTerminalSession(session.id), appearance);
     const tab: TerminalTab = {
       kind: "terminal",
       session,
@@ -2415,7 +2421,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       return;
     }
     if (event.reset) {
-      tab.terminal.reset();
       if (event.cols && event.rows) tab.terminal.resize(event.cols, event.rows);
     }
     writeTerminalOutputToTab(event.sessionId, tab, event.data);

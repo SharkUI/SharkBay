@@ -15,7 +15,7 @@ const env = { ...process.env }; for (const key of ["GIT_DIR", "GIT_WORK_TREE", "
 execFileSync("git", ["-c", "init.templateDir=", "init", "--quiet", project], { env });
 await writeFile(path.join(project, "README.md"), "# Shared runtime fixture\n");
 const config = path.join(directory, "config.json"), data = path.join(directory, "runtime");
-await writeFile(config, JSON.stringify({ configuredProjects: [project], disabledPluginIds: ["bundled.codegraph"] }));
+await writeFile(config, JSON.stringify({ appearanceTheme: "morning", terminalFontSize: 14, configuredProjects: [project], disabledPluginIds: ["bundled.codegraph"] }));
 const backend = spawn(process.execPath, ["dist-runtime/src/server/main.js", "--background", "--port", "0", "--data-dir", data, "--config", config], { env, stdio: ["ignore", "pipe", "pipe"] });
 const backendExit = once(backend, "exit");
 let backendError = ""; backend.stderr.on("data", (chunk) => { backendError += chunk; }); backend.stdout.resume();
@@ -61,11 +61,6 @@ try {
   await until(() => desktopCdp.evaluate(`!!document.querySelector('.project-row')`), "desktop project list");
   await desktopCdp.evaluate(`document.querySelector('.project-row').click()`);
   await until(() => desktopCdp.evaluate(`Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Terminal' && !button.disabled)`), "desktop workbench");
-  await desktopCdp.evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Terminal' && !button.disabled).click()`);
-  console.log("UI_CHECK desktop terminal action sent");
-  const terminal = await until(async () => (await client.call("terminal.list"))[0], "terminal created from desktop UI");
-  assert.equal((await client.call("hello", { protocol: 1 })).pid, backend.pid);
-  await until(() => desktopCdp.evaluate(`window.sharkBay.runtime.canControl(${JSON.stringify(terminal.session.id)})`), "desktop terminal control");
   const link = await client.call("connect");
   const chrome = process.env.SHARKBAY_TEST_CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
   browser = launch(chrome, ["--headless=new", "--no-first-run", "--no-default-browser-check", "--remote-debugging-port=0", `--user-data-dir=${path.join(directory, "chrome")}`, "--window-size=1500,900", link]);
@@ -73,11 +68,23 @@ try {
   browserCdp = await page(browser, (url) => url.startsWith(hello.origin));
   await until(() => browserCdp.evaluate(`!!document.querySelector('.project-row')`), "browser project list");
   await browserCdp.evaluate(`document.querySelector('.project-row').click()`);
+  // Both clients load their settings before a new terminal is announced to the observer.
+  for (const cdp of [desktopCdp, browserCdp]) await until(() => cdp.evaluate(`document.querySelector('.app-shell')?.dataset.theme === 'morning'`), "appearance loaded");
+  await desktopCdp.evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Terminal' && !button.disabled).click()`);
+  console.log("UI_CHECK desktop terminal action sent");
+  const terminal = await until(async () => (await client.call("terminal.list"))[0], "terminal created from desktop UI");
+  assert.equal((await client.call("hello", { protocol: 1 })).pid, backend.pid);
+  await until(() => desktopCdp.evaluate(`window.sharkBay.runtime.canControl(${JSON.stringify(terminal.session.id)})`), "desktop terminal control");
   await until(() => browserCdp.evaluate(`!!window.sharkBay?.runtime && !!document.querySelector('.xterm-screen')`), "browser attaches existing terminal");
+  for (const cdp of [desktopCdp, browserCdp]) {
+    const appearance = await cdp.evaluate(`({ background: getComputedStyle(document.querySelector('.xterm-scrollable-element')).backgroundColor, foreground: getComputedStyle(document.querySelector('.xterm-rows')).color, fontSize: getComputedStyle(document.querySelector('.xterm-rows')).fontSize })`);
+    assert.deepEqual(appearance, { background: "rgb(16, 23, 25)", foreground: "rgb(217, 229, 223)", fontSize: "14px" });
+  }
+  console.log("UI_CHECK observer inherits current terminal colors and font");
   const browserTerminal = await browserCdp.evaluate(`window.sharkBay.runtime.listTerminals().then(rows => rows[0].session)`);
   assert.equal(browserTerminal.pid, terminal.session.pid);
   assert.equal(await browserCdp.evaluate(`window.sharkBay.runtime.canControl(${JSON.stringify(terminal.session.id)})`), false);
-  await browserCdp.evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent === '接管终端').click()`);
+  await browserCdp.evaluate(`document.querySelector('[aria-label="接管终端"]').click()`);
   await until(() => browserCdp.evaluate(`window.sharkBay.runtime.canControl(${JSON.stringify(terminal.session.id)})`), "browser takes control");
   await until(async () => !(await desktopCdp.evaluate(`window.sharkBay.runtime.canControl(${JSON.stringify(terminal.session.id)})`)), "desktop becomes observer");
   await browserCdp.evaluate(`window.sharkBay.terminal.input({ sessionId: ${JSON.stringify(terminal.session.id)}, data: "echo SHARED_RUNTIME_UI_OK\\r" })`);
@@ -86,8 +93,9 @@ try {
   try { await desktopCdp.send("Page.bringToFront"); await desktopCdp.screenshot("electron.png"); }
   catch { console.log("UI_CHECK native screenshot unavailable; browser screenshot captured"); }
   console.log("UI_CHECK both screenshots captured");
+  await browserCdp.evaluate(`window.__beforeReload = true`);
   await browserCdp.send("Page.reload");
-  await until(() => browserCdp.evaluate(`!!window.sharkBay?.runtime && !!document.querySelector('.xterm-screen')`), "browser reload");
+  await until(() => browserCdp.evaluate(`!window.__beforeReload && !!window.sharkBay?.runtime && !!document.querySelector('.xterm-screen')`), "browser reload");
   console.log("UI_CHECK browser reloaded");
   const sessions = await client.call("terminal.list"); assert.equal(sessions.length, 1); assert.equal(sessions[0].session.pid, terminal.session.pid);
   desktopCdp.close(); desktopCdp = undefined; desktop.process.kill("SIGKILL"); await Promise.race([desktop.exit, new Promise((resolve) => setTimeout(resolve, 3000))]);

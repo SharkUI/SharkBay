@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import Xterm from "@xterm/headless";
 import { describe, expect, it, vi } from "vitest";
 import { TerminalState } from "../src/runtime/terminal-state.js";
 import type { CoreRuntime } from "../src/core/core-runtime.js";
@@ -13,6 +14,47 @@ function fixture() {
   return { state, core, frames, session };
 }
 describe("terminal screen lifecycle", () => {
+  it.each(["\x1b[43mSTALE", "\x1b[48;2;255;", "\x1b]11;rgb:"])("replaces queued color and parser state when replaying a snapshot after %j", async (pending) => {
+    const { state, core } = fixture();
+    const observer = new Xterm.Terminal({ cols: 80, rows: 24, allowProposedApi: true });
+    try {
+      core.emit("terminalData", { sessionId: "terminal", data: "DEFAULT\x1b[41mRED\x1b[0m", stream: "stdout" });
+      let snapshot!: TerminalFrame;
+      await state.attach("terminal", (frame) => { snapshot = frame; });
+      observer.write(pending);
+      // Attach/resize snapshots can arrive before the previous write has parsed.
+      observer.write(snapshot.data);
+      observer.write(snapshot.data);
+      await new Promise<void>((done) => observer.write("NEXT", done));
+      const line = observer.buffer.active.getLine(0)!;
+      expect(line.translateToString(true)).toBe("DEFAULTREDNEXT");
+      expect(line.getCell(0)!.isBgDefault()).toBe(true);
+      expect(line.getCell(7)!.getBgColor()).toBe(1);
+      expect(line.getCell(10)!.isBgDefault()).toBe(true);
+    } finally { observer.dispose(); await state.dispose(); }
+  });
+
+  it("restores alternate-screen truecolor across takeover and resize snapshots", async () => {
+    const { state, core, frames } = fixture();
+    const observer = new Xterm.Terminal({ cols: 80, rows: 24, allowProposedApi: true });
+    try {
+      core.emit("terminalData", { sessionId: "terminal", data: "\x1b[?1049h\x1b[48;2;12;34;56mRGB\x1b[0m", stream: "stdout" });
+      for (const [owner, cols, rows] of [["desktop", 100, 30], ["web", 60, 20]] as const) {
+        state.claim("terminal", owner);
+        await state.resize("terminal", owner, cols, rows);
+        const snapshot = frames.at(-1)!;
+        observer.write("\x1b[43mSTALE");
+        observer.resize(snapshot.cols!, snapshot.rows!);
+        await new Promise<void>((done) => observer.write(snapshot.data, done));
+        expect(observer.buffer.active.type).toBe("alternate");
+        expect(observer.buffer.active.getLine(0)!.translateToString(true)).toBe("RGB");
+        expect(observer.buffer.active.getLine(0)!.getCell(0)!.getBgColor()).toBe(0x0c2238);
+      }
+      await new Promise<void>((done) => observer.write("NEXT", done));
+      expect(observer.buffer.active.getLine(0)!.getCell(3)!.isBgDefault()).toBe(true);
+    } finally { observer.dispose(); await state.dispose(); }
+  });
+
   it("recovers its output queue after an attach callback fails", async () => {
     const { state, core, frames } = fixture();
     try {

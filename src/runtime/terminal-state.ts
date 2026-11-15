@@ -40,7 +40,8 @@ export class TerminalState {
     return screen;
   }
   private snapshot(sessionId: string, screen: Screen): TerminalFrame {
-    return { sessionId, stream: "stdout", data: screen.serializer.serialize({ scrollback: 2000 }), sequence: screen.sequence,
+    // Cancel incomplete ANSI input and reset in the write queue before replaying the snapshot.
+    return { sessionId, stream: "stdout", data: `\x18\x1bc${screen.serializer.serialize({ scrollback: 2000 })}`, sequence: screen.sequence,
       reset: true, cols: screen.terminal.cols, rows: screen.terminal.rows };
   }
   register(session: TerminalSession): void {
