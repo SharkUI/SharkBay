@@ -12,12 +12,12 @@ agent: Codex GPT-6
 sessionId: 01a1e76d-6a24-74b3-acf6-ade1b1cdbee0
 branch: main
 createdAt: 2026-11-17T07:20:07Z
-updatedAt: 2026-11-17T07:41:03Z
-completedAt: 2026-11-17T07:41:03Z
+updatedAt: 2026-11-17T08:55:46Z
+completedAt: 2026-11-17T08:55:46Z
 ---
 
 ## Summary
-已将本地 agent 状态链路对齐 Orca 的四态执行语义与独立已读提醒，界面统一显示等待、阻塞、完成、失败、中断、空闲及证据过期。接入精确终端身份、异步问题/子任务/后台工作跟踪、结构化终端信号及当前回合 rollout 补偿，完成测试、构建和真实渲染验证；未产生提交或替换已安装 App。
+已将本地 agent 状态链路对齐 Orca 的四态执行语义与独立已读提醒，界面统一显示等待、阻塞、完成、失败、中断、空闲及证据过期。接入精确终端身份、异步问题/子任务/后台工作跟踪、结构化终端信号及当前回合 rollout 补偿，完成测试、构建和真实渲染验证；未产生提交或替换已安装 App。所有状态指示已按用户指定的绿/黄/红/灰四组统一，已读、主题与进程退出不改变状态色。
 
 ## Files
 - package.json
@@ -68,6 +68,12 @@ completedAt: 2026-11-17T07:41:03Z
 - 已记录 docs/agent-status.md 和随应用分发的 Orca MIT NOTICE；保留现有 Unix socket 和 provider 边界，没有迁入 Orca 的 SSH/tmux、多机同步或完整后台任务明细界面。
 - 并行任务在本次期间提交了 v0.3.10；未将该提交记为本任务提交，也未覆盖其修改。
 
+- 用户要求统一所有状态指示的颜色：working/monitoring 绿，done/interrupted 黄，waiting/blocked/failed 红，idle/unverifiable/unknown 灰；已读不改变状态颜色。
+- 本轮计划：统一共享颜色分组与主题样式 → 调整 Island 色彩和独立未读光效 → 验证所有状态、主题、退出及已读组合。
+
+- 共享 AGENT_STATUS_TONE 驱动终端标签、项目胶囊和 Telegram 徽标；Island 使用同一分组及四个色值，已读只解除闪烁/光效，不再将完成或失败置灰。
+- 修正 morning/night 主题、is-exited 和虚线状态的覆盖优先级；保持原有通知/展开规则。读取团队任务 C8R4N7-u3960864-m81ae10，未改动 xterm 终端内容调色板或观察端外观同步。
+
 ## Verification
 - 第一轮类型检查通过；第一轮 4 组针对性测试 60/63 通过，3 个旧三态断言需按新中断与 hook 优先语义迁移。
 - 正在补充真实事件序列回归，完整检查与渲染验证尚未执行。
@@ -79,6 +85,11 @@ completedAt: 2026-11-17T07:41:03Z
 - CodeGraph affected 未返回相关测试（索引依赖图未覆盖新增模块）；使用直接回归和全量测试验证，不将其解释为无需测试。
 - 临时 HTTP 验证服务和浏览器已退出；截图位于 /tmp/sharkbay-status-render.png、/tmp/sharkbay-status-island-waiting.png。
 - 未修改 /Applications/SharkBay.app，未输入、回答或中断真实用户 agent 会话。
+
+- 本轮 npm run typecheck、npm run build、git diff --check 通过；Island/Telegram 相关 33 项测试全部通过。
+- 本轮无头 Chromium 实际构建色彩矩阵：10 种状态 × day/night/morning 三套主题，项目胶囊及终端标签（叠加 exited/unread）颜色一致；unverifiable 验证灰色虚线边框。
+- Island 实际 HTML 验证 10 种状态在已读/未读两种情况下圆点和文字颜色一致；既有状态、已读、等待展开/收起流程仍通过。截图已检查，临时 HTTP 服务和浏览器已退出，未操作运行中用户会话。
+- 本轮保留并行新增的 tests/terminal-close-resize.test.ts，未创建提交。
 
 ## Notes
 - .sharkbay/team-context/ 只读。
