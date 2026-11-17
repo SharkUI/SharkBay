@@ -13,7 +13,7 @@ await mkdir(project); await mkdir(path.join(directory, "electron"));
 const env = { ...process.env }; for (const key of ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"]) delete env[key];
 execFileSync("git", ["-c", "init.templateDir=", "init", "--quiet", project], { env });
 await writeFile(config, JSON.stringify({ configuredProjects: [project] }));
-const desktop = spawn(path.join(appPath, "Contents/MacOS/SharkBay"), ["--disable-gpu"], { env: { ...env, SHARKBAY_RUNTIME_DATA_DIR: data, SHARKBAY_CONFIG_PATH: config, SHARKBAY_ELECTRON_DATA_DIR: path.join(directory, "electron") }, stdio: "ignore" });
+const desktop = spawn(path.join(appPath, "Contents/MacOS/SharkBay"), ["--disable-gpu"], { env: { ...env, SHARKBAY_RUNTIME_PORT: "0", SHARKBAY_RUNTIME_DATA_DIR: data, SHARKBAY_CONFIG_PATH: config, SHARKBAY_ELECTRON_DATA_DIR: path.join(directory, "electron") }, stdio: "ignore" });
 const desktopExit = once(desktop, "exit");
 let client, runtimePid, session, stopped = false;
 async function until(read, label) {
@@ -47,7 +47,7 @@ try {
   console.log("PACKAGED_RUNTIME_OK bundled Node auto-start, SQLite/config, static WebUI, actual PTY, desktop termination survival, explicit shutdown");
 } catch (error) {
   console.error("Packaged runtime diagnostics:", (await readFile(path.join(data, "runtime.log"), "utf8").catch(() => "unavailable")).slice(-4000));
-  if (runtimePid) console.error("Runtime process state:", execFileSync("ps", ["-p", String(runtimePid), "-o", "stat="], { encoding: "utf8" }).trim());
+  if (runtimePid) console.error("Runtime process state:", spawnSync("ps", ["-p", String(runtimePid), "-o", "stat="], { encoding: "utf8" }).stdout.trim() || "exited");
   throw error;
 } finally {
   if (client) { if (!stopped) await Promise.race([client.call("stop").catch(() => {}), new Promise((resolve) => setTimeout(resolve, 2000))]); client.dispose(); }
