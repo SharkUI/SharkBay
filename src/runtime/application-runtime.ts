@@ -75,7 +75,7 @@ export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] 
         return session;
       },
       "terminal.claim": async (input, clientId) => { await this.requireTerminal(input.sessionId); return this.terminals.claim(input.sessionId, clientId); },
-      "terminal.input": async (input, clientId) => { this.terminals.assertControl(input.sessionId, clientId); return this.requireResult(await this.core.inputTerminal(input)); },
+      "terminal.input": async (input, clientId) => { this.terminals.assertControl(input.sessionId, clientId); const result = this.requireResult(await this.core.inputTerminal(input)); this.agents.hookStateManager.noteTerminalInput(input.sessionId, input.data); return result; },
       "terminal.resize": async (input, clientId) => { await this.terminals.resize(input.sessionId, clientId, input.cols, input.rows); return this.requireTerminal(input.sessionId); },
       "terminal.close": async (input, clientId) => { this.terminals.assertControl(input.sessionId, clientId); const result = this.requireResult(await this.core.closeTerminal(input)); return result; },
       "terminal.recordPrompt": (input, clientId) => { this.terminals.assertControl(input.terminalSessionId, clientId); this.agents.recordPrompt(input); },
@@ -205,7 +205,7 @@ export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] 
       return this.queueConfig(() => setCaffeinateMode(this.paths, input));
     }
     if (method === "desktop.tabs") { if (!Array.isArray(input)) throw new Error("Tabs required"); this.telegram?.setTabs(input); return; }
-    if (method === "desktop.sessions") return this.agents.hookStateManager.getAllStatuses().map((entry) => ({ agentId: entry.agent, projectPath: entry.projectPath, sessionId: entry.sessionId, text: entry.action, timestamp: entry.timestamp, hookState: entry.state, pid: entry.pid, terminalSessionId: this.agents.hookSessionToTerminal.get(entry.sessionId), lastPrompt: this.agents.promptStore.get(entry.sessionId) ?? undefined }));
+    if (method === "desktop.sessions") return this.agents.getStatuses();
     const telegram = this.telegram?.service;
     if (method.startsWith("telegram.")) {
       if (!telegram) throw new Error("Telegram is not ready");

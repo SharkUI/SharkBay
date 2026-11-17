@@ -162,7 +162,7 @@ describe("harness install", () => {
     const sessionId = "33333333-3333-4333-8333-333333333333";
     const { stdout } = await execFileAsync("sh", [path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"), "codex"], {
       cwd: workspace,
-      env: { ...process.env, SHARKBAY_RESTORED_SESSION_ID: sessionId },
+      env: { ...process.env, CODEX_THREAD_ID: "", SHARKBAY_RESTORED_SESSION_ID: sessionId },
     });
 
     expect(stdout.trim()).toBe(sessionId);
@@ -178,6 +178,34 @@ describe("harness install", () => {
     const { stdout } = await execFileAsync("sh", [path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"), "codex"], {
       cwd: workspace,
       env: { ...process.env, CODEX_THREAD_ID: sessionId, SHARKBAY_RESTORED_SESSION_ID: "" },
+    });
+
+    expect(stdout.trim()).toBe(sessionId);
+  });
+
+  it("prefers the current Codex thread over a stale restored session id", async () => {
+    const root = await makeTempRoot("harness-codex-switched-session");
+    const repo = await createRealGitRepoFixture(root);
+    await installHarness(repo, harnessOptions);
+
+    const sessionId = "55555555-5555-4555-8555-555555555555";
+    const { stdout } = await execFileAsync("sh", [path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"), "codex"], {
+      cwd: repo,
+      env: { ...process.env, CODEX_THREAD_ID: sessionId, SHARKBAY_RESTORED_SESSION_ID: "33333333-3333-4333-8333-333333333333" },
+    });
+
+    expect(stdout.trim()).toBe(sessionId);
+  });
+
+  it("keeps another agent's restored session independent of the Codex thread", async () => {
+    const root = await makeTempRoot("harness-claude-restored-session");
+    const repo = await createRealGitRepoFixture(root);
+    await installHarness(repo, harnessOptions);
+
+    const sessionId = "33333333-3333-4333-8333-333333333333";
+    const { stdout } = await execFileAsync("sh", [path.join(repo, ".sharkbay", "harness", "agent-session-id.sh"), "claude"], {
+      cwd: repo,
+      env: { ...process.env, CODEX_THREAD_ID: "55555555-5555-4555-8555-555555555555", SHARKBAY_RESTORED_SESSION_ID: sessionId },
     });
 
     expect(stdout.trim()).toBe(sessionId);

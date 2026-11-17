@@ -1,3 +1,4 @@
+import type { AgentDisplayState, AgentStatusEvidence } from "./agent-status.js";
 import type { CaffeinateMode } from "./caffeinate.js";
 
 export type AppearanceTheme = "day" | "night" | "morning";
@@ -789,7 +790,8 @@ export type AgentProjectStatusEvent = {
   sessionId: string | null;
   text: string;
   timestamp: string;
-  hookState?: "working" | "stopped" | "approval";
+  hookState?: AgentDisplayState;
+  evidence?: AgentStatusEvidence;
   pid?: number;
   terminalSessionId?: string;
   lastPrompt?: string;

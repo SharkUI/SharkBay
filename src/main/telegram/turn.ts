@@ -86,17 +86,17 @@ export function applyTurnEvent(turn: Turn, event: TurnEvent): TurnResult {
 
     case "status": {
       if (!matchesSession(turn, event) || event.at < turn.startedAt) return { turn, action: "none" };
-      if (event.state === "approval") {
+      if (event.state === "approval" || event.state === "waiting" || event.state === "blocked") {
         if (turn.approvalHeld) return { turn, action: "none" };
         return { turn: { ...turn, approvalHeld: true, sawWorking: true, state: "working" }, action: "approvalHold" };
       }
-      if (event.state === "working") {
+      if (event.state === "working" || event.state === "monitoring") {
         const released = turn.approvalHeld;
         const next = { ...turn, sawWorking: true, approvalHeld: false, state: "working" } as Turn;
         return { turn: next, action: released ? "approvalRelease" : "none" };
       }
       // stopped: only finalize if we have actually seen this turn working.
-      if (turn.sawWorking && !turn.approvalHeld) return finalize(turn);
+      if ((["done", "failed", "interrupted"].includes(event.state) || event.state === "stopped" && !turn.approvalHeld) && turn.sawWorking) return finalize(turn);
       return { turn, action: "none" };
     }
 

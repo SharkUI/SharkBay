@@ -23,7 +23,7 @@ describe("Codex pending input", () => {
       "",
     ];
     expect(codexHasPendingInput(lines)).toBe(true);
-    expect(codexTerminalActivity(lines)).toBe("approval");
+    expect(codexTerminalActivity(lines)).toBe("waiting");
   });
 
   it("detects multiple pending questions", () => {
@@ -38,7 +38,7 @@ describe("Codex pending input", () => {
     expect(codexTerminalActivity([
       "enter submit   ^] skip   ⇧→ main prompt",
       ...Array.from({ length: 12 }, () => "    "),
-    ])).toBe("approval");
+    ])).toBe("waiting");
   });
 
   it("clears the waiting state once the live question footer disappears", () => {
@@ -80,12 +80,12 @@ describe("Codex terminal activity without a resolved hook session", () => {
     ])).toBe("working");
   });
 
-  it("reports an idle prompt as stopped after the turn finishes", () => {
+  it("does not infer completion from prose and a bare idle prompt", () => {
     expect(codexTerminalActivity([
       "The task is complete.",
       "› Ask Codex to do anything",
       "GPT-6.1-Sol high · ~/Projects/example",
-    ])).toBe("stopped");
+    ])).toBe("idle");
   });
 
   it.each(["Worked for 49s • 00:26", "Worked for 1m 18s", "Worked for 2h 3m 4s · 12:34"])(
@@ -99,8 +99,8 @@ describe("Codex terminal activity without a resolved hook session", () => {
         "› Ask Codex to do anything",
         "GPT-6.1-Sol xhigh · ~/Projects/SharkBay",
       ]);
-      expect(state).toBe("stopped");
-      expect(codexActivityWithHook(state!, "stopped")).toBe("stopped");
+      expect(state).toBe("done");
+      expect(codexActivityWithHook(state!, "done")).toBe("done");
     },
   );
 
@@ -160,7 +160,7 @@ describe("Codex terminal activity without a resolved hook session", () => {
       "? 1 question · 14s",
       "⇧← to answer",
       "› Ask Codex to do anything",
-    ])).toBe("approval");
+    ])).toBe("waiting");
   });
 
   it("leaves hook state intact when no live Codex footer is available", () => {
@@ -170,18 +170,29 @@ describe("Codex terminal activity without a resolved hook session", () => {
 });
 
 describe("Codex hook and terminal activity", () => {
+  it.each(["working", "waiting"] as const)("uses live %s when structured evidence has expired", (state) => {
+    const lines = ["• Working (32m 29s • esc to interrupt)",
+      ...(state === "waiting" ? ["? 1 question · 14s", "⇧← to answer"] : []),
+      "› Ask Codex to do anything", "GPT-6.1-Sol high · ~/Projects/example"];
+    expect(codexActivityWithHook(codexTerminalActivity(lines)!, "unverifiable")).toBe(state);
+  });
+
+  it.each(["idle", "done"] as const)("does not infer a fresh outcome from %s beside expired evidence", (state) => {
+    expect(codexActivityWithHook(state, "unverifiable")).toBe("unverifiable");
+  });
+
   it("keeps authoritative working when a partial redraw exposes only the input prompt", () => {
     const screenState = codexTerminalActivity(["› Ask Codex to do anything"]);
-    expect(screenState).toBe("stopped");
+    expect(screenState).toBe("idle");
     expect(codexActivityWithHook(screenState!, "working")).toBe("working");
   });
 
   it.each([
-    ["working", "approval", "approval"],
-    ["approval", "working", "approval"],
-    ["stopped", "stopped", "stopped"],
-    ["working", "stopped", "working"],
-    ["stopped", undefined, "stopped"],
+    ["working", "waiting", "waiting"],
+    ["waiting", "working", "working"],
+    ["done", "done", "done"],
+    ["working", "done", "done"],
+    ["done", undefined, "done"],
   ] as const)("combines terminal %s and hook %s as %s", (terminal, hook, expected) => {
     expect(codexActivityWithHook(terminal, hook)).toBe(expected);
   });

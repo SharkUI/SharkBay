@@ -115,7 +115,8 @@
       "!node_modules/better-sqlite3/binding.gyp",
       "src/island/**/*",
       "src/find-popover/**/*",
-      "package.json"
+      "package.json",
+      "resources/orca-status-NOTICE.txt"
     ],
     "extraResources": [
       {

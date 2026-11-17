@@ -1,3 +1,4 @@
+import { AGENT_STATUS_TONE, type AgentDisplayState } from "../../shared/agent-status.js";
 /**
  * Pure rendering helpers for Telegram messages (spec §6).
  *
@@ -12,16 +13,8 @@ export const TELEGRAM_MAX_MESSAGE = 4096;
 export type InlineButton = { text: string; callbackData: string };
 
 export function statusBadge(state: SessionState | null): string {
-  switch (state) {
-    case "working":
-      return "🟢";
-    case "stopped":
-      return "🟡";
-    case "approval":
-      return "🔴";
-    default:
-      return "⚪";
-  }
+  const tone = state === "stopped" ? "green" : state === "approval" ? "yellow" : state ? AGENT_STATUS_TONE[state as AgentDisplayState] : "gray";
+  return { blue: "🔵", green: "🟢", yellow: "🟡", red: "🔴", gray: "⚪" }[tone ?? "gray"];
 }
 
 export function relativeTime(fromIso: string, now: number = Date.now()): string {

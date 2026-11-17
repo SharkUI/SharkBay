@@ -6,7 +6,7 @@ const script = readFileSync(new URL("../src/island/island.html", import.meta.url
   .match(/<script>([\s\S]*?)<\/script>/)?.[1];
 if (!script) throw new Error("Island script not found");
 
-type Tab = { sessionId: string; state: string; projectName: string; lastPrompt?: string };
+type Tab = { sessionId: string; state: string; projectName: string; lastPrompt?: string; unread?: boolean };
 const tab = (state: string, sessionId = "codex-1"): Tab => ({ sessionId, state, projectName: "SharkBay" });
 
 function islandHarness() {
@@ -68,7 +68,7 @@ describe("Island automatic expansion", () => {
 
   it("does not expand for a pre-existing stopped session on startup", () => {
     const island = islandHarness();
-    island.tabs([tab("stopped")]);
+    island.tabs([tab("done")]);
     vi.advanceTimersByTime(3000);
     expect(island.opened()).toBe(false);
   });
@@ -84,14 +84,14 @@ describe("Island automatic expansion", () => {
   it.each(["working", "unknown"])("ignores a stopped pulse that returns to %s", (next) => {
     const island = islandHarness();
     island.tabs([tab("working")]);
-    island.tabs([tab("stopped")]);
+    island.tabs([tab("done")]);
     vi.advanceTimersByTime(2500);
     island.tabs([tab(next)]);
     vi.advanceTimersByTime(3000);
     expect(island.setExpanded).not.toHaveBeenCalled();
   });
 
-  it.each(["stopped", "approval"])("opens only after %s remains stable for 3000ms", (state) => {
+  it.each(["done", "waiting"])("opens only after %s remains stable for 3000ms", (state) => {
     const island = islandHarness();
     island.tabs([tab("working")]);
     island.tabs([tab(state)]);
@@ -101,10 +101,21 @@ describe("Island automatic expansion", () => {
     expect(island.opened()).toBe(true);
   });
 
+  it("keeps completed execution after acknowledgement while canceling its pending reminder", () => {
+    const island = islandHarness(); island.tabs([tab("working")]);
+    island.tabs([{ ...tab("done"), unread: true }]);
+    vi.advanceTimersByTime(1000);
+    island.tabs([{ ...tab("done"), unread: false }]);
+    vi.advanceTimersByTime(3000); expect(island.opened()).toBe(false);
+  });
+  it.each(["interrupted", "idle", "unverifiable"])("does not open for %s", (state) => {
+    const island = islandHarness(); island.tabs([tab("working")]); island.tabs([tab(state)]);
+    vi.advanceTimersByTime(3000); expect(island.opened()).toBe(false);
+  });
   it("cancels pending expansion when the session closes", () => {
     const island = islandHarness();
     island.tabs([tab("working")]);
-    island.tabs([tab("stopped")]);
+    island.tabs([tab("done")]);
     vi.advanceTimersByTime(100);
     island.tabs([]);
     vi.advanceTimersByTime(3000);
@@ -114,9 +125,9 @@ describe("Island automatic expansion", () => {
   it("keeps the deadline when only prompt metadata changes", () => {
     const island = islandHarness();
     island.tabs([tab("working")]);
-    island.tabs([tab("stopped")]);
+    island.tabs([tab("done")]);
     vi.advanceTimersByTime(300);
-    island.tabs([{ ...tab("stopped"), lastPrompt: "Updated task title" }]);
+    island.tabs([{ ...tab("done"), lastPrompt: "Updated task title" }]);
     vi.advanceTimersByTime(2700);
     expect(island.opened()).toBe(true);
   });
@@ -124,9 +135,9 @@ describe("Island automatic expansion", () => {
   it("waits independently for each session, ignoring a later stopped pulse", () => {
     const island = islandHarness();
     island.tabs([tab("working", "first"), tab("working", "second")]);
-    island.tabs([tab("stopped", "first"), tab("working", "second")]);
+    island.tabs([tab("done", "first"), tab("working", "second")]);
     vi.advanceTimersByTime(2950);
-    island.tabs([tab("working", "first"), tab("stopped", "second")]);
+    island.tabs([tab("working", "first"), tab("done", "second")]);
     vi.advanceTimersByTime(100);
     island.tabs([tab("working", "first"), tab("working", "second")]);
     vi.advanceTimersByTime(3000);
@@ -137,7 +148,7 @@ describe("Island automatic expansion", () => {
     const island = islandHarness();
     island.tabs([tab("working")]);
     island.tabs([tab("unknown")]);
-    island.tabs([tab("stopped")]);
+    island.tabs([tab("done")]);
     vi.advanceTimersByTime(3000);
     expect(island.opened()).toBe(true);
   });
@@ -145,9 +156,9 @@ describe("Island automatic expansion", () => {
   it("restarts confirmation when stopped changes to approval", () => {
     const island = islandHarness();
     island.tabs([tab("working")]);
-    island.tabs([tab("stopped")]);
+    island.tabs([tab("done")]);
     vi.advanceTimersByTime(2900);
-    island.tabs([tab("approval")]);
+    island.tabs([tab("waiting")]);
     vi.advanceTimersByTime(100);
     expect(island.opened()).toBe(false);
     vi.advanceTimersByTime(2900);
@@ -157,7 +168,7 @@ describe("Island automatic expansion", () => {
   it("collapses an automatic panel once only working and unknown remain", () => {
     const island = islandHarness();
     island.tabs([tab("working", "done"), tab("working", "running")]);
-    island.tabs([tab("stopped", "done"), tab("working", "running")]);
+    island.tabs([tab("done", "done"), tab("working", "running")]);
     vi.advanceTimersByTime(3000);
     expect(island.opened()).toBe(true);
     island.tabs([tab("unknown", "done"), tab("working", "running")]);
@@ -177,7 +188,7 @@ describe("Island automatic expansion", () => {
   it("keeps an automatic panel open after the user hovers to inspect it", () => {
     const island = islandHarness();
     island.tabs([tab("working")]);
-    island.tabs([tab("stopped")]);
+    island.tabs([tab("done")]);
     vi.advanceTimersByTime(3000);
     island.hover();
     island.tabs([tab("working")]);
@@ -187,10 +198,10 @@ describe("Island automatic expansion", () => {
   it("does not reopen a panel dismissed during confirmation", () => {
     const island = islandHarness();
     island.tabs([tab("working")]);
-    island.tabs([tab("stopped")]);
+    island.tabs([tab("done")]);
     island.openManually();
     island.collapse();
-    island.tabs([tab("stopped")]);
+    island.tabs([tab("done")]);
     vi.advanceTimersByTime(3000);
     expect(island.opened()).toBe(false);
   });

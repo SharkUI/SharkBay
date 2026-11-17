@@ -29,7 +29,7 @@ export function isBotCommand(name: string): name is BotCommandName {
 }
 
 /** Three-state badge reused from the hook state manager. */
-export type SessionState = "working" | "stopped" | "approval";
+export type SessionState = import("../../shared/agent-status.js").AgentDisplayState | "stopped" | "approval";
 
 export type PairedUser = {
   telegramUserId: number;

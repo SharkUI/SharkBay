@@ -21,10 +21,32 @@ const EVENT_MAP: Record<string, HookEventKind> = {
   PreToolUse: "tool_start",
   PostToolUse: "tool_end",
   Stop: "turn_end",
+  StopFailure: "turn_end",
+  PostToolUseFailure: "tool_end",
+  SubagentStart: "tool_start",
+  SubagentStop: "tool_end",
+  Elicitation: "attention",
+  ElicitationResult: "tool_end",
   SessionEnd: "session_end",
   PermissionRequest: "attention",
   PermissionDenied: "attention",
 };
+
+const FINISHED_BACKGROUND_STATES = new Set(["idle", "done", "success", "succeeded", "complete", "completed", "finished", "failed", "error", "terminated", "exited", "aborted", "expired", "skipped", "crashed", "killed", "cancelled", "canceled", "timed_out"]);
+function claudeBackgroundWork(raw: Record<string, unknown>): Pick<UnifiedHookEvent, "backgroundAgents" | "backgroundCommands" | "activeCrons"> {
+  const inventory = raw.background_tasks;
+  const result: Pick<UnifiedHookEvent, "backgroundAgents" | "backgroundCommands" | "activeCrons"> = {};
+  if (Array.isArray(inventory)) {
+    result.backgroundAgents = false; result.backgroundCommands = false;
+    for (const task of inventory) {
+      if (task && typeof task.status === "string" && FINISHED_BACKGROUND_STATES.has(task.status.toLowerCase())) continue;
+      if (task && ["local_agent", "local_subagent", "subagent", "teammate"].includes(task.type)) result.backgroundAgents = true;
+      else result.backgroundCommands = true;
+    }
+  }
+  if (Array.isArray(raw.session_crons)) result.activeCrons = raw.session_crons.length > 0;
+  return result;
+}
 
 function normalizeClaudePayload(agentId: string, raw: unknown): UnifiedHookEvent | null {
   if (!raw || typeof raw !== "object") return null;
@@ -32,6 +54,8 @@ function normalizeClaudePayload(agentId: string, raw: unknown): UnifiedHookEvent
 
   const hookName = typeof r.hook_event_name === "string" ? r.hook_event_name : null;
   if (!hookName) return null;
+  // Compaction and child initialization do not begin a new idle lead session.
+  if (agentId === "claude" && hookName === "SessionStart" && (r.agent_id || r.source != null && !["startup", "resume", "fork", "clear"].includes(String(r.source)))) return null;
 
   // Notification with permission-related types → attention
   let event = EVENT_MAP[hookName];
@@ -47,10 +71,23 @@ function normalizeClaudePayload(agentId: string, raw: unknown): UnifiedHookEvent
   if (!event) return null;
 
   return {
+    ...(agentId === "claude" && !r.agent_id ? claudeBackgroundWork(r) : {}),
     agent: agentId,
     sessionId: typeof r.session_id === "string" ? r.session_id : "",
     event,
     timestamp: new Date().toISOString(),
+    toolUseId: typeof r.tool_use_id === "string" ? r.tool_use_id : undefined,
+    transcriptPath: typeof r.transcript_path === "string" ? r.transcript_path : undefined,
+    turnId: typeof r.turn_id === "string" ? r.turn_id : undefined,
+    childId: typeof r.agent_id === "string" ? r.agent_id : undefined,
+    childEvent: hookName === "SubagentStart" ? "start" : hookName === "SubagentStop" ? "stop" : undefined,
+    elicitation: agentId === "claude" && (hookName === "Elicitation" || hookName === "ElicitationResult") ? {
+      phase: hookName === "Elicitation" ? "request" : "result",
+      id: typeof r.elicitation_id === "string" ? r.elicitation_id : undefined,
+      server: typeof r.mcp_server_name === "string" ? r.mcp_server_name : undefined,
+    } : undefined,
+    outcome: hookName === "Interrupt" || r.is_interrupt === true ? "cancellation" : hookName === "StopFailure" ? "failure" : undefined,
+    sessionBoundary: hookName === "SessionStart" || hookName === "SessionEnd",
     tool: typeof r.tool_name === "string" ? { name: r.tool_name, input: r.tool_input } : undefined,
     prompt: typeof r.prompt === "string" ? r.prompt : undefined,
     cwd: typeof r.cwd === "string" ? r.cwd : undefined,
@@ -77,6 +114,11 @@ const HOOK_EVENT_SPECS: Array<{ name: string; matcher: string | null; timeout: n
 ];
 
 const MANAGED_MARKER = "sharkbay-managed";
+const CLAUDE_HOOK_EVENT_SPECS = [...HOOK_EVENT_SPECS,
+  ...["StopFailure", "PostToolUseFailure", "SubagentStart", "SubagentStop", "Elicitation", "ElicitationResult"].map(name => ({ name, matcher: null, timeout: null }))];
+function hookEventSpecs(source: string) {
+  return source === "claude" ? CLAUDE_HOOK_EVENT_SPECS : HOOK_EVENT_SPECS;
+}
 
 function shellQuote(s: string): string {
   if (!s) return "''";
@@ -90,7 +132,7 @@ function tomlString(s: string): string {
 function buildHookEntries(hookCliPath: string, source: string): Record<string, unknown[]> {
   const command = `${shellQuote(hookCliPath)} --source ${source}`;
   const entries: Record<string, unknown[]> = {};
-  for (const spec of HOOK_EVENT_SPECS) {
+  for (const spec of hookEventSpecs(source)) {
     const hook: Record<string, unknown> = { type: "command", command };
     if (spec.timeout != null) hook.timeout = spec.timeout;
     const group: Record<string, unknown> = { hooks: [hook], _managedBy: MANAGED_MARKER };
@@ -144,7 +186,7 @@ export class ClaudeConnector implements AgentConnector {
     const config = this.readConfig();
     const hooks = config.hooks as Record<string, unknown[]> | undefined;
     if (!hooks) return;
-    for (const spec of HOOK_EVENT_SPECS) {
+    for (const spec of hookEventSpecs(this.id)) {
       const arr = hooks[spec.name];
       if (Array.isArray(arr)) {
         hooks[spec.name] = arr.filter((e: any) => e?._managedBy !== MANAGED_MARKER);
@@ -160,7 +202,7 @@ export class ClaudeConnector implements AgentConnector {
     const config = this.readConfig();
     const hooks = config.hooks as Record<string, unknown[]> | undefined;
     if (!hooks) return "not_installed";
-    const hasManaged = HOOK_EVENT_SPECS.some((spec) => { const arr = hooks[spec.name]; return Array.isArray(arr) && arr.some((h: any) => h?._managedBy === MANAGED_MARKER); });
+    const hasManaged = hookEventSpecs(this.id).some((spec) => { const arr = hooks[spec.name]; return Array.isArray(arr) && arr.some((h: any) => h?._managedBy === MANAGED_MARKER); });
     if (!hasManaged) return "not_installed";
     if (expectedHookCliPath) {
       const expected = `${shellQuote(expectedHookCliPath)} --source ${this.id}`;

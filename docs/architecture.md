@@ -72,6 +72,12 @@ The renderer currently uses React hooks rather than a separate state library.
 - Protocol shared state: remote branch `sharkbay-team-context`, mirrored locally under `.sharkbay/team-context/`.
 - Agent status sources: recent local files under `~/.codex/sessions` and `~/.claude/projects`.
 
+### Startup resource boundaries
+
+- Opening projects and observing file changes only read CodeGraph status. Index creation/sync requires the Files panel's **Build index** / **Sync index** action; no automatic indexing is scheduled.
+- Transcript polling and usage backfill read JSONL in 64 KiB chunks, one file at a time per reader. Partial records retain their byte positions; incomplete or cancelled backfills are not marked fully scanned. Records above 4 MiB are skipped with a diagnostic warning. Kiro's single-document JSON is capped at 16 MiB before parsing; larger documents remain unindexed with a warning. These limits protect startup memory, and can leave usage statistics incomplete for oversized records.
+- Profile/config locks are reclaimed only after a valid recorded PID is confirmed absent (`ESRCH`). Concurrent recovery is serialized; live owners, permission failures, malformed locks, and an existing recovery guard fail closed. A PID reused by another process is treated as live. An interrupted recovery guard requires manual verification rather than automatic deletion.
+
 ## Path And Execution Safety
 
 Path safety is enforced in the shared runtime. Renderer-supplied paths are re-resolved against persisted configured projects before filesystem, Git, file-tree, terminal, or Protocol operations run.

@@ -1,3 +1,5 @@
+import { isOlderHookSnapshot, projectHookSnapshots, type HookSessionStateEntry, type HookSnapshotByTerminalId } from "./hook-snapshots";
+import { AGENT_STATUS_TONE, AGENT_STATUS_LABELS, AGENT_STATUS_RANK, isAgentAttention, isAgentFinished, isAgentWorking, type AgentStatusEvidence } from "../shared/agent-status";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { CSSProperties, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { FitAddon } from "@xterm/addon-fit";
@@ -61,7 +63,6 @@ import {
   firstHttpUrl,
   formatSessionModelName,
   resolveSelectedCandidate,
-  shouldEnsureCodeGraphForSelection,
   shouldKeepCurrentServiceUrl,
   projectActivityForCandidate,
   validTerminalResizeDimensions,
@@ -104,17 +105,6 @@ type Disposable = {
 };
 
 type ProjectActivityState = WorkflowProjectActivityState;
-
-type HookSessionStateEntry = {
-  state: ProjectActivityState;
-  projectId: string;
-  agentId: string;
-  timestamp: string;
-  terminalSessionId?: string;
-  lastPrompt?: string;
-};
-
-type HookSnapshotByTerminalId = Record<string, { sessionId: string; state: ProjectActivityState; timestampMs: number; lastPrompt?: string }>;
 
 type TerminalShellTab = {
   kind: "terminal";
@@ -206,7 +196,6 @@ const minProjectColumnWidth = 216;
 const minDetailColumnWidth = 340;
 const minTerminalColumnWidth = 420;
 const maxPendingTerminalOutputChars = 1024 * 1024;
-const codeGraphSyncDebounceMs = 300000;
 const diagnosticsRefreshIntervalMs = 15_000;
 const foregroundRefreshDebounceMs = 250;
 const sessionDetailRefreshIntervalMs = 15_000;
@@ -583,14 +572,6 @@ async function sendTerminalInput(sessionId: string, data: string): Promise<void>
   await handler({ sessionId, data });
 }
 
-async function resizeTerminal(sessionId: string, cols: number, rows: number): Promise<void> {
-  if (getBridge().runtime && !getBridge().runtime!.canControl(sessionId)) return;
-  if (!validTerminalResizeDimensions(cols, rows)) return;
-  const handler = getBridge().terminal?.resize;
-  if (!handler) throw new Error("Terminal resize is not exposed by the preload API.");
-  await handler({ sessionId, cols: Math.floor(cols), rows: Math.floor(rows) });
-}
-
 async function closeTerminal(sessionId: string): Promise<void> {
   const handler = getBridge().terminal?.close;
   if (!handler) throw new Error("Terminal close is not exposed by the preload API.");
@@ -682,20 +663,12 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function priorityOf(state: ProjectActivityState): number {
-  if (state === "approval") return 3;
-  if (state === "stopped") return 2;
-  if (state === "working") return 1;
-  return 0;
-}
-
-function timestampValue(value: string): number {
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : 0;
+  return AGENT_STATUS_RANK[state];
 }
 
 // Single source of truth for an agent tab's light state. The project pill is
 // aggregated from these per-tab states so the pill color always matches the tab
-// lights. Acknowledged stopped reminders are cleared before reaching this map.
+// lights. Read acknowledgement does not change execution state.
 function agentTabLightState(
   tab: TerminalTab,
   _isActiveTab: boolean,
@@ -703,8 +676,7 @@ function agentTabLightState(
 ): ProjectActivityState | null {
   if (tab.kind !== "terminal" || !tab.session.agentId) return null;
   const state = hookStateByTerminalId[tab.session.id];
-  if (!state) return null;
-  return state;
+  return state ?? "unknown";
 }
 
 function sameActivityMap(
@@ -1379,11 +1351,12 @@ function DashboardView({
       if (event.hookState) {
         const matchedProjectId = filteredCandidates.find((c) => c.displayPath === event.projectPath)?.id;
         if (event.sessionId && matchedProjectId) {
+          const statusKey = event.terminalSessionId ? `${event.terminalSessionId}\0${event.sessionId}` : event.sessionId;
           setHookStateBySessionId((current) => {
-            const existing = current[event.sessionId!];
-            if (existing && timestampValue(event.timestamp) < timestampValue(existing.timestamp)) return current;
-            if (existing && existing.state === event.hookState && existing.projectId === matchedProjectId && existing.agentId === event.agentId && existing.timestamp === event.timestamp && existing.terminalSessionId === event.terminalSessionId && (!event.lastPrompt || existing.lastPrompt === event.lastPrompt)) return current;
-            return { ...current, [event.sessionId!]: { state: event.hookState!, projectId: matchedProjectId, agentId: event.agentId, timestamp: event.timestamp, terminalSessionId: event.terminalSessionId, lastPrompt: event.lastPrompt || existing?.lastPrompt } };
+            const existing = current[statusKey];
+            if (existing && isOlderHookSnapshot(event, existing)) return current;
+            if (existing && existing.state === event.hookState && existing.projectId === matchedProjectId && existing.agentId === event.agentId && existing.timestamp === event.timestamp && existing.evidence?.revision === event.evidence?.revision && existing.terminalSessionId === event.terminalSessionId && (!event.lastPrompt || existing.lastPrompt === event.lastPrompt)) return current;
+            return { ...current, [statusKey]: { sessionId: event.sessionId!, state: event.hookState!, projectId: matchedProjectId, agentId: event.agentId, timestamp: event.timestamp, terminalSessionId: event.terminalSessionId, evidence: event.evidence, lastPrompt: event.lastPrompt || existing?.lastPrompt } };
           });
         }
       }
@@ -1616,12 +1589,13 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const compact = useCompactWebLayout();
   const [spaces, setSpaces] = useState<Record<string, TerminalSpace>>({});
   const [codexActivityByTerminalId, setCodexActivityByTerminalId] = useState<Record<string, ProjectActivityState>>({});
-  const [acknowledgedStoppedTerminalIds, setAcknowledgedStoppedTerminalIds] = useState<Set<string>>(() => new Set());
+  const [acknowledgedTerminalTurns, setAcknowledgedTerminalTurns] = useState<Record<string, string>>({});
   const [taskTitlesByProjectPath, setTaskTitlesByProjectPath] = useState<Record<string, Record<string, string>>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [terminalSpacesRestored, setTerminalSpacesRestored] = useState(false);
   const [, refreshRuntimeControl] = useState(0);
   const spacesRef = useRef<Record<string, TerminalSpace>>({});
+  const closingTerminalIds = useRef(new Set<string>());
   const terminalAppearanceRef = useRef({ appearanceTheme, colorScheme: terminalColorScheme, fontFamily: terminalFontFamily, fontSize: terminalFontSize, lineHeight: terminalLineHeight });
   useEffect(() => {
     terminalAppearanceRef.current = { appearanceTheme, colorScheme: terminalColorScheme, fontFamily: terminalFontFamily, fontSize: terminalFontSize, lineHeight: terminalLineHeight };
@@ -1669,36 +1643,11 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     }));
   }, []);
   const hookSnapshotByTerminalId = useMemo(() => {
-    const map = agentSessionToTerminalRef.current;
-    for (const [sid, entry] of Object.entries(hookStateBySessionId)) {
-      if (entry.terminalSessionId) {
-        map[sid] = entry.terminalSessionId;
-      }
-    }
-    const runningTabsByProjectAgent = new Map<string, string[]>();
-    for (const space of Object.values(spaces)) {
-      for (const tab of space.tabs) {
-        if (tab.kind !== "terminal" || !tab.session.agentId || tab.session.status !== "running") continue;
-        if (tab.hookSessionId) map[tab.hookSessionId] = tab.session.id;
-        const key = `${space.projectId}\0${tab.session.agentId}`;
-        runningTabsByProjectAgent.set(key, [...(runningTabsByProjectAgent.get(key) ?? []), tab.session.id]);
-      }
-    }
-    const result: Record<string, { sessionId: string; state: ProjectActivityState; timestampMs: number; lastPrompt?: string }> = {};
-    for (const [sid, entry] of Object.entries(hookStateBySessionId)) {
-      let termId = map[sid];
-      if (!termId && entry.state === "working") {
-        const candidates = runningTabsByProjectAgent.get(`${entry.projectId}\0${entry.agentId}`);
-        if (candidates?.length === 1) termId = candidates[0];
-      }
-      if (!termId) continue;
-      const timestampMs = timestampValue(entry.timestamp);
-      const current = result[termId];
-      if (!current || timestampMs >= current.timestampMs) {
-        result[termId] = { sessionId: sid, state: entry.state, timestampMs, lastPrompt: entry.lastPrompt };
-      }
-    }
-    return result;
+    const terminals = Object.values(spaces).flatMap(space => space.tabs.flatMap(tab => tab.kind === "terminal" && tab.session.agentId
+      ? [{ terminalId: tab.session.id, projectId: space.projectId, agentId: tab.session.agentId, hookSessionId: tab.hookSessionId }] : []));
+    const projection = projectHookSnapshots(hookStateBySessionId, terminals);
+    agentSessionToTerminalRef.current = projection.sessionToTerminal;
+    return projection.snapshots;
   }, [hookStateBySessionId, spaces]);
   const terminalActivityByTerminalId = useMemo(() => {
     const result: Record<string, ProjectActivityState> = {};
@@ -1712,26 +1661,20 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       for (const tab of space.tabs) {
         if (tab.kind !== "terminal" || !tab.reviewRun) continue;
         if (tab.reviewRun.status === "running") result[tab.session.id] = "working";
-        else if (tab.reviewRun.status === "completed" || tab.reviewRun.status === "cancelled") result[tab.session.id] = "stopped";
-        else if (tab.reviewRun.status === "failed") result[tab.session.id] = "approval";
+        else if (tab.reviewRun.status === "completed") result[tab.session.id] = "done";
+        else if (tab.reviewRun.status === "cancelled") result[tab.session.id] = "interrupted";
+        else if (tab.reviewRun.status === "failed") result[tab.session.id] = "failed";
       }
     }
     return result;
   }, [hookSnapshotByTerminalId, codexActivityByTerminalId, spaces]);
   const terminalActivityByTerminalIdRef = useRef(terminalActivityByTerminalId);
-  useEffect(() => {
-    terminalActivityByTerminalIdRef.current = terminalActivityByTerminalId;
-    const terminalIds = new Set(Object.values(spaces).flatMap((space) => space.tabs)
-      .filter((tab): tab is TerminalShellTab => tab.kind === "terminal").map((tab) => tab.session.id));
-    setAcknowledgedStoppedTerminalIds((current) => {
-      const next = new Set([...current].filter((id) => terminalIds.has(id)
-        && terminalActivityByTerminalId[id] !== "working" && terminalActivityByTerminalId[id] !== "approval"));
-      return next.size === current.size ? current : next;
-    });
-  }, [terminalActivityByTerminalId, spaces]);
-  const hookStateByTerminalId = useMemo(() => Object.fromEntries(
-    Object.entries(terminalActivityByTerminalId).filter(([id, state]) => state !== "stopped" || !acknowledgedStoppedTerminalIds.has(id)),
-  ), [terminalActivityByTerminalId, acknowledgedStoppedTerminalIds]);
+  useEffect(() => { terminalActivityByTerminalIdRef.current = terminalActivityByTerminalId; }, [terminalActivityByTerminalId]);
+  const hookStateByTerminalId = terminalActivityByTerminalId;
+  const terminalTurnKey = (terminalId: string) => {
+    const snapshot = hookSnapshotByTerminalId[terminalId];
+    return `${terminalActivityByTerminalId[terminalId]}:${snapshot?.evidence?.turnRevision ?? snapshot?.evidence?.turnStartedAt ?? 0}:${snapshot?.evidence?.stateStartedAt ?? 0}`;
+  };
   const hookSnapshotByTerminalIdRef = useRef(hookSnapshotByTerminalId);
   useEffect(() => { hookSnapshotByTerminalIdRef.current = hookSnapshotByTerminalId; }, [hookSnapshotByTerminalId]);
   useEffect(() => {
@@ -1792,7 +1735,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     persistTimer.current = setTimeout(flushTerminalSpacesSnapshot, 500);
   }, [flushTerminalSpacesSnapshot]);
 
-  // Auto-focus based on hookState: approval → terminal, working/stopped → prompt input bar
+  // Waiting requests focus the terminal; other state changes focus the prompt input bar.
   const prevHookFocusState = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!activeProjectId) return;
@@ -1803,7 +1746,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     if (state === prevHookFocusState.current) return;
     prevHookFocusState.current = state;
     if (!state) return;
-    if (state === "approval") {
+    if (isAgentAttention(state)) {
       const tab = space.tabs.find((t): t is TerminalShellTab => t.kind === "terminal" && t.session.id === activeTabId);
       if (tab) tab.terminal.focus();
     } else {
@@ -1812,81 +1755,32 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     }
   }, [hookStateByTerminalId, activeProjectId, spaces]);
 
-  const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearStoppedTerminalSession = useCallback((terminalId: string): boolean => {
-    if (terminalActivityByTerminalIdRef.current[terminalId] !== "stopped") return false;
-    setAcknowledgedStoppedTerminalIds((current) => current.has(terminalId) ? current : new Set(current).add(terminalId));
-    clearAgentSessionsForTerminal(terminalId);
+    const state = terminalActivityByTerminalIdRef.current[terminalId];
+    if (!state || !isAgentFinished(state)) return false;
+    const snapshot = hookSnapshotByTerminalIdRef.current[terminalId];
+    const key = `${state}:${snapshot?.evidence?.turnRevision ?? snapshot?.evidence?.turnStartedAt ?? 0}:${snapshot?.evidence?.stateStartedAt ?? 0}`;
+    setAcknowledgedTerminalTurns((current) => current[terminalId] === key ? current : { ...current, [terminalId]: key });
     return true;
-  }, [clearAgentSessionsForTerminal]);
-  const clearActiveTabForStates = useCallback((states: ProjectActivityState[]): boolean => {
-    if (!activeProjectId) return false;
-    const space = spaces[activeProjectId];
-    const activeTabId = space?.activeId;
-    if (!activeTabId) return false;
-    const state = terminalActivityByTerminalIdRef.current[activeTabId];
-    if (!state || !states.includes(state)) return false;
-    if (state === "stopped") return clearStoppedTerminalSession(activeTabId);
-    clearAgentSessionsForTerminal(activeTabId);
-    return true;
-  }, [activeProjectId, spaces, clearAgentSessionsForTerminal, clearStoppedTerminalSession]);
-
+  }, []);
   const clearStoppedTerminalSessionRef = useRef(clearStoppedTerminalSession);
   useEffect(() => { clearStoppedTerminalSessionRef.current = clearStoppedTerminalSession; }, [clearStoppedTerminalSession]);
   const focusedTabId = isVisible && activeProjectId ? spaces[activeProjectId]?.activeId : null;
   useEffect(() => {
-    const acknowledge = () => {
-      if (focusedTabId && document.hasFocus()) clearStoppedTerminalSessionRef.current(focusedTabId);
-    };
+    const acknowledge = () => { if (focusedTabId && document.hasFocus()) clearStoppedTerminalSessionRef.current(focusedTabId); };
     acknowledge();
     window.addEventListener("focus", acknowledge);
     return () => window.removeEventListener("focus", acknowledge);
   }, [focusedTabId]);
-
-  // Clicking a session in the island acknowledges it: clear stopped OR approval
-  // for that terminal immediately and cancel any pending delayed auto-clear.
-  const clearAttentionTerminalSession = useCallback((terminalId: string): boolean => {
-    if (clearStoppedTerminalSession(terminalId)) return true;
-    const state = hookSnapshotByTerminalIdRef.current[terminalId]?.state;
-    if (state !== "stopped" && state !== "approval") return false;
-    clearAgentSessionsForTerminal(terminalId);
-    if (clearTimerRef.current) { clearTimeout(clearTimerRef.current); clearTimerRef.current = null; }
-    return true;
-  }, [clearAgentSessionsForTerminal, clearStoppedTerminalSession]);
-
-  const scheduleClear = useCallback(() => {
-    if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
-    clearTimerRef.current = setTimeout(() => { clearTimerRef.current = null; clearActiveTabForStates(["stopped", "approval"]); }, 300_000);
-  }, [clearActiveTabForStates]);
-
+  // Viewing a request acknowledges its notification, never answers or dismisses it.
+  const clearAttentionTerminalSession = clearStoppedTerminalSession;
   const immediatelyClearActiveTab = useCallback(() => {
-    if (clearTimerRef.current) { clearTimeout(clearTimerRef.current); clearTimerRef.current = null; }
-    clearActiveTabForStates(["stopped", "approval"]);
-  }, [clearActiveTabForStates]);
-
-  const acknowledgeActiveStoppedSession = useCallback(() => {
-    if (!clearActiveTabForStates(["stopped"])) return;
-    if (clearTimerRef.current) { clearTimeout(clearTimerRef.current); clearTimerRef.current = null; }
-  }, [clearActiveTabForStates]);
-
-  useEffect(() => {
-    const trySchedule = () => {
-      if (!document.hasFocus()) return;
-      if (!activeProjectId) return;
-      const space = spaces[activeProjectId];
-      const activeTabId = space?.activeId;
-      if (!activeTabId) return;
-      const state = hookStateByTerminalId[activeTabId];
-      if (state !== "stopped" && state !== "approval") return;
-      scheduleClear();
-    };
-    trySchedule();
-    window.addEventListener("focus", trySchedule);
-    return () => { window.removeEventListener("focus", trySchedule); if (clearTimerRef.current) { clearTimeout(clearTimerRef.current); clearTimerRef.current = null; } };
-  }, [hookStateByTerminalId, activeProjectId, spaces, scheduleClear]);
+    if (focusedTabId) clearStoppedTerminalSession(focusedTabId);
+  }, [focusedTabId, clearStoppedTerminalSession]);
+  const acknowledgeActiveStoppedSession = immediatelyClearActiveTab;
 
   // Project pill = highest-priority light state across the project's own SharkBay
-  // agent tabs (approval > stopped > working > null). Tab lights are the single
+  // agent tabs using the shared attention rank. Tab lights are the single
   // source of truth; sessions not running inside a SharkBay tab never count.
   useEffect(() => {
     const compute = () => {
@@ -1897,7 +1791,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
           const isActiveTab = tabIdForTab(tab) === space.activeId;
           const state = agentTabLightState(tab, isActiveTab, hookStateByTerminalId);
           if (!state) continue;
-          if (state === "working") working = true;
+          if (isAgentWorking(state)) working = true;
           const current = byProject[space.projectId];
           if (!current || priorityOf(state) > priorityOf(current)) {
             byProject[space.projectId] = state;
@@ -1919,6 +1813,9 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
 
   useEffect(() => {
     spacesRef.current = spaces;
+    for (const id of closingTerminalIds.current) {
+      if (!findTerminalTab(spaces, id)) closingTerminalIds.current.delete(id);
+    }
     if (restoredSpaces.current) scheduleTerminalSpacesSnapshot();
   }, [scheduleTerminalSpacesSnapshot, spaces]);
   useEffect(() => {
@@ -1962,19 +1859,19 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     });
   }, []);
   useEffect(() => {
-    const tabs: Array<{ sessionId: string; title: string; projectName: string; agentId?: string; state: string; lastPrompt?: string; hookSessionId?: string }> = [];
+    const tabs: Array<{ sessionId: string; title: string; projectName: string; agentId?: string; state: string; unread: boolean; lastPrompt?: string; hookSessionId?: string }> = [];
     for (const space of Object.values(spaces)) {
       for (const tab of space.tabs) {
-        if (tab.kind === "terminal" && tab.session.agentId && tab.session.status === "running") {
+        if (tab.kind === "terminal" && tab.session.agentId) {
           const hookState = hookStateByTerminalId[tab.session.id];
           const lastPrompt = hookSnapshotByTerminalId[tab.session.id]?.lastPrompt;
           const hookSessionId = tab.hookSessionId ?? hookSnapshotByTerminalId[tab.session.id]?.sessionId;
-          tabs.push({ sessionId: tab.session.id, title: tab.session.title, projectName: space.projectName ?? space.projectId, agentId: tab.session.agentId, state: hookState || "unknown", lastPrompt, hookSessionId });
+          tabs.push({ sessionId: tab.session.id, title: tab.session.title, projectName: space.projectName ?? space.projectId, agentId: tab.session.agentId, state: hookState || "unknown", unread: !!hookState && (isAgentAttention(hookState) || isAgentFinished(hookState) && acknowledgedTerminalTurns[tab.session.id] !== terminalTurnKey(tab.session.id)), lastPrompt, hookSessionId });
         }
       }
     }
     getBridge().dock?.syncIslandTabs?.(tabs);
-  }, [spaces, hookStateByTerminalId, hookSnapshotByTerminalId]);
+  }, [spaces, hookStateByTerminalId, hookSnapshotByTerminalId, acknowledgedTerminalTurns]);
   // Forward main-window keyboard activity so the island can auto-collapse an
   // auto-expanded panel while the user is typing (throttled to ~2/sec).
   useEffect(() => {
@@ -2466,9 +2363,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     if (match?.tab) {
       const hint = explainEarlyTerminalExit(match.tab, event);
       if (hint) setToast({ tone: "error", message: hint });
-      if (match.tab.session.agentId) {
-        clearAgentSessionsForTerminal(match.tab.session.id);
-      }
     }
     setSpaces((current) => mapTerminalTab(current, event.sessionId, (currentTab) => ({ ...currentTab, session: { ...currentTab.session, status: "exited" } })));
   }
@@ -2523,6 +2417,21 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     });
   }
 
+  async function resizeTerminal(sessionId: string, cols: number, rows: number): Promise<void> {
+    const isClosed = () => closingTerminalIds.current.has(sessionId) || !findTerminalTab(spacesRef.current, sessionId);
+    if (isClosed()) return;
+    if (getBridge().runtime && !getBridge().runtime!.canControl(sessionId)) return;
+    if (!validTerminalResizeDimensions(cols, rows)) return;
+    const handler = getBridge().terminal?.resize;
+    if (!handler) throw new Error("Terminal resize is not exposed by the preload API.");
+    try {
+      await handler({ sessionId, cols: Math.floor(cols), rows: Math.floor(rows) });
+    } catch (error) {
+      // A resize already in flight can lose its owner when the terminal closes.
+      if (!isClosed()) throw error;
+    }
+  }
+
   async function closeTab(tabId: string) {
     const match = findTabWithSpace(spacesRef.current, tabId);
     const cancelReview = getBridge().reviews?.cancel;
@@ -2535,6 +2444,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       removeTab(tabId, match);
       return;
     }
+    if (match?.tab.kind === "terminal") closingTerminalIds.current.add(tabId);
     try {
       if (match?.tab.kind === "browser") {
         await closeBrowser(tabId);
@@ -2573,11 +2483,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     onActiveTabKindChange(nextKind);
     requestProjectTabFocus(projectId);
     if (isVisible && document.hasFocus()) clearStoppedTerminalSession(tabId);
-    // Approval retains its existing delayed-clear behavior.
-    const focusedState = hookStateByTerminalId[tabId];
-    if (focusedState === "approval") {
-      scheduleClear();
-    }
     setSpaces((current) => {
       const space = current[projectId];
       if (!space) return current;
@@ -2641,10 +2546,9 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const terminalConnected = !runtime || runtime.connection() === "connected";
   const terminalReadOnly = Boolean(selectedActiveTerminal && runtime && !runtime.canControl(selectedActiveTerminal.session.id));
   const promptFocusRequest = Math.max(selectedSpace && tabFocusRequest?.projectId === selectedSpace.projectId ? tabFocusRequest.nonce : 0, hookPromptFocus);
-  const agentHookSessionId = selectedActiveTerminal?.hookSessionId
-    ?? (selectedActiveTerminal?.session.id
-      ? Object.entries(hookStateBySessionId).find(([, v]) => v.terminalSessionId === selectedActiveTerminal.session.id)?.[0] ?? null
-      : null);
+  const agentHookSessionId = selectedActiveTerminal
+    ? hookSnapshotByTerminalId[selectedActiveTerminal.session.id]?.sessionId ?? selectedActiveTerminal.hookSessionId ?? null
+    : null;
 
   return (
     <div className="terminal-layout">
@@ -2699,7 +2603,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                       >
                         <button className="terminal-tab-main" type="button" onClick={() => { setActiveTab(space.projectId, tabId); }}>
                           {tab.kind === "terminal" ? (
-                            <span className={cx("terminal-state", tab.session.service && tab.session.status === "running" && "is-service-running", lightState === "working" && "is-working", lightState === "stopped" && "is-stopped", lightState === "approval" && "is-approval", tab.session.status === "exited" && "is-exited")} />
+                            <span data-status-tone={lightState ? AGENT_STATUS_TONE[lightState] : undefined} title={lightState ? AGENT_STATUS_LABELS[lightState] : undefined} aria-label={lightState ? AGENT_STATUS_LABELS[lightState] : undefined} className={cx("terminal-state", lightState && isAgentFinished(lightState) && acknowledgedTerminalTurns[tabId] !== terminalTurnKey(tabId) && "is-unread", tab.session.service && tab.session.status === "running" && "is-service-running", lightState && `is-${lightState}`, tab.session.status === "exited" && "is-exited")}>{lightState === "done" ? "✓" : lightState === "failed" ? "×" : lightState === "waiting" ? "?" : lightState === "blocked" ? "!" : lightState === "interrupted" ? "−" : ""}</span>
                           ) : tab.kind === "browser" ? (
                             <BrowserTabIcon browser={tab.browser} />
                           ) : (
@@ -3456,7 +3360,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
           const projectActivity = projectActivityForCandidate(candidate, projectActivityByProjectId);
           const hasProjectStatus = Boolean(projectActivity);
           const agentStatus = agentStatusByProjectPath[candidate.displayPath];
-          const subtitle = projectActivity === "stopped" ? candidate.displayPath : agentStatus ?? candidate.displayPath;
+          const subtitle = projectActivity === "done" ? candidate.displayPath : agentStatus ?? candidate.displayPath;
           const displayName = projectAliases[candidate.uri] || candidate.name;
           const isRenaming = renamingId === candidate.id;
           return (
@@ -3501,7 +3405,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
               </span>
               <span className="project-row-status">
                 {hasProjectStatus && projectActivity ? (
-                  <span className={cx("terminal-activity-pill", projectActivity === "working" ? "is-working" : projectActivity === "approval" ? "is-approval" : "is-stopped")}>{projectActivity === "working" ? "working" : projectActivity === "approval" ? "approval" : "stopped"}</span>
+                  <span data-status-tone={AGENT_STATUS_TONE[projectActivity]} className={cx("terminal-activity-pill", `is-${projectActivity}`)}>{AGENT_STATUS_LABELS[projectActivity]}</span>
                 ) : null}
               </span>
             </button>
@@ -3773,10 +3677,7 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
   const availableTabs = detailTabs.filter((tab) => !tab.localOnly || isLocal);
   const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>("git");
   const [codeGraphStatus, setCodeGraphStatus] = useState<CodeGraphStatusView>({ loading: false, status: null, error: null });
-  const lastCodeGraphDirtyCount = useRef<{ projectUri: string; count: number } | null>(null);
   const currentDetail = detail?.uri === candidate.uri ? detail : null;
-  const isGitManaged = currentDetail ? currentDetail.dirtyWorktree !== null : null;
-  const gitDirtyFileCount = currentDetail ? currentDetail.gitDirtyFiles?.length ?? 0 : null;
   const visibleDetailTab = availableTabs.some((tab) => tab.id === activeDetailTab)
     ? activeDetailTab
     : availableTabs[0]?.id ?? "git";
@@ -3794,58 +3695,16 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
     return () => { cancelled = true; };
   }, [candidate.uri]);
 
-  useEffect(() => {
-    const statusState = codeGraphStatus.status?.state;
-    if (!statusState || !shouldEnsureCodeGraphForSelection({ providerKind: candidate.providerKind, isGitManaged, statusState })) return;
-    let cancelled = false;
+  async function maintainCodeGraph() {
+    const projectUri = candidate.uri;
     setCodeGraphStatus((current) => ({ ...current, loading: true, error: null }));
-    void ensureCodeGraphStatus(candidate.uri)
-      .then((status) => {
-        if (!cancelled) setCodeGraphStatus({ loading: false, status, error: null });
-      })
-      .catch((error) => {
-        if (!cancelled) setCodeGraphStatus({ loading: false, status: null, error: asMessage(error) });
-      });
-    return () => { cancelled = true; };
-  }, [candidate.providerKind, candidate.uri, codeGraphStatus.status?.state, isGitManaged]);
-
-  useEffect(() => {
-    if (!isLocal || isGitManaged !== false) return;
-    let cancelled = false;
-    setCodeGraphStatus({ loading: true, status: null, error: null });
-    void ensureCodeGraphStatus(candidate.uri)
-      .then((status) => {
-        if (!cancelled) setCodeGraphStatus({ loading: false, status, error: null });
-      })
-      .catch((error) => {
-        if (!cancelled) setCodeGraphStatus({ loading: false, status: null, error: asMessage(error) });
-      });
-    return () => { cancelled = true; };
-  }, [candidate.uri, isLocal, isGitManaged]);
-
-  useEffect(() => {
-    if (!isLocal || isGitManaged !== true || gitDirtyFileCount === null) return;
-    const previous = lastCodeGraphDirtyCount.current;
-    lastCodeGraphDirtyCount.current = { projectUri: candidate.uri, count: gitDirtyFileCount };
-    if (!previous || previous.projectUri !== candidate.uri || previous.count === gitDirtyFileCount) return;
-
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      setCodeGraphStatus({ loading: true, status: null, error: null });
-      void ensureCodeGraphStatus(candidate.uri)
-        .then((status) => {
-          if (!cancelled) setCodeGraphStatus({ loading: false, status, error: null });
-        })
-        .catch((error) => {
-          if (!cancelled) setCodeGraphStatus({ loading: false, status: null, error: asMessage(error) });
-        });
-    }, codeGraphSyncDebounceMs);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [candidate.uri, gitDirtyFileCount, isGitManaged, isLocal]);
+    try {
+      const status = await ensureCodeGraphStatus(projectUri);
+      setCodeGraphStatus((current) => current.status?.projectUri === projectUri ? { loading: false, status, error: null } : current);
+    } catch (error) {
+      setCodeGraphStatus((current) => current.status?.projectUri === projectUri ? { ...current, loading: false, error: asMessage(error) } : current);
+    }
+  }
 
   function handleDetailTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, tab: DetailTab) {
     const currentIndex = availableTabs.findIndex((item) => item.id === tab);
@@ -3902,7 +3761,7 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
         </div>
       ) : null}
       <div aria-labelledby="project-detail-tab-files" className="detail-tab-panel" hidden={visibleDetailTab !== "files"} id="project-detail-tabpanel-files" role="tabpanel">
-        <FilesDetailTab active={visibleDetailTab === "files"} candidate={candidate} codeGraphStatus={codeGraphStatus} detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} onOpenTerminal={onOpenTerminal} />
+        <FilesDetailTab active={visibleDetailTab === "files"} candidate={candidate} codeGraphStatus={codeGraphStatus} onMaintainCodeGraph={maintainCodeGraph} detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} onOpenTerminal={onOpenTerminal} />
       </div>
     </div>
   );
@@ -4837,10 +4696,11 @@ function GitHistoryItems({ events }: { events: NonNullable<ProjectDetail["gitHis
 }
 
 
-function FilesDetailTab({ active, candidate, codeGraphStatus, detail, setToast, onOpenFileInEditor, onOpenGitDiff, onOpenTerminal }: {
+function FilesDetailTab({ active, candidate, codeGraphStatus, onMaintainCodeGraph, detail, setToast, onOpenFileInEditor, onOpenGitDiff, onOpenTerminal }: {
   active: boolean;
   candidate: ProjectCandidate;
   codeGraphStatus: CodeGraphStatusView;
+  onMaintainCodeGraph: () => void;
   detail: ProjectDetail | null;
   setToast: (toast: Toast) => void;
   onOpenFileInEditor: (relativePath: string) => Promise<void>;
@@ -5019,13 +4879,13 @@ function FilesDetailTab({ active, candidate, codeGraphStatus, detail, setToast, 
 
   return (
     <>
-      <CodeGraphStatusSummary codeGraphStatus={codeGraphStatus} onOpenTerminal={onOpenTerminal} />
+      <CodeGraphStatusSummary codeGraphStatus={codeGraphStatus} onMaintainCodeGraph={onMaintainCodeGraph} onOpenTerminal={onOpenTerminal} />
       {fileContent}
     </>
   );
 }
 
-function CodeGraphStatusSummary({ codeGraphStatus, onOpenTerminal }: { codeGraphStatus: CodeGraphStatusView; onOpenTerminal: (options: { title?: string; initialCommand?: string }) => Promise<void> }) {
+function CodeGraphStatusSummary({ codeGraphStatus, onMaintainCodeGraph, onOpenTerminal }: { codeGraphStatus: CodeGraphStatusView; onMaintainCodeGraph: () => void; onOpenTerminal: (options: { title?: string; initialCommand?: string }) => Promise<void> }) {
   if (!codeGraphStatus.loading && codeGraphStatus.status?.state === "not-installed") {
     return (
       <section className="subpanel confirm-panel protocol-action-card codegraph-status-card" aria-label="CodeGraph status summary">
@@ -5052,6 +4912,13 @@ function CodeGraphStatusSummary({ codeGraphStatus, onOpenTerminal }: { codeGraph
     <section className="subpanel codegraph-status-card" aria-label="CodeGraph status summary">
       <h4>CodeGraph</h4>
       <div className="codegraph-status-line">{line}</div>
+      {codeGraphStatus.status && !["disabled", "unsupported"].includes(codeGraphStatus.status.state) ? (
+        <div className="button-row">
+          <button className="button compact" type="button" disabled={codeGraphStatus.loading} onClick={onMaintainCodeGraph}>
+            {codeGraphStatus.status.state === "uninitialized" ? "Build index" : "Sync index"}
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }

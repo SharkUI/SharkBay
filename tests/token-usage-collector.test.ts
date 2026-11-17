@@ -6,6 +6,47 @@ import { codexTotalUsageKey, isTranscriptFileUnchanged, TokenUsageCollector, typ
 import type { TokenEvent, TokenUsageDb } from "../src/main/token-usage-db.js";
 
 describe("token usage collector", () => {
+  it.each(["codex", "claude"])("streams %s history and resumes a partial tail with the correct project", async (agentId) => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "sharkbay-usage-stream-"));
+    const home = vi.spyOn(os, "homedir").mockReturnValue(root);
+    const events = new Map<number, TokenEvent>(); let index: { size: number; mtimeMs: number } | null = null;
+    const setFileIndex = vi.fn((_file: string, mtimeMs: number, size: number) => { index = { mtimeMs, size }; });
+    const db = {
+      insertBatch: (items: TokenEvent[]) => { for (const event of items) events.set(event.sourceOffset, event); },
+      getFileIndex: () => index, getLastOffset: () => Math.max(0, ...events.keys()), setFileIndex,
+    } as unknown as TokenUsageDb;
+    try {
+      const logs = agentId === "codex" ? path.join(root, ".codex/sessions/2026/11/17") : path.join(root, ".claude/projects/fixture");
+      await fs.mkdir(logs, { recursive: true }); const file = path.join(logs, "rollout-fixture.jsonl");
+      const meta = agentId === "codex"
+        ? { type: "session_meta", payload: { id: "session", originator: "codex-tui", cwd: "/fixture/中文" } }
+        : { entrypoint: "cli", sessionId: "session", cwd: "/fixture/中文" };
+      const line = agentId === "codex" ? codexTokenCountLine(5, 2, 0, 5, 2, 0) : JSON.stringify({ type: "assistant", message: { usage: { input_tokens: 5, output_tokens: 2 } } });
+      const second = agentId === "codex" ? codexTokenCountLine(7, 3, 0, 12, 5, 0) : line;
+      const prefix = JSON.stringify(meta) + "\r\n" + line + "\r\n";
+      await fs.writeFile(file, prefix + second.slice(0, 15));
+      let collector = new TokenUsageCollector(db); await collector.backfill(); collector.flush();
+      expect(events.size).toBe(1); expect(setFileIndex).not.toHaveBeenCalled();
+      await fs.appendFile(file, second.slice(15) + "\n");
+      collector = new TokenUsageCollector(db); await collector.backfill(); collector.flush();
+      expect(events.size).toBe(2); expect(events.get(Buffer.byteLength(prefix))).toMatchObject({ projectPath: "/fixture/中文", sessionId: "session" });
+      expect(setFileIndex).toHaveBeenCalledTimes(1);
+      await new TokenUsageCollector(db).backfill(); expect(events.size).toBe(2); expect(setFileIndex).toHaveBeenCalledTimes(1);
+    } finally { home.mockRestore(); await fs.rm(root, { recursive: true, force: true }); }
+  });
+
+  it("reports oversized Kiro JSON without reading it or marking it indexed", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "sharkbay-usage-kiro-limit-"));
+    const home = vi.spyOn(os, "homedir").mockReturnValue(root); const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const setFileIndex = vi.fn();
+    try {
+      const directory = path.join(root, ".kiro/sessions/cli"); await fs.mkdir(directory, { recursive: true });
+      const file = await fs.open(path.join(directory, "large.json"), "w"); await file.truncate(128 * 1024 * 1024); await file.close();
+      const collector = new TokenUsageCollector({ getFileIndex: () => null, setFileIndex } as unknown as TokenUsageDb);
+      await collector.backfill(); expect(setFileIndex).not.toHaveBeenCalled(); expect(warning).toHaveBeenCalledWith(expect.stringContaining("16 MiB"));
+    } finally { home.mockRestore(); warning.mockRestore(); await fs.rm(root, { recursive: true, force: true }); }
+  });
+
   it("cancels historical backfill between files while retaining collected events", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "sharkbay-usage-stop-"));
     const home = vi.spyOn(os, "homedir").mockReturnValue(root);

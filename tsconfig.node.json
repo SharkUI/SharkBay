@@ -31,6 +31,7 @@
     "src/renderer/workflow.ts",
     "src/renderer/prompt-search.ts",
     "src/renderer/codex-input-state.ts",
+    "src/renderer/hook-snapshots.ts",
     "src/shared/**/*.ts",
     "tests/**/*.ts",
     "vite.config.ts",

@@ -5,18 +5,18 @@ import path from "node:path";
 import { resolveCommandPath } from "./command-path.js";
 import type { AgentCli, AgentProjectStatusEvent, IpcRuntimeLike } from "../shared/types.js";
 import type { TokenUsageCollector } from "./token-usage-collector.js";
+import { JsonlReader } from "./jsonl-reader.js";
 
 export { prependPathDirectories, resolveCommandPath, resolveCommandSearchPaths } from "./command-path.js";
 
 export type AgentSessionState = {
   agentId: string;
-  buffer: string;
   cwd: string | null;
   ignored: boolean;
   offset: number;
-  lineByteOffset: number;
   sessionId: string | null;
   filePath: string;
+  reader?: JsonlReader;
 };
 
 type AgentCliDefinition = {
@@ -91,6 +91,7 @@ export class AgentSessionWatcher extends EventEmitter<AgentSessionWatcherEvents>
   private discoveredFiles: AgentLogFile[] = [];
   private lastDiscoveryAt = 0;
   private lastActivityAt: number | null = null;
+  private readCancellation = new AbortController();
 
   constructor(options: {
     codexSessionsRoot?: string;
@@ -117,12 +118,14 @@ export class AgentSessionWatcher extends EventEmitter<AgentSessionWatcherEvents>
 
   start(): void {
     if (this.running) return;
+    if (this.readCancellation.signal.aborted) this.readCancellation = new AbortController();
     this.running = true;
     this.scheduleNextScan(0);
   }
 
   async stop(): Promise<void> {
     this.running = false;
+    this.readCancellation.abort();
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = null;
@@ -164,8 +167,12 @@ export class AgentSessionWatcher extends EventEmitter<AgentSessionWatcherEvents>
     this.scanning = true;
     try {
       const files = await this.discoverFiles();
-      const activity = await Promise.all(files.map((file) => this.readNewContent(file)));
-      return activity.some(Boolean);
+      let activity = false;
+      for (const file of files) {
+        if (this.readCancellation.signal.aborted) break;
+        activity = await this.readNewContent(file) || activity;
+      }
+      return activity;
     } finally {
       this.scanning = false;
     }
@@ -205,11 +212,9 @@ export class AgentSessionWatcher extends EventEmitter<AgentSessionWatcherEvents>
       const existingBeforeWatcher = stat.mtimeMs < this.startedAt - discoveredFileGraceMs;
       state = {
         agentId: file.agentId,
-        buffer: "",
         cwd: null,
         ignored: false,
         offset: existingBeforeWatcher ? stat.size : 0,
-        lineByteOffset: existingBeforeWatcher ? stat.size : 0,
         sessionId: null,
         filePath: file.filePath,
       };
@@ -219,53 +224,44 @@ export class AgentSessionWatcher extends EventEmitter<AgentSessionWatcherEvents>
 
     if (stat.size < state.offset) {
       state.offset = 0;
-      state.lineByteOffset = 0;
-      state.buffer = "";
       state.cwd = null;
       state.ignored = false;
       state.sessionId = null;
+      state.reader = undefined;
     }
     if (stat.size === state.offset || state.ignored) return false;
 
-    const handle = await fs.open(file.filePath, "r");
+    const reader = state.reader ??= new JsonlReader(file.filePath, state.offset);
+    const before = reader.offset;
     try {
-      const length = stat.size - state.offset;
-      const buffer = Buffer.alloc(length);
-      await handle.read(buffer, 0, length, state.offset);
-      state.offset = stat.size;
-      this.processChunk(state, buffer.toString("utf8"));
-      return true;
+      for await (const { line, offset } of reader.read(stat.size, this.readCancellation.signal)) {
+        if (line === null) { console.warn(`Agent session scan: oversized JSONL record skipped in ${file.filePath} at ${offset}`); continue; }
+        this.processLine(state, line, offset);
+      }
+      return reader.offset > before;
     } finally {
-      await handle.close();
+      state.offset = reader.offset;
     }
   }
 
-  private processChunk(state: AgentSessionState, chunk: string): void {
-    const text = `${state.buffer}${chunk}`;
-    const lines = text.split(/\r?\n/);
-    state.buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      const lineOffset = state.lineByteOffset;
-      state.lineByteOffset += Buffer.byteLength(line, "utf8") + 1;
+  private processLine(state: AgentSessionState, line: string, lineOffset: number): void {
+    const status = statusFromJsonLine(line, state);
+    if (status && state.cwd) {
+      this.emit("status", {
+        agentId: state.agentId,
+        projectPath: state.cwd,
+        sessionId: state.sessionId,
+        text: status,
+        timestamp: new Date().toISOString(),
+      });
+    }
 
-      const status = statusFromJsonLine(line, state);
-      if (status && state.cwd) {
-        this.emit("status", {
-          agentId: state.agentId,
-          projectPath: state.cwd,
-          sessionId: state.sessionId,
-          text: status,
-          timestamp: new Date().toISOString(),
-        });
-      }
-
-      if (this.usageCollector) {
-        this.usageCollector.processLine(line, state.filePath, lineOffset, {
-          agentId: state.agentId,
-          sessionId: state.sessionId,
-          projectPath: state.cwd,
-        });
-      }
+    if (this.usageCollector) {
+      this.usageCollector.processLine(line, state.filePath, lineOffset, {
+        agentId: state.agentId,
+        sessionId: state.sessionId,
+        projectPath: state.cwd,
+      });
     }
   }
 }

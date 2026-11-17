@@ -29,9 +29,9 @@ function row(over: Partial<TelegramSessionRow> = {}): TelegramSessionRow {
 
 describe("statusBadge", () => {
   it("maps states to badges", () => {
-    expect(statusBadge("working")).toBe("🟢");
-    expect(statusBadge("stopped")).toBe("🟡");
-    expect(statusBadge("approval")).toBe("🔴");
+    expect(statusBadge("working")).toBe("🔵");
+    expect(statusBadge("stopped")).toBe("🟢");
+    expect(statusBadge("approval")).toBe("🟡");
     expect(statusBadge(null)).toBe("⚪");
   });
 });
@@ -48,11 +48,11 @@ describe("relativeTime", () => {
 
 describe("sessionButtonLabel", () => {
   it("packs index, badge, project, agent/model and title into one line", () => {
-    expect(sessionButtonLabel(1, row())).toBe("1. 🟢 SharkBay · Kiro/opus-4.8 · 修复终端标题刷新");
+    expect(sessionButtonLabel(1, row())).toBe("1. 🔵 SharkBay · Kiro/opus-4.8 · 修复终端标题刷新");
   });
 
   it("omits model when null", () => {
-    expect(sessionButtonLabel(2, row({ model: null, title: "做调研" }))).toBe("2. 🟢 SharkBay · Kiro · 做调研");
+    expect(sessionButtonLabel(2, row({ model: null, title: "做调研" }))).toBe("2. 🔵 SharkBay · Kiro · 做调研");
   });
 
   it("truncates overly long labels with an ellipsis", () => {

@@ -71,7 +71,7 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  const message = JSON.stringify({ source, payload: parsed, pid: process.ppid });
+  const message = JSON.stringify({ source, payload: parsed, pid: process.ppid, terminalSessionId: process.env.SHARKBAY_TERMINAL_SESSION_ID, launchToken: process.env.SHARKBAY_AGENT_LAUNCH_TOKEN });
   await send(socketPath, message);
 }
 

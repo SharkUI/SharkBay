@@ -644,7 +644,7 @@ export class TelegramService {
     const model = row.model ? `/${row.model}` : "";
     const header = `💬 ${row.projectName} ｜ ${row.agentId}${model} ｜ ${statusBadge(state)} ${stateWord(state)}`;
 
-    if (state === "approval") {
+    if (state === "approval" || state === "waiting" || state === "blocked") {
       await this.send(chatId, `${header}\n（已映射到 SharkBay 终端）`);
       this.beginPassiveTurn(chat);
       if (chat.turn) chat.turn = applyTurnEvent(chat.turn, { type: "status", state: "approval", at: this.now(), hookSessionId: row.sessionId, projectPath: row.projectPath }).turn;
@@ -976,7 +976,7 @@ function stateWord(state: SessionState | null): string {
     case "working": return "working";
     case "stopped": return "stopped";
     case "approval": return "approval";
-    default: return "unknown";
+    default: return state ?? "unknown";
   }
 }
 

@@ -1,3 +1,4 @@
+import { ProgramStatusReader } from "../main/hooks/program-status.js";
 import { execFile } from "node:child_process";
 import { HookBridge } from "../main/hooks/bridge.js";
 import { AgentHookStateManager } from "../main/hooks/state-manager.js";
@@ -10,7 +11,7 @@ import { KiroConnector } from "../main/hooks/connectors/kiro.js";
 import { ReasonixConnector } from "../main/hooks/connectors/reasonix.js";
 import { OpenCodeConnector } from "../main/hooks/connectors/opencode.js";
 import { CursorConnector } from "../main/hooks/connectors/cursor.js";
-import type { AgentConnector } from "../main/hooks/types.js";
+import type { AgentConnector, HookBridgeMessage } from "../main/hooks/types.js";
 import { ReviewRunManager } from "../main/review-runs.js";
 import { ArtifactRunManager } from "../main/artifact-runs.js";
 import { ReviewControlServer, type ReviewControlRequest } from "../main/review-control-server.js";
@@ -47,10 +48,14 @@ export function createAgentRuntime(runtime: RuntimePaths, core: CoreRuntime, opt
     const hookSessionId = findAgentSessionForTerminal(event.terminalSessionId, event.agentId);
     if (hookSessionId) hookStateManager.injectEvent({ agent: event.agentId, sessionId: hookSessionId, event: "attention", timestamp: new Date().toISOString(), cwd: event.cwd });
   });
+  const terminalSessions = new Map<string, TerminalSession>();
+  const programStatusReaders = new Map<string, ProgramStatusReader>();
   const terminalPidToId = new Map<number, string>();
   const hookSessionToTerminal = new Map<string, string>();
   const pendingHookResolutions = new Map<string, number>();
+  const lastHookPromptByTerminal = new Map<string, string>();
   const pendingPromptsByTerminal = new Map<string, string[]>();
+  const pendingCodexPrompts = new Map<string, string>();
   const subscriptions: Array<() => void> = [];
   function listenCore<K extends keyof SharkBayCoreServiceEvents>(name: K, listener: (...args: SharkBayCoreServiceEvents[K]) => void) {
     core.on(name, listener as never);
@@ -63,19 +68,32 @@ export function createAgentRuntime(runtime: RuntimePaths, core: CoreRuntime, opt
     await ensureReviewOrchestration(runtime);
     listenCore("terminalData", (event) => {
       terminalApprovalDetector.feed(event.sessionId, event.data);
+      const session = terminalSessions.get(event.sessionId);
+      if (session?.agentId) {
+        let reader = programStatusReaders.get(event.sessionId);
+        if (!reader) { reader = new ProgramStatusReader(); programStatusReaders.set(event.sessionId, reader); }
+        for (const report of reader.feed(event.data)) hookStateManager.ingestProgramStatus({
+          agent: session.agentId, sessionId: findAgentSessionForTerminal(session.id) ?? session.id,
+          terminalSessionId: session.id, cwd: localPathFromUri(session.cwdUri), event: "tool_start", timestamp: new Date().toISOString(),
+        }, report);
+        const reply = reader.takeQueryReply();
+        if (reply) core.inputTerminal({ sessionId: session.id, data: reply });
+      }
       options.emit(channels.terminalData, event);
     });
     listenCore("terminalUpdate", (event: TerminalUpdateEvent) => {
+      if (event.reason === "closed") { lastHookPromptByTerminal.delete(event.session.id); pendingPromptsByTerminal.delete(event.session.id); hookStateManager.forgetTerminal(event.session.id); terminalSessions.delete(event.session.id); programStatusReaders.delete(event.session.id); }
+      else terminalSessions.set(event.session.id, event.session);
       if (event.session.pid != null && event.session.agentId) {
         terminalPidToId.set(event.session.pid, event.session.id);
         // Retry pending hook resolutions now that a new terminal PID is registered
         for (const [sessionId, pid] of pendingHookResolutions) {
           resolveTerminalForPid(pid).then((terminalId) => {
-            if (!terminalId) return;
+            const state = hookStateManager.getStatus(null, sessionId);
+            if (!terminalId || pendingHookResolutions.get(sessionId) !== pid || state?.pid !== pid) return;
             hookSessionToTerminal.set(sessionId, terminalId);
             pendingHookResolutions.delete(sessionId);
             flushPendingPrompt(sessionId, terminalId);
-            const state = hookStateManager.getStatus(null, sessionId);
             if (state) {
               const statusEvent: AgentProjectStatusEvent = {
                 agentId: state.agent,
@@ -84,6 +102,7 @@ export function createAgentRuntime(runtime: RuntimePaths, core: CoreRuntime, opt
                 text: state.action,
                 timestamp: state.timestamp,
                 hookState: state.state,
+                evidence: state.evidence,
                 pid: state.pid,
                 terminalSessionId: terminalId,
               };
@@ -95,6 +114,10 @@ export function createAgentRuntime(runtime: RuntimePaths, core: CoreRuntime, opt
       options.emit(channels.terminalUpdate, event);
     });
     listenCore("terminalExit", (event) => {
+      pendingCodexPrompts.delete(event.sessionId);
+      const session = terminalSessions.get(event.sessionId);
+      hookStateManager.finishTerminal(event.sessionId, event.exitCode !== 0, session?.agentId ? { agent: session.agentId, sessionId: session.id, terminalSessionId: session.id, cwd: localPathFromUri(session.cwdUri), event: "session_end", timestamp: new Date().toISOString() } : undefined);
+      programStatusReaders.delete(event.sessionId);
       reviewRunManager?.handleTerminalExit(event.sessionId);
       artifactRunManager?.handleTerminalExit(event.sessionId);
       terminalApprovalDetector.untrack(event.sessionId);
@@ -117,6 +140,16 @@ export function createAgentRuntime(runtime: RuntimePaths, core: CoreRuntime, opt
     hookBridge.removeAllListeners("event");
     hookBridge.on("event", (msg) => {
       if (tryHandleArtifactMessage(msg)) return;
+      if (msg.launchToken && msg.launchToken !== msg.terminalSessionId) return;
+      if (msg.source === "codex") {
+        const attributed = attributeCodexMessage(msg);
+        if (!attributed) return;
+        msg = attributed;
+      }
+      if (msg.terminalSessionId) {
+        const session = terminalSessions.get(msg.terminalSessionId);
+        if (!session || session.status !== "running" || (msg.launchToken && msg.launchToken !== session.id)) return;
+      }
       hookStateManager.handleMessage(msg);
     });
     hookStateManager.removeAllListeners("stateChange");
@@ -125,9 +158,13 @@ export function createAgentRuntime(runtime: RuntimePaths, core: CoreRuntime, opt
       if (event.lastPrompt && promptStore?.get(event.sessionId) !== event.lastPrompt) {
         promptStore?.record(event.sessionId, event.lastPrompt);
       }
-      const cached = hookSessionToTerminal.get(event.sessionId);
+      if (event.terminalSessionId) { hookSessionToTerminal.set(event.sessionId, event.terminalSessionId); flushPendingPrompt(event.sessionId, event.terminalSessionId); }
       const sendStatus = (terminalSessionId?: string) => {
-        const storedPrompt = promptStore?.get(event.sessionId) ?? undefined;
+        if (terminalSessionId && event.lastPrompt && lastHookPromptByTerminal.get(terminalSessionId) !== event.lastPrompt) {
+          lastHookPromptByTerminal.set(terminalSessionId, event.lastPrompt);
+          promptStore.record(terminalSessionId, event.lastPrompt);
+        }
+        const storedPrompt = terminalSessionId ? promptStore.get(terminalSessionId) : promptStore.get(event.sessionId);
         const statusEvent: AgentProjectStatusEvent = {
           agentId: event.agent,
           projectPath: event.projectPath,
@@ -135,6 +172,7 @@ export function createAgentRuntime(runtime: RuntimePaths, core: CoreRuntime, opt
           text: event.action,
           timestamp: event.timestamp,
           hookState: event.state,
+          evidence: event.evidence,
           pid: event.pid,
           terminalSessionId,
           lastPrompt: storedPrompt ?? event.lastPrompt,
@@ -142,20 +180,12 @@ export function createAgentRuntime(runtime: RuntimePaths, core: CoreRuntime, opt
         options.emit(channels.agentStatus, statusEvent);
       };
 
-      if (cached) {
-        sendStatus(cached);
-        // Re-resolve if PID changed (session was re-restored in a new terminal)
-        if (event.pid != null) {
-          resolveTerminalForPid(event.pid).then((terminalId) => {
-            if (terminalId && terminalId !== cached) {
-              hookSessionToTerminal.set(event.sessionId, terminalId);
-              flushPendingPrompt(event.sessionId, terminalId);
-              sendStatus(terminalId);
-            }
-          });
-        }
+      if (event.terminalSessionId) {
+        sendStatus(event.terminalSessionId);
       } else if (event.pid != null) {
         resolveTerminalForPid(event.pid).then((terminalId) => {
+          const current = hookStateManager.getStatus(event.projectPath, event.sessionId);
+          if (current?.evidence.revision !== event.evidence.revision) return;
           if (terminalId) {
             hookSessionToTerminal.set(event.sessionId, terminalId);
             pendingHookResolutions.delete(event.sessionId);
@@ -179,6 +209,9 @@ export function createAgentRuntime(runtime: RuntimePaths, core: CoreRuntime, opt
     artifactRunManager?.dispose();
     await reviewControlServer?.stop();
     await hookBridge.stop();
+    hookStateManager.dispose();
+    terminalSessions.clear(); programStatusReaders.clear(); lastHookPromptByTerminal.clear();
+    pendingCodexPrompts.clear();
     promptStore.flushSync();
     for (const unsubscribe of subscriptions.splice(0)) unsubscribe();
   }
@@ -201,6 +234,31 @@ export function createAgentRuntime(runtime: RuntimePaths, core: CoreRuntime, opt
       };
       walk();
     });
+  }
+
+  function attributeCodexMessage(msg: HookBridgeMessage): HookBridgeMessage | null {
+    const event = hookConnectors.get("codex")?.normalize(msg.payload);
+    if (!event?.sessionId) return null;
+    const normalizePrompt = (text: string) => text.replace(/\s+/g, " ").trim();
+    const matchingInputs = event.event === "prompt" && event.prompt ? [...pendingCodexPrompts].filter(([id, prompt]) => {
+      const terminal = terminalSessions.get(id);
+      return terminal?.status === "running" && terminal.agentId === "codex"
+        && localPathFromUri(terminal.cwdUri) === event.cwd && prompt === normalizePrompt(event.prompt!);
+    }) : [];
+    const declared = msg.terminalSessionId ? hookStateManager.getStatusForTerminal(msg.terminalSessionId) : null;
+    const owners = hookStateManager.getAllStatuses().filter(row => row.agent === "codex" && row.projectPath === event.cwd
+      && row.sessionId === event.sessionId && row.terminalSessionId && terminalSessions.get(row.terminalSessionId)?.status === "running");
+    if (matchingInputs.length > 1 && declared?.sessionId !== event.sessionId && owners.length !== 1) return null;
+    // Codex's shared daemon can keep the first client's environment for every thread.
+    // A locally submitted prompt or an established provider binding outranks that environment.
+    const terminalId = matchingInputs.length === 1 ? matchingInputs[0]![0]
+      : declared?.sessionId === event.sessionId ? msg.terminalSessionId
+      : msg.terminalSessionId && (!declared || declared.sessionId === msg.terminalSessionId) ? msg.terminalSessionId
+      : owners.length === 1 ? owners[0]!.terminalSessionId
+      : undefined;
+    if (!terminalId) return msg.terminalSessionId ? null : msg;
+    if (event.event === "prompt") pendingCodexPrompts.delete(terminalId);
+    return { ...msg, terminalSessionId: terminalId, launchToken: terminalId };
   }
 
   function tryHandleArtifactMessage(msg: { source: string; payload: unknown; pid?: number }): boolean {
@@ -230,6 +288,7 @@ export function createAgentRuntime(runtime: RuntimePaths, core: CoreRuntime, opt
   }
 
   function registerCreatedTerminal(session: TerminalSession): void {
+    terminalSessions.set(session.id, session);
     if (session.pid != null && session.agentId) terminalPidToId.set(session.pid, session.id);
     if (session.agentId === "kiro") {
       const cwd = session.cwdUri.startsWith("local:") ? decodeURI(session.cwdUri.slice(6)) : session.cwdUri.replace(/^file:\/\//, "");
@@ -375,6 +434,8 @@ export function createAgentRuntime(runtime: RuntimePaths, core: CoreRuntime, opt
   }
 
   function findAgentSessionForTerminal(terminalSessionId: string, agentId?: string): string | null {
+    const exact = hookStateManager.getStatusForTerminal(terminalSessionId);
+    if (exact && (!agentId || exact.agent === agentId)) return exact.sessionId;
     const statuses = new Map(hookStateManager.getAllStatuses().map((entry) => [entry.sessionId, entry]));
     let fallback: string | null = null;
     let latest: { sessionId: string; timestamp: number } | null = null;
@@ -395,17 +456,27 @@ export function createAgentRuntime(runtime: RuntimePaths, core: CoreRuntime, opt
   function flushPendingPrompt(agentSessionId: string, terminalId: string): void {
     const pending = pendingPromptsByTerminal.get(terminalId);
     if (pending?.length && promptStore) {
-      for (const text of pending) promptStore.record(agentSessionId, text);
+      for (const text of pending) { promptStore.record(agentSessionId, text); promptStore.record(terminalId, text); }
       pendingPromptsByTerminal.delete(terminalId);
     }
   }
 
+  function getStatuses(): AgentProjectStatusEvent[] {
+    const entries = hookStateManager.getAllStatuses();
+    return entries.filter(entry => entry.terminalSessionId || !entries.some(other => other.terminalSessionId && other.sessionId === entry.sessionId && other.agent === entry.agent && other.projectPath === entry.projectPath))
+      .map((entry) => ({ agentId: entry.agent, projectPath: entry.projectPath,
+      sessionId: entry.sessionId, text: entry.action, timestamp: entry.timestamp, hookState: entry.state, evidence: entry.evidence,
+      pid: entry.pid, terminalSessionId: entry.terminalSessionId ?? hookSessionToTerminal.get(entry.sessionId),
+      lastPrompt: entry.terminalSessionId ? promptStore.get(entry.terminalSessionId) ?? entry.lastPrompt : entry.lastPrompt ?? promptStore.get(entry.sessionId) ?? undefined }));
+  }
   return {
-    start, stop, agentSessionWatcher, hookStateManager, hookSessionToTerminal, promptStore, hookBridge, hookConnectors,
+    start, stop, getStatuses, agentSessionWatcher, hookStateManager, hookSessionToTerminal, promptStore, hookBridge, hookConnectors,
     registerCreatedTerminal, findAgentSessionForTerminal, flushPendingPrompt,
     reviewRuns: requireReviewRunManager, artifactRuns: requireArtifactRunManager,
     recordPrompt(input: { terminalSessionId: string; text: string }) {
       if (!input?.terminalSessionId || !input?.text) return;
+      if (terminalSessions.get(input.terminalSessionId)?.agentId === "codex") pendingCodexPrompts.set(input.terminalSessionId, input.text.replace(/\s+/g, " ").trim());
+      promptStore.record(input.terminalSessionId, input.text);
       const hookId = findAgentSessionForTerminal(input.terminalSessionId);
       if (hookId) { if (promptStore.get(hookId) !== input.text) promptStore.record(hookId, input.text); }
       else pendingPromptsByTerminal.set(input.terminalSessionId, [...(pendingPromptsByTerminal.get(input.terminalSessionId) ?? []), input.text]);

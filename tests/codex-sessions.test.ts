@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { claudeStatusFromJsonLine, codexStatusFromJsonLine, type AgentSessionState } from "../src/main/agent-clis.js";
 
 function state(agentId = "codex"): AgentSessionState {
-  return { agentId, buffer: "", cwd: null, ignored: false, offset: 0, lineByteOffset: 0, sessionId: null, filePath: "" };
+  return { agentId, cwd: null, ignored: false, offset: 0, sessionId: null, filePath: "" };
 }
 
 describe("Codex session log parsing", () => {

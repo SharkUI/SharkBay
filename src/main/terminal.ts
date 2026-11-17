@@ -140,7 +140,7 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
       cols: input.cols ?? 80,
       rows: input.rows ?? 24,
       name: "xterm-256color",
-      env: { ...spec.env, SHARKBAY_TERMINAL_SESSION_ID: id },
+      env: { ...spec.env, SHARKBAY_TERMINAL_SESSION_ID: id, SHARKBAY_AGENT_LAUNCH_TOKEN: id },
     });
     const foregroundProcess = safeForegroundProcess(ptyProcess);
     const initialTitle = terminalDisplayTitle({
@@ -271,6 +271,10 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
     };
     // The host may run under a non-color automation console; the PTY is an xterm.
     delete env.NO_COLOR;
+    // Each terminal owns its agent session; explicit restore commands set their own id.
+    delete env.CODEX_THREAD_ID;
+    delete env.SHARKBAY_RESTORED_SESSION_ID;
+    delete env.SHARKBAY_SESSION_ID;
     return {
       cwd: resolved.cwd,
       cwdUri: resolved.cwdUri,

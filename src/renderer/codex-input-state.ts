@@ -1,4 +1,5 @@
-type CodexActivity = "working" | "stopped" | "approval";
+import { mergeAgentScreenState, type AgentDisplayState } from "../shared/agent-status.js";
+type CodexActivity = AgentDisplayState;
 
 function liveLines(screenLines: readonly string[]): string[] {
   const lines = screenLines.map((line) => line.trim());
@@ -17,25 +18,22 @@ export function codexHasPendingInput(screenLines: readonly string[]): boolean {
 }
 
 export function codexTerminalActivity(screenLines: readonly string[]): CodexActivity | null {
-  if (codexHasPendingInput(screenLines)) return "approval";
+  if (codexHasPendingInput(screenLines)) return "waiting";
   const lines = liveLines(screenLines);
   // Queued or multiline input can put the live progress indicator well above
   // the footer. A later completion banner retires any older progress line.
   // The caller supplies the live screen, never scrollback rows.
   let working = false;
+  let completed = false;
   for (const line of lines) {
     if (/\besc to interrupt\)(?:\s*[·•].*)?\s*$/i.test(line)) working = true;
-    else if (/^Worked for \d+(?:\.\d+)?[hms](?:\s+\d+(?:\.\d+)?[hms])*(?:\s*[·•].*)?$/i.test(line)) working = false;
+    else if (/^Worked for \d+(?:\.\d+)?[hms](?:\s+\d+(?:\.\d+)?[hms])*(?:\s*[·•].*)?$/i.test(line)) { working = false; completed = true; }
   }
   if (working) return "working";
-  if (lines.slice(-8).some((line) => /^[›❯](?:\s|$)/.test(line))) return "stopped";
+  if (lines.slice(-8).some((line) => /^[›❯](?:\s|$)/.test(line))) return completed ? "done" : "idle";
   return null;
 }
 
 export function codexActivityWithHook(terminalState: CodexActivity, hookState?: CodexActivity): CodexActivity {
-  if (terminalState === "approval" || hookState === "approval") return "approval";
-  // An input prompt is also visible during work; its presence cannot end a
-  // turn that the associated hook still reports as running.
-  if (terminalState === "stopped" && hookState === "working") return "working";
-  return terminalState;
+  return mergeAgentScreenState(terminalState, hookState);
 }

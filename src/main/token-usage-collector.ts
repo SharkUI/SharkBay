@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { TokenUsageDb, type TokenEvent } from "./token-usage-db.js";
+import { JsonlReader } from "./jsonl-reader.js";
 
 export type CollectorSessionState = {
   agentId: string;
@@ -202,10 +203,8 @@ export class TokenUsageCollector {
 
   private async backfillFile(filePath: string, agentId: string, signal?: AbortSignal): Promise<void> {
     if (signal?.aborted) return;
-    // Cheap stat-based short-circuit: if the file's size and mtime are unchanged
-    // since the last scan, there is no new content to index — skip the readFile
-    // entirely. This keeps full history (events already in the DB are retained)
-    // while avoiding re-reading every transcript on each startup (issue #15).
+    // Unchanged history needs no I/O; changed files are streamed once to recover
+    // session context without retaining or parsing their entire contents at once.
     let stat;
     try {
       stat = await fs.stat(filePath);
@@ -215,47 +214,24 @@ export class TokenUsageCollector {
     const indexed = this.db.getFileIndex(filePath);
     if (isTranscriptFileUnchanged(indexed, stat)) return;
 
-    const lastOffset = this.db.getLastOffset(filePath);
-
-    let content: string;
-    try {
-      const buf = await fs.readFile(filePath, { signal });
-      if (buf.length <= lastOffset) {
-        this.db.setFileIndex(filePath, stat.mtimeMs, stat.size);
-        return;
-      }
-      content = buf.slice(lastOffset).toString("utf8");
-    } catch {
-      return;
-    }
-
+    const lastOffset = indexed && stat.size < indexed.size ? 0 : this.db.getLastOffset(filePath);
     const session: CollectorSessionState = { agentId, sessionId: null, projectPath: null };
-    let byteOffset = lastOffset;
-
-    // If resuming mid-file, we need session context from earlier lines
-    if (lastOffset > 0 && agentId === "claude") {
-      try {
-        const headBuf = await fs.readFile(filePath, { signal });
-        const head = headBuf.slice(0, lastOffset).toString("utf8");
-        for (const line of head.split("\n")) {
-          this.updateSessionContext(line, session, agentId);
-        }
-      } catch { /* best effort */ }
-    }
-
-    const lines = content.split("\n");
-    for (const line of lines) {
-      if (!line.trim()) {
-        byteOffset += Buffer.byteLength(line, "utf8") + 1;
-        continue;
+    const reader = new JsonlReader(filePath);
+    try {
+      for await (const { line, offset } of reader.read(stat.size, signal)) {
+        if (line === null) { console.warn(`Usage backfill: oversized JSONL record skipped in ${filePath} at ${offset}`); continue; }
+        if (!line.trim()) continue;
+        this.updateSessionContext(line, session, agentId);
+        if (offset >= lastOffset) this.processLine(line, filePath, offset, session);
       }
-
-      this.updateSessionContext(line, session, agentId);
-      this.processLine(line, filePath, byteOffset, session);
-      byteOffset += Buffer.byteLength(line, "utf8") + 1;
+      // A partial tail or cancelled scan must be retried after the next append/start.
+      if (!signal?.aborted && reader.lineOffset === stat.size) {
+        this.flush();
+        this.db.setFileIndex(filePath, stat.mtimeMs, stat.size);
+      }
+    } catch (error) {
+      if (!signal?.aborted && (error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
-
-    this.db.setFileIndex(filePath, stat.mtimeMs, stat.size);
   }
 
   private async backfillKiroSessions(root: string, signal?: AbortSignal): Promise<void> {
@@ -286,7 +262,7 @@ export class TokenUsageCollector {
 
       let content: string;
       try {
-        content = await fs.readFile(filePath, { encoding: "utf8", signal });
+        content = await readKiroSession(filePath, signal);
       } catch {
         continue;
       }
@@ -298,16 +274,12 @@ export class TokenUsageCollector {
         continue;
       }
 
-      // File was read and parsed; mark it scanned so unchanged sessions are
-      // skipped next startup. Re-inserts on growth are idempotent.
-      this.db.setFileIndex(filePath, stat.mtimeMs, stat.size);
-
       const cwd = typeof data.cwd === "string" ? data.cwd : null;
       const sessionId = typeof data.session_id === "string" ? data.session_id : null;
       const state = data.session_state as Record<string, unknown> | undefined;
       const conv = state?.conversation_metadata as Record<string, unknown> | undefined;
       const turns = conv?.user_turn_metadatas as Record<string, unknown>[] | undefined;
-      if (!turns || turns.length === 0) continue;
+      if (!turns || turns.length === 0) { this.db.setFileIndex(filePath, stat.mtimeMs, stat.size); continue; }
 
       let turnOffset = 0;
       for (const turn of turns) {
@@ -335,9 +307,11 @@ export class TokenUsageCollector {
           sourceOffset: turnOffset,
         });
         turnOffset++;
+        if (this.batch.length >= this.batchSize) this.flush();
       }
 
-      if (this.batch.length >= this.batchSize) this.flush();
+      this.flush();
+      this.db.setFileIndex(filePath, stat.mtimeMs, stat.size);
     }
   }
 
@@ -366,6 +340,28 @@ export class TokenUsageCollector {
       }
     }
   }
+}
+
+// Kiro stores one JSON document, rather than JSONL. Bound it before parsing;
+// oversized documents remain unindexed and are reported instead of exhausting RAM.
+async function readKiroSession(filePath: string, signal?: AbortSignal): Promise<string> {
+  const handle = await fs.open(filePath, "r");
+  try {
+    const { size } = await handle.stat();
+    if (size > 16 * 1024 * 1024) {
+      console.warn(`Usage backfill: Kiro session exceeds 16 MiB: ${filePath}`);
+      throw new Error("Kiro session is too large to parse safely");
+    }
+    const buffer = Buffer.alloc(size);
+    let offset = 0;
+    while (offset < size) {
+      signal?.throwIfAborted();
+      const { bytesRead } = await handle.read(buffer, offset, Math.min(64 * 1024, size - offset), offset);
+      if (!bytesRead) break;
+      offset += bytesRead;
+    }
+    return buffer.subarray(0, offset).toString("utf8");
+  } finally { await handle.close(); }
 }
 
 function toInt(value: unknown): number {

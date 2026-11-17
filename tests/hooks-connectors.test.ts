@@ -12,6 +12,28 @@ import { ReasonixConnector } from "../src/main/hooks/connectors/reasonix.js";
 import { OpenCodeConnector } from "../src/main/hooks/connectors/opencode.js";
 
 describe("hook connectors", () => {
+  it("uninstalls every Claude managed event while preserving user hooks and detects extra-event remnants", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "sharkbay-claude-roundtrip-"));
+    const configPath = path.join(root, "settings.json");
+    const connector = new ClaudeConnector({ configPath });
+    const user = { hooks: [{ type: "command", command: "user-hook" }] };
+    const extras = ["StopFailure", "PostToolUseFailure", "SubagentStart", "SubagentStop", "Elicitation", "ElicitationResult"];
+    try {
+      await fs.writeFile(configPath, JSON.stringify({ hooks: { StopFailure: [user] }, theme: "dark" }));
+      await connector.install("/tmp/current/sharkbay-hook");
+      const installed = JSON.parse(await fs.readFile(configPath, "utf8"));
+      for (const name of extras) expect(installed.hooks[name].some((item: any) => item._managedBy === "sharkbay-managed")).toBe(true);
+      const residual = Object.fromEntries(extras.map(name => [name, installed.hooks[name]]));
+      await fs.writeFile(configPath, JSON.stringify({ hooks: residual, theme: "dark" }));
+      expect(await connector.status()).toBe("installed");
+      expect(await connector.status("/tmp/other/sharkbay-hook")).toBe("outdated");
+      await connector.uninstall();
+      expect(JSON.parse(await fs.readFile(configPath, "utf8"))).toEqual({ hooks: { StopFailure: [user] }, theme: "dark" });
+      expect(await connector.status()).toBe("not_installed");
+      await connector.install("/tmp/current/sharkbay-hook"); await connector.uninstall();
+      expect(JSON.parse(await fs.readFile(configPath, "utf8"))).toEqual({ hooks: { StopFailure: [user] }, theme: "dark" });
+    } finally { await fs.rm(root, { recursive: true, force: true }); }
+  });
   it.each([ClaudeConnector, CodexConnector, QwenConnector, GeminiConnector, KiroConnector, CursorConnector, ReasonixConnector, OpenCodeConnector])("detects hooks targeting an older runtime (%s)", async (Connector) => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "sharkbay-hook-migration-"));
     const connector = new Connector();
@@ -105,8 +127,8 @@ describe("hook connectors", () => {
       manager.handleMessage({ source: "codex", payload: { ...payload, hook_event_name: "UserPromptSubmit" } });
       manager.handleMessage({ source: "codex", payload: { ...payload, hook_event_name: "Interrupt" } });
 
-      expect(states).toEqual(["working", "stopped"]);
-      expect(manager.getStatus(root, payload.session_id)?.state).toBe("stopped");
+      expect(states).toEqual(["working", "interrupted"]);
+      expect(manager.getStatus(root, payload.session_id)?.state).toBe("interrupted");
     } finally {
       manager.dispose();
       await fs.rm(root, { recursive: true, force: true });

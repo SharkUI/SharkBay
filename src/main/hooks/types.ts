@@ -1,3 +1,4 @@
+import type { AgentDisplayState, AgentOutcome, AgentStatusEvidence } from "../../shared/agent-status.js";
 /**
  * Hook-based agent status system — core type definitions.
  *
@@ -22,22 +23,36 @@ export type UnifiedHookEvent = {
   sessionId: string;
   event: HookEventKind;
   timestamp: string;
+  toolUseId?: string;
+  turnId?: string;
+  transcriptPath?: string;
+  backgroundAgents?: boolean;
+  backgroundCommands?: boolean;
+  activeCrons?: boolean;
+  childId?: string;
+  childEvent?: "start" | "stop";
+  elicitation?: { phase: "request" | "result"; id?: string; server?: string };
+  outcome?: AgentOutcome;
+  sessionBoundary?: boolean;
   tool?: { name: string; input?: unknown; response?: unknown };
   prompt?: string;
   cwd?: string;
   pid?: number;
+  terminalSessionId?: string;
+  launchToken?: string;
 };
 
 // ---------------------------------------------------------------------------
 // Agent hook state (three-state model)
 // ---------------------------------------------------------------------------
 
-export type AgentHookState = "working" | "stopped" | "approval";
+export type AgentHookState = AgentDisplayState;
 
 export type AgentHookStatus = {
   state: AgentHookState;
   action: string;
   lastUpdate: number;
+  evidence?: AgentStatusEvidence;
 };
 
 // ---------------------------------------------------------------------------
@@ -65,5 +80,7 @@ export interface AgentConnector {
 export type HookBridgeMessage = {
   source: string;
   payload: unknown;
+  terminalSessionId?: string;
+  launchToken?: string;
   pid?: number;
 };

@@ -969,13 +969,13 @@ body.is-resizing-columns * {
   border: 0;
 }
 
-.terminal-activity-pill.is-stopped {
+.terminal-activity-pill.is-waiting {
   color: #ffffff;
   background: #c9962f;
   border: 0;
 }
 
-.terminal-activity-pill.is-approval {
+.terminal-activity-pill:is(.is-blocked, .is-failed) {
   color: #ffffff;
   background: #c0392b;
   border: 0;
@@ -4112,12 +4112,12 @@ button.project-file-toggle:focus-visible {
   box-shadow: 0 0 0 3px rgba(76, 132, 93, 0.14);
 }
 
-.terminal-state.is-stopped {
+.terminal-state.is-waiting {
   background: #c9962f;
   box-shadow: 0 0 0 3px rgba(201, 150, 47, 0.14);
 }
 
-.terminal-state.is-approval {
+.terminal-state:is(.is-blocked, .is-failed) {
   background: #c0392b;
   box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.14);
 }
@@ -4987,7 +4987,7 @@ body.is-resizing-columns .app-shell[data-theme="night"] .column-resizer::before 
   border-color: rgba(215, 189, 120, 0.18);
 }
 
-.app-shell[data-theme="night"] .terminal-activity-pill.is-approval {
+.app-shell[data-theme="night"] .terminal-activity-pill:is(.is-blocked, .is-failed) {
   color: #ffffff;
   background: #c9962f;
   border: 0;
@@ -5467,12 +5467,12 @@ body.is-resizing-columns .app-shell[data-theme="night"] .column-resizer::before 
   box-shadow: 0 0 0 3px rgba(147, 215, 164, 0.14);
 }
 
-.app-shell[data-theme="night"] .terminal-state.is-stopped {
+.app-shell[data-theme="night"] .terminal-state.is-waiting {
   background: #f0c040;
   box-shadow: 0 0 0 3px rgba(240, 192, 64, 0.14);
 }
 
-.app-shell[data-theme="night"] .terminal-state.is-approval {
+.app-shell[data-theme="night"] .terminal-state:is(.is-blocked, .is-failed) {
   background: #e74c3c;
   box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.14);
 }
@@ -5706,12 +5706,12 @@ body.is-resizing-columns .app-shell[data-theme="morning"] .column-resizer::befor
   box-shadow: 0 0 0 3px rgba(111, 210, 140, 0.14);
 }
 
-.app-shell[data-theme="morning"] .terminal-state.is-stopped {
+.app-shell[data-theme="morning"] .terminal-state.is-waiting {
   background: #e0a820;
   box-shadow: 0 0 0 3px rgba(224, 168, 32, 0.14);
 }
 
-.app-shell[data-theme="morning"] .terminal-state.is-approval {
+.app-shell[data-theme="morning"] .terminal-state:is(.is-blocked, .is-failed) {
   background: #e74c3c;
   box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.14);
 }
@@ -6472,4 +6472,31 @@ body.is-resizing-columns .app-shell[data-theme="morning"] .column-resizer::befor
   .app-shell[data-host="web"] .detail-tab-card {
     flex: 1 0 auto;
   }
+}
+
+.terminal-state.is-unread { outline: 1px solid currentColor; outline-offset: 3px; }
+
+.terminal-state:is(.is-done, .is-failed, .is-waiting, .is-blocked, .is-interrupted) {
+  display: inline-flex; align-items: center; justify-content: center; width: 10px; height: 10px;
+  font-size: 10px; font-weight: 700; line-height: 1; flex-shrink: 0;
+}
+.terminal-state.is-working { animation: agent-working-pulse 1.5s ease-in-out infinite; }
+@keyframes agent-working-pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .terminal-state.is-working { animation: none; } }
+
+/* State color is shared across surfaces, themes, process exit and read acknowledgement. */
+.app-shell [data-status-tone="blue"] { --agent-status-color: #3b82f6; }
+.app-shell [data-status-tone="green"] { --agent-status-color: #2f7d54; }
+.app-shell [data-status-tone="yellow"] { --agent-status-color: #febc2e; }
+.app-shell [data-status-tone="red"] { --agent-status-color: #ff5f57; }
+.app-shell [data-status-tone="gray"] { --agent-status-color: #888888; }
+.app-shell[data-theme] .terminal-activity-pill[data-status-tone] {
+  background: var(--agent-status-color); color: #ffffff; border: 0;
+}
+.app-shell[data-theme] .terminal-state[data-status-tone] {
+  background: var(--agent-status-color); color: #0d0d0f; box-shadow: none;
+  outline-color: var(--agent-status-color);
+}
+.app-shell[data-theme] .terminal-state.is-unverifiable[data-status-tone] {
+  background: transparent; border: 1px dashed var(--agent-status-color);
 }

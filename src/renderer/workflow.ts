@@ -11,8 +11,7 @@ export type WorkflowProjectCandidate = {
   dirtyWorktree?: boolean | null;
 };
 
-export type WorkflowProjectActivityState = "working" | "stopped" | "approval";
-export type WorkflowCodeGraphStatusState = "disabled" | "unsupported" | "not-installed" | "uninitialized" | "stale" | "indexed" | "error";
+export type WorkflowProjectActivityState = import("../shared/agent-status.js").AgentDisplayState;
 
 export function validTerminalResizeDimensions(cols: number | null | undefined, rows: number | null | undefined): boolean {
   return typeof cols === "number"
@@ -35,16 +34,6 @@ export function projectActivityForCandidate(
   statesByProjectId: Record<string, WorkflowProjectActivityState>,
 ): WorkflowProjectActivityState | null {
   return statesByProjectId[candidate.id] ?? statesByProjectId[candidate.uri] ?? null;
-}
-
-export function shouldEnsureCodeGraphForSelection(input: {
-  providerKind: WorkflowProjectCandidate["providerKind"];
-  isGitManaged: boolean | null;
-  statusState: WorkflowCodeGraphStatusState;
-}): boolean {
-  return input.providerKind === "local"
-    && input.isGitManaged === true
-    && input.statusState === "uninitialized";
 }
 
 export function firstHttpUrl(data: string): string | null {

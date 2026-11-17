@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { getRuntimeConfigPath } from "../src/main/config.js";
 import {
   applyTerminalInputData,
@@ -14,6 +14,7 @@ import {
 } from "../src/main/terminal.js";
 import { toLocalProjectUri } from "../src/core/project-uri.js";
 import { createGitRepoFixture, makeTempRoot, makeTestRuntime, writeJson } from "./helpers.js";
+import { buildAgentSessionRestoreCommand } from "../src/shared/agent-session-restore.js";
 
 describe("terminal cwd validation", () => {
   it("starts shells without interactive TTY-only flags or Apple session restore", () => {
@@ -215,6 +216,50 @@ describe("terminal cwd validation", () => {
     }
 
     expect(manager.list()).toHaveLength(0);
+  });
+
+  it.each([false, true])("isolates inherited session identities while preserving explicit restore: %s", async (restore) => {
+    const runtime = await makeTestRuntime("terminal-session-env");
+    const root = await makeTempRoot("terminal-session-env");
+    const repo = await createGitRepoFixture(root, "TerminalRepo");
+    await writeJson(getRuntimeConfigPath(runtime), {
+      schemaVersion: 1,
+      configuredRoots: [],
+      configuredProjects: [repo],
+      updatedAt: "2026-05-06",
+    });
+
+    const keys = ["CODEX_THREAD_ID", "SHARKBAY_RESTORED_SESSION_ID", "SHARKBAY_SESSION_ID"];
+    const restoredId = "33333333-3333-4333-8333-333333333333";
+    const capture = path.join(root, "environment.json");
+    const script = path.join(root, "capture.cjs");
+    const capturedKeys = JSON.stringify([...keys, "SHARKBAY_TERMINAL_SESSION_ID"]);
+    await fs.writeFile(script, `#!${process.execPath}\nconst env = Object.fromEntries(${capturedKeys}.map(key => [key, process.env[key]]));\nrequire('node:fs').writeFileSync(${JSON.stringify(capture)}, JSON.stringify({ env, args: process.argv.slice(2) }));`);
+    await fs.chmod(script, 0o755);
+    const executable = `'${script.replace(/'/g, "'\\''")}'`;
+    const command = restore ? buildAgentSessionRestoreCommand({
+      agentName: "codex", sessionId: restoredId,
+      availableAgents: [{ id: "codex", label: "Codex CLI", shortLabel: "Cx", command: "codex", executablePath: script }],
+    })!.command : executable;
+    const manager = new TerminalManager();
+    let sessionId: string | undefined;
+    try {
+      for (const key of keys) vi.stubEnv(key, "parent-session");
+      const session = await manager.create(runtime, { cwdUri: toLocalProjectUri(repo), initialCommand: command });
+      sessionId = session.id;
+      await vi.waitFor(async () => {
+        const { env, args } = JSON.parse(await fs.readFile(capture, "utf8"));
+        expect(env.CODEX_THREAD_ID).toBeUndefined();
+        expect(env.SHARKBAY_SESSION_ID).toBeUndefined();
+        expect(env.SHARKBAY_RESTORED_SESSION_ID).toBe(restore ? restoredId : undefined);
+        expect(env.SHARKBAY_TERMINAL_SESSION_ID).toBe(session.id);
+        expect(args).toEqual(restore ? ["resume", restoredId] : []);
+      }, { timeout: 3000 });
+      expect(process.env.CODEX_THREAD_ID).toBe("parent-session");
+    } finally {
+      if (sessionId) manager.close({ sessionId });
+      vi.unstubAllEnvs();
+    }
   });
 
   it("ignores invalid resize dimensions without surfacing pty errors", async () => {

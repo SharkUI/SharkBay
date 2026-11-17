@@ -106,7 +106,7 @@ process.stdin.on("end", () => {
   if (source === "reasonix" && sharkbaySessionId && parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
     parsed = { ...parsed, sharkbaySessionId };
   }
-  const msg = JSON.stringify({ source, payload: parsed, pid: process.ppid }) + "\\n";
+  const msg = JSON.stringify({ source, payload: parsed, pid: process.ppid, terminalSessionId: process.env.SHARKBAY_TERMINAL_SESSION_ID, launchToken: process.env.SHARKBAY_AGENT_LAUNCH_TOKEN }) + "\\n";
   const conn = net.createConnection(socketPath, () => { conn.end(msg, () => process.exit(0)); });
   conn.on("error", () => process.exit(0));
   conn.setTimeout(3000, () => { conn.destroy(); process.exit(0); });

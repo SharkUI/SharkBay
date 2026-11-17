@@ -66,7 +66,7 @@ describe("Reasonix status hooks", () => {
     manager.handleMessage({ source: "reasonix", payload: { ...payload, event: "Notification", message: "approval needed: bash" } });
     manager.handleMessage({ source: "reasonix", payload: { ...payload, event: "Stop" } });
 
-    expect(states).toEqual(["working", "approval", "stopped"]);
+    expect(states).toEqual(["working", "waiting", "done"]);
     manager.dispose();
   });
 

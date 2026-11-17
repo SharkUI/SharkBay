@@ -1,3 +1,4 @@
+import type { SessionState } from "../main/telegram/types.js";
 import * as os from "node:os";
 import * as nodePath from "node:path";
 import * as nodeFs from "node:fs";
@@ -59,8 +60,8 @@ async function buildHookSessionIndex(runtime: RuntimePaths): Promise<Map<string,
   return index;
 }
 
-function mapIslandState(state: string | undefined): "working" | "stopped" | "approval" | null {
-  return state === "working" || state === "stopped" || state === "approval" ? state : null;
+function mapIslandState(state: string | undefined): SessionState | null {
+  return state && ["working", "waiting", "blocked", "done", "failed", "interrupted", "idle", "unverifiable", "unknown", "monitoring", "stopped", "approval"].includes(state) ? state as SessionState : null;
 }
 
 /** Read an agent session transcript as lines. Empty when unavailable. */
@@ -267,7 +268,7 @@ function createTelegramService(runtime: RuntimePaths): TelegramService {
   let initialization: Promise<void> | undefined;
   const onData = (event: { sessionId: string; data: string }) => service.feedTerminalData(event.sessionId, event.data);
   const onExit = (event: { sessionId: string }) => service.feedTerminalExit(event.sessionId);
-  const onStatus = (event: { sessionId: string; projectPath: string; state: "working" | "stopped" | "approval"; action: string; timestamp: string }) => service.feedStatusChange({ sessionId: event.sessionId, projectPath: event.projectPath, state: event.state, action: event.action, at: Date.parse(event.timestamp) || Date.now() });
+  const onStatus = (event: { sessionId: string; projectPath: string; state: SessionState; action: string; timestamp: string }) => service.feedStatusChange({ sessionId: event.sessionId, projectPath: event.projectPath, state: event.state, action: event.action, at: Date.parse(event.timestamp) || Date.now() });
   core.on("terminalData", onData); core.on("terminalExit", onExit); hookStateManager.on("stateChange", onStatus);
   return { service, init: () => initialization ??= service.init(), setTabs: (tabs: typeof latestIslandAgentTabs) => { latestIslandAgentTabs = tabs; }, async dispose() { core.off("terminalData", onData); core.off("terminalExit", onExit); hookStateManager.off("stateChange", onStatus); await service.stop(); } };
 }
