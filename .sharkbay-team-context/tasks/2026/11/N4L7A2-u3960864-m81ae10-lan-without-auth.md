@@ -12,7 +12,7 @@ agent: Codex GPT-6
 sessionId: 01a1e76d-6a24-74b3-acf6-ade1b1cdbee0
 branch: main
 createdAt: 2026-11-17T04:28:01Z
-updatedAt: 2026-11-17T04:40:21Z
+updatedAt: 2026-11-17T04:55:42Z
 commits:
   - 4b81842cace9fa0974fb09d38b2464dd0ea1f088
 completedAt: 2026-11-17T04:36:58Z
@@ -40,6 +40,7 @@ completedAt: 2026-11-17T04:36:58Z
 - 无 Cookie 的真实 bridge 覆盖 HTTP 命令、WS、PTY 输入、接管与自动重连；LAN 连接不会被鉴权过期或 revoke 中断。
 - 真实 Chrome 无痕窗口使用不含 #connect 的 LAN 地址成功直连、创建终端并刷新恢复；测试窗口关闭，隔离 Runtime、终端和临时项目均已清理。
 - 用户随后授权提交发布并升级远端，提交为 4b81842；后续发布结果见 R8L5N3-u3960864-m81ae10。
+- 已随 v0.3.8 正式发布并升级 103，跨主机无 Cookie HTTP/WS/命令和真实 Chrome 无痕直连验收通过，详见 R8L5N3-u3960864-m81ae10。
 
 ## Verification
 - 修改前针对性回归 27 项失败、9 项通过，确认原代码对本机/LAN 返回 401。
@@ -51,4 +52,4 @@ completedAt: 2026-11-17T04:36:58Z
 ## Notes
 - 本任务不重新发布、不修改已发布的 v0.3.7、不重启远端或用户现有 Runtime。
 - 团队上下文只读；仅本机/局域网免鉴权，其他来源保留现有访问限制。
-- 已发布及远端当前运行的 v0.3.7 尚未包含本次修改；部署需更新构建并重启 Runtime。
+- 远端现运行包含本次修改的 v0.3.8，已更换 Runtime；普通 URL http://10.0.0.103:17777/ 可直接访问。
