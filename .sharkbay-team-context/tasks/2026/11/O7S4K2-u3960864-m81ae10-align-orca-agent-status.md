@@ -12,11 +12,12 @@ agent: Codex GPT-6
 sessionId: 01a1e76d-6a24-74b3-acf6-ade1b1cdbee0
 branch: main
 createdAt: 2026-11-17T07:20:07Z
-updatedAt: 2026-11-17T09:21:33Z
-completedAt: 2026-11-17T09:21:33Z
+updatedAt: 2026-11-17T09:32:51Z
+completedAt: 2026-11-17T09:32:51Z
 ---
 
 ## Summary
+已补充修复可复现的会话归属污染：精确终端身份不再被恢复别名或快照缓存覆盖，提示词按终端隔离，子会话 Stop 不再将父标签误标 done。
 已将本地 agent 状态链路对齐 Orca 的四态执行语义与独立已读提醒，界面统一显示等待、阻塞、完成、失败、中断、空闲及证据过期。接入精确终端身份、异步问题/子任务/后台工作跟踪、结构化终端信号及当前回合 rollout 补偿，完成测试、构建和真实渲染验证；未产生提交或替换已安装 App。所有状态指示已按用户最新指定的蓝/绿/黄/红/灰五组统一，已读、主题与进程退出不改变状态色，项目状态胶囊文字统一为白色。
 
 ## Files
@@ -53,6 +54,11 @@ completedAt: 2026-11-17T09:21:33Z
 - src/shared/agent-status.ts
 - tests/agent-status.test.ts
 
+- src/renderer/hook-snapshots.ts
+- tests/hook-snapshots.test.ts
+- tests/agent-status-attribution.test.ts
+- tsconfig.node.json
+
 ## Work
 - 用户明确选择界面和内部状态一起对齐 Orca；执行状态与已读提醒独立。
 - 已读取协议、AGENTS.md、状态设计与团队任务 C9H4QX-u3960864-m81ae10；新请求覆盖旧三态显示约定。
@@ -83,6 +89,15 @@ completedAt: 2026-11-17T09:21:33Z
 
 - 用户指出绿色偏离原配色；git HEAD 确认原项目胶囊为 #2f7d54，而统一时误用了 Island 的 #28c840。本轮恢复原深绿色，并保持所有状态指示色值一致。
 
+- 用户报告两个不同活跃会话的 Island 提示词重复、终端标签状态污染，随后更正以 done 污染较多。重新打开任务：检查身份与结束事件归属 → 建立双会话失败回归 → 最小修复并验证状态/名称隔离。
+- 保留并行 src/main/harness.ts、tests/harness.test.ts、tests/terminal.test.ts、tests/terminal-close-resize.test.ts 的修改。
+
+- 本轮读取历史 T4K8M2-u3960864-m81ae10、V7K3P9-u3960864-m81ae10，复现旧恢复别名/无绑定结束记录覆盖另一实时标签，跨项目/agent 记录未校验；抽取实际 renderer 投影并实施精确归属优先、恢复别名唯一且同项目/agent 的约束。
+- 复现 runtime 重连快照丢弃自身 terminalSessionId 并跨终端读取 provider 提示词；保留精确 ID，显示文案优先使用终端缓存或该行文案。终端输入历史与 hook 文案按终端隔离，保留 provider 历史用于恢复用途。
+- PID 解析后核对当前 revision/pending PID，移除先向旧缓存终端发布状态的路径；当前终端身份查询优先读取自己的状态，歧义 provider 查询返回空。
+- 复现子会话 Stop 将父记录替换为 done 且丢失提示词；子事件保留父身份，未建立归属的新 provider Stop 不允许接管终端。补充日志中的终端、PID、turn 和 child 归属字段供后续诊断。
+- 修复活动输入栏误用 composite 存储键作 provider ID，优先使用当前可信投影的真实会话 ID；文档已更新。
+
 ## Verification
 - 第一轮类型检查通过；第一轮 4 组针对性测试 60/63 通过，3 个旧三态断言需按新中断与 hook 优先语义迁移。
 - 正在补充真实事件序列回归，完整检查与渲染验证尚未执行。
@@ -106,6 +121,11 @@ completedAt: 2026-11-17T09:21:33Z
 - 胶囊白字修正：无头 Chromium 加载真实 src/styles/app.css，三套主题 × 五色背景共 15 组全部确认白色文字且背景色不变；截图已检查，git diff --check 通过。单行 CSS 调整未重复运行类型检查/全量测试，浏览器已退出。
 
 - 恢复原绿色验证：实际 CSS 在三主题 × 五色共 15 组中保持白字，绿色恢复 rgb(47,125,84)；真实 Island HTML 的小块、圆点、状态文字和鲨鱼标记均为 #2f7d54。截图已检查，diff check 通过；只改颜色字面值，未重复执行全量测试，浏览器已退出。
+
+- 本轮失败回归：投影 3 项、重连快照 1 项、子会话结束归属 1 项在修复前失败；修复后归属相关 7 项通过（含实时 runtime hook 路由与不同终端提示词缓存）。
+- 最终 npm run typecheck、npm run build、git diff --check 通过；npm test -- --reporter=dot 全量 77 文件、539 测试通过。并行 harness/terminal 修改保持原样。
+- 实际构建 renderer/xterm → 真实 Island HTML 验证：A done/B working 与 A working/B done 均独立；迟到的无绑定 A done 不影响 B，提示词分别保持各自任务；终端指示和 Island 一致。截图 /tmp/sharkbay-session-isolation-island.png 已检查，无 pageerror。
+- 用户截图对应时刻的原始 hook 归属证据未完整捕获，不能断言截图由上述哪一条路径触发；新增诊断字段便于后续定位。此次未操作实际用户会话或替换已安装 App，临时浏览器及 HTTP 服务已退出，未创建提交。
 
 ## Notes
 - .sharkbay/team-context/ 只读。
