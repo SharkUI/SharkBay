@@ -12,7 +12,9 @@ agent: Codex GPT-6
 sessionId: 01a1e76d-6a24-74b3-acf6-ade1b1cdbee0
 branch: main
 createdAt: 2026-11-17T07:15:07Z
-updatedAt: 2026-11-17T07:18:07Z
+updatedAt: 2026-11-17T07:33:20Z
+commits:
+  - 45a492088a0a68cd3813b896a64ef914200e5355
 completedAt: 2026-11-17T07:18:07Z
 ---
 
@@ -31,6 +33,7 @@ completedAt: 2026-11-17T07:18:07Z
 - 使用真实 Runtime、桌面私有 socket 和 HTTP command 做回归：原生路径、local URI、file URI、空格/百分号/中文路径均应到达 Task 校验；未登记项目仍应在目录边界拒绝。不创建真实 reviewer 或用户文件。
 - 新测试先复现与用户相同的 ENOENT（仓库 URI 被拼到当前目录），随后在统一 resolveRepo 入口使用已有 fileURLToLocalPath，一行修复。源码及已安装 0.3.6 都存在该遗漏，单纯升级到当前 0.3.9 不会解决。
 - 完成代码验证；保留本机日常实例、用户仓库和配置，未发布或重启。测试只验证 Review 到达正常 Task 校验，不自动启动 reviewer。
+- 用户后续授权提交发布；修复与回归测试已随 45a4920 提交，发布过程记录在 R1B6F8-u3960864-m81ae10。
 
 ## Verification
 - 已用回归测试复现用户所示 local:/Users/... 被 realpath 解析为应用目录下相对路径的问题。
