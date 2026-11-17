@@ -12,12 +12,12 @@ agent: Codex GPT-6
 sessionId: 01a1e76d-6a24-74b3-acf6-ade1b1cdbee0
 branch: main
 createdAt: 2026-11-17T07:20:07Z
-updatedAt: 2026-11-17T08:55:46Z
-completedAt: 2026-11-17T08:55:46Z
+updatedAt: 2026-11-17T09:12:08Z
+completedAt: 2026-11-17T09:12:08Z
 ---
 
 ## Summary
-已将本地 agent 状态链路对齐 Orca 的四态执行语义与独立已读提醒，界面统一显示等待、阻塞、完成、失败、中断、空闲及证据过期。接入精确终端身份、异步问题/子任务/后台工作跟踪、结构化终端信号及当前回合 rollout 补偿，完成测试、构建和真实渲染验证；未产生提交或替换已安装 App。所有状态指示已按用户指定的绿/黄/红/灰四组统一，已读、主题与进程退出不改变状态色。
+已将本地 agent 状态链路对齐 Orca 的四态执行语义与独立已读提醒，界面统一显示等待、阻塞、完成、失败、中断、空闲及证据过期。接入精确终端身份、异步问题/子任务/后台工作跟踪、结构化终端信号及当前回合 rollout 补偿，完成测试、构建和真实渲染验证；未产生提交或替换已安装 App。所有状态指示已按用户最新指定的蓝/绿/黄/红/灰五组统一，已读、主题与进程退出不改变状态色。
 
 ## Files
 - package.json
@@ -45,6 +45,7 @@ completedAt: 2026-11-17T08:55:46Z
 - tests/hooks-connectors.test.ts
 - tests/island-auto-expand.test.ts
 - tests/reasonix-hooks.test.ts
+- tests/telegram-render.test.ts
 - docs/agent-status.md
 - resources/orca-status-NOTICE.txt
 - src/main/hooks/codex-turn-reader.ts
@@ -74,6 +75,10 @@ completedAt: 2026-11-17T08:55:46Z
 - 共享 AGENT_STATUS_TONE 驱动终端标签、项目胶囊和 Telegram 徽标；Island 使用同一分组及四个色值，已读只解除闪烁/光效，不再将完成或失败置灰。
 - 修正 morning/night 主题、is-exited 和虚线状态的覆盖优先级；保持原有通知/展开规则。读取团队任务 C8R4N7-u3960864-m81ae10，未改动 xterm 终端内容调色板或观察端外观同步。
 
+- 用户再次调整颜色：working/monitoring 蓝，done 绿，waiting/blocked 黄，failed 红，interrupted/idle/unverifiable/unknown 灰；本轮只更新颜色映射和完成提醒光效适配，保留状态与已读语义。
+
+- 最新配色已同步共享映射、胶囊/终端 CSS、Island 各指示和 Telegram（含历史状态别名）。补充蓝色 #3b82f6，完成绿色光效保留；文档已更新。
+
 ## Verification
 - 第一轮类型检查通过；第一轮 4 组针对性测试 60/63 通过，3 个旧三态断言需按新中断与 hook 优先语义迁移。
 - 正在补充真实事件序列回归，完整检查与渲染验证尚未执行。
@@ -90,6 +95,9 @@ completedAt: 2026-11-17T08:55:46Z
 - 本轮无头 Chromium 实际构建色彩矩阵：10 种状态 × day/night/morning 三套主题，项目胶囊及终端标签（叠加 exited/unread）颜色一致；unverifiable 验证灰色虚线边框。
 - Island 实际 HTML 验证 10 种状态在已读/未读两种情况下圆点和文字颜色一致；既有状态、已读、等待展开/收起流程仍通过。截图已检查，临时 HTTP 服务和浏览器已退出，未操作运行中用户会话。
 - 本轮保留并行新增的 tests/terminal-close-resize.test.ts，未创建提交。
+
+- 最新五色版本：类型检查、构建、diff check 通过；Island/Telegram 33 项测试通过（迁移旧绿色执行徽标的预期）。
+- 最新真实渲染矩阵通过：10 状态 × 3 主题 × 终端/项目，覆盖 exited/unread 覆盖；Island 10 状态的已读/未读圆点与文字均匹配新色值，原状态及展开/收起验证仍通过。截图已检查，临时浏览器/HTTP 服务已关闭，未替换运行中的 App。
 
 ## Notes
 - .sharkbay/team-context/ 只读。
