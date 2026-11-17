@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.9] — 2026-11-17
+
+### Fixed
+- WebUI initial loading no longer downloads an unminified, uncompressed JavaScript bundle. Production builds now minify assets, and the runtime serves gzip to browsers that accept it.
+- Content-hashed static assets are cached for repeat visits; entry HTML and API responses stay fresh across upgrades.
+
+### Upgrade Note
+- Finish active terminal work and stop the previous runtime before starting this version to activate compressed static responses and caching. Updating or reopening the desktop app alone reuses an existing runtime.
+
 ## [0.3.8] — 2026-11-17
 
 ### Changed

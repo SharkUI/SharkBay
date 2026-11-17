@@ -26,9 +26,9 @@ macOS on Apple Silicon (arm64).
 
 Or download the signed and notarized app from [GitHub Releases](https://github.com/SharkUI/SharkBay/releases/latest).
 
-### New in 0.3.8
+### New in 0.3.9
 
-Open the WebUI directly from your local network at `http://<host-LAN-IP>:17777/`, without a connection token or session cookie. Terminal controls and reconnects work without authorization links. See the [changelog](CHANGELOG.md#038--2026-11-17).
+The WebUI loads smaller, minified assets with gzip compression and reuses cached assets on repeat visits. Open it directly from your local network at `http://<host-LAN-IP>:17777/`, without a connection token or session cookie. See the [changelog](CHANGELOG.md#039--2026-11-17).
 
 ## Features
 

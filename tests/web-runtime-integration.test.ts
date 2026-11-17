@@ -49,6 +49,8 @@ beforeAll(async () => {
   const gitEnv = { ...process.env }; for (const key of ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"]) delete gitEnv[key];
   execFileSync("git", ["-c", "init.templateDir=", "init", "--quiet", project], { env: gitEnv });
   const staticRoot = path.join(directory, "static"); await mkdir(staticRoot); await writeFile(path.join(staticRoot, "index.html"), "<h1>SharkBay</h1>");
+  await mkdir(path.join(staticRoot, "assets"));
+  await writeFile(path.join(staticRoot, "assets", "main-12345678.js"), "console.log('SharkBay');\n".repeat(100));
   await writeFile(path.join(project, "hello.txt"), "before");
   await writeFile(path.join(project, "artifact.html"), "<script>fetch('/api/command')</script><h1>Artifact</h1>");
   await writeFile(path.join(directory, "private.txt"), "outside"); await symlink(path.join(directory, "private.txt"), path.join(project, "outside-link"));
@@ -65,6 +67,35 @@ afterAll(async () => {
   await server?.dispose(); await runtime?.dispose(); await rm(directory, { recursive: true, force: true });
 });
 describe("local Web runtime end to end", () => {
+  it("compresses static text when accepted and preserves clients that decline gzip", async () => {
+    const url = `${server.origin}/assets/main-12345678.js`;
+    const content = "console.log('SharkBay');\n".repeat(100);
+    const compressed = await fetch(url, { headers: { "Accept-Encoding": "br, gzip;q=0.8" } });
+    expect(compressed.headers.get("content-encoding")).toBe("gzip");
+    expect(compressed.headers.get("vary")).toBe("Accept-Encoding");
+    expect(Number(compressed.headers.get("content-length"))).toBeLessThan(Buffer.byteLength(content) / 2);
+    expect(await compressed.text()).toBe(content);
+    for (const encoding of ["identity", "gzip;q=0", "gzip;q=0.00, *;q=1"]) {
+      const response = await fetch(url, { headers: { "Accept-Encoding": encoding } });
+      expect(response.headers.get("content-encoding")).toBeNull();
+      expect(Number(response.headers.get("content-length"))).toBe(Buffer.byteLength(content));
+      expect(await response.text()).toBe(content);
+    }
+    const head = await fetch(url, { method: "HEAD", headers: { "Accept-Encoding": "gzip" } });
+    expect(head.headers.get("content-encoding")).toBe("gzip");
+    expect(head.headers.get("content-length")).toBe(compressed.headers.get("content-length"));
+    expect((await head.arrayBuffer()).byteLength).toBe(0);
+  });
+  it("caches content-hashed assets while keeping entry HTML and APIs fresh across upgrades", async () => {
+    const asset = await fetch(`${server.origin}/assets/main-12345678.js`);
+    expect(asset.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+    await asset.arrayBuffer();
+    for (const route of ["/", "/index.html", "/api/capabilities"]) {
+      const response = await fetch(server.origin + route);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      await response.arrayBuffer();
+    }
+  });
   it("shares one actual PTY between the desktop transport and browser without tying it to client lifetime", async () => {
     const desktop = await RuntimeClient.connect(runtime.paths.userDataPath); desktops.push(desktop);
     const hello = await desktop.call("hello", { protocol: 1 }); expect(hello.pid).toBe(process.pid);

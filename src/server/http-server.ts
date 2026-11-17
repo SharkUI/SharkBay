@@ -2,6 +2,8 @@ import http from "node:http";
 import { randomUUID } from "node:crypto";
 import { readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
+import { gzip } from "node:zlib";
 import { WebSocketServer, WebSocket } from "ws";
 import { ApplicationRuntime } from "../runtime/application-runtime.js";
 import { ApplicationError, runtimeCapabilities, type ApplicationResponse } from "../shared/application-api.js";
@@ -11,6 +13,7 @@ import { isLocalNetworkAddress, SessionAuth } from "./session-auth.js";
 
 type Client = { id: string; session: string; address: string | undefined; socket: WebSocket; alive: boolean };
 const maxBody = 2 * 1024 * 1024;
+const compress = promisify(gzip);
 const maxClientQueue = 2 * 1024 * 1024;
 const eventNames = new Set<string>(Object.values(applicationEvents));
 const contentTypes: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon", ".woff2": "font/woff2" };
@@ -114,7 +117,21 @@ export async function createWebServer(runtime: ApplicationRuntime, options: { po
       if (!isPathInside(staticRoot, file) || !(await stat(file)).isFile()) throw new ApplicationError("NOT_FOUND", "Not found", 404);
       const contentType = contentTypes[path.extname(file)];
       if (!contentType) throw new ApplicationError("NOT_FOUND", "Not found", 404);
-      const data = await readFile(file);
+      let data = await readFile(file);
+      res.setHeader("Cache-Control", /^\/assets\/.+-[\w-]{8}\.[\w]+$/.test(relative) ? "public, max-age=31536000, immutable" : "no-store");
+      if (/\.(?:html|js|css|svg)$/.test(file)) {
+        res.setHeader("Vary", "Accept-Encoding");
+        const acceptsGzip = req.headers["accept-encoding"]?.split(",").some((entry) => {
+          const [encoding, ...parameters] = entry.trim().split(";");
+          const quality = parameters.find((parameter) => parameter.trim().startsWith("q="));
+          return encoding === "gzip" && (quality === undefined || Number(quality.trim().slice(2)) > 0);
+        });
+        if (data.length >= 1024 && acceptsGzip) {
+          data = await compress(data);
+          res.setHeader("Content-Encoding", "gzip");
+        }
+      }
+      res.setHeader("Content-Length", data.length);
       res.writeHead(200, { "Content-Type": contentType, "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer",
         "Content-Security-Policy": `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' ${requestOrigin.replace("http:", "ws:")}; font-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'` });
       res.end(req.method === "HEAD" ? undefined : data);

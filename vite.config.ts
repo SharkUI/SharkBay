@@ -22,7 +22,7 @@ export default defineConfig({
     outDir: "dist/renderer",
     emptyOutDir: true,
     sourcemap: false,
-    minify: false,
+    minify: "esbuild",
     rollupOptions: {
       input: {
         main: resolve(root, "index.html"),
