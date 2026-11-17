@@ -12,14 +12,14 @@ agent: Codex GPT-6
 sessionId: 01a1e76d-6a24-74b3-acf6-ade1b1cdbee0
 branch: main
 createdAt: 2026-11-17T05:20:41Z
-updatedAt: 2026-11-17T05:43:49Z
+updatedAt: 2026-11-17T06:40:36Z
 commits:
   - 4d89603c783f1978b1f31d61f6860fc815ba5bbe
 completedAt: 2026-11-17T05:27:26Z
 ---
 
 ## Summary
-定位首屏 2.66 MB 未压缩 JS 传输瓶颈，开启构建 minify、HTTP gzip 与内容哈希资源缓存。103 同网络隔离实例浏览器 load 从 11.30 s 降至 2.26 s，命中缓存为 147 ms；代码已验证，尚未提交或发布，正式 17777 仍运行 0.3.8。
+定位首屏 2.66 MB 未压缩 JS 传输瓶颈，开启构建 minify、HTTP gzip 与内容哈希资源缓存，已随 4d89603 / v0.3.9 发布并升级 103。正式 17777 浏览器无缓存 load 1.32 s、命中缓存 139 ms；发布详情见 R9P4W7-u3960864-m81ae10。
 
 ## Files
 - .sharkbay/tasks/P9W3L6-u3960864-m81ae10-webui-initial-load.md
@@ -34,6 +34,7 @@ completedAt: 2026-11-17T05:27:26Z
 - Chrome DevTools Network 复现旧版 JS 11.17 s、DOMContentLoaded 11.25 s、load 11.30 s；初始 API 请求为几十毫秒。构建主 JS gzip 520.67 KB；使用 103 独立临时目录、空配置和随机端口验证，不替换正式 App、不重启 17777。
 - 新版 103 临时实例（独立空配置）冷加载主 JS 521 KB/2.08 s，DOMContentLoaded 2.20 s、load 2.26 s；恢复缓存后 JS/CSS 内存缓存 0 ms、DOMContentLoaded 88 ms、load 147 ms，页面显示已连接。临时进程和目录已清理，正式 Runtime PID 76466、17777 监听及 API 正常。
 - 用户后续授权发布升级；修复随 4d89603 提交，正式发布与 103 升级记录于 R9P4W7-u3960864-m81ae10。
+- R9P4W7-u3960864-m81ae10 已完成正式 v0.3.9 发布升级，正式 17777 已启用压缩/缓存并通过浏览器与无 Cookie API/WS 验证。
 
 ## Verification
 - 当前部署 HTML、JS/CSS、API、WS 耗时已测量，结果见以下记录。
@@ -46,4 +47,4 @@ completedAt: 2026-11-17T05:27:26Z
 - 团队上下文只读；当前部署 0.3.8，局域网免鉴权要求保持有效。
 - 不记录 Cookie、令牌、用户会话内容或私人配置。
 - 浏览器指标为 Chrome Network 的 DOMContentLoaded/load，未测 FCP/LCP；新版临时实例无项目，不能将其整体加载时间等同于正式项目全部数据加载完成。主 JS 传输前后对比为同机同网络，属于确定的主要瓶颈。
-- 未提交、未发布；下一次正式打包发布并升级 103 后，17777 才会应用此修复。生产应用与用户配置未修改。
+- 初次实现时未提交发布；后续已获用户授权并由 R9P4W7-u3960864-m81ae10 完成，正式应用已升级、用户配置保持不变。
