@@ -12,7 +12,9 @@ agent: Codex GPT-6
 sessionId: 01a1e76d-6a24-74b3-acf6-ade1b1cdbee0
 branch: main
 createdAt: 2026-11-17T05:20:41Z
-updatedAt: 2026-11-17T05:27:26Z
+updatedAt: 2026-11-17T05:43:49Z
+commits:
+  - 4d89603c783f1978b1f31d61f6860fc815ba5bbe
 completedAt: 2026-11-17T05:27:26Z
 ---
 
@@ -31,6 +33,7 @@ completedAt: 2026-11-17T05:27:26Z
 - 实测 HTML 53 ms、capabilities 53 ms，2,662,589 B 主 JS 下载 11.62 s、137,973 B CSS 1.38 s；构建 minify=false，静态响应无传输压缩和缓存。按此证据开启构建压缩、文本 gzip 协商、带内容哈希资源长期缓存，HTML 每次重新获取。
 - Chrome DevTools Network 复现旧版 JS 11.17 s、DOMContentLoaded 11.25 s、load 11.30 s；初始 API 请求为几十毫秒。构建主 JS gzip 520.67 KB；使用 103 独立临时目录、空配置和随机端口验证，不替换正式 App、不重启 17777。
 - 新版 103 临时实例（独立空配置）冷加载主 JS 521 KB/2.08 s，DOMContentLoaded 2.20 s、load 2.26 s；恢复缓存后 JS/CSS 内存缓存 0 ms、DOMContentLoaded 88 ms、load 147 ms，页面显示已连接。临时进程和目录已清理，正式 Runtime PID 76466、17777 监听及 API 正常。
+- 用户后续授权发布升级；修复随 4d89603 提交，正式发布与 103 升级记录于 R9P4W7-u3960864-m81ae10。
 
 ## Verification
 - 当前部署 HTML、JS/CSS、API、WS 耗时已测量，结果见以下记录。
