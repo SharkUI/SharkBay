@@ -144,6 +144,25 @@ describe("local Web runtime end to end", () => {
     const saved = await desktop.call("config.get");
     expect(saved.caffeinateMode).toBe("on"); expect(saved.projectAliases[uri]).toBe("Shared fixture");
   });
+  it("resolves Review project URIs before filesystem access on desktop and WebUI", async () => {
+    const desktop = await RuntimeClient.connect(runtime.paths.userDataPath); desktops.push(desktop);
+    const browser = await connect();
+    const namedDirectory = path.join(project, "Review % 空间"); await mkdir(namedDirectory);
+    for (const repoPath of [project, uri, pathToFileURL(project).href, toLocalProjectUri(namedDirectory)]) {
+      const input = { repoPath, taskId: "MISSING-TASK", agentId: "codex" };
+      await expect(desktop.call("reviews.start", input)).rejects.toThrow("Task not found: MISSING-TASK");
+      const result = await command(browser, "reviews.start", input);
+      expect(result.ok).toBe(false);
+      expect(result.error.message).toBe("Task not found: MISSING-TASK");
+    }
+    for (const repoPath of [toLocalProjectUri(directory), pathToFileURL(directory).href]) {
+      const input = { repoPath, taskId: "MISSING-TASK", agentId: "codex" };
+      await expect(desktop.call("reviews.start", input)).rejects.toThrow("outside configured projects");
+      const result = await command(browser, "reviews.start", input);
+      expect(result.ok).toBe(false);
+      expect(result.error.message).toBe("Repository path is outside configured projects");
+    }
+  });
   it("protects HTTP/WS, Host, Origin and command envelopes", async () => {
     expect((await fetch(server.origin)).status).toBe(200);
     expect((await fetch(`${server.origin}/api/capabilities`)).status).toBe(200);

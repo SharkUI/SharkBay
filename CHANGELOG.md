@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.10] — 2026-11-17
+
+### Fixed
+- Starting Review from a project now resolves `local:` and `file:` project URIs before accessing the filesystem, preventing an `ENOENT` error beneath the packaged application directory. Native paths and configured-project boundaries remain supported.
+
+### Upgrade Note
+- Finish active terminal work and explicitly stop the previous shared runtime before starting this version to activate the Review fix. Updating or reopening the desktop app alone reuses an existing runtime.
+
 ## [0.3.9] — 2026-11-17
 
 ### Fixed

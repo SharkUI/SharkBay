@@ -47,7 +47,7 @@ export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] 
   constructor(readonly paths: Required<RuntimePaths>) {
     super();
     this.paths = Object.freeze({ userDataPath: path.resolve(paths.userDataPath), configPath: path.resolve(paths.configPath) });
-    const resolveRepo = (repoPath: string) => resolveRuntimeRepoPath(this.paths, repoPath);
+    const resolveRepo = (repoPath: string) => resolveRuntimeRepoPath(this.paths, fileURLToLocalPath(repoPath));
     this.handlers = {
       "config.get": () => loadRuntimeConfig(this.paths),
       "config.renameProject": async (input) => { await resolveRepo(fileURLToLocalPath(input.uri)); return renameProject(this.paths, input); },
