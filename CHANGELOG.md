@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.7] — 2026-11-17
+
+### Added
+- The WebUI accepts direct LAN IPv4 connections with one-use browser authorization. Interactive runtime startup prints both local and LAN connection links.
+
+### Changed
+- The standalone WebUI and app-started runtime use fixed port `17777` by default, while explicit port overrides remain supported.
+- The runtime listens on all IPv4 interfaces. Host and Origin checks remain enforced for HTTP commands and WebSocket connections.
+
+### Fixed
+- WebUI commands work over LAN HTTP without requiring the secure-context-only `crypto.randomUUID()` API.
+- Copy URL and Copy Path work over HTTP when the Clipboard API is unavailable, and failed copies report an error.
+
+### Upgrade Note
+- Finish active terminal work and explicitly stop the previous runtime before starting this version to activate the fixed port and LAN listener. Updating or reopening the desktop app alone reuses an existing runtime.
+- Other devices need a fresh connection link and network access to the host port. Project development URLs are not rewritten or proxied, and custom domain access is not included.
+
 ## [0.3.6] — 2026-11-15
 
 ### Added

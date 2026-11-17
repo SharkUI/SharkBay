@@ -11,7 +11,7 @@ import { createWebServer } from "./http-server.js";
 
 const args = process.argv.slice(2);
 const projects: string[] = [];
-let port = 5185;
+let port = 17777;
 let background = false;
 let stopRequested = false;
 let userDataPath = process.env.SHARKBAY_RUNTIME_DATA_DIR ?? defaultRuntimeDataPath();
@@ -19,7 +19,7 @@ let configPath: string | undefined;
 for (let index = 0; index < args.length; index++) {
   const key = args[index];
   if (key === "--help") {
-    console.log("SharkBay WebUI\n  npm start -- [--port 5185] [--data-dir path] [--config path] [--project path ...]\nUse --stop to stop the shared runtime and its terminals. Loopback only. Existing host projects are copied into a separate WebUI profile on first start.\nIn the host terminal: Enter/connect = new connection link; revoke = disconnect authorized browsers.");
+    console.log("SharkBay WebUI\n  npm start -- [--port 17777] [--data-dir path] [--config path] [--project path ...]\nUse --stop to stop the shared runtime and its terminals. Listens on all IPv4 interfaces for LAN access; browser authorization is required. Existing host projects are copied into a separate WebUI profile on first start.\nIn the host terminal: Enter/connect = new connection link; revoke = disconnect authorized browsers.");
     process.exit(0);
   }
   if (key === "--stop") { stopRequested = true; continue; }
@@ -77,7 +77,12 @@ try {
   const server = await createWebServer(runtime, { port, staticRoot });
   const control = await createRuntimeControl(runtime, server, () => { void stop().catch((error) => { console.error(error); process.exitCode = 1; }); });
   console.log(`SharkBay WebUI: ${server.origin}\nHost profile: ${userDataPath}\nProjects: ${config.configuredProjects.length}`);
-  const connect = () => console.log(`Connection link (one use, 5 minutes): ${server.connectionUrl()}`);
+  const connect = () => {
+    const link = server.connectionUrl();
+    console.log(`Connection link (one use, 5 minutes): ${link}`);
+    const addresses = new Set(Object.values(os.networkInterfaces()).flatMap((entries) => entries?.filter((entry) => entry.family === "IPv4" && !entry.internal).map((entry) => entry.address) ?? []));
+    for (const address of addresses) console.log(`LAN connection link (same one-use grant): ${link.replace("127.0.0.1", address)}`);
+  };
   if (!background) connect();
   const terminal = readline.createInterface({ input: process.stdin });
   terminal.on("line", (line) => {

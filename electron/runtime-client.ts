@@ -13,7 +13,7 @@ export async function ensureRuntime(): Promise<RuntimeClient> {
   const node = process.env.SHARKBAY_NODE_PATH ?? (app.isPackaged ? join(process.resourcesPath, "runtime", "bin", process.platform === "win32" ? "node.exe" : "node") : await resolveCommandPath("node"));
   if (!node) throw new Error("Node runtime was not found. Build the runtime before starting SharkBay.");
   const root = app.isPackaged ? join(process.resourcesPath, "runtime") : app.getAppPath();
-  const args = [join(root, "dist-runtime/src/server/main.js"), "--background", "--port", process.env.SHARKBAY_RUNTIME_PORT ?? "0", "--data-dir", dataPath];
+  const args = [join(root, "dist-runtime/src/server/main.js"), "--background", "--port", process.env.SHARKBAY_RUNTIME_PORT ?? "17777", "--data-dir", dataPath];
   if (process.env.SHARKBAY_CONFIG_PATH) args.push("--config", process.env.SHARKBAY_CONFIG_PATH);
   const log = await open(join(dataPath, "runtime.log"), "a", 0o600);
   let spawnError: Error | undefined;

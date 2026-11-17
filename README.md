@@ -26,9 +26,9 @@ macOS on Apple Silicon (arm64).
 
 Or download the signed and notarized app from [GitHub Releases](https://github.com/SharkUI/SharkBay/releases/latest).
 
-### New in 0.3.6
+### New in 0.3.7
 
-Connect the macOS app and a browser to the same live terminal sessions, with a responsive WebUI for phones and tablets. This release also fixes observer terminal colors, browser tab cleanup, and packaged runtime dependencies. See the [changelog](CHANGELOG.md#036--2026-11-15).
+Open the WebUI from another device on your LAN using a one-use connection link. The runtime now uses port `17777` by default, with working terminal commands and clipboard actions over LAN HTTP. See the [changelog](CHANGELOG.md#037--2026-11-17).
 
 ## Features
 
@@ -37,6 +37,8 @@ Connect the macOS app and a browser to the same live terminal sessions, with a r
 The macOS app and WebUI connect to one local Node runtime. Open the runtime's connection link in a browser to access your projects and existing terminals; one client controls each terminal while others observe. Closing the desktop client leaves sessions running, and you can take control from another connected client.
 
 The WebUI adapts to phones and tablets with full-screen project navigation, touch terminal keys, and preserved input drafts across reconnects. The packaged app includes Node and its runtime dependencies.
+
+The runtime listens on all IPv4 interfaces at port `17777` by default. To connect from another device on the same LAN, use the LAN connection link printed by the runtime, or replace `127.0.0.1` in a fresh connection link with the host computer's LAN IPv4 address, keeping the port and `#connect=...` fragment. Each grant expires after five minutes and can authorize one browser; the local and LAN variants share that grant. Browser authorization is still required, and the host firewall must allow the connection. Project development URLs are not rewritten or proxied.
 
 ### Multi-Agent Support
 

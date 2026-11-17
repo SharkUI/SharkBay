@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, realpath, rm, writeFile, symlink, readFile, chmod } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { networkInterfaces, tmpdir } from "node:os";
 import path from "node:path";
 import http from "node:http";
 import { pathToFileURL } from "node:url";
@@ -16,7 +16,8 @@ import { createDefaultConfig, saveAppConfig } from "../src/main/config.js";
 import { toLocalProjectUri } from "../src/core/project-uri.js";
 
 type Message = { type: string; clientId?: string; name?: string; code?: string; payload?: any };
-type Browser = { socket: WebSocket; clientId: string; cookie: string; messages: Message[] };
+type Browser = { origin: string; socket: WebSocket; clientId: string; cookie: string; messages: Message[] };
+const lanAddress = Object.values(networkInterfaces()).flat().find((address) => address?.family === "IPv4" && !address.internal)?.address;
 let directory: string, project: string, uri: string;
 let runtime: ApplicationRuntime;
 let server: Awaited<ReturnType<typeof createWebServer>>;
@@ -28,20 +29,20 @@ async function waitFor<T>(read: () => T | undefined, timeout = 5000): Promise<T>
   while (Date.now() < end) { const result = read(); if (result !== undefined) return result; await new Promise((done) => setTimeout(done, 20)); }
   throw new Error("Timed out waiting for runtime event");
 }
-async function connect(): Promise<Browser> {
+async function connect(origin = server.origin): Promise<Browser> {
   const token = new URLSearchParams(new URL(server.connectionUrl()).hash.slice(1)).get("connect");
-  const exchange = await fetch(`${server.origin}/api/session`, { method: "POST", headers: { Origin: server.origin, "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
+  const exchange = await fetch(`${origin}/api/session`, { method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
   expect(exchange.status).toBe(200);
   expect(exchange.headers.get("set-cookie")).toMatch(/HttpOnly; SameSite=Strict/);
   const cookie = exchange.headers.get("set-cookie")!.split(";")[0]!;
-  const socket = new WebSocket(server.origin.replace("http:", "ws:") + "/api/events", { headers: { Origin: server.origin, Cookie: cookie } });
+  const socket = new WebSocket(origin.replace("http:", "ws:") + "/api/events", { headers: { Origin: origin, Cookie: cookie } });
   const messages: Message[] = [];
   socket.on("message", (raw) => messages.push(JSON.parse(raw.toString())));
   const hello = await waitFor(() => messages.find((message) => message.type === "hello"));
-  const browser = { socket, messages, cookie, clientId: hello.clientId! }; browsers.push(browser); return browser;
+  const browser = { origin, socket, messages, cookie, clientId: hello.clientId! }; browsers.push(browser); return browser;
 }
 async function command(browser: Browser, method: string, input?: unknown, requestId = randomUUID()) {
-  const response = await fetch(`${server.origin}/api/command`, { method: "POST", headers: { Origin: server.origin, Cookie: browser.cookie, "Content-Type": "application/json", "X-SharkBay-Request": "1", "X-SharkBay-Client": browser.clientId }, body: JSON.stringify({ requestId, method, input }) });
+  const response = await fetch(`${browser.origin}/api/command`, { method: "POST", headers: { Origin: browser.origin, Cookie: browser.cookie, "Content-Type": "application/json", "X-SharkBay-Request": "1", "X-SharkBay-Client": browser.clientId }, body: JSON.stringify({ requestId, method, input }) });
   return { status: response.status, ...(await response.json()) };
 }
 beforeAll(async () => {
@@ -143,22 +144,41 @@ describe("local Web runtime end to end", () => {
     expect(preview.status).toBe(200); expect(preview.headers.get("content-security-policy")).toContain("sandbox allow-scripts;"); expect(preview.headers.get("content-security-policy")).not.toContain("allow-same-origin");
     expect(preview.headers.get("content-security-policy")).toContain("connect-src 'none'");
   });
-  it("runs the real Web bridge through authorization, snapshots and reauthorization", async () => {
+  it.skipIf(!lanAddress)("accepts LAN HTTP and WS while rejecting mismatched Host and Origin", async () => {
+    const origin = server.origin.replace("127.0.0.1", lanAddress!);
+    const page = await fetch(origin);
+    expect(page.status).toBe(200);
+    expect(page.headers.get("content-security-policy")).toContain(origin.replace("http:", "ws:"));
+    expect((await fetch(`${origin}/api/capabilities`)).status).toBe(401);
+    const wrongHost = await new Promise<number>((done, reject) => { http.get(origin, { headers: { Host: new URL(server.origin).host } }, (response) => { response.resume(); done(response.statusCode!); }).on("error", reject); });
+    expect(wrongHost).toBe(403);
+    expect((await fetch(`${origin}/api/session`, { method: "POST", headers: { Origin: server.origin, "Content-Type": "application/json" }, body: "{}" })).status).toBe(403);
+    const browser = await connect(origin);
+    expect((await command(browser, "config.get")).ok).toBe(true);
+    for (const headers of [{ Origin: server.origin, Cookie: browser.cookie }, { Origin: origin, Cookie: browser.cookie, Host: "attacker.invalid" }]) {
+      const rejected = new WebSocket(origin.replace("http:", "ws:") + "/api/events", { headers });
+      const status = await new Promise<number>((done) => { rejected.on("unexpected-response", (_request, response) => { response.resume(); rejected.terminate(); done(response.statusCode!); }); rejected.on("error", () => {}); });
+      expect(status).toBe(403);
+    }
+  });
+  it.each([{ mode: "loopback", address: "127.0.0.1" }, { mode: "LAN HTTP", address: lanAddress }].filter((entry) => entry.address))("runs the real Web bridge through authorization, snapshots and reauthorization over $mode", async ({ address }) => {
     const nativeFetch = globalThis.fetch;
-    const location = new URL(server.connectionUrl());
+    const origin = server.origin.replace("127.0.0.1", address!);
+    const location = new URL(server.connectionUrl().replace("127.0.0.1", address!));
     let cookie = "";
     const sockets: WebSocket[] = [];
     class BrowserSocket extends WebSocket {
-      constructor(url: string) { super(url, { headers: { Origin: server.origin, Cookie: cookie } }); sockets.push(this); }
+      constructor(url: string) { super(url, { headers: { Origin: origin, Cookie: cookie } }); sockets.push(this); }
     }
     const window = new EventTarget();
     vi.stubGlobal("window", window); vi.stubGlobal("location", location);
-    vi.stubGlobal("history", { replaceState: (_state: unknown, _title: string, url: string) => { location.href = new URL(url, server.origin).href; } });
+    vi.stubGlobal("history", { replaceState: (_state: unknown, _title: string, url: string) => { location.href = new URL(url, origin).href; } });
+    vi.stubGlobal("crypto", { getRandomValues: globalThis.crypto.getRandomValues.bind(globalThis.crypto) });
     vi.stubGlobal("WebSocket", BrowserSocket);
     vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
-      const headers = new Headers(init?.headers); headers.set("Origin", server.origin);
+      const headers = new Headers(init?.headers); headers.set("Origin", origin);
       if (cookie) headers.set("Cookie", cookie);
-      const response = await nativeFetch(new URL(input, server.origin), { ...init, headers });
+      const response = await nativeFetch(new URL(input, origin), { ...init, headers });
       const next = response.headers.get("set-cookie"); if (next) cookie = next.split(";")[0]!;
       return response;
     });
@@ -174,7 +194,7 @@ describe("local Web runtime end to end", () => {
       server.revoke(); await waitFor(() => bridge!.runtime.connection() === "unauthorized" ? true : undefined);
       const notices: string[] = []; const offNotice = bridge.runtime.onNotice((notice) => notices.push(notice));
       bridge.terminal!.inputFire!({ sessionId: session.id, data: "do not replay" }); expect(notices).toHaveLength(1);
-      location.href = server.connectionUrl(); window.dispatchEvent(new Event("hashchange"));
+      location.href = server.connectionUrl().replace("127.0.0.1", address!); window.dispatchEvent(new Event("hashchange"));
       await waitFor(() => bridge!.runtime.connection() === "connected" ? true : undefined);
       const terminals = await bridge.runtime.listTerminals(); expect(terminals).toHaveLength(1); expect(terminals[0]!.session.pid).toBe(session.pid);
       await bridge.terminal!.close!({ sessionId: session.id }); off(); offNotice();

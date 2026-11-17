@@ -54,8 +54,9 @@ export async function createWebBridge(): Promise<SharkBayBridge & { runtime: Web
 
   async function request<M extends ApplicationMethod>(method: M, input: ApplicationMethodMap[M]["input"]): Promise<ApplicationMethodMap[M]["result"]> {
     if (connection !== "connected" || !clientId) throw new Error("Runtime is disconnected. Wait for the connection to recover.");
+    const requestId = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
     const response = await fetch("/api/command", { method: "POST", headers: { "Content-Type": "application/json", "X-SharkBay-Request": "1", "X-SharkBay-Client": clientId },
-      body: JSON.stringify({ requestId: crypto.randomUUID(), method, input }) });
+      body: JSON.stringify({ requestId, method, input }) });
     const result = await response.json();
     if (response.status === 401) { setConnection("unauthorized"); socket?.close(); }
     if (!response.ok || !result.ok) throw new Error(result.error?.message ?? "Application command failed");

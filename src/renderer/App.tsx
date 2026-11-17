@@ -11,6 +11,7 @@ import { UpdateHint } from "./update-hint";
 import { ProjectStart } from "./project-start";
 import { RuntimeStatus } from "./bridge/runtime-status";
 import { useCompactWebLayout, useWebViewport } from "./mobile-layout";
+import { copyText } from "./clipboard";
 import { TerminalCreateMenu } from "./terminal-create-menu";
 import { colorSchemes, getColorScheme } from "./color-schemes";
 import { promptSearchKeys } from "./prompt-search";
@@ -2737,7 +2738,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                 const active = isVisible && space.projectId === activeProjectId && tabIdForTab(tab) === space.activeId;
                 const focusRequest = active && tabFocusRequest?.projectId === space.projectId ? tabFocusRequest.nonce : 0;
                 if (tab.kind === "terminal") {
-                  return <XTermSurface active={active} focusRequest={focusRequest} key={tab.session.id} showSearch={active && searchOpen} tab={tab} onCloseSearch={() => setSearchOpen(false)} onResize={(cols, rows) => void resizeTerminal(tab.session.id, cols, rows).catch((error) => setToast({ tone: "error", message: asMessage(error) }))} />;
+                  return <XTermSurface active={active} focusRequest={focusRequest} key={tab.session.id} showSearch={active && searchOpen} tab={tab} onCloseSearch={() => setSearchOpen(false)} onError={(message) => setToast({ tone: "error", message })} onResize={(cols, rows) => void resizeTerminal(tab.session.id, cols, rows).catch((error) => setToast({ tone: "error", message: asMessage(error) }))} />;
                 }
                 if (tab.kind === "browser") {
                   return <BrowserSurface active={active} focusRequest={focusRequest} key={tab.browser.id} layoutKey={browserLayoutKey} setToast={setToast} tab={tab} onAddressChange={(value) => updateBrowserAddress(tab.browser.id, value)} onBrowserUpdate={(browser) => updateBrowserSession(browser)} />;
@@ -2979,7 +2980,7 @@ function BrowserSurface({
   );
 }
 
-function XTermSurface({ active, focusRequest, onResize, onCloseSearch, showSearch, tab }: { active: boolean; focusRequest: number; onResize: (cols: number, rows: number) => void; onCloseSearch: () => void; showSearch: boolean; tab: TerminalShellTab }) {
+function XTermSurface({ active, focusRequest, onResize, onCloseSearch, onError, showSearch, tab }: { active: boolean; focusRequest: number; onResize: (cols: number, rows: number) => void; onCloseSearch: () => void; onError: (message: string) => void; showSearch: boolean; tab: TerminalShellTab }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const runtime = getBridge().runtime;
   useEffect(() => {
@@ -3052,7 +3053,7 @@ function XTermSurface({ active, focusRequest, onResize, onCloseSearch, showSearc
       {linkMenu ? (
         <div ref={linkMenuRef} className="terminal-link-context-menu" style={{ top: linkMenu.y, left: linkMenu.x }}>
           <button className="terminal-link-context-menu-item" type="button" onClick={() => { void getBridge().shell?.openExternal?.({ url: linkMenu.url }); setLinkMenu(null); }}>Open in Default Browser</button>
-          <button className="terminal-link-context-menu-item" type="button" onClick={() => { void navigator.clipboard.writeText(linkMenu.url); setLinkMenu(null); }}>Copy URL</button>
+          <button className="terminal-link-context-menu-item" type="button" onClick={() => { void copyText(linkMenu.url).catch((error) => onError(asMessage(error))); setLinkMenu(null); }}>Copy URL</button>
         </div>
       ) : null}
       {showSearch ? (
@@ -5007,7 +5008,7 @@ function FilesDetailTab({ active, candidate, codeGraphStatus, detail, setToast, 
             {fileMenu.item.kind === "directory" ? <button className="project-context-menu-item" type="button" onClick={() => { setFileMenu(null); setCreating({ parentPath: fileMenu.item.path, kind: "directory" }); }}>New Folder</button> : null}
             {fileMenu.item.kind === "file" ? <button className="project-context-menu-item" type="button" onClick={() => { const p = fileMenu.item.path; setFileMenu(null); void onOpenFileInEditor(p); }}>Edit</button> : null}
             {fileMenu.item.path ? <button className="project-context-menu-item" type="button" onClick={() => { const p = fileMenu.item.path; setFileMenu(null); setRenaming(p); }}>Rename</button> : null}
-            <button className="project-context-menu-item" type="button" onClick={() => { const localPath = localPathFromCandidate(candidate); const abs = localPath ? (fileMenu.item.path ? `${localPath}/${fileMenu.item.path}` : localPath) : fileMenu.item.path; void navigator.clipboard.writeText(abs); setFileMenu(null); setToast({ tone: "info", message: "Path copied." }); }}>Copy Path</button>
+            <button className="project-context-menu-item" type="button" onClick={() => { const localPath = localPathFromCandidate(candidate); const abs = localPath ? (fileMenu.item.path ? `${localPath}/${fileMenu.item.path}` : localPath) : fileMenu.item.path; void copyText(abs).then(() => setToast({ tone: "info", message: "Path copied." }), (error) => setToast({ tone: "error", message: asMessage(error) })); setFileMenu(null); }}>Copy Path</button>
             {fileMenu.item.kind === "file" ? <button className="project-context-menu-item" type="button" onClick={() => { const p = fileMenu.item.path; setFileMenu(null); void onOpenGitDiff(p); }}>Diff</button> : null}
             {fileMenu.item.path ? <button className="project-context-menu-item is-danger" type="button" onClick={() => { const item = fileMenu.item; setFileMenu(null); void handleDelete(item); }}>Delete</button> : null}
           </div>

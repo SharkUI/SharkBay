@@ -34,10 +34,10 @@ export async function createWebServer(runtime: ApplicationRuntime, options: { po
   server.headersTimeout = 10000;
 
   function checkHost(req: http.IncomingMessage): void {
-    if (req.headers.host !== new URL(origin).host) throw new ApplicationError("INVALID_HOST", "Unexpected Host", 403);
+    if (req.headers.host !== new URL(`http://${req.socket.localAddress}:${req.socket.localPort}`).host) throw new ApplicationError("INVALID_HOST", "Unexpected Host", 403);
   }
   function checkOrigin(req: http.IncomingMessage): void {
-    if (req.headers.origin !== origin) throw new ApplicationError("INVALID_ORIGIN", "Cross-site requests are not allowed", 403);
+    if (req.headers.origin !== `http://${req.headers.host}`) throw new ApplicationError("INVALID_ORIGIN", "Cross-site requests are not allowed", 403);
   }
   function json(res: http.ServerResponse, status: number, value: unknown): void {
     res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
@@ -58,7 +58,8 @@ export async function createWebServer(runtime: ApplicationRuntime, options: { po
   async function handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     try {
       checkHost(req);
-      const url = new URL(req.url ?? "/", origin);
+      const requestOrigin = `http://${req.headers.host}`;
+      const url = new URL(req.url ?? "/", requestOrigin);
       if (url.pathname.startsWith("/api/")) {
         res.setHeader("Cache-Control", "no-store");
         if (url.pathname === "/api/session" && req.method === "POST") {
@@ -114,7 +115,7 @@ export async function createWebServer(runtime: ApplicationRuntime, options: { po
       if (!contentType) throw new ApplicationError("NOT_FOUND", "Not found", 404);
       const data = await readFile(file);
       res.writeHead(200, { "Content-Type": contentType, "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer",
-        "Content-Security-Policy": `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' ${origin.replace("http:", "ws:")}; font-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'` });
+        "Content-Security-Policy": `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' ${requestOrigin.replace("http:", "ws:")}; font-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'` });
       res.end(req.method === "HEAD" ? undefined : data);
     } catch (error) { replyError(res, error); }
   }
@@ -173,7 +174,7 @@ export async function createWebServer(runtime: ApplicationRuntime, options: { po
   }, 15000);
   heartbeat.unref();
   try {
-    await new Promise<void>((done, reject) => { server.once("error", reject); server.listen(options.port, "127.0.0.1", () => { server.off("error", reject); done(); }); });
+    await new Promise<void>((done, reject) => { server.once("error", reject); server.listen(options.port, "0.0.0.0", () => { server.off("error", reject); done(); }); });
   } catch (error) { clearInterval(heartbeat); runtime.off("event", onEvent); ws.close(); throw error; }
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Unable to bind local HTTP server");
