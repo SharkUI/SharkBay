@@ -25,7 +25,7 @@
 - 子 hook 的失败/取消不写入主任务结果。程序接管已结束 provider 回合后，旧 hook 子任务清单失效，旧执行事件即使没有 turn_id 也不能重开或结束 OSC 工作。OSC 子任务保持整体 working 时，主 Stop 不解除保持；仅对应 OSC 子结束或会话边界解除。新主 prompt / SessionStart 恢复 provider 执行跟踪。
 - Claude 专属 hook 的安装、卸载与安装状态检查使用同一事件范围，卸载保留用户自己配置的非 managed hook。
 - Claude MCP Elicitation 保留独立事件身份，以子归属、server 和 elicitation_id 匹配请求/回答；允许在回合外或 OSC 持有期发起等待。等待只覆盖展示，不写入主状态/结果或改动其证据时间；全部匹配回答后显露原有（或等待期间更新的）执行事实。新主 prompt/会话边界清理请求；不匹配回答无效。等待单独过期，不销毁原完成结果。
-- 有效 OSC 会话边界（包括 clear/RIS）独立清理 Elicitation 及专属计时器，即使执行仲裁保留同态的 hook done/failed/interrupted 事实，也不保留旧对话；结果和原证据时间继续保持。普通非边界 OSC 完成保留待回答对话。首次对话请求可绑定尚未绑定 provider、以物理终端 ID 占位的 OSC 记录，但要求终端、agent、cwd 和已有启动标识匹配；回答不能抢先绑定，已绑定身份不得被其他 provider 请求替换。
+- 有效 OSC 会话边界（包括 clear/RIS）独立清理 Elicitation 及专属计时器，即使执行仲裁保留同态的 hook done/failed/interrupted 事实，也不保留旧对话；结果和原证据时间继续保持。边界到达时只清理一次，延迟执行仲裁不重放清理，边界之后的新请求保持等待，匹配回答后显露已仲裁的执行事实。普通非边界 OSC 完成保留待回答对话。首次对话请求可绑定尚未绑定 provider、以物理终端 ID 占位的 OSC 记录，但要求终端、agent、cwd 和已有启动标识匹配；回答不能抢先绑定，已绑定身份不得被其他 provider 请求替换。
 - Claude hook 提供后台任务清单或 session_crons 时，后台 agent 保持 working，只有后台命令/cron 则显示 monitoring，空清单解除保持。
 - 主机读取 PTY 的 OSC 7501 / OSC 9999 结构化信号。waiting/blocked 与回合结果分别映射；子记录仍工作时保持整体 working。
 - hook 优先于弱屏幕推断；OSC 与 hook 冲突通常须连续静默两分钟，旧 working/waiting 不能重开已结束回合。完成后开始的新工作进入 waiting 时立即让出，不延误用户回答。新 hook 取消等待中的 fallback。

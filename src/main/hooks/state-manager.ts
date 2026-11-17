@@ -69,14 +69,18 @@ export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
     this.states.clear();
   }
   ingestProgramStatus(event: UnifiedHookEvent, report: ProgramStatus): void {
-    const key = event.terminalSessionId!;
-    const previous = this.states.get(key);
-    const now = Date.now();
+    const previous = this.states.get(event.terminalSessionId!);
     const dialogCleared = Boolean(previous?.elicitation && report.sessionBoundary);
     if (dialogCleared && previous) {
       clearTimeout(previous.elicitation?.timer); previous.elicitation = undefined;
       previous.evidence = { ...previous.evidence, revision: ++this.revision };
     }
+    this.arbitrateProgramStatus(event, report, dialogCleared);
+  }
+  private arbitrateProgramStatus(event: UnifiedHookEvent, report: ProgramStatus, dialogCleared = false): void {
+    const key = event.terminalSessionId!;
+    const previous = this.states.get(key);
+    const now = Date.now();
     // Dialog lifetime follows the boundary even when execution arbitration retains the old verdict.
     const keepPrevious = () => { if (dialogCleared && previous) this.publish(previous); };
     if (previous?.programOwnsTurn && ["done", "failed", "interrupted", "idle"].includes(previous.state)
@@ -98,7 +102,8 @@ export class AgentHookStateManager extends EventEmitter<StateManagerEvents> {
       if (delay > 0) {
         if (!previous.fallbackTimer) previous.fallbackTimer = setTimeout(() => {
           previous.fallbackTimer = undefined;
-          if (this.states.get(key) === previous) this.ingestProgramStatus(event, report);
+          // Retry execution arbitration without replaying the boundary's dialog cleanup.
+          if (this.states.get(key) === previous) this.arbitrateProgramStatus(event, report);
         }, delay + 1);
         previous.fallbackTimer?.unref?.();
         return keepPrevious();

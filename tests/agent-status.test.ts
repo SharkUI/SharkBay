@@ -25,6 +25,33 @@ function harness(agent = "codex") {
 }
 describe("agent status lifecycle", () => {
   it.each([
+    ["\x1b]7501;state=clear\x07", false], ["\x1bc", false],
+    ["\x1b]7501;state=clear\x07", true], ["\x1bc", true],
+  ] as const)("preserves post-boundary elicitation through delayed OSC arbitration (case %#)", (boundary, pendingBeforeBoundary) => {
+    const { manager, send, read, root } = harness("claude"); send("UserPromptSubmit", { turn_id: undefined });
+    const reader = new ProgramStatusReader();
+    const event = { agent: "claude", sessionId: "provider-session", terminalSessionId: "terminal-a", cwd: root, event: "tool_start" as const, timestamp: new Date().toISOString() };
+    const report = (data: string) => { for (const value of reader.feed(data)) manager.ingestProgramStatus(event, value); };
+    report("\x1b]7501;state=working\x07");
+    if (pendingBeforeBoundary) send("Elicitation", { elicitation_id: "old", turn_id: undefined });
+    vi.advanceTimersByTime(1000); report(boundary);
+    expect(read().state).toBe("working");
+    const revision = read().evidence.revision;
+    send("ElicitationResult", { elicitation_id: "old", turn_id: undefined });
+    expect(read().evidence.revision).toBe(revision);
+    vi.advanceTimersByTime(1000);
+    send("Elicitation", { elicitation_id: "new", turn_id: undefined });
+    const waiting = read(); expect(waiting.state).toBe("waiting");
+    vi.advanceTimersByTime(120_002);
+    expect(read()).toMatchObject({ state: "waiting", timestamp: waiting.timestamp,
+      evidence: { stateStartedAt: waiting.evidence.stateStartedAt, sessionBoundary: false } });
+    const settledRevision = read().evidence.revision;
+    send("ElicitationResult", { elicitation_id: "old", turn_id: undefined });
+    expect(read().evidence.revision).toBe(settledRevision);
+    send("ElicitationResult", { elicitation_id: "new", turn_id: undefined });
+    expect(read()).toMatchObject({ state: "idle", evidence: { origin: "osc", sessionBoundary: true } });
+  });
+  it.each([
     ["Stop", false, "done", "\x1b]7501;state=clear\x07"], ["Stop", false, "done", "\x1bc"],
     ["StopFailure", false, "failed", "\x1b]7501;state=clear\x07"], ["StopFailure", false, "failed", "\x1bc"],
     ["Stop", true, "interrupted", "\x1b]7501;state=clear\x07"], ["Stop", true, "interrupted", "\x1bc"],
