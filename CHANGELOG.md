@@ -8,6 +8,7 @@
 ### Changed
 - The standalone WebUI and app-started runtime use fixed port `17777` by default, while explicit port overrides remain supported.
 - The runtime listens on all IPv4 interfaces. Host and Origin checks remain enforced for HTTP commands and WebSocket connections.
+- Project start launchers use a compact three-column layout.
 
 ### Fixed
 - WebUI commands work over LAN HTTP without requiring the secure-context-only `crypto.randomUUID()` API.

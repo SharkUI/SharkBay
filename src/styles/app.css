@@ -4214,13 +4214,12 @@ button.project-file-toggle:focus-visible {
 }
 
 .project-start-content {
-  width: min(100%, 360px);
+  width: min(100%, 320px);
 }
 
 .project-start-launchers {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 24px;
 }
@@ -4248,7 +4247,7 @@ button.project-file-toggle:focus-visible {
   display: grid;
   justify-items: center;
   gap: 8px;
-  min-width: 80px;
+  min-width: 0;
   padding: 12px 10px;
 }
 
