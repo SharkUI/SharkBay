@@ -2,12 +2,20 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { SessionAuth } from "../src/server/session-auth.js";
+import { isLocalNetworkAddress, SessionAuth } from "../src/server/session-auth.js";
 import { validateApplicationInput } from "../src/runtime/application-input.js";
 import { acquireProfileLock } from "../src/runtime/profile-lock.js";
 
 afterEach(() => { vi.useRealTimers(); });
 describe("browser connection authorization", () => {
+  it.each(["127.0.0.1", "127.1.2.3", "10.0.0.103", "172.16.0.1", "172.31.255.254", "192.168.2.113", "169.254.1.2", "::1", "::ffff:192.168.1.2"])("allows local network peer %s without a cookie", (address) => {
+    expect(isLocalNetworkAddress(address)).toBe(true);
+    expect(new SessionAuth().authenticate(undefined, address)).toBe("lan");
+  });
+  it.each([undefined, "8.8.8.8", "172.15.255.255", "172.32.0.1", "192.169.1.1", "10.0.0.999", "localhost", "127.0.0.1.attacker.invalid", "2001:db8::1"])("requires authorization for other peers: %s", (address) => {
+    expect(isLocalNetworkAddress(address)).toBe(false);
+    expect(() => new SessionAuth().authenticate(undefined, address)).toThrow(/fresh connection/);
+  });
   it("exchanges once, expires grants and sessions, and revokes pending access", () => {
     vi.useFakeTimers();
     const auth = new SessionAuth();

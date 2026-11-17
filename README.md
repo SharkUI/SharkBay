@@ -26,19 +26,19 @@ macOS on Apple Silicon (arm64).
 
 Or download the signed and notarized app from [GitHub Releases](https://github.com/SharkUI/SharkBay/releases/latest).
 
-### New in 0.3.7
+### New in 0.3.8
 
-Open the WebUI from another device on your LAN using a one-use connection link. The runtime now uses port `17777` by default, with working terminal commands and clipboard actions over LAN HTTP. See the [changelog](CHANGELOG.md#037--2026-11-17).
+Open the WebUI directly from your local network at `http://<host-LAN-IP>:17777/`, without a connection token or session cookie. Terminal controls and reconnects work without authorization links. See the [changelog](CHANGELOG.md#038--2026-11-17).
 
 ## Features
 
 ### Shared Runtime and Browser Access
 
-The macOS app and WebUI connect to one local Node runtime. Open the runtime's connection link in a browser to access your projects and existing terminals; one client controls each terminal while others observe. Closing the desktop client leaves sessions running, and you can take control from another connected client.
+The macOS app and WebUI connect to one local Node runtime. Open the runtime's local or LAN address in a browser to access your projects and existing terminals; one client controls each terminal while others observe. Closing the desktop client leaves sessions running, and you can take control from another connected client.
 
 The WebUI adapts to phones and tablets with full-screen project navigation, touch terminal keys, and preserved input drafts across reconnects. The packaged app includes Node and its runtime dependencies.
 
-The runtime listens on all IPv4 interfaces at port `17777` by default. To connect from another device on the same LAN, use the LAN connection link printed by the runtime, or replace `127.0.0.1` in a fresh connection link with the host computer's LAN IPv4 address, keeping the port and `#connect=...` fragment. Each grant expires after five minutes and can authorize one browser; the local and LAN variants share that grant. Browser authorization is still required, and the host firewall must allow the connection. Project development URLs are not rewritten or proxied.
+The runtime listens on all IPv4 interfaces at port `17777` by default. Open `http://<host-LAN-IP>:17777/` directly from another device on the LAN; local and LAN access does not require a connection token or session cookie. The host firewall must allow the connection. Host and Origin checks remain enforced, and non-LAN clients retain the existing authorization requirement. Project development URLs are not rewritten or proxied.
 
 ### Multi-Agent Support
 

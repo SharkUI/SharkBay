@@ -16,7 +16,7 @@ import { createDefaultConfig, saveAppConfig } from "../src/main/config.js";
 import { toLocalProjectUri } from "../src/core/project-uri.js";
 
 type Message = { type: string; clientId?: string; name?: string; code?: string; payload?: any };
-type Browser = { origin: string; socket: WebSocket; clientId: string; cookie: string; messages: Message[] };
+type Browser = { origin: string; socket: WebSocket; clientId: string; messages: Message[] };
 const lanAddress = Object.values(networkInterfaces()).flat().find((address) => address?.family === "IPv4" && !address.internal)?.address;
 let directory: string, project: string, uri: string;
 let runtime: ApplicationRuntime;
@@ -30,19 +30,17 @@ async function waitFor<T>(read: () => T | undefined, timeout = 5000): Promise<T>
   throw new Error("Timed out waiting for runtime event");
 }
 async function connect(origin = server.origin): Promise<Browser> {
-  const token = new URLSearchParams(new URL(server.connectionUrl()).hash.slice(1)).get("connect");
-  const exchange = await fetch(`${origin}/api/session`, { method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
-  expect(exchange.status).toBe(200);
-  expect(exchange.headers.get("set-cookie")).toMatch(/HttpOnly; SameSite=Strict/);
-  const cookie = exchange.headers.get("set-cookie")!.split(";")[0]!;
-  const socket = new WebSocket(origin.replace("http:", "ws:") + "/api/events", { headers: { Origin: origin, Cookie: cookie } });
+  const capabilities = await fetch(`${origin}/api/capabilities`);
+  expect(capabilities.status).toBe(200);
+  expect(capabilities.headers.get("set-cookie")).toBeNull();
+  const socket = new WebSocket(origin.replace("http:", "ws:") + "/api/events", { headers: { Origin: origin } });
   const messages: Message[] = [];
   socket.on("message", (raw) => messages.push(JSON.parse(raw.toString())));
   const hello = await waitFor(() => messages.find((message) => message.type === "hello"));
-  const browser = { origin, socket, messages, cookie, clientId: hello.clientId! }; browsers.push(browser); return browser;
+  const browser = { origin, socket, messages, clientId: hello.clientId! }; browsers.push(browser); return browser;
 }
 async function command(browser: Browser, method: string, input?: unknown, requestId = randomUUID()) {
-  const response = await fetch(`${browser.origin}/api/command`, { method: "POST", headers: { Origin: browser.origin, Cookie: browser.cookie, "Content-Type": "application/json", "X-SharkBay-Request": "1", "X-SharkBay-Client": browser.clientId }, body: JSON.stringify({ requestId, method, input }) });
+  const response = await fetch(`${browser.origin}/api/command`, { method: "POST", headers: { Origin: browser.origin, "Content-Type": "application/json", "X-SharkBay-Request": "1", "X-SharkBay-Client": browser.clientId }, body: JSON.stringify({ requestId, method, input }) });
   return { status: response.status, ...(await response.json()) };
 }
 beforeAll(async () => {
@@ -117,15 +115,15 @@ describe("local Web runtime end to end", () => {
   });
   it("protects HTTP/WS, Host, Origin and command envelopes", async () => {
     expect((await fetch(server.origin)).status).toBe(200);
-    expect((await fetch(`${server.origin}/api/capabilities`)).status).toBe(401);
+    expect((await fetch(`${server.origin}/api/capabilities`)).status).toBe(200);
     const wrongHost = await new Promise<number>((done) => { http.get(server.origin, { headers: { Host: "attacker.invalid" } }, (response) => { response.resume(); done(response.statusCode!); }); });
     expect(wrongHost).toBe(403);
     expect((await fetch(`${server.origin}/api/session`, { method: "POST", headers: { Origin: "https://attacker.invalid", "Content-Type": "application/json" }, body: "{}" })).status).toBe(403);
-    const rejected = new WebSocket(server.origin.replace("http:", "ws:") + "/api/events", { origin: server.origin });
+    const rejected = new WebSocket(server.origin.replace("http:", "ws:") + "/api/events", { origin: "https://attacker.invalid" });
     const status = await new Promise<number>((done) => { rejected.on("unexpected-response", (_request, response) => { response.resume(); rejected.terminate(); done(response.statusCode!); }); rejected.on("error", () => {}); });
     expect(status).toBe(403);
     const browser = await connect();
-    expect((await fetch(`${server.origin}/api/command`, { method: "POST", headers: { Cookie: browser.cookie, Origin: server.origin, "Content-Type": "application/json" }, body: "{}" })).status).toBe(403);
+    expect((await fetch(`${server.origin}/api/command`, { method: "POST", headers: { Origin: server.origin, "Content-Type": "application/json" }, body: "{}" })).status).toBe(403);
     expect((await command(browser, "cancelAllCodeGraphJobs")).status).toBe(404);
     expect((await command(browser, "terminal.create", { cwdUri: uri, configPath: "/tmp/injected" })).status).toBe(400);
   });
@@ -140,7 +138,7 @@ describe("local Web runtime end to end", () => {
     expect((await command(browser, "projects.readFile", { projectUri: uri, relativePath: "../private.txt" })).result?.ok).not.toBe(true);
     expect((await command(browser, "projects.readFile", { projectUri: uri, relativePath: "outside-link" })).result?.ok).not.toBe(true);
     expect((await command(browser, "protocol.getTasks", { repoPath: directory })).ok).toBe(false);
-    const preview = await fetch(`${server.origin}/api/preview?url=${encodeURIComponent(pathToFileURL(path.join(project, "artifact.html")).href)}`, { headers: { Cookie: browser.cookie } });
+    const preview = await fetch(`${server.origin}/api/preview?url=${encodeURIComponent(pathToFileURL(path.join(project, "artifact.html")).href)}`);
     expect(preview.status).toBe(200); expect(preview.headers.get("content-security-policy")).toContain("sandbox allow-scripts;"); expect(preview.headers.get("content-security-policy")).not.toContain("allow-same-origin");
     expect(preview.headers.get("content-security-policy")).toContain("connect-src 'none'");
   });
@@ -149,26 +147,25 @@ describe("local Web runtime end to end", () => {
     const page = await fetch(origin);
     expect(page.status).toBe(200);
     expect(page.headers.get("content-security-policy")).toContain(origin.replace("http:", "ws:"));
-    expect((await fetch(`${origin}/api/capabilities`)).status).toBe(401);
+    expect((await fetch(`${origin}/api/capabilities`)).status).toBe(200);
     const wrongHost = await new Promise<number>((done, reject) => { http.get(origin, { headers: { Host: new URL(server.origin).host } }, (response) => { response.resume(); done(response.statusCode!); }).on("error", reject); });
     expect(wrongHost).toBe(403);
     expect((await fetch(`${origin}/api/session`, { method: "POST", headers: { Origin: server.origin, "Content-Type": "application/json" }, body: "{}" })).status).toBe(403);
     const browser = await connect(origin);
     expect((await command(browser, "config.get")).ok).toBe(true);
-    for (const headers of [{ Origin: server.origin, Cookie: browser.cookie }, { Origin: origin, Cookie: browser.cookie, Host: "attacker.invalid" }]) {
+    for (const headers of [{ Origin: server.origin }, { Origin: origin, Host: "attacker.invalid" }]) {
       const rejected = new WebSocket(origin.replace("http:", "ws:") + "/api/events", { headers });
       const status = await new Promise<number>((done) => { rejected.on("unexpected-response", (_request, response) => { response.resume(); rejected.terminate(); done(response.statusCode!); }); rejected.on("error", () => {}); });
       expect(status).toBe(403);
     }
   });
-  it.each([{ mode: "loopback", address: "127.0.0.1" }, { mode: "LAN HTTP", address: lanAddress }].filter((entry) => entry.address))("runs the real Web bridge through authorization, snapshots and reauthorization over $mode", async ({ address }) => {
+  it.each([{ mode: "loopback", address: "127.0.0.1" }, { mode: "LAN HTTP", address: lanAddress }].filter((entry) => entry.address))("runs the real Web bridge without grants or cookies through snapshots and reconnects over $mode", async ({ address }) => {
     const nativeFetch = globalThis.fetch;
     const origin = server.origin.replace("127.0.0.1", address!);
-    const location = new URL(server.connectionUrl().replace("127.0.0.1", address!));
-    let cookie = "";
+    const location = new URL(origin);
     const sockets: WebSocket[] = [];
     class BrowserSocket extends WebSocket {
-      constructor(url: string) { super(url, { headers: { Origin: origin, Cookie: cookie } }); sockets.push(this); }
+      constructor(url: string) { super(url, { headers: { Origin: origin } }); sockets.push(this); }
     }
     const window = new EventTarget();
     vi.stubGlobal("window", window); vi.stubGlobal("location", location);
@@ -177,9 +174,8 @@ describe("local Web runtime end to end", () => {
     vi.stubGlobal("WebSocket", BrowserSocket);
     vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
       const headers = new Headers(init?.headers); headers.set("Origin", origin);
-      if (cookie) headers.set("Cookie", cookie);
       const response = await nativeFetch(new URL(input, origin), { ...init, headers });
-      const next = response.headers.get("set-cookie"); if (next) cookie = next.split(";")[0]!;
+      expect(response.headers.get("set-cookie")).toBeNull();
       return response;
     });
     let bridge: Awaited<ReturnType<typeof createWebBridge>> | undefined;
@@ -191,10 +187,11 @@ describe("local Web runtime end to end", () => {
       await waitFor(() => frames.find((frame) => frame.reset)); expect(bridge.runtime.canControl(session.id)).toBe(true);
       bridge.terminal!.inputFire!({ sessionId: session.id, data: "printf '%s%s\\n' 'web-bridge-' 'ok'\r" });
       await waitFor(() => frames.find((frame) => frame.data.includes("web-bridge-ok")));
-      server.revoke(); await waitFor(() => bridge!.runtime.connection() === "unauthorized" ? true : undefined);
+      server.revoke(); expect((await bridge.runtime.listTerminals())[0]!.session.pid).toBe(session.pid);
+      sockets[sockets.length - 1]!.close();
+      await waitFor(() => bridge!.runtime.connection() === "disconnected" ? true : undefined);
       const notices: string[] = []; const offNotice = bridge.runtime.onNotice((notice) => notices.push(notice));
       bridge.terminal!.inputFire!({ sessionId: session.id, data: "do not replay" }); expect(notices).toHaveLength(1);
-      location.href = server.connectionUrl().replace("127.0.0.1", address!); window.dispatchEvent(new Event("hashchange"));
       await waitFor(() => bridge!.runtime.connection() === "connected" ? true : undefined);
       const terminals = await bridge.runtime.listTerminals(); expect(terminals).toHaveLength(1); expect(terminals[0]!.session.pid).toBe(session.pid);
       await bridge.terminal!.close!({ sessionId: session.id }); off(); offNotice();
@@ -249,7 +246,7 @@ describe("local Web runtime end to end", () => {
     expect(sessions).toHaveLength(1); expect(sessions[0].session.pid).toBe(session.pid);
     expect(() => process.kill(session.pid, 0)).not.toThrow();
     server.revoke();
-    expect((await fetch(`${server.origin}/api/capabilities`, { headers: { Cookie: reconnect.cookie } })).status).toBe(401);
+    expect((await fetch(`${server.origin}/api/capabilities`)).status).toBe(200);
     const create = runtime.core.createTerminal.bind(runtime.core);
     let release!: () => void;
     const gate = new Promise<void>((done) => { release = done; });

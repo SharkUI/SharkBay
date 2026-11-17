@@ -19,7 +19,7 @@ let configPath: string | undefined;
 for (let index = 0; index < args.length; index++) {
   const key = args[index];
   if (key === "--help") {
-    console.log("SharkBay WebUI\n  npm start -- [--port 17777] [--data-dir path] [--config path] [--project path ...]\nUse --stop to stop the shared runtime and its terminals. Listens on all IPv4 interfaces for LAN access; browser authorization is required. Existing host projects are copied into a separate WebUI profile on first start.\nIn the host terminal: Enter/connect = new connection link; revoke = disconnect authorized browsers.");
+    console.log("SharkBay WebUI\n  npm start -- [--port 17777] [--data-dir path] [--config path] [--project path ...]\nUse --stop to stop the shared runtime and its terminals. Listens on all IPv4 interfaces; local and LAN access does not require browser authorization. Existing host projects are copied into a separate WebUI profile on first start.\nIn the host terminal: Enter/connect = local and LAN addresses; revoke = disconnect authorized non-LAN browsers.");
     process.exit(0);
   }
   if (key === "--stop") { stopRequested = true; continue; }
@@ -45,7 +45,7 @@ if (existing) {
     if (stopRequested) { await existing.call("stop"); console.log("SharkBay runtime stop requested."); }
     else {
       for (const project of projects) await existing.call("config.addProject", { path: project });
-      console.log(`Existing SharkBay runtime: ${await existing.call("connect")}`);
+      console.log(`Existing SharkBay runtime: ${new URL(await existing.call<string>("connect")).origin}`);
     }
   } finally { existing.dispose(); }
   process.exit(0);
@@ -78,18 +78,18 @@ try {
   const control = await createRuntimeControl(runtime, server, () => { void stop().catch((error) => { console.error(error); process.exitCode = 1; }); });
   console.log(`SharkBay WebUI: ${server.origin}\nHost profile: ${userDataPath}\nProjects: ${config.configuredProjects.length}`);
   const connect = () => {
-    const link = server.connectionUrl();
-    console.log(`Connection link (one use, 5 minutes): ${link}`);
+    const link = server.origin;
+    console.log(`WebUI address (local/LAN, no authorization required): ${link}`);
     const addresses = new Set(Object.values(os.networkInterfaces()).flatMap((entries) => entries?.filter((entry) => entry.family === "IPv4" && !entry.internal).map((entry) => entry.address) ?? []));
-    for (const address of addresses) console.log(`LAN connection link (same one-use grant): ${link.replace("127.0.0.1", address)}`);
+    for (const address of addresses) console.log(`LAN address: ${link.replace("127.0.0.1", address)}`);
   };
   if (!background) connect();
   const terminal = readline.createInterface({ input: process.stdin });
   terminal.on("line", (line) => {
     const command = line.trim();
     if (!command || command === "connect") connect();
-    else if (command === "revoke") { server.revoke(); console.log("Browser authorization revoked. PTYs remain running."); }
-    else console.log("Enter/connect: connection link; revoke: revoke browser access; Ctrl-C: stop runtime.");
+    else if (command === "revoke") { server.revoke(); console.log("Non-LAN browser authorization revoked. Local/LAN access and PTYs remain running."); }
+    else console.log("Enter/connect: local and LAN addresses; revoke: revoke non-LAN browser access; Ctrl-C: stop runtime.");
   });
   let stopping = false;
   const stop = async () => {

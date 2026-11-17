@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.8] — 2026-11-17
+
+### Changed
+- Local and LAN browsers can open the WebUI directly without a one-use connection link or session cookie.
+- Interactive runtime startup prints plain local and LAN addresses.
+- Host, Origin and terminal control checks remain enforced; non-LAN clients retain the existing authorization requirement.
+
+### Fixed
+- LAN terminals reconnect without requiring a new connection link, and authorization expiry or revocation does not interrupt LAN sessions.
+
+### Upgrade Note
+- Finish active terminal work and stop the previous runtime before starting this version to activate direct LAN access. Updating or reopening the desktop app alone reuses an existing runtime.
+
 ## [0.3.7] — 2026-11-17
 
 ### Added
