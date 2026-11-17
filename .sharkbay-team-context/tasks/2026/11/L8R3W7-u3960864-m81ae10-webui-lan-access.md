@@ -12,12 +12,14 @@ agent: Codex GPT-6
 sessionId: 01a1e76d-6a24-74b3-acf6-ade1b1cdbee0
 branch: main
 createdAt: 2026-11-17T03:44:56Z
-updatedAt: 2026-11-17T03:52:05Z
+updatedAt: 2026-11-17T04:01:55Z
+commits:
+  - fab4ada07fabab0d165957957be64f544151dabc
 completedAt: 2026-11-17T03:52:05Z
 ---
 
 ## Summary
-已支持 WebUI 在默认 17777 端口通过局域网 IPv4 访问，保留一次性连接授权与严格 Host/Origin 校验，并修复 HTTP 下请求 ID 和复制操作兼容性。全量 480 项测试及真实 Chrome 局域网地址操作验证通过；未创建提交。
+已支持 WebUI 在默认 17777 端口通过局域网 IPv4 访问，保留一次性连接授权与严格 Host/Origin 校验，并修复 HTTP 下请求 ID 和复制操作兼容性。全量 480 项测试及真实 Chrome 局域网地址操作验证通过，已提交为 fab4ada。
 
 ## Files
 - README.md
@@ -40,6 +42,7 @@ completedAt: 2026-11-17T03:52:05Z
 - README 记录局域网授权方式、共享 grant 的一次性语义及防火墙前提；未实现项目测试 URL 转换、域名或代理。
 - 按 vercel:react-best-practices 检查修改组件：复制逻辑保留在事件回调，无新增 Hook/订阅或依赖，错误反馈通过父组件回调沿用既有 Toast；临时 DOM 在 finally 中清理。
 - 真实 Chrome 验证结束，停止本任务的隔离 Runtime，清理临时项目、配置、终端和目录；保留用户现有运行实例。
+- 用户授权发布后提交 fab4ada；发布和远端安装进展见 R7N4V9-u3960864-m81ae10。
 
 ## Verification
 - 回归复现：`npx vitest run tests/web-runtime-integration.test.ts` 修改前 7 项通过、3 项预期失败。
