@@ -26,9 +26,9 @@ macOS on Apple Silicon (arm64).
 
 Or download the signed and notarized app from [GitHub Releases](https://github.com/SharkUI/SharkBay/releases/latest).
 
-### New in 0.3.10
+### New in 0.3.11
 
-Review starts correctly from projects identified by `local:` or `file:` URIs, fixing a missing-directory error in packaged apps. See the [changelog](CHANGELOG.md#0310--2026-11-17).
+More reliable agent status and startup, authenticated browser access, safer file/worktree operations, and fixes for Telegram and background jobs. Finish active work and stop the previous shared runtime before upgrading; browser access now needs a fresh host-issued connection link. See the [changelog](CHANGELOG.md#0311--2026-11-18).
 
 ## Features
 

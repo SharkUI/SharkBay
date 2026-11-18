@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.3.11] — 2026-11-18
+
+### Fixed
+- Agent status now consistently attributes hook, terminal and transcript events to the right session, preserves explicit completion and approval outcomes, and rejects stale updates.
+- The desktop shows its loading window before runtime initialization completes; slow or failed Telegram initialization no longer delays the workspace. Startup phase timing is recorded for diagnosis.
+- All browser API and WebSocket access, including local and LAN clients, requires a host-issued connection grant and session cookie. Revoking access also rejects in-flight commands and disconnects sessions.
+- Managed task, artifact and protocol writes reject unsafe paths; linked Git worktrees support protocol installation and team synchronization without changing the user's staging area.
+- Job cancellation and timeouts, CodeGraph process cleanup, plugin cache invalidation, and token-usage persistence handle failure and shutdown more reliably.
+- Telegram approvals and terminal takeover are bound to the correct user, message and turn; polling cancellation, background errors and output retention are bounded.
+- Creating a file or folder no longer overwrites an existing item, and Git filenames containing Unicode, whitespace or control characters are parsed correctly.
+
+### Changed
+- Updated Electron and build dependencies, removed unused plugin and pricing modules, and separated isolated tests from host and full-runtime integration tests.
+- Desktop builds clean obsolete compiled modules before packaging. CodeGraph remains manually triggered.
+
+### Upgrade Note
+- Finish active terminal work and explicitly stop the previous shared runtime before starting this version. Updating or reopening the desktop app alone can reuse an older runtime and will not activate these fixes.
+- Direct unauthenticated LAN access from 0.3.8–0.3.10 has been removed. Open a fresh host-issued browser connection link after upgrading.
+
 ## [0.3.10] — 2026-11-17
 
 ### Fixed
