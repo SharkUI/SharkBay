@@ -1,0 +1,12 @@
+[
+  {
+    "mutation": "window-wait",
+    "expected_exit_code": 1,
+    "actual_exit_code": 1
+  },
+  {
+    "mutation": "telegram-wait",
+    "expected_exit_code": 1,
+    "actual_exit_code": 1
+  }
+]

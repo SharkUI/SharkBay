@@ -1,8 +1,10 @@
-# Execution Target, Profiles, and Plugin Platform
+# Execution Target Profiles and Plugin Platform Historical Proposal
+
+状态：历史设计提案，包含已实现子集与未实施目标。当前事实以 [Current facts](current-facts.md) 和仓库产品约束为准；本文件的架构目标、示例、阶段与预算不自动成为当前功能或已完成承诺。以下除更新后的实施状态表外，保留早期设计上下文，其中“当前”指原提案时的假设。
 
 ## 1. 背景
 
-SharkBay 已经开始从 local-only project workbench 走向 multi-target developer workbench。当前支持本地 project 和 SSH remote project，但代码里仍然存在较多 `local` / `ssh` 特判。
+本提案讨论从本地项目扩展到多执行目标的可能方案。当前注册的执行实现只有 LocalProvider；SSH、container、WSL、marketplace 与第三方插件执行均不应从本提案推断为已提供功能。多目标扩展必须服从当前 GitHub 原生协调工具的产品边界。
 
 下一阶段不能只做一层简单抽象。SharkBay 需要把这些能力收敛成一个可扩展平台：
 
@@ -1388,24 +1390,24 @@ Settings 可以增加 Diagnostics 页面，导出最近日志，方便定位 rem
 
 ## 14. Migration Plan
 
-### Implementation tracker
+### Current implementation status
 
-| Area | Status | Notes |
+此表按审计整改后的源码核对。后面的Phase保留原提案的阶段划分，不表示当前待办承诺或已完成验收；当前规范入口为 [Current facts](current-facts.md)。
+
+| Area | Current status | Evidence and boundary |
 | --- | --- | --- |
-| Shared target/profile/plugin types | Done | Added final architecture models in `src/shared/types.ts`. |
-| Core service boundary | Done (MVP) | Electron IPC now talks to `SharkBayCoreService` through a `CoreClient` proxy that forks the service into an Electron `utilityProcess` (`electron/core-host.ts`). Legacy `src/main/core/SharkBayCore` removed. |
-| Provider registry | Done | URI- and target-id-based dispatch in `src/core/provider-registry.ts`; no SSH special cases in callers. |
-| Local provider final shape | In progress | Runtime IPC uses `LocalProvider` with `readProjectFingerprint` and `pathExistsOnTarget`. Profile detector migration remains. |
-| SSH provider final shape | In progress | Runtime IPC uses `SshProvider` with `pathExistsOnTarget`; helper / connection pooling remain. |
-| Plugin manifest and bundled plugin loader | In progress | All 7 bundled detectors now declare a `sharkbay-plugin.json` manifest and register through `PluginHost.registerPlugin`. Disabled state persists in `AppConfig.disabledPluginIds` and applies on Core spawn; Settings → Extensions UI lists plugins and toggles enable/disable. Filesystem scanner for `~/.sharkbay/plugins/installed/` reads manifests but cannot execute plugin code yet (deferred to Phase 5.x sandbox). |
-| Profile orchestrator | In progress | Orchestrator with quick/standard/deep depth filtering; bundled detectors for core, Node, Python, Go, Rust, Java, and Agent CLIs. Detector `runOn` declares supported depths. |
-| Job scheduler | In progress | Added scheduler with per-target concurrency, priority, timeout, dedupe, and profile detector integration. Diagnostics collector subscribes to job updates and aggregates per-detector durations + failures. |
-| Diagnostics | In progress | Core-side `DiagnosticsCollector` tracks last 50 jobs, per-detector aggregates, cache hit/miss per category, SSH latency (count/avg/p50/p95/max + errors), terminal data event throughput. Settings → Diagnostics tab auto-refreshes every 3 s. |
-| Profile cache/storage | In progress | File cache keyed by `<target/uri>|<depth>` with 24h machine / 15min project TTLs; project cache invalidates on manifest-mtime / git-HEAD change for local provider. SQLite migration remains. |
-| UI profile consumption | In progress | Agent CLI buttons from MachineProfile; Stack tab in project detail and Machine Profile card in remote machine detail consume profiles via `profiles:*` IPC. Project list has context menu (rename / remove) with persisted `projectAliases`. Add Project verifies remote path via `targets:pathExists` before saving; terminals emit a friendly toast hint when they exit with a non-zero code within 5s. |
-| Agent install pipeline | Done (MVP) | Recipe listing, Core install/verify/refresh, IPC bridge, and renderer Install Agent dialog with command preview, target label, logs, and post-install refresh. |
-| Core service process isolation | Done (MVP) | `SharkBayCoreService` runs in an Electron `utilityProcess`. `CoreClient` (`electron/core-client.ts`) provides request/response + event forwarding via `parentPort` messages. Browser/AgentSessionWatcher/PortForwardManager stay in Electron main for now. Worker-pool split inside the core process remains. |
-| Remote helper strategy | Documented | Helper is optional, user-scoped, SharkBay-managed, and not a system daemon by default. |
+| Product and types | Current constraints plus partial scaffolding | GitHub remains the identity and collaboration source. Shared target/profile types do not establish available remote execution. |
+| Core process | Independent ordinary Node runtime | Electron runtime-client/control socket connects to ApplicationRuntime. There is no current Electron utilityProcess CoreClient/core-host backend. |
+| Provider registry | Local provider registered | CoreRuntime registers LocalProvider; SSH, container and WSL execution providers are not implemented in this tree. |
+| Bundled plugins | Implemented in code | Eight definitions register through bundledPlugins and PluginHost; enable/disable is persisted. They do not load sharkbay-plugin.json files from disk. |
+| Installed plugins and marketplace | Not implemented | The unused filesystem scanner/parser and their standalone test were removed during audit remediation. No third-party code loading or marketplace installation was enabled. |
+| Machine profile | Used by installation workflow | Installation recipes use the cached machine profile. Agent CLI listing uses enabled-detector discovery, including its direct bundled shortcut. |
+| Project profile | Internal implementation without application consumer | The orchestrator and project detectors exist, but no current application command/UI consumes the profile. A Stack tab or profiles:* transport should not be inferred. |
+| Scheduler | Implemented with audited cancellation | Per-target concurrency, priority and dedupe remain. Deadlines reject callers while retaining actual slots until work settles; owned commands receive cancellation. |
+| Diagnostics | Implemented subset | Recent jobs (50), detector duration/failure aggregates, profile-cache counts and terminal event counts exist. SSH latency and the proposed full performance dashboard are not current features. |
+| Profile storage | Local JSON cache | Stable target/URI/depth filenames; 24h machine and 15min project TTL. Enabled-plugin signatures and in-process revision checks prevent configuration drift. No automatic SQLite profile migration. |
+| Agent installation | Implemented for local recipes | Explicit user-triggered recipe selection, command execution, verification and profile refresh. Successful refresh happens outside the installation scheduler slot. |
+| Worker pools and remote helper | Proposal | Neither independent detector workers nor a shipped remote helper can be assumed from this design. |
 
 ### Phase 1: Plugin manifest and bundled plugins
 

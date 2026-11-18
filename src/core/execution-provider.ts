@@ -65,6 +65,7 @@ export type CommandResult = {
 
 export type RunCommandOptions = {
   timeoutMs?: number;
+  signal?: AbortSignal;
   cwdUri?: string;
   env?: Record<string, string>;
 };

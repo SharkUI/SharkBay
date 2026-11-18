@@ -9,7 +9,7 @@ export function createCoreRuntime(): CoreRuntime {
   return Object.assign(core, {
     dispose(): Promise<void> {
       return disposal ??= (async () => {
-        try { await core.cancelAllCodeGraphJobs(); }
+        try { await core.stopJobs(); await core.cancelAllCodeGraphJobs(); }
         finally {
           const pending = new Set(core.listTerminalSessions().filter((session) => session.status === "running").map((session) => session.id));
           if (!pending.size) core.closeAllTerminalSessions();

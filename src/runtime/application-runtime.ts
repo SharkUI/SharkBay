@@ -22,6 +22,7 @@ import { cloneProject } from "../main/project-clone.js";
 import { createRuntimeTelegram } from "./telegram-runtime.js";
 import { ApplicationError, type ApplicationMethod, type ApplicationMethodMap, type RuntimeTerminal } from "../shared/application-api.js";
 import { validateApplicationInput } from "./application-input.js";
+import { createStartupTimer } from "../main/startup-timing.js";
 
 type Handlers = { [M in ApplicationMethod]: (input: ApplicationMethodMap[M]["input"], clientId: string) => ApplicationMethodMap[M]["result"] | Promise<ApplicationMethodMap[M]["result"]> };
 import type { RuntimePaths } from "../shared/types.js";
@@ -134,15 +135,19 @@ export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] 
   }
 
   async start(prepare?: () => Promise<void>): Promise<void> {
+    const startup = createStartupTimer("runtime");
     if (this.started || this.disposal) throw new Error("Runtime can only be started once");
     this.releaseLock = await acquireProfileLock(this.paths);
+    startup("profile-lock-acquired");
     try {
       await prepare?.();
       const config = await loadRuntimeConfig(this.paths);
+      startup("config-loaded");
       await this.core.applyDisabledPlugins(config.disabledPluginIds);
       const socketDir = path.join("/tmp", `sharkbay-${createHash("sha256").update(this.paths.userDataPath).digest("hex").slice(0, 12)}`);
       await mkdir(socketDir, { recursive: true, mode: 0o700 });
       this.usage = new TokenUsageDb(this.paths.userDataPath);
+      startup("usage-db-ready");
       this.collector = new TokenUsageCollector(this.usage);
       this.agents = createAgentRuntime(this.paths, this.core, {
         socketDir,
@@ -150,12 +155,20 @@ export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] 
         emit: (name, payload) => { if (name !== "terminal:data") this.emit("event", name, payload); },
       });
       this.telegram = createRuntimeTelegram(this.paths, this.core, this.agents, (name, payload) => this.emit("event", name, payload));
-      if (config.telegram?.enabled) await this.telegram.init();
       this.agents.agentSessionWatcher.setUsageCollector(this.collector);
       await this.agents.start();
+      startup("agents-ready");
       this.backfillTimer = setTimeout(() => { this.backfill = this.collector.backfill(this.backfillCancellation.signal).catch((error) => console.error("Usage backfill:", error)); }, 5000);
       this.backfillTimer.unref();
       this.started = true;
+      startup("core-ready");
+      if (config.telegram?.enabled) {
+        startup("telegram-init-started");
+        void this.telegram.init().then(() => startup("telegram-init-finished"), () => {
+          startup("telegram-init-failed");
+          console.error("Telegram initialization failed");
+        });
+      }
     } catch (error) { await this.dispose(); throw error; }
   }
 
@@ -259,9 +272,9 @@ export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] 
       this.backfillCancellation.abort();
       const errors: unknown[] = [];
       for (const cleanup of [
-        () => this.core.cancelAllCodeGraphJobs(), () => Promise.allSettled([...this.pending]),
+        () => this.core.stopJobs(), () => this.core.cancelAllCodeGraphJobs(), () => Promise.allSettled([...this.pending]),
         () => this.tasks.stop(), () => this.telegram?.dispose(), () => this.agents?.stop(), () => this.backfill,
-        () => this.collector?.flush(), () => this.core.dispose(), () => this.terminals.dispose(),
+        () => this.collector?.dispose(), () => this.core.dispose(), () => this.terminals.dispose(),
         () => this.usage?.close(), () => this.releaseLock?.(),
       ]) { try { await cleanup(); } catch (error) { errors.push(error); } }
       if (errors.length) throw new AggregateError(errors, "Runtime cleanup failed");

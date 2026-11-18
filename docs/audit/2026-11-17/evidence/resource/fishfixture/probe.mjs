@@ -1,0 +1,1 @@
+import {resolveCommandSearchPaths} from '../src/main/command-path.js'; console.log(JSON.stringify({case:'fish_paths',paths:await resolveCommandSearchPaths('/tmp/sharkbay-audit-resource-repro/fishfixture',[])}));

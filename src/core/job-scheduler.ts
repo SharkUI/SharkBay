@@ -37,12 +37,15 @@ export class JobScheduler extends EventEmitter<JobSchedulerEvents> {
   private readonly runningByTarget = new Map<string, number>();
   private readonly jobsByDedupeKey = new Map<string, Promise<unknown>>();
   private sequence = 0;
+  private stopped = false;
+  private readonly active = new Map<AbortController, Promise<void>>();
 
   constructor(private readonly options: { defaultTimeoutMs?: number; maxConcurrentPerTarget?: number } = {}) {
     super();
   }
 
   schedule<T>(input: ScheduleJobInput<T>): Promise<T> {
+    if (this.stopped) return Promise.reject(new Error("Job scheduler is stopped"));
     if (input.dedupeKey) {
       const existing = this.jobsByDedupeKey.get(input.dedupeKey);
       if (existing) return existing as Promise<T>;
@@ -90,6 +93,18 @@ export class JobScheduler extends EventEmitter<JobSchedulerEvents> {
     return (this.runningByTarget.get(targetId) ?? 0) < max;
   }
 
+  async stop(): Promise<void> {
+    this.stopped = true;
+    for (const queued of this.queue.splice(0)) {
+      queued.job.status = "cancelled";
+      queued.job.finishedAt = new Date().toISOString();
+      queued.reject(new Error("Job scheduler is stopped"));
+      this.emit("update", queued.job);
+    }
+    for (const controller of this.active.keys()) controller.abort(new Error("Job scheduler is stopped"));
+    await Promise.all(this.active.values());
+  }
+
   private run<T>(queued: QueuedJob<T>): void {
     const { input, job, resolve, reject } = queued;
     this.runningByTarget.set(job.targetId, (this.runningByTarget.get(job.targetId) ?? 0) + 1);
@@ -98,28 +113,42 @@ export class JobScheduler extends EventEmitter<JobSchedulerEvents> {
     this.emit("update", job as ScheduledJob<unknown>);
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), job.timeoutMs);
-    input.run(controller.signal)
-      .then((result) => {
-        job.status = "completed";
-        job.result = result;
-        job.finishedAt = new Date().toISOString();
-        resolve(result);
-      })
-      .catch((error) => {
-        job.status = controller.signal.aborted ? "timeout" : "failed";
-        job.error = error instanceof Error ? error.message : String(error);
-        job.finishedAt = new Date().toISOString();
-        reject(error);
-      })
-      .finally(() => {
-        clearTimeout(timer);
-        const running = (this.runningByTarget.get(job.targetId) ?? 1) - 1;
-        if (running <= 0) this.runningByTarget.delete(job.targetId);
-        else this.runningByTarget.set(job.targetId, running);
-        this.emit("update", job as ScheduledJob<unknown>);
-        this.pump();
-      });
+    const abort = () => {
+      job.status = this.stopped ? "cancelled" : "timeout";
+      job.error = controller.signal.reason instanceof Error ? controller.signal.reason.message : "Job cancelled";
+      job.finishedAt = new Date().toISOString();
+      reject(controller.signal.reason);
+      this.emit("update", job as ScheduledJob<unknown>);
+    };
+    controller.signal.addEventListener("abort", abort, { once: true });
+    const timer = setTimeout(() => controller.abort(new Error(`Job timed out after ${job.timeoutMs}ms`)), job.timeoutMs);
+    // Reject callers at the deadline, but keep the slot until the actual work stops.
+    const execution = Promise.resolve().then(() => {
+      controller.signal.throwIfAborted();
+      return input.run(controller.signal);
+    }).then((result) => {
+      if (controller.signal.aborted) return;
+      job.status = "completed";
+      job.result = result;
+      job.finishedAt = new Date().toISOString();
+      resolve(result);
+    }).catch((error) => {
+      if (controller.signal.aborted) return;
+      job.status = "failed";
+      job.error = error instanceof Error ? error.message : String(error);
+      job.finishedAt = new Date().toISOString();
+      reject(error);
+    }).finally(() => {
+      clearTimeout(timer);
+      controller.signal.removeEventListener("abort", abort);
+      this.active.delete(controller);
+      const running = (this.runningByTarget.get(job.targetId) ?? 1) - 1;
+      if (running <= 0) this.runningByTarget.delete(job.targetId);
+      else this.runningByTarget.set(job.targetId, running);
+      if (!controller.signal.aborted) this.emit("update", job as ScheduledJob<unknown>);
+      this.pump();
+    });
+    this.active.set(controller, execution);
   }
 }
 

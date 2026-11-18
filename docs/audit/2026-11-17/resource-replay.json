@@ -1,0 +1,27 @@
+[
+  {
+    "script": "repro.cjs",
+    "exit_code": 0,
+    "output": ""
+  },
+  {
+    "script": "cases.mjs",
+    "exit_code": 0,
+    "output": "{\"case\":\"timeout_ignored\",\"final\":{\"status\":\"completed\"},\"events\":[{\"status\":\"queued\"},{\"status\":\"running\"},{\"status\":\"completed\"}]}\n{\"case\":\"nested_install_deadlock\",\"nestedStarted\":0,\"parentsFinished\":0}\n{\"case\":\"flush_first_failure\",\"error\":\"injected SQLite write failure\"}\n{\"case\":\"flush_retry\",\"insertCalls\":1,\"expected\":2}\n"
+  },
+  {
+    "script": "extra.mjs",
+    "exit_code": 0,
+    "output": "{\"case\":\"signalled_command\",\"resolved\":true,\"result\":{\"stdout\":\"\",\"stderr\":\"\"}}\n{\"case\":\"uname_fields\",\"actual\":{\"platform\":\"darwin\",\"name\":\"Darwin\",\"version\":\"arm64\",\"arch\":\"26.1.0\",\"kernel\":\"arm64\"},\"expected\":{\"version\":\"26.1.0\",\"arch\":\"arm64\",\"kernel\":\"26.1.0\"}}\n"
+  },
+  {
+    "script": "remove-active.mjs",
+    "exit_code": 0,
+    "output": "{\"case\":\"remove_active_index\",\"calls\":[\"status\",\"sync\",\"uninit\"],\"aborted\":false,\"hasActiveJobs\":true}\n"
+  },
+  {
+    "script": "reader.mjs",
+    "exit_code": 0,
+    "output": "{\"case\":\"reader_scale\",\"bytes\":1048576,\"lines\":4096,\"durationMs\":8,\"peakRss\":57950208,\"initialRss\":48676864,\"retainedPartial\":0,\"finalOffset\":1048576}\n{\"case\":\"reader_scale\",\"bytes\":8388608,\"lines\":32768,\"durationMs\":39,\"peakRss\":68141056,\"initialRss\":67649536,\"retainedPartial\":0,\"finalOffset\":8388608}\n{\"case\":\"reader_lifecycle\",\"rounds\":20,\"result\":\"passed\"}\n"
+  }
+]

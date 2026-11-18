@@ -10,6 +10,7 @@
  * (dispatch/turn/render/pairing/ansi/session-registry) carry the unit tests.
  */
 
+import { randomUUID } from "node:crypto";
 import type {
   TelegramConfig,
   TelegramConfigView,
@@ -43,6 +44,7 @@ const TUI_SUBMIT_DELAY_MS = 30;
 const PROGRESS_TAIL_CHARS = 200;
 /** Safety cap on the final message so a runaway PTY can never dump the whole scrollback. */
 const FINAL_MAX_CHARS = 6000;
+export const TELEGRAM_BUFFER_MAX_BYTES = 64 * 1024;
 
 const BOT_COMMAND_MENU: BotCommandSpec[] = [
   { command: "sessions", description: "已打开的会话" },
@@ -144,14 +146,15 @@ type ChatSession = {
   transcriptCursor: number | null;
   typingTimer: ReturnType<typeof setInterval> | null;
   approvalMessageId: number | null;
+  approvalRequest?: { token: string; turnId: string; messageId: number | null };
   lastProgressText: string;
   lastTasks: Array<{ taskId: string; title: string; raw: string }>;
 };
 
 type TelegramUpdate = {
   update_id: number;
-  message?: { message_id: number; from?: { id: number; first_name?: string; username?: string }; chat: { id: number }; text?: string };
-  callback_query?: { id: string; from: { id: number; first_name?: string; username?: string }; message?: { chat: { id: number } }; data?: string };
+  message?: { message_id: number; from?: { id: number; first_name?: string; username?: string }; chat: { id: number }; text?: string; reply_to_message?: { message_id: number } };
+  callback_query?: { id: string; from: { id: number; first_name?: string; username?: string }; message?: { message_id: number; chat: { id: number } }; data?: string };
 };
 
 export class TelegramService {
@@ -161,15 +164,16 @@ export class TelegramService {
   private pairStore = new PairStore();
   private polling = false;
   private offset = 0;
+  private generation = 0;
+  private startPromise?: Promise<void>;
+  private pollAbort?: AbortController;
   private status: TelegramConnectionStatus = "disabled";
   private statusMessage: string | undefined;
   private botUsername: string | null = null;
   private idleTimeoutMs = 15 * 60 * 1000;
   private chats = new Map<number, ChatSession>(); // by telegramUserId
   private ptyToChat = new Map<string, number>();
-  private lastSessionRows: TelegramSessionRow[] = [];
-  private lastResumeRows: TelegramSessionRow[] = [];
-  private lastListKind: "use" | "resume" = "use";
+  private selections = new Map<number, { chatId: number; kind: "use" | "resume"; rows: TelegramSessionRow[]; messageId: number | null }>();
   private newWizard = new Map<number, { projects: Array<{ cwdUri: string; projectName: string }>; project?: { cwdUri: string; projectName: string }; agents: Array<{ id: string; label: string }> }>();
   private idleTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -180,7 +184,9 @@ export class TelegramService {
 
   /** Load persisted config and start polling if enabled and a token is present. */
   async init(): Promise<void> {
+    const generation = this.generation;
     const config = await this.deps.loadConfig();
+    if (generation !== this.generation) return;
     this.botUsername = config.botUsername;
     this.idleTimeoutMs = config.idleTimeoutMs;
     this.pairStore = new PairStore({ initialUsers: config.pairedUsers });
@@ -201,6 +207,11 @@ export class TelegramService {
   }
 
   async setToken(token: string): Promise<{ ok: boolean; botUsername?: string; message?: string }> {
+    const resume = this.polling || !!this.startPromise;
+    const stopping = this.stop();
+    const generation = this.generation;
+    await stopping;
+    if (generation !== this.generation) return { ok: false, message: "Token 更新已取消" };
     const trimmed = token.trim();
     if (!trimmed) {
       await this.deps.secretDelete();
@@ -216,14 +227,19 @@ export class TelegramService {
     const api = new BotApi({ token: trimmed, fetch: this.deps.fetchImpl });
     try {
       const me = await api.getMe();
+      if (generation !== this.generation) return { ok: false, message: "Token 更新已取消" };
       await this.deps.secretSet(trimmed);
+      if (generation !== this.generation) return { ok: false, message: "Token 更新已取消" };
+      this.offset = 0;
       this.api = api;
       this.botUsername = me.username ?? null;
       this.status = this.polling ? "connected" : "disabled";
       await this.deps.saveConfig({ botUsername: this.botUsername });
       this.notify();
+      if (resume && generation === this.generation) await this.start();
       return { ok: true, botUsername: this.botUsername ?? undefined };
     } catch (error) {
+      if (generation !== this.generation) return { ok: false, message: "Token 更新已取消" };
       this.status = "error";
       this.statusMessage = errorMessage(error);
       this.notify();
@@ -237,35 +253,54 @@ export class TelegramService {
     else await this.stop();
   }
 
-  async start(): Promise<void> {
-    if (this.polling) return;
+  start(): Promise<void> {
+    if (this.polling) return Promise.resolve();
+    if (this.startPromise) return this.startPromise;
+    const operation = this.startPolling(++this.generation);
+    this.startPromise = operation;
+    const clear = () => { if (this.startPromise === operation) this.startPromise = undefined; };
+    void operation.then(clear, clear);
+    return operation;
+  }
+
+  private async startPolling(generation: number): Promise<void> {
     const token = await this.deps.secretGet();
+    if (generation !== this.generation) return;
     if (!token) {
       this.status = "unconfigured";
       this.notify();
       return;
     }
-    this.api = new BotApi({ token, fetch: this.deps.fetchImpl });
+    const api = new BotApi({ token, fetch: this.deps.fetchImpl });
     try {
-      const me = await this.api.getMe();
+      const me = await api.getMe();
+      if (generation !== this.generation) return;
       this.botUsername = me.username ?? this.botUsername;
-      await this.api.setMyCommands(BOT_COMMAND_MENU);
+      await api.setMyCommands(BOT_COMMAND_MENU);
     } catch (error) {
+      if (generation !== this.generation) return;
       this.status = "error";
       this.statusMessage = errorMessage(error);
       this.notify();
       return;
     }
+    if (generation !== this.generation) return;
+    this.api = api;
     this.polling = true;
     this.status = "connected";
     this.notify();
+    this.pollAbort = new AbortController();
     this.idleTimer = setInterval(() => this.sweepIdle(), 30_000);
     this.idleTimer.unref?.();
-    void this.pollLoop();
+    this.runBackground(this.pollLoop(generation, api, this.pollAbort.signal), "Polling");
   }
 
   async stop(): Promise<void> {
     this.polling = false;
+    this.generation++;
+    this.startPromise = undefined;
+    this.pollAbort?.abort(); this.pollAbort = undefined;
+    this.selections.clear(); this.newWizard.clear();
     if (this.idleTimer) { clearInterval(this.idleTimer); this.idleTimer = null; }
     for (const chat of [...this.chats.values()]) {
       this.detach(chat);
@@ -281,6 +316,7 @@ export class TelegramService {
 
   async revokeUser(telegramUserId: number): Promise<void> {
     this.pairStore.revoke(telegramUserId);
+    this.selections.delete(telegramUserId); this.newWizard.delete(telegramUserId);
     const chat = this.chats.get(telegramUserId);
     if (chat) { this.detach(chat); void this.send(chat.chatId, "🔒 访问已被吊销。"); }
     await this.persistUsers();
@@ -289,17 +325,19 @@ export class TelegramService {
 
   // --- polling --------------------------------------------------------------
 
-  private async pollLoop(): Promise<void> {
-    while (this.polling && this.api) {
+  private async pollLoop(generation: number, api: BotApi, signal: AbortSignal): Promise<void> {
+    while (this.polling && generation === this.generation && !signal.aborted) {
       try {
-        const updates = (await this.api.getUpdates(this.offset, POLL_TIMEOUT_SEC)) as TelegramUpdate[];
+        const updates = (await api.getUpdates(this.offset, POLL_TIMEOUT_SEC, signal)) as TelegramUpdate[];
         for (const update of updates) {
+          if (!this.polling || generation !== this.generation || signal.aborted) return;
           this.offset = Math.max(this.offset, update.update_id + 1);
           await this.handleUpdate(update).catch(() => { /* fail-safe per update */ });
         }
       } catch {
         // Network/timeout — back off, never throw into the app.
-        await delay(POLL_ERROR_BACKOFF_MS);
+        if (generation !== this.generation || signal.aborted) return;
+        await delay(POLL_ERROR_BACKOFF_MS, signal);
       }
     }
   }
@@ -327,9 +365,11 @@ export class TelegramService {
     if (dispatch.kind === "agent") {
       // A bare number while NOT in a chat selects from the last shown list.
       if (!this.chats.has(from.id) && /^\d+$/.test(text.trim())) {
-        const rows = this.lastListKind === "resume" ? this.lastResumeRows : this.lastSessionRows;
-        const id = parseSelection(text, rows, this.lastListKind);
-        if (id) return this.lastListKind === "resume" ? this.selectResume(chatId, from.id, id) : this.enterChat(chatId, from.id, id);
+        const selection = this.selections.get(from.id);
+        if (selection?.chatId === chatId && (!message.reply_to_message || message.reply_to_message.message_id === selection.messageId)) {
+          const id = parseSelection(text, selection.rows, selection.kind);
+          if (id) return selection.kind === "resume" ? this.selectResume(chatId, from.id, id) : this.enterChat(chatId, from.id, id);
+        }
       }
       return this.handleAgentInput(chatId, from.id, text, dispatch.text);
     }
@@ -340,8 +380,8 @@ export class TelegramService {
       case "help": await this.send(chatId, HELP_TEXT); return;
       case "whoami": return this.sendWhoami(chatId, from.id);
       case "machine": return this.sendMachine(chatId);
-      case "sessions": return this.sendSessions(chatId, dispatch.args);
-      case "resume": return this.sendResume(chatId, dispatch.args);
+      case "sessions": return this.sendSessions(chatId, from.id, dispatch.args);
+      case "resume": return this.sendResume(chatId, from.id, dispatch.args);
       case "new": return this.sendNewProjects(chatId, from.id);
       case "tasks": return this.sendTasks(chatId, from.id);
       case "status": return this.sendStatus(chatId, from.id);
@@ -353,27 +393,34 @@ export class TelegramService {
     const chatId = cb.message?.chat.id;
     if (chatId === undefined) return;
     if (!this.pairStore.isAuthorized(cb.from.id)) { await this.api?.answerCallbackQuery(cb.id, "未授权"); return; }
+    const generation = this.generation;
     const data = cb.data ?? "";
     if (data.startsWith("akey:")) {
-      await this.api?.answerCallbackQuery(cb.id, "已发送");
       const chat = this.chats.get(cb.from.id);
-      if (chat) {
-        const key = data.slice("akey:".length);
-        const input = key === "y" ? "y\r" : key === "n" ? "n\r" : "\r";
-        this.deps.inputTerminal(chat.ptyId, input);
-        chat.lastActivityAt = this.now();
-        this.clearApproval(chat);
+      const match = /^akey:([^:]+):(y|n|enter)$/.exec(data);
+      const request = chat?.approvalRequest;
+      if (!chat || !match || !request || request.token !== match[1] || request.messageId !== cb.message?.message_id
+        || chat.chatId !== chatId || chat.turn?.turnId !== request.turnId || !chat.turn.approvalHeld
+        || this.ptyToChat.get(chat.ptyId) !== cb.from.id) {
+        await this.api?.answerCallbackQuery(cb.id, "审批已过期"); return;
       }
+      // Consume before any await so a duplicate callback cannot send a second input.
+      this.clearApproval(chat);
+      this.deps.inputTerminal(chat.ptyId, match[2] === "y" ? "y\r" : match[2] === "n" ? "n\r" : "\r");
+      chat.lastActivityAt = this.now();
+      await this.api?.answerCallbackQuery(cb.id, "已发送");
       return;
     }
-    if (data === "sessions:refresh") { await this.api?.answerCallbackQuery(cb.id); return this.sendSessions(chatId, ""); }
-    if (data === "resume:refresh") { await this.api?.answerCallbackQuery(cb.id); return this.sendResume(chatId, ""); }
+    if (data === "sessions:refresh") { await this.api?.answerCallbackQuery(cb.id); if (generation !== this.generation) return; return this.sendSessions(chatId, cb.from.id, ""); }
+    if (data === "resume:refresh") { await this.api?.answerCallbackQuery(cb.id); if (generation !== this.generation) return; return this.sendResume(chatId, cb.from.id, ""); }
     if (data.startsWith("new:p:")) {
       await this.api?.answerCallbackQuery(cb.id);
+      if (generation !== this.generation || !this.pairStore.isAuthorized(cb.from.id)) return;
       const wizard = this.newWizard.get(cb.from.id);
       const project = wizard?.projects[Number.parseInt(data.slice("new:p:".length), 10)];
       if (!wizard || !project) { await this.send(chatId, "向导已过期，请重新 /new。"); return; }
       const agents = await this.deps.listAgents(project.cwdUri).catch(() => []);
+      if (generation !== this.generation || !this.pairStore.isAuthorized(cb.from.id)) return;
       if (agents.length === 0) { await this.send(chatId, "该项目没有可用的 agent CLI。"); this.newWizard.delete(cb.from.id); return; }
       wizard.project = project;
       wizard.agents = agents;
@@ -383,6 +430,7 @@ export class TelegramService {
     }
     if (data.startsWith("new:a:")) {
       await this.api?.answerCallbackQuery(cb.id);
+      if (generation !== this.generation || !this.pairStore.isAuthorized(cb.from.id)) return;
       const wizard = this.newWizard.get(cb.from.id);
       const agent = wizard?.agents[Number.parseInt(data.slice("new:a:".length), 10)];
       if (!wizard || !wizard.project || !agent) { await this.send(chatId, "向导已过期，请重新 /new。"); return; }
@@ -392,6 +440,7 @@ export class TelegramService {
     }
     if (data.startsWith("task:")) {
       await this.api?.answerCallbackQuery(cb.id);
+      if (generation !== this.generation || !this.pairStore.isAuthorized(cb.from.id)) return;
       const chat = this.chats.get(cb.from.id);
       const index = Number.parseInt(data.slice("task:".length), 10);
       const task = chat?.lastTasks[index];
@@ -404,12 +453,14 @@ export class TelegramService {
     }
     if (data.startsWith("use:")) {
       await this.api?.answerCallbackQuery(cb.id);
-      const id = parseSelection(data, this.lastSessionRows, "use");
+      if (generation !== this.generation || !this.pairStore.isAuthorized(cb.from.id)) return;
+      const id = parseSelection(data, this.selectionRows(cb.from.id, chatId, "use", cb.message?.message_id), "use");
       if (id) return this.enterChat(chatId, cb.from.id, id);
     }
     if (data.startsWith("resume:")) {
       await this.api?.answerCallbackQuery(cb.id);
-      const id = parseSelection(data, this.lastResumeRows, "resume");
+      if (generation !== this.generation || !this.pairStore.isAuthorized(cb.from.id)) return;
+      const id = parseSelection(data, this.selectionRows(cb.from.id, chatId, "resume", cb.message?.message_id), "resume");
       if (id) return this.selectResume(chatId, cb.from.id, id);
     }
     await this.api?.answerCallbackQuery(cb.id);
@@ -459,28 +510,32 @@ export class TelegramService {
     await this.send(chatId, `🖥 ${id.label}\nGitHub: u${id.githubUserId ?? "?"}\nMachine: ${id.machineId}\n已打开会话：${open} ｜ 历史会话：${total}\n/sessions 进入已打开 · /resume 恢复历史。`);
   }
 
-  private async sendSessions(chatId: number, args: string): Promise<void> {
+  private async sendSessions(chatId: number, userId: number, args: string): Promise<void> {
+    const generation = this.generation;
     const limit = parsePositiveInt(args) ?? DEFAULT_SESSIONS_LIMIT;
     const open = await this.deps.listOpenSessions();
+    if (generation !== this.generation || !this.pairStore.isAuthorized(userId)) return;
     const shown = open.slice(0, limit);
-    this.lastSessionRows = shown;
-    this.lastListKind = "use";
+    const selection = { chatId, kind: "use" as const, rows: shown, messageId: null as number | null };
+    this.selections.set(userId, selection);
     const { text, buttons } = renderSessionsList(shown, open.length, this.now(), {
       prefix: "use",
       header: `已打开会话（${open.length}）`,
       footer: "点按钮或回数字序号进入；未打开的历史会话用 /resume",
       empty: "当前没有已打开的 agent 会话。用 /resume 恢复历史会话。",
     });
-    await this.send(chatId, text, buttons.length ? toReplyMarkup(buttons) : undefined);
+    selection.messageId = await this.send(chatId, text, buttons.length ? toReplyMarkup(buttons) : undefined);
   }
 
-  private async sendResume(chatId: number, args: string): Promise<void> {
+  private async sendResume(chatId: number, userId: number, args: string): Promise<void> {
+    const generation = this.generation;
     const limit = parsePositiveInt(args) ?? DEFAULT_SESSIONS_LIMIT;
     const { rows } = await this.deps.listSessions();
+    if (generation !== this.generation || !this.pairStore.isAuthorized(userId)) return;
     const notOpen = rows.filter((r) => this.deps.resolveOpenTerminal(r.sessionId) === null);
     const shown = notOpen.slice(0, limit);
-    this.lastResumeRows = shown;
-    this.lastListKind = "resume";
+    const selection = { chatId, kind: "resume" as const, rows: shown, messageId: null as number | null };
+    this.selections.set(userId, selection);
     const { text, buttons } = renderSessionsList(shown, notOpen.length, this.now(), {
       prefix: "resume",
       refresh: "resume:refresh",
@@ -488,11 +543,13 @@ export class TelegramService {
       footer: "点按钮或回数字序号，在 SharkBay 中恢复并进入",
       empty: "没有可恢复的历史会话。",
     });
-    await this.send(chatId, text, buttons.length ? toReplyMarkup(buttons) : undefined);
+    selection.messageId = await this.send(chatId, text, buttons.length ? toReplyMarkup(buttons) : undefined);
   }
 
   private async sendNewProjects(chatId: number, userId: number): Promise<void> {
+    const generation = this.generation;
     const projects = await this.deps.listProjects().catch(() => []);
+    if (generation !== this.generation || !this.pairStore.isAuthorized(userId)) return;
     if (projects.length === 0) { await this.send(chatId, "没有已配置的项目。"); return; }
     this.newWizard.set(userId, { projects, agents: [] });
     const buttons = projects.map((p, i) => ({ text: p.projectName, callbackData: `new:p:${i}` }));
@@ -500,7 +557,9 @@ export class TelegramService {
   }
 
   private async startNewSession(chatId: number, userId: number, project: { cwdUri: string; projectName: string }, agent: { id: string; label: string }): Promise<void> {
+    const generation = this.generation;
     await this.send(chatId, `🚀 正在 ${project.projectName} 启动 ${agent.label}…`);
+    if (generation !== this.generation || !this.pairStore.isAuthorized(userId)) return;
     const before = new Set(this.deps.currentOpenTerminalIds());
     try {
       await this.deps.launchSession(project.cwdUri, project.projectName, agent.id);
@@ -513,6 +572,7 @@ export class TelegramService {
       await this.send(chatId, "已请求启动；打开后用 /sessions 进入。");
       return;
     }
+    if (generation !== this.generation || !this.pairStore.isAuthorized(userId)) return;
     const hookSessionId = this.deps.resolveHookForTerminal(terminalId) ?? "";
     const row: TelegramSessionRow = {
       sessionId: hookSessionId || terminalId,
@@ -577,7 +637,7 @@ export class TelegramService {
   // --- chat bridge ----------------------------------------------------------
 
   private async enterChat(chatId: number, userId: number, sessionId: string): Promise<void> {
-    const row = this.lastSessionRows.find((r) => r.sessionId === sessionId);
+    const row = this.selectionRows(userId, chatId, "use").find((r) => r.sessionId === sessionId);
     if (!row) { await this.send(chatId, "会话已过期，请重新 /sessions。"); return; }
     const terminalId = row.terminalId ?? this.deps.resolveOpenTerminal(row.sessionId);
     if (!terminalId) {
@@ -588,9 +648,11 @@ export class TelegramService {
   }
 
   private async selectResume(chatId: number, userId: number, sessionId: string): Promise<void> {
-    const row = this.lastResumeRows.find((r) => r.sessionId === sessionId);
+    const row = this.selectionRows(userId, chatId, "resume").find((r) => r.sessionId === sessionId);
     if (!row) { await this.send(chatId, "列表已过期，请重新 /resume。"); return; }
+    const generation = this.generation;
     await this.send(chatId, `♻️ 正在 SharkBay 中恢复 ${row.projectName} 会话…`);
+    if (generation !== this.generation || !this.pairStore.isAuthorized(userId)) return;
     try {
       await this.deps.restoreSession(row);
     } catch (error) {
@@ -602,12 +664,20 @@ export class TelegramService {
       await this.send(chatId, "已请求恢复；待 SharkBay 打开后用 /sessions 进入。");
       return;
     }
+    if (generation !== this.generation || !this.pairStore.isAuthorized(userId)) return;
     return this.attach(chatId, userId, row, terminalId);
   }
 
   /** Bind a Telegram chat to an open SharkBay terminal and sync current state. */
   /** Build + register a chat bound to an open terminal (detaching any previous). */
   private registerChat(chatId: number, userId: number, row: TelegramSessionRow, terminalId: string): ChatSession {
+    // Remote typing is exclusive, matching the single PTY output route.
+    const owner = this.ptyToChat.get(terminalId);
+    const previous = owner !== undefined ? this.chats.get(owner) : undefined;
+    if (previous && previous.telegramUserId !== userId) {
+      this.detach(previous);
+      void this.send(previous.chatId, "会话已由另一位配对用户接管，已退出聊天。");
+    }
     const existing = this.chats.get(userId);
     if (existing) this.detach(existing); // switch sessions; leave the old tab open
     const live = this.deps.currentStatus?.(row) ?? null;
@@ -648,7 +718,7 @@ export class TelegramService {
       await this.send(chatId, `${header}\n（已映射到 SharkBay 终端）`);
       this.beginPassiveTurn(chat);
       if (chat.turn) chat.turn = applyTurnEvent(chat.turn, { type: "status", state: "approval", at: this.now(), hookSessionId: row.sessionId, projectPath: row.projectPath }).turn;
-      void this.sendApproval(chat);
+      this.runBackground(this.sendApproval(chat), "Approval notification");
       return;
     }
 
@@ -682,10 +752,11 @@ export class TelegramService {
 
   private async handleAgentInput(chatId: number, userId: number, originalText: string, agentText: string): Promise<void> {
     const chat = this.chats.get(userId);
-    if (!chat) { await this.send(chatId, NOT_IN_CHAT_TEXT); return; }
+    if (!chat || chat.chatId !== chatId || this.ptyToChat.get(chat.ptyId) !== userId) { await this.send(chatId, NOT_IN_CHAT_TEXT); return; }
     chat.lastActivityAt = this.now();
     // Close any previous unfinished turn first (it stops its own typing).
     if (chat.turn && chat.turn.state !== "done") await this.finalizeChat(chat);
+    if (this.chats.get(userId) !== chat) return;
     // Immediately acknowledge: show "typing…" and forward the prompt to SharkBay
     // right away, so the user gets instant feedback instead of waiting for output.
     this.startTyping(chat);
@@ -693,7 +764,7 @@ export class TelegramService {
     chat.lastProgressText = "";
     chat.transcriptCursor = this.deps.transcript?.cursor(chat.row) ?? null;
     chat.turn = createTurn({
-      turnId: `${chat.ptyId}-${this.now()}`,
+      turnId: randomUUID(),
       hookSessionId: chat.hookSessionId,
       projectPath: chat.projectPath,
       ptyId: chat.ptyId,
@@ -708,7 +779,7 @@ export class TelegramService {
     for (const chunk of buildAgentSubmitSequence(chat.row.agentId, agentText)) {
       if (chunk.delayMs != null) {
         const ptyId = chat.ptyId;
-        setTimeout(() => this.deps.inputTerminal(ptyId, chunk.data), chunk.delayMs);
+        setTimeout(() => { if (this.chats.get(chat.telegramUserId) === chat && this.ptyToChat.get(ptyId) === chat.telegramUserId) this.deps.inputTerminal(ptyId, chunk.data); }, chunk.delayMs);
       } else {
         this.deps.inputTerminal(chat.ptyId, chunk.data);
       }
@@ -727,6 +798,7 @@ export class TelegramService {
       const hookId = this.deps.resolveHookForTerminal(chat.ptyId);
       if (hookId) {
         chat.hookSessionId = hookId;
+        if (chat.turn) chat.turn = { ...chat.turn, hookSessionId: hookId };
         if (chat.row.sessionId === "" || chat.row.sessionId === chat.ptyId) chat.row.sessionId = hookId;
       }
     }
@@ -734,7 +806,12 @@ export class TelegramService {
     // Ignore output produced while no turn is active — this drops the resume
     // replay / boot banner the agent prints before the user's prompt is processed.
     if (!chat.turn || chat.turn.state === "done") return;
-    chat.buffer += data;
+    if (!this.deps.transcript?.supports(chat.row.agentId)) {
+      const bytes = Buffer.from(chat.buffer + data);
+      let start = Math.max(0, bytes.length - TELEGRAM_BUFFER_MAX_BYTES);
+      while (start < bytes.length && (bytes[start]! & 0xc0) === 0x80) start++;
+      chat.buffer = bytes.subarray(start).toString("utf8");
+    }
     const res = applyTurnEvent(chat.turn, { type: "ptyData", at: this.now(), ptyId });
     chat.turn = res.turn;
     this.scheduleEdit(chat);
@@ -749,7 +826,7 @@ export class TelegramService {
     if (chat.turn) {
       const res = applyTurnEvent(chat.turn, { type: "ptyExit", ptyId });
       chat.turn = res.turn;
-      if (res.action === "finalize") void this.finalizeChat(chat);
+      if (res.action === "finalize") this.runBackground(this.finalizeChat(chat), "Turn finalization");
     }
     this.detach(chat);
     void this.send(chat.chatId, "会话所在的 SharkBay 终端已关闭，已退出。");
@@ -782,11 +859,11 @@ export class TelegramService {
       chat.buffer = "";
     }
     if (res.action === "approvalHold") {
-      void this.sendApproval(chat);
+      this.runBackground(this.sendApproval(chat), "Approval notification");
     } else if (res.action === "approvalRelease") {
       this.clearApproval(chat);
     } else if (res.action === "finalize") {
-      void this.finalizeChat(chat);
+      this.runBackground(this.finalizeChat(chat), "Turn finalization");
     }
   }
 
@@ -805,13 +882,13 @@ export class TelegramService {
     if (chat.progressMessageId === null) return;
     chat.lastEditAt = this.now();
     const text = this.renderProgress(chat);
-    void this.api?.editMessageText(chat.chatId, chat.progressMessageId, text || "🫧 working…");
+    this.runBackground(this.api?.editMessageText(chat.chatId, chat.progressMessageId, text || "🫧 working…"), "Progress update");
   }
 
   /** Open a turn that mirrors output for a turn started outside Telegram. */
   private beginPassiveTurn(chat: ChatSession): void {
     chat.transcriptCursor = this.deps.transcript?.turnStartCursor(chat.row) ?? null;
-    let turn = createTurn({ turnId: `${chat.ptyId}-${this.now()}`, hookSessionId: chat.hookSessionId, projectPath: chat.projectPath, ptyId: chat.ptyId, startedAt: this.now() });
+    let turn = createTurn({ turnId: randomUUID(), hookSessionId: chat.hookSessionId, projectPath: chat.projectPath, ptyId: chat.ptyId, startedAt: this.now() });
     turn = applyTurnEvent(turn, { type: "status", state: "working", at: this.now(), hookSessionId: chat.hookSessionId, projectPath: chat.projectPath }).turn;
     chat.turn = turn;
     chat.buffer = "";
@@ -824,8 +901,8 @@ export class TelegramService {
   /** Keep the "typing…" indicator alive while the session is working (~5s per ping). */
   private startTyping(chat: ChatSession): void {
     if (chat.typingTimer) return;
-    void this.api?.sendChatAction(chat.chatId, "typing");
-    chat.typingTimer = setInterval(() => { void this.api?.sendChatAction(chat.chatId, "typing"); }, 4000);
+    this.runBackground(this.api?.sendChatAction(chat.chatId, "typing"), "Typing notification");
+    chat.typingTimer = setInterval(() => { this.runBackground(this.api?.sendChatAction(chat.chatId, "typing"), "Typing notification"); }, 4000);
     chat.typingTimer.unref?.();
   }
 
@@ -835,15 +912,23 @@ export class TelegramService {
 
   /** Show the approval prompt with inline buttons (once per pending approval). */
   private async sendApproval(chat: ChatSession): Promise<void> {
-    if (chat.approvalMessageId !== null) return;
-    const id = await this.send(chat.chatId, "🔴 需要审批，请选择：", approvalKeyboard());
-    chat.approvalMessageId = id;
+    if (chat.approvalRequest || !chat.turn?.approvalHeld || this.chats.get(chat.telegramUserId) !== chat) return;
+    const request = { token: randomUUID(), turnId: chat.turn.turnId, messageId: null as number | null };
+    chat.approvalRequest = request;
+    const id = await this.send(chat.chatId, "🔴 需要审批，请选择：", approvalKeyboard(request.token));
+    if (chat.approvalRequest !== request || this.chats.get(chat.telegramUserId) !== chat || chat.turn?.turnId !== request.turnId) {
+      if (id !== null) this.runBackground(this.api?.deleteMessage(chat.chatId, id), "Approval cleanup");
+      return;
+    }
+    if (id === null) { chat.approvalRequest = undefined; return; }
+    request.messageId = id; chat.approvalMessageId = id;
   }
 
-  /** Remove the approval prompt once resolved (choice made or released elsewhere). */
+  /** Invalidate the request immediately, including notifications still in flight. */
   private clearApproval(chat: ChatSession): void {
+    chat.approvalRequest = undefined;
     if (chat.approvalMessageId !== null) {
-      void this.api?.deleteMessage(chat.chatId, chat.approvalMessageId);
+      this.runBackground(this.api?.deleteMessage(chat.chatId, chat.approvalMessageId), "Approval cleanup");
       chat.approvalMessageId = null;
     }
   }
@@ -869,43 +954,49 @@ export class TelegramService {
   }
 
   private async finalizeChat(chat: ChatSession): Promise<void> {
+    const turn = chat.turn;
     if (chat.editTimer) { clearTimeout(chat.editTimer); chat.editTimer = null; }
     this.stopTyping(chat);
     this.clearApproval(chat);
     // Delete the progress message → client plays the particle dissolve animation.
     if (chat.progressMessageId !== null) {
-      void this.api?.deleteMessage(chat.chatId, chat.progressMessageId);
+      this.runBackground(this.api?.deleteMessage(chat.chatId, chat.progressMessageId), "Progress cleanup");
       chat.progressMessageId = null;
     }
 
-    const supported = this.deps.transcript?.supports?.(chat.row.agentId) ?? false;
+    try {
+      const supported = this.deps.transcript?.supports?.(chat.row.agentId) ?? false;
 
-    // Prefer the clean answer reconstructed from the agent transcript; the PTY
-    // stream of a TUI agent is redraw frames and cannot be sent verbatim.
-    let final: string | null = null;
-    if (chat.transcriptCursor != null) {
-      final = this.deps.transcript?.answer(chat.row, chat.transcriptCursor) ?? null;
-      // Transcript flush may lag behind the stop hook — poll briefly for the
-      // end_turn entry to appear in the jsonl file.
-      if (!final && supported) {
-        for (let i = 0; i < 6 && !final; i++) {
-          await delay(500);
-          final = this.deps.transcript?.answer(chat.row, chat.transcriptCursor) ?? null;
+      // Prefer the clean answer reconstructed from the agent transcript; the PTY
+      // stream of a TUI agent is redraw frames and cannot be sent verbatim.
+      let final: string | null = null;
+      if (chat.transcriptCursor != null) {
+        final = this.deps.transcript?.answer(chat.row, chat.transcriptCursor) ?? null;
+        // Transcript flush may lag behind the stop hook — poll briefly for the
+        // end_turn entry to appear in the jsonl file.
+        if (!final && supported) {
+          for (let i = 0; i < 6 && !final; i++) {
+            await delay(500);
+            final = this.deps.transcript?.answer(chat.row, chat.transcriptCursor) ?? null;
+          }
         }
       }
-    }
-    if (!final && !supported) {
-      // Fallback (agents without a transcript reader): capped PTY tail.
-      const clean = stripAnsi(chat.buffer).trim();
-      final = clean || "（本轮无文本回复）";
-      if (final.length > FINAL_MAX_CHARS) {
-        final = `…（仅显示最近 ${FINAL_MAX_CHARS} 字符）\n${final.slice(-FINAL_MAX_CHARS)}`;
+      if (!final && !supported) {
+        // Fallback (agents without a transcript reader): capped PTY tail.
+        const clean = stripAnsi(chat.buffer).trim();
+        final = clean || "（本轮无文本回复）";
+        if (final.length > FINAL_MAX_CHARS) {
+          final = `…（仅显示最近 ${FINAL_MAX_CHARS} 字符）\n${final.slice(-FINAL_MAX_CHARS)}`;
+        }
+      }
+      await this.sendFormatted(chat.chatId, final || "（本轮无文本回复）");
+    } finally {
+      if (chat.turn === turn) {
+        chat.buffer = "";
+        chat.transcriptCursor = null;
+        chat.turn = null;
       }
     }
-    await this.sendFormatted(chat.chatId, final || "（本轮无文本回复）");
-    chat.buffer = "";
-    chat.transcriptCursor = null;
-    chat.turn = null;
   }
 
   /** Unbind a Telegram chat from its terminal. Never closes the SharkBay tab. */
@@ -913,8 +1004,9 @@ export class TelegramService {
     if (chat.editTimer) { clearTimeout(chat.editTimer); chat.editTimer = null; }
     this.stopTyping(chat);
     this.clearApproval(chat);
-    this.chats.delete(chat.telegramUserId);
-    this.ptyToChat.delete(chat.ptyId);
+    if (this.chats.get(chat.telegramUserId) === chat) this.chats.delete(chat.telegramUserId);
+    if (this.ptyToChat.get(chat.ptyId) === chat.telegramUserId) this.ptyToChat.delete(chat.ptyId);
+    chat.buffer = ""; chat.turn = null; chat.transcriptCursor = null;
   }
 
   private sweepIdle(): void {
@@ -928,6 +1020,15 @@ export class TelegramService {
   }
 
   // --- helpers --------------------------------------------------------------
+
+  private selectionRows(userId: number, chatId: number, kind: "use" | "resume", messageId?: number): TelegramSessionRow[] {
+    const selection = this.selections.get(userId);
+    return selection?.chatId === chatId && selection.kind === kind && (messageId === undefined || messageId === selection.messageId) ? selection.rows : [];
+  }
+
+  private runBackground(operation: Promise<unknown> | undefined, label: string): void {
+    void operation?.catch(() => { console.warn(`[telegram] ${label} failed`); });
+  }
 
   private async send(chatId: number, text: string, replyMarkup?: ReplyMarkup): Promise<number | null> {
     try {
@@ -980,12 +1081,12 @@ function stateWord(state: SessionState | null): string {
   }
 }
 
-function approvalKeyboard(): ReplyMarkup {
+function approvalKeyboard(token: string): ReplyMarkup {
   return {
     inline_keyboard: [[
-      { text: "✅ 同意 (y)", callback_data: "akey:y" },
-      { text: "❌ 拒绝 (n)", callback_data: "akey:n" },
-      { text: "↵ 回车", callback_data: "akey:enter" },
+      { text: "✅ 同意 (y)", callback_data: `akey:${token}:y` },
+      { text: "❌ 拒绝 (n)", callback_data: `akey:${token}:n` },
+      { text: "↵ 回车", callback_data: `akey:${token}:enter` },
     ]],
   };
 }
@@ -999,6 +1100,11 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const done = () => { clearTimeout(timer); signal?.removeEventListener("abort", done); resolve(); };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener("abort", done, { once: true });
+    if (signal?.aborted) done();
+  });
 }

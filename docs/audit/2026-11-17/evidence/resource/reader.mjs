@@ -1,0 +1,5 @@
+import {JsonlReader} from './src/main/jsonl-reader.js';
+import fs from 'node:fs/promises';
+const line='x'.repeat(255)+'\n';
+for(const bytes of [1024*1024,8*1024*1024]){const file=new URL('./fixture-'+bytes,import.meta.url);await fs.writeFile(file,line.repeat(bytes/256));global.gc();const initial=process.memoryUsage().rss;let count=0,peak=initial;const start=performance.now();const r=new JsonlReader(file.pathname);for await(const record of r.read(bytes)){count++;if(count%256===0)peak=Math.max(peak,process.memoryUsage().rss)}console.log(JSON.stringify({case:'reader_scale',bytes,lines:count,durationMs:Math.round(performance.now()-start),peakRss:peak,initialRss:initial,retainedPartial:r.bufferedBytes,finalOffset:r.offset}));await fs.unlink(file)}
+for(let i=0;i<20;i++){const file=new URL('./small',import.meta.url);await fs.writeFile(file,line.repeat(16));const r=new JsonlReader(file.pathname);let n=0;for await(const record of r.read()){n++}if(n!==16||r.bufferedBytes!==0)throw Error('reader lifecycle invariant failed');await fs.unlink(file)}console.log(JSON.stringify({case:'reader_lifecycle',rounds:20,result:'passed'}));

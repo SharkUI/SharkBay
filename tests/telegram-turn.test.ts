@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { applyTurnEvent, createTurn, SILENCE_FALLBACK_MS, type Turn, type TurnEvent } from "../src/main/telegram/turn.js";
+import { applyTurnEvent, createTurn, type Turn, type TurnEvent } from "../src/main/telegram/turn.js";
 
 const KEY = { hookSessionId: "s1", projectPath: "/proj", ptyId: "pty-1" };
 
@@ -39,7 +39,7 @@ describe("Turn state machine", () => {
     expect(finalized).toBe(false);
   });
 
-  it("ignores events for a different hook session / project", () => {
+  it("ignores events for a different hook session", () => {
     const { finalized } = run(newTurn(), [
       { type: "status", state: "working", at: 1100, hookSessionId: "other", projectPath: "/proj" },
       { type: "status", state: "stopped", at: 1200, hookSessionId: "other", projectPath: "/proj" },
@@ -80,27 +80,9 @@ describe("Turn state machine", () => {
     expect(end.action).toBe("finalize");
   });
 
-  it("finalizes on turnEnd after working", () => {
-    const { finalized } = run(newTurn(), [
-      { type: "ptyData", at: 1100, ptyId: "pty-1" },
-      { type: "turnEnd", at: 1400, hookSessionId: "s1", projectPath: "/proj" },
-    ]);
-    expect(finalized).toBe(true);
-  });
-
-  it("conservative silence fallback needs working + two ticks past threshold", () => {
-    const base = newTurn(1000);
-    const afterData = applyTurnEvent(base, { type: "ptyData", at: 1100, ptyId: "pty-1" }).turn;
-    const t1 = applyTurnEvent(afterData, { type: "silence", at: 1000 + SILENCE_FALLBACK_MS + 1 });
-    expect(t1.action).toBe("none");
-    expect(t1.turn.state).toBe("settling");
-    const t2 = applyTurnEvent(t1.turn, { type: "silence", at: 1000 + SILENCE_FALLBACK_MS + 200 });
-    expect(t2.action).toBe("finalize");
-  });
-
-  it("silence does nothing before working was seen", () => {
-    const res = applyTurnEvent(newTurn(1000), { type: "silence", at: 1000 + SILENCE_FALLBACK_MS + 5000 });
-    expect(res.action).toBe("none");
+  it.each(["done", "failed", "interrupted"] as const)("finishes on explicit %s even while a previous request was waiting", (state) => {
+    const held = applyTurnEvent(newTurn(), { type: "status", state: "waiting", at: 1100, hookSessionId: "s1", projectPath: "/proj" }).turn;
+    expect(applyTurnEvent(held, { type: "status", state, at: 1200, hookSessionId: "s1", projectPath: "/proj" }).action).toBe("finalize");
   });
 
   it("ptyExit and stop finalize immediately", () => {

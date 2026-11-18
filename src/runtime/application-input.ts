@@ -17,7 +17,7 @@ export const applicationInputRules: Record<ApplicationMethod, Rule> = {
   "projects.scan": {}, "projects.getSetupStatus": repo,
   "projects.getDetail": uri, "projects.getGitHub": uri,
   "projects.listFiles": { ...uri, strings: ["projectUri", "directoryPath"] },
-  "projects.readFile": file, "projects.writeFile": { ...file, required: [...file.required!, "content"], strings: [...file.strings!, "content"] },
+  "projects.readFile": file, "projects.writeFile": { ...file, required: [...file.required!, "content"], strings: [...file.strings!, "content", "create"] },
   "projects.deleteFile": file, "projects.renameFile": { ...file, required: [...file.required!, "newName"], strings: [...file.strings!, "newName"] },
   "codeGraph.getStatus": uri, "codeGraph.ensureStatus": uri,
   "terminal.list": {},
@@ -62,6 +62,7 @@ export function validateApplicationInput(method: string, value: unknown): Record
     if (rule.objects?.includes(key) && (!field || typeof field !== "object" || Array.isArray(field))) throw new ApplicationError("INVALID_INPUT", `Invalid ${key}`);
   }
   for (const key of rule.required ?? []) if (data[key] === undefined || (typeof data[key] === "string" && !(data[key] as string).length && key !== "content" && key !== "data")) throw new ApplicationError("INVALID_INPUT", `Missing ${key}`);
+  if (method === "projects.writeFile" && data.create !== undefined && data.create !== "file" && data.create !== "directory") throw new ApplicationError("INVALID_INPUT", "Invalid create mode");
   for (const key of ["cols", "rows"]) if (data[key] !== undefined && (!Number.isInteger(data[key]) || (data[key] as number) < 1 || (data[key] as number) > 500)) throw new ApplicationError("INVALID_INPUT", `Invalid ${key}`);
   if (data.service) {
     const service = data.service as Record<string, unknown>;

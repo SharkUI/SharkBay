@@ -1,0 +1,17 @@
+[
+  {
+    "config": "tsconfig.renderer.json",
+    "exit_code": 0,
+    "seconds": 1.18
+  },
+  {
+    "config": "tsconfig.node.json",
+    "exit_code": 0,
+    "seconds": 1.05
+  },
+  {
+    "config": "tsconfig.runtime.json",
+    "exit_code": 0,
+    "seconds": 0.59
+  }
+]

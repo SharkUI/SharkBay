@@ -1,0 +1,32 @@
+[
+  {
+    "name": "security",
+    "command": [
+      "node",
+      "docs/audit/2026-11-17/evidence/security-repro.cjs",
+      "/tmp/sharkbay-audit-2fc9c93"
+    ],
+    "exit_code": 0,
+    "seconds": 0.225
+  },
+  {
+    "name": "states",
+    "command": [
+      "node",
+      "docs/audit/2026-11-17/evidence/reproduce-state-defects.cjs",
+      "/tmp/sharkbay-audit-2fc9c93"
+    ],
+    "exit_code": 0,
+    "seconds": 0.206
+  },
+  {
+    "name": "build",
+    "command": [
+      "python3",
+      "docs/audit/2026-11-17/evidence/build-residue-repro.py",
+      "/tmp/sharkbay-audit-2fc9c93"
+    ],
+    "exit_code": 0,
+    "seconds": 0.267
+  }
+]

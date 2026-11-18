@@ -51,9 +51,16 @@ export async function writeLocalProjectFile(runtime: RuntimePaths, input: WriteF
     const safeRepo = await resolveRepoPath(repoPath, config.configuredRoots, config.configuredProjects);
     const filePath = await resolveReadableRepoFile(safeRepo.repoPath, config.configuredRoots, input.relativePath, config.configuredProjects);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
-    await fs.writeFile(filePath, input.content, "utf8");
+    if (input.create === "directory") {
+      await fs.mkdir(filePath);
+    } else {
+      await fs.writeFile(filePath, input.content, { encoding: "utf8", flag: input.create === "file" ? "wx" : "w" });
+    }
     return { ok: true, size: byteSize, relativePath: input.relativePath };
   } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+      return { ok: false, reason: "already-exists", message: "A file or folder with that name already exists" };
+    }
     return classifyFileError(error);
   }
 }

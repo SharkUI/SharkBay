@@ -1,11 +1,51 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { codexTotalUsageKey, isTranscriptFileUnchanged, TokenUsageCollector, type CollectorSessionState } from "../src/main/token-usage-collector.js";
 import type { TokenEvent, TokenUsageDb } from "../src/main/token-usage-db.js";
 
+afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks(); });
+
 describe("token usage collector", () => {
+  const usageLine = JSON.stringify({ type: "assistant", message: { usage: { input_tokens: 5, output_tokens: 2 } } });
+  const usageSession: CollectorSessionState = { agentId: "claude", sessionId: "fixture", projectPath: "/fixture" };
+  it("keeps a failed transaction available for retry", () => {
+    const insertBatch = vi.fn().mockImplementationOnce(() => { throw new Error("busy"); }).mockImplementation(() => {});
+    const collector = new TokenUsageCollector({ insertBatch } as unknown as TokenUsageDb);
+    collector.processLine(usageLine, "fixture", 0, usageSession);
+    expect(() => collector.flush()).toThrow("busy");
+    collector.flush();
+    expect(insertBatch).toHaveBeenCalledTimes(2);
+    expect(insertBatch.mock.calls[1]![0]).toEqual(insertBatch.mock.calls[0]![0]);
+    collector.dispose();
+  });
+  it("contains timer failures and retries the retained batch", async () => {
+    vi.useFakeTimers(); const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const insertBatch = vi.fn().mockImplementationOnce(() => { throw new Error("busy"); }).mockImplementation(() => {});
+    const collector = new TokenUsageCollector({ insertBatch } as unknown as TokenUsageDb);
+    collector.processLine(usageLine, "fixture", 0, usageSession);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(warning).toHaveBeenCalledWith("Usage batch write failed; retaining events for retry");
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(insertBatch).toHaveBeenCalledTimes(2);
+    expect(insertBatch.mock.calls[1]![0]).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(0); collector.dispose();
+  });
+  it("bounds the retained queue and cancels retries before disposal", async () => {
+    vi.useFakeTimers();
+    const insertBatch = vi.fn((_items: TokenEvent[]) => { throw new Error("busy"); });
+    const collector = new TokenUsageCollector({ insertBatch } as unknown as TokenUsageDb);
+    for (let offset = 0; offset < 100; offset++) {
+      try { collector.processLine(usageLine, "fixture", offset, usageSession); } catch { /* source retries after storage recovers */ }
+    }
+    expect(insertBatch.mock.calls.length).toBeGreaterThan(0);
+    expect(insertBatch.mock.calls.every(call => call[0].length <= 50)).toBe(true);
+    expect(() => collector.dispose()).toThrow("busy");
+    const calls = insertBatch.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(insertBatch).toHaveBeenCalledTimes(calls); expect(vi.getTimerCount()).toBe(0);
+  });
   it.each(["codex", "claude"])("streams %s history and resumes a partial tail with the correct project", async (agentId) => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "sharkbay-usage-stream-"));
     const home = vi.spyOn(os, "homedir").mockReturnValue(root);

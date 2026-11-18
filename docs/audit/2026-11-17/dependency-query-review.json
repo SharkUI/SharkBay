@@ -1,0 +1,3827 @@
+{
+  "purpose": "Proposed npm official vulnerability metadata query; not sent by this file. Root private project omitted from this review list.",
+  "packages": [
+    {
+      "name": "@babel/code-frame",
+      "version": "7.29.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@babel/compat-data",
+      "version": "7.29.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@babel/core",
+      "version": "7.29.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@babel/generator",
+      "version": "7.29.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@babel/helper-compilation-targets",
+      "version": "7.28.6",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@babel/helper-globals",
+      "version": "7.28.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@babel/helper-module-imports",
+      "version": "7.28.6",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@babel/helper-module-transforms",
+      "version": "7.28.6",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@babel/helper-plugin-utils",
+      "version": "7.28.6",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@babel/helper-string-parser",
+      "version": "7.27.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@babel/helper-validator-identifier",
+      "version": "7.28.5",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@babel/helper-validator-option",
+      "version": "7.27.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@babel/helpers",
+      "version": "7.29.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@babel/parser",
+      "version": "7.29.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@babel/plugin-transform-react-jsx-self",
+      "version": "7.27.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@babel/plugin-transform-react-jsx-source",
+      "version": "7.27.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@babel/runtime",
+      "version": "7.29.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@babel/template",
+      "version": "7.28.6",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@babel/traverse",
+      "version": "7.29.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@babel/types",
+      "version": "7.29.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@codemirror/autocomplete",
+      "version": "6.20.2",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@codemirror/commands",
+      "version": "6.10.3",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@codemirror/lang-css",
+      "version": "6.3.1",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@codemirror/lang-go",
+      "version": "6.0.1",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@codemirror/lang-html",
+      "version": "6.4.11",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@codemirror/lang-javascript",
+      "version": "6.2.5",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@codemirror/lang-json",
+      "version": "6.0.2",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@codemirror/lang-markdown",
+      "version": "6.5.0",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@codemirror/lang-python",
+      "version": "6.2.1",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@codemirror/lang-rust",
+      "version": "6.0.2",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@codemirror/lang-sql",
+      "version": "6.10.0",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@codemirror/lang-xml",
+      "version": "6.1.0",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@codemirror/lang-yaml",
+      "version": "6.1.3",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@codemirror/language",
+      "version": "6.12.3",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@codemirror/lint",
+      "version": "6.9.6",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@codemirror/search",
+      "version": "6.7.0",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@codemirror/state",
+      "version": "6.6.0",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@codemirror/view",
+      "version": "6.43.0",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@develar/schema-utils",
+      "version": "2.6.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@electron/asar",
+      "version": "3.4.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "balanced-match",
+      "version": "1.0.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "brace-expansion",
+      "version": "1.1.14",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "minimatch",
+      "version": "3.1.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@electron/fuses",
+      "version": "1.8.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "fs-extra",
+      "version": "9.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "jsonfile",
+      "version": "6.2.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "universalify",
+      "version": "2.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@electron/get",
+      "version": "2.0.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@electron/notarize",
+      "version": "2.5.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "fs-extra",
+      "version": "9.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "jsonfile",
+      "version": "6.2.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "universalify",
+      "version": "2.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@electron/osx-sign",
+      "version": "1.3.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "fs-extra",
+      "version": "10.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "isbinaryfile",
+      "version": "4.0.10",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "jsonfile",
+      "version": "6.2.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "universalify",
+      "version": "2.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@electron/rebuild",
+      "version": "4.0.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@electron/universal",
+      "version": "2.0.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "balanced-match",
+      "version": "1.0.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "brace-expansion",
+      "version": "2.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "fs-extra",
+      "version": "11.3.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "jsonfile",
+      "version": "6.2.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "minimatch",
+      "version": "9.0.9",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "universalify",
+      "version": "2.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@electron/windows-sign",
+      "version": "1.2.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "fs-extra",
+      "version": "11.3.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "jsonfile",
+      "version": "6.2.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "universalify",
+      "version": "2.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@esbuild/aix-ppc64",
+      "version": "0.21.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@esbuild/android-arm",
+      "version": "0.21.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@esbuild/android-arm64",
+      "version": "0.21.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@esbuild/android-x64",
+      "version": "0.21.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@esbuild/darwin-arm64",
+      "version": "0.21.5",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@esbuild/darwin-x64",
+      "version": "0.21.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@esbuild/freebsd-arm64",
+      "version": "0.21.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@esbuild/freebsd-x64",
+      "version": "0.21.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@esbuild/linux-arm",
+      "version": "0.21.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@esbuild/linux-arm64",
+      "version": "0.21.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@esbuild/linux-ia32",
+      "version": "0.21.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@esbuild/linux-loong64",
+      "version": "0.21.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@esbuild/linux-mips64el",
+      "version": "0.21.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@esbuild/linux-ppc64",
+      "version": "0.21.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@esbuild/linux-riscv64",
+      "version": "0.21.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@esbuild/linux-s390x",
+      "version": "0.21.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@esbuild/linux-x64",
+      "version": "0.21.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@esbuild/netbsd-x64",
+      "version": "0.21.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@esbuild/openbsd-x64",
+      "version": "0.21.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@esbuild/sunos-x64",
+      "version": "0.21.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@esbuild/win32-arm64",
+      "version": "0.21.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@esbuild/win32-ia32",
+      "version": "0.21.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@esbuild/win32-x64",
+      "version": "0.21.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@hapi/hoek",
+      "version": "9.3.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@hapi/topo",
+      "version": "5.1.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@isaacs/fs-minipass",
+      "version": "4.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@jest/schemas",
+      "version": "29.6.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@jridgewell/gen-mapping",
+      "version": "0.3.13",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@jridgewell/remapping",
+      "version": "2.3.5",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@jridgewell/resolve-uri",
+      "version": "3.1.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@jridgewell/sourcemap-codec",
+      "version": "1.5.5",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@jridgewell/trace-mapping",
+      "version": "0.3.31",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@lezer/common",
+      "version": "1.5.2",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@lezer/css",
+      "version": "1.3.3",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@lezer/go",
+      "version": "1.0.1",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@lezer/highlight",
+      "version": "1.2.3",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@lezer/html",
+      "version": "1.3.13",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@lezer/javascript",
+      "version": "1.5.4",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@lezer/json",
+      "version": "1.0.3",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@lezer/lr",
+      "version": "1.4.10",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@lezer/markdown",
+      "version": "1.6.3",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@lezer/python",
+      "version": "1.1.18",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@lezer/rust",
+      "version": "1.0.2",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@lezer/xml",
+      "version": "1.0.6",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@lezer/yaml",
+      "version": "1.0.4",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@lydell/node-pty",
+      "version": "1.2.0-beta.12",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@lydell/node-pty-darwin-arm64",
+      "version": "1.2.0-beta.12",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@lydell/node-pty-darwin-x64",
+      "version": "1.2.0-beta.12",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@lydell/node-pty-linux-arm64",
+      "version": "1.2.0-beta.12",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@lydell/node-pty-linux-x64",
+      "version": "1.2.0-beta.12",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@lydell/node-pty-win32-arm64",
+      "version": "1.2.0-beta.12",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@lydell/node-pty-win32-x64",
+      "version": "1.2.0-beta.12",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@malept/cross-spawn-promise",
+      "version": "2.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@malept/flatpak-bundler",
+      "version": "0.4.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "fs-extra",
+      "version": "9.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "jsonfile",
+      "version": "6.2.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "universalify",
+      "version": "2.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@marijn/find-cluster-break",
+      "version": "1.0.2",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "@rolldown/pluginutils",
+      "version": "1.0.0-beta.27",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-android-arm-eabi",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-android-arm64",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-darwin-arm64",
+      "version": "4.60.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-darwin-x64",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-freebsd-arm64",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-freebsd-x64",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-linux-arm-gnueabihf",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-linux-arm-musleabihf",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-linux-arm64-gnu",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-linux-arm64-musl",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-linux-loong64-gnu",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-linux-loong64-musl",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-linux-ppc64-gnu",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-linux-ppc64-musl",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-linux-riscv64-gnu",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-linux-riscv64-musl",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-linux-s390x-gnu",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-linux-x64-gnu",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-linux-x64-musl",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-openbsd-x64",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-openharmony-arm64",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-win32-arm64-msvc",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-win32-ia32-msvc",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-win32-x64-gnu",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@rollup/rollup-win32-x64-msvc",
+      "version": "4.60.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@sideway/address",
+      "version": "4.1.5",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@sideway/formula",
+      "version": "3.0.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@sideway/pinpoint",
+      "version": "2.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@sinclair/typebox",
+      "version": "0.27.10",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@sindresorhus/is",
+      "version": "4.6.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@szmarczak/http-timer",
+      "version": "4.0.6",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@types/babel__core",
+      "version": "7.20.5",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@types/babel__generator",
+      "version": "7.27.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@types/babel__template",
+      "version": "7.4.4",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@types/babel__traverse",
+      "version": "7.28.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@types/better-sqlite3",
+      "version": "7.6.13",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@types/cacheable-request",
+      "version": "6.0.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@types/debug",
+      "version": "4.1.13",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@types/estree",
+      "version": "1.0.8",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@types/fs-extra",
+      "version": "9.0.13",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@types/http-cache-semantics",
+      "version": "4.2.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@types/keyv",
+      "version": "3.1.4",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@types/mdast",
+      "version": "3.0.15",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@types/ms",
+      "version": "2.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@types/node",
+      "version": "20.19.39",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@types/plist",
+      "version": "3.0.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@types/prop-types",
+      "version": "15.7.15",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@types/react",
+      "version": "18.3.28",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@types/react-dom",
+      "version": "18.3.7",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@types/responselike",
+      "version": "1.0.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@types/unist",
+      "version": "2.0.11",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@types/verror",
+      "version": "1.10.11",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@types/ws",
+      "version": "8.18.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@types/yauzl",
+      "version": "2.10.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@vitejs/plugin-react",
+      "version": "4.7.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@vitest/expect",
+      "version": "1.6.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@vitest/runner",
+      "version": "1.6.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "p-limit",
+      "version": "5.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "yocto-queue",
+      "version": "1.2.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@vitest/snapshot",
+      "version": "1.6.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@vitest/spy",
+      "version": "1.6.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@vitest/utils",
+      "version": "1.6.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "@xmldom/xmldom",
+      "version": "0.8.13",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@xterm/addon-fit",
+      "version": "0.11.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@xterm/addon-search",
+      "version": "0.16.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@xterm/addon-serialize",
+      "version": "0.14.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@xterm/addon-web-links",
+      "version": "0.12.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@xterm/headless",
+      "version": "6.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@xterm/xterm",
+      "version": "6.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "7zip-bin",
+      "version": "5.2.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "abbrev",
+      "version": "4.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "acorn",
+      "version": "8.16.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "acorn-walk",
+      "version": "8.3.5",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "agent-base",
+      "version": "7.1.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "ajv",
+      "version": "6.15.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "ajv-keywords",
+      "version": "3.5.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "ansi-regex",
+      "version": "5.0.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "ansi-styles",
+      "version": "4.3.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "app-builder-bin",
+      "version": "5.0.0-alpha.12",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "app-builder-lib",
+      "version": "26.8.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "@electron/get",
+      "version": "3.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "fs-extra",
+      "version": "8.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "semver",
+      "version": "6.3.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "ci-info",
+      "version": "4.3.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "fs-extra",
+      "version": "10.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "jsonfile",
+      "version": "6.2.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "universalify",
+      "version": "2.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "isexe",
+      "version": "3.1.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "semver",
+      "version": "7.7.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "which",
+      "version": "5.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "argparse",
+      "version": "2.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "assert-plus",
+      "version": "1.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "assertion-error",
+      "version": "1.1.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "astral-regex",
+      "version": "2.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "async",
+      "version": "3.2.6",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "async-exit-hook",
+      "version": "2.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "asynckit",
+      "version": "0.4.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "at-least-node",
+      "version": "1.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "axios",
+      "version": "1.16.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "bail",
+      "version": "1.0.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "balanced-match",
+      "version": "4.0.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "base64-js",
+      "version": "1.5.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "baseline-browser-mapping",
+      "version": "2.10.27",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "better-sqlite3",
+      "version": "11.10.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "bindings",
+      "version": "1.5.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "bl",
+      "version": "4.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "boolean",
+      "version": "3.2.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "brace-expansion",
+      "version": "5.0.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "browserslist",
+      "version": "4.28.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "buffer",
+      "version": "5.7.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "buffer-crc32",
+      "version": "0.2.13",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "buffer-from",
+      "version": "1.1.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "builder-util",
+      "version": "26.8.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "builder-util-runtime",
+      "version": "9.5.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "fs-extra",
+      "version": "10.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "jsonfile",
+      "version": "6.2.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "universalify",
+      "version": "2.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "bun-pty",
+      "version": "0.4.8",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "cac",
+      "version": "6.7.14",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "cacheable-lookup",
+      "version": "5.0.4",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "cacheable-request",
+      "version": "7.0.4",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "call-bind-apply-helpers",
+      "version": "1.0.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "caniuse-lite",
+      "version": "1.0.30001791",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "ccount",
+      "version": "1.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "chai",
+      "version": "4.5.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "chalk",
+      "version": "4.1.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "supports-color",
+      "version": "7.2.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "character-entities",
+      "version": "1.2.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "character-entities-legacy",
+      "version": "1.1.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "character-reference-invalid",
+      "version": "1.1.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "check-error",
+      "version": "1.0.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "chownr",
+      "version": "3.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "chromium-pickle-js",
+      "version": "0.2.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "ci-info",
+      "version": "4.4.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "cli-truncate",
+      "version": "2.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "cliui",
+      "version": "8.0.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "clone-response",
+      "version": "1.0.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "codemirror",
+      "version": "6.0.2",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "color-convert",
+      "version": "2.0.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "color-name",
+      "version": "1.1.4",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "combined-stream",
+      "version": "1.0.8",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "commander",
+      "version": "5.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "compare-version",
+      "version": "0.1.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "concat-map",
+      "version": "0.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "concurrently",
+      "version": "8.2.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "confbox",
+      "version": "0.1.8",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "convert-source-map",
+      "version": "2.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "core-util-is",
+      "version": "1.0.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "crc",
+      "version": "3.8.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "crelt",
+      "version": "1.0.6",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "cross-dirname",
+      "version": "0.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "cross-spawn",
+      "version": "7.0.6",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "csstype",
+      "version": "3.2.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "date-fns",
+      "version": "2.30.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "debug",
+      "version": "4.4.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "decompress-response",
+      "version": "6.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "mimic-response",
+      "version": "3.1.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "deep-eql",
+      "version": "4.1.4",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "deep-extend",
+      "version": "0.6.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "defer-to-connect",
+      "version": "2.0.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "define-data-property",
+      "version": "1.1.4",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "define-properties",
+      "version": "1.2.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "delayed-stream",
+      "version": "1.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "detect-libc",
+      "version": "2.1.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "detect-node",
+      "version": "2.1.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "diff-sequences",
+      "version": "29.6.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "dir-compare",
+      "version": "4.2.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "balanced-match",
+      "version": "1.0.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "brace-expansion",
+      "version": "1.1.14",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "minimatch",
+      "version": "3.1.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "dmg-builder",
+      "version": "26.8.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "fs-extra",
+      "version": "10.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "jsonfile",
+      "version": "6.2.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "universalify",
+      "version": "2.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "dmg-license",
+      "version": "1.0.11",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "dotenv",
+      "version": "16.6.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "dotenv-expand",
+      "version": "11.0.7",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "dunder-proto",
+      "version": "1.0.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "ejs",
+      "version": "3.1.10",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "electron",
+      "version": "29.4.6",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "electron-builder",
+      "version": "26.8.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "electron-builder-squirrel-windows",
+      "version": "26.8.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "fs-extra",
+      "version": "10.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "jsonfile",
+      "version": "6.2.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "universalify",
+      "version": "2.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "electron-publish",
+      "version": "26.8.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "fs-extra",
+      "version": "10.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "jsonfile",
+      "version": "6.2.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "universalify",
+      "version": "2.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "electron-to-chromium",
+      "version": "1.5.349",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "electron-updater",
+      "version": "6.8.9",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "builder-util-runtime",
+      "version": "9.7.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "fs-extra",
+      "version": "10.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "jsonfile",
+      "version": "6.2.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "semver",
+      "version": "7.7.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "universalify",
+      "version": "2.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "electron-winstaller",
+      "version": "5.4.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "fs-extra",
+      "version": "7.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "emoji-regex",
+      "version": "8.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "end-of-stream",
+      "version": "1.4.5",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "env-paths",
+      "version": "2.2.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "err-code",
+      "version": "2.0.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "es-define-property",
+      "version": "1.0.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "es-errors",
+      "version": "1.3.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "es-object-atoms",
+      "version": "1.1.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "es-set-tostringtag",
+      "version": "2.1.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "es6-error",
+      "version": "4.1.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "esbuild",
+      "version": "0.21.5",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "escalade",
+      "version": "3.2.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "escape-string-regexp",
+      "version": "4.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "estree-walker",
+      "version": "3.0.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "execa",
+      "version": "8.0.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "get-stream",
+      "version": "8.0.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "expand-template",
+      "version": "2.0.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "exponential-backoff",
+      "version": "3.1.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "extend",
+      "version": "3.0.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "extract-zip",
+      "version": "2.0.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "extsprintf",
+      "version": "1.4.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "fast-deep-equal",
+      "version": "3.1.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "fast-json-stable-stringify",
+      "version": "2.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "fd-slicer",
+      "version": "1.1.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "fdir",
+      "version": "6.5.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "file-uri-to-path",
+      "version": "1.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "filelist",
+      "version": "1.0.6",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "balanced-match",
+      "version": "1.0.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "brace-expansion",
+      "version": "2.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "minimatch",
+      "version": "5.1.9",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "follow-redirects",
+      "version": "1.16.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "form-data",
+      "version": "4.0.5",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "fs-constants",
+      "version": "1.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "fs-extra",
+      "version": "8.1.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "fs.realpath",
+      "version": "1.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "fsevents",
+      "version": "2.3.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "function-bind",
+      "version": "1.1.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "gensync",
+      "version": "1.0.0-beta.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "get-caller-file",
+      "version": "2.0.5",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "get-func-name",
+      "version": "2.0.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "get-intrinsic",
+      "version": "1.3.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "get-proto",
+      "version": "1.0.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "get-stream",
+      "version": "5.2.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "github-from-package",
+      "version": "0.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "glob",
+      "version": "7.2.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "balanced-match",
+      "version": "1.0.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "brace-expansion",
+      "version": "1.1.14",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "minimatch",
+      "version": "3.1.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "global-agent",
+      "version": "3.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "semver",
+      "version": "7.7.4",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "globalthis",
+      "version": "1.0.4",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "gopd",
+      "version": "1.2.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "got",
+      "version": "11.8.6",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "graceful-fs",
+      "version": "4.2.11",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "has-flag",
+      "version": "4.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "has-property-descriptors",
+      "version": "1.0.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "has-symbols",
+      "version": "1.1.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "has-tostringtag",
+      "version": "1.0.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "hasown",
+      "version": "2.0.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "hosted-git-info",
+      "version": "4.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "lru-cache",
+      "version": "6.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "yallist",
+      "version": "4.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "html-comment-regex",
+      "version": "1.1.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "http-cache-semantics",
+      "version": "4.2.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "http-proxy-agent",
+      "version": "7.0.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "http2-wrapper",
+      "version": "1.0.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "https-proxy-agent",
+      "version": "7.0.6",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "human-signals",
+      "version": "5.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "iconv-corefoundation",
+      "version": "1.1.7",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "node-addon-api",
+      "version": "1.7.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "iconv-lite",
+      "version": "0.6.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "ieee754",
+      "version": "1.2.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "inflight",
+      "version": "1.0.6",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "inherits",
+      "version": "2.0.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "ini",
+      "version": "1.3.8",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "is-alphabetical",
+      "version": "1.0.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "is-alphanumerical",
+      "version": "1.0.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "is-buffer",
+      "version": "2.0.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "is-decimal",
+      "version": "1.0.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "is-fullwidth-code-point",
+      "version": "3.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "is-hexadecimal",
+      "version": "1.0.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "is-plain-obj",
+      "version": "2.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "is-stream",
+      "version": "3.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "isbinaryfile",
+      "version": "5.0.7",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "isexe",
+      "version": "2.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "jake",
+      "version": "10.9.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "jiti",
+      "version": "2.7.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "joi",
+      "version": "17.13.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "js-tokens",
+      "version": "4.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "js-yaml",
+      "version": "4.1.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "jsesc",
+      "version": "3.1.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "json-buffer",
+      "version": "3.0.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "json-schema-traverse",
+      "version": "0.4.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "json-stringify-safe",
+      "version": "5.0.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "json5",
+      "version": "2.2.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "jsonfile",
+      "version": "4.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "keyv",
+      "version": "4.5.4",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "lazy-val",
+      "version": "1.0.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "local-pkg",
+      "version": "0.5.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "lodash",
+      "version": "4.18.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "lodash.escaperegexp",
+      "version": "4.1.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "lodash.isequal",
+      "version": "4.5.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "longest-streak",
+      "version": "2.0.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "loose-envify",
+      "version": "1.4.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "loupe",
+      "version": "2.3.7",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "lowercase-keys",
+      "version": "2.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "lru-cache",
+      "version": "5.1.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "magic-string",
+      "version": "0.30.21",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "markdown-table",
+      "version": "2.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "matcher",
+      "version": "3.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "math-intrinsics",
+      "version": "1.1.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "mdast-util-find-and-replace",
+      "version": "1.1.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "mdast-util-from-markdown",
+      "version": "0.8.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "mdast-util-gfm",
+      "version": "0.1.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "mdast-util-gfm-autolink-literal",
+      "version": "0.1.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "mdast-util-gfm-strikethrough",
+      "version": "0.2.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "mdast-util-gfm-table",
+      "version": "0.1.6",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "mdast-util-gfm-task-list-item",
+      "version": "0.1.6",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "mdast-util-to-markdown",
+      "version": "0.6.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "mdast-util-to-string",
+      "version": "2.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "merge-stream",
+      "version": "2.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "micromark",
+      "version": "2.11.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "micromark-extension-gfm",
+      "version": "0.3.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "micromark-extension-gfm-autolink-literal",
+      "version": "0.5.7",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "micromark-extension-gfm-strikethrough",
+      "version": "0.6.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "micromark-extension-gfm-table",
+      "version": "0.4.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "micromark-extension-gfm-tagfilter",
+      "version": "0.3.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "micromark-extension-gfm-task-list-item",
+      "version": "0.3.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "mime",
+      "version": "2.6.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "mime-db",
+      "version": "1.52.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "mime-types",
+      "version": "2.1.35",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "mimic-fn",
+      "version": "4.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "mimic-response",
+      "version": "1.0.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "minimatch",
+      "version": "10.2.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "minimist",
+      "version": "1.2.8",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "minipass",
+      "version": "7.1.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "minizlib",
+      "version": "3.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "mkdirp",
+      "version": "0.5.6",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "mkdirp-classic",
+      "version": "0.5.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "mlly",
+      "version": "1.8.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "pathe",
+      "version": "2.0.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "ms",
+      "version": "2.1.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "nanoid",
+      "version": "3.3.12",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "napi-build-utils",
+      "version": "2.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "node-abi",
+      "version": "4.30.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "semver",
+      "version": "7.7.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "node-api-version",
+      "version": "0.2.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "semver",
+      "version": "7.7.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "node-gyp",
+      "version": "12.3.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "isexe",
+      "version": "4.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "semver",
+      "version": "7.7.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "which",
+      "version": "6.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "node-releases",
+      "version": "2.0.38",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "nopt",
+      "version": "9.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "normalize-url",
+      "version": "6.1.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "npm-run-path",
+      "version": "5.3.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "path-key",
+      "version": "4.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "object-keys",
+      "version": "1.1.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "once",
+      "version": "1.4.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "onetime",
+      "version": "6.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "p-cancelable",
+      "version": "2.1.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "p-limit",
+      "version": "3.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "parse-entities",
+      "version": "2.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "path-is-absolute",
+      "version": "1.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "path-key",
+      "version": "3.1.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "pathe",
+      "version": "1.1.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "pathval",
+      "version": "1.1.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "pe-library",
+      "version": "0.4.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "pend",
+      "version": "1.2.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "picocolors",
+      "version": "1.1.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "picomatch",
+      "version": "4.0.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "pkg-types",
+      "version": "1.3.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "pathe",
+      "version": "2.0.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "plist",
+      "version": "3.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "postcss",
+      "version": "8.5.14",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "postject",
+      "version": "1.0.0-alpha.6",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "commander",
+      "version": "9.5.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "prebuild-install",
+      "version": "7.1.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "node-abi",
+      "version": "3.92.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "semver",
+      "version": "7.8.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "pretty-format",
+      "version": "29.7.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "ansi-styles",
+      "version": "5.2.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "proc-log",
+      "version": "6.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "progress",
+      "version": "2.0.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "promise-retry",
+      "version": "2.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "proper-lockfile",
+      "version": "4.1.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "signal-exit",
+      "version": "3.0.7",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "proxy-from-env",
+      "version": "2.1.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "pump",
+      "version": "3.0.4",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "punycode",
+      "version": "2.3.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "quick-lru",
+      "version": "5.1.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "rc",
+      "version": "1.2.8",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "react",
+      "version": "18.3.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "react-dom",
+      "version": "18.3.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "react-is",
+      "version": "18.3.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "react-refresh",
+      "version": "0.17.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "read-binary-file-arch",
+      "version": "1.0.6",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "readable-stream",
+      "version": "3.6.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "remark-gfm",
+      "version": "1.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "remark-parse",
+      "version": "9.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "remark-remove-comments",
+      "version": "0.2.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "remark-stringify",
+      "version": "9.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "repeat-string",
+      "version": "1.6.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "require-directory",
+      "version": "2.1.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "resedit",
+      "version": "1.7.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "resolve-alpn",
+      "version": "1.2.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "responselike",
+      "version": "2.0.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "retry",
+      "version": "0.12.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "rimraf",
+      "version": "2.6.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "roarr",
+      "version": "2.15.4",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "rollup",
+      "version": "4.60.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "rxjs",
+      "version": "7.8.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "safe-buffer",
+      "version": "5.2.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "safer-buffer",
+      "version": "2.1.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "sanitize-filename",
+      "version": "1.6.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "sax",
+      "version": "1.6.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "scheduler",
+      "version": "0.23.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "semver",
+      "version": "6.3.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "semver-compare",
+      "version": "1.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "serialize-error",
+      "version": "7.0.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "type-fest",
+      "version": "0.13.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "shebang-command",
+      "version": "2.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "shebang-regex",
+      "version": "3.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "shell-quote",
+      "version": "1.8.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "siginfo",
+      "version": "2.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "signal-exit",
+      "version": "4.1.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "simple-concat",
+      "version": "1.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "simple-get",
+      "version": "4.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "simple-update-notifier",
+      "version": "2.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "semver",
+      "version": "7.7.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "slice-ansi",
+      "version": "3.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "smart-buffer",
+      "version": "4.2.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "source-map",
+      "version": "0.6.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "source-map-js",
+      "version": "1.2.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "source-map-support",
+      "version": "0.5.21",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "spawn-command",
+      "version": "0.0.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "sprintf-js",
+      "version": "1.1.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "stackback",
+      "version": "0.0.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "stat-mode",
+      "version": "1.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "std-env",
+      "version": "3.10.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "string_decoder",
+      "version": "1.3.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "string-width",
+      "version": "4.2.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "strip-ansi",
+      "version": "6.0.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "strip-final-newline",
+      "version": "3.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "strip-json-comments",
+      "version": "2.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "strip-literal",
+      "version": "2.1.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "js-tokens",
+      "version": "9.0.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "style-mod",
+      "version": "4.1.3",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "sumchecker",
+      "version": "3.0.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "supports-color",
+      "version": "8.1.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "tar",
+      "version": "7.5.14",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "tar-fs",
+      "version": "2.1.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "chownr",
+      "version": "1.1.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "tar-stream",
+      "version": "2.2.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "yallist",
+      "version": "5.0.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "telegramify-markdown",
+      "version": "1.3.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "temp",
+      "version": "0.9.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "temp-file",
+      "version": "3.4.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "fs-extra",
+      "version": "10.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "jsonfile",
+      "version": "6.2.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "universalify",
+      "version": "2.0.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "tiny-async-pool",
+      "version": "1.3.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "semver",
+      "version": "5.7.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "tiny-typed-emitter",
+      "version": "2.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "tinybench",
+      "version": "2.9.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "tinyglobby",
+      "version": "0.2.16",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "tinypool",
+      "version": "0.8.4",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "tinyspy",
+      "version": "2.2.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "tmp",
+      "version": "0.2.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "tmp-promise",
+      "version": "3.0.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "tree-kill",
+      "version": "1.2.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "trough",
+      "version": "1.0.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "truncate-utf8-bytes",
+      "version": "1.0.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "tslib",
+      "version": "2.8.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "tunnel-agent",
+      "version": "0.6.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "type-detect",
+      "version": "4.1.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "typescript",
+      "version": "5.9.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "ufo",
+      "version": "1.6.4",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "undici",
+      "version": "6.25.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "undici-types",
+      "version": "6.21.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "unified",
+      "version": "9.2.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "unist-util-is",
+      "version": "4.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "unist-util-remove",
+      "version": "2.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "unist-util-stringify-position",
+      "version": "2.0.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "unist-util-visit",
+      "version": "2.0.3",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "unist-util-visit-parents",
+      "version": "3.1.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "universalify",
+      "version": "0.1.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "update-browserslist-db",
+      "version": "1.2.3",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "uri-js",
+      "version": "4.4.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "utf8-byte-length",
+      "version": "1.0.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "util-deprecate",
+      "version": "1.0.2",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "verror",
+      "version": "1.10.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "vfile",
+      "version": "4.2.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "vfile-message",
+      "version": "2.0.4",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "vite",
+      "version": "5.4.21",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "vite-node",
+      "version": "1.6.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "vitest",
+      "version": "1.6.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "w3c-keyname",
+      "version": "2.2.8",
+      "resolved_host": "registry.npmmirror.com",
+      "private_flag": false
+    },
+    {
+      "name": "wait-on",
+      "version": "7.2.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "which",
+      "version": "2.0.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "why-is-node-running",
+      "version": "2.3.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "wrap-ansi",
+      "version": "7.0.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "wrappy",
+      "version": "1.0.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "ws",
+      "version": "8.23.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "xmlbuilder",
+      "version": "15.1.1",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "y18n",
+      "version": "5.0.8",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "yallist",
+      "version": "3.1.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "yargs",
+      "version": "17.7.2",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "yargs-parser",
+      "version": "21.1.1",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "yauzl",
+      "version": "2.10.0",
+      "resolved_host": null,
+      "private_flag": false
+    },
+    {
+      "name": "yocto-queue",
+      "version": "0.1.0",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    },
+    {
+      "name": "zwitch",
+      "version": "1.0.5",
+      "resolved_host": "registry.npmjs.org",
+      "private_flag": false
+    }
+  ]
+}

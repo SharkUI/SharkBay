@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, screen, shell } from "electron";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { appendFile, mkdir } from "node:fs/promises";
 import { openRuntimeInBrowser, registerIpcHandlers, shouldAllowBrowserCertificateError, disconnectRuntime } from "./ipc.js";
 import { createApplicationMenuTemplate } from "../src/main/application-menu.js";
 import electronUpdater from "electron-updater";
@@ -9,6 +10,7 @@ import { ensureRuntime } from "./runtime-client.js";
 import { appChannels } from "../src/shared/app-events.js";
 import { ipcChannels as channels } from "../src/shared/ipc-channels.js";
 import type { AppConfig, AppearanceTheme } from "../src/shared/types.js";
+import { createStartupTimer } from "../src/main/startup-timing.js";
 
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = dirname(currentFile);
@@ -20,6 +22,13 @@ let appearanceTheme: AppearanceTheme = "morning";
 let isQuitting = false;
 let appUpdates: AppUpdates | null = null;
 let installUpdateOnQuit = false;
+let startupLogDirectory: Promise<unknown> | undefined;
+const startup = createStartupTimer("desktop", (line) => {
+  console.info(line);
+  const directory = app.getPath("userData");
+  startupLogDirectory ??= mkdir(directory, { recursive: true });
+  void startupLogDirectory.then(() => appendFile(join(directory, "startup.log"), `${line}\n`)).catch(() => {});
+});
 
 app.setName("SharkBay");
 if (process.env.SHARKBAY_ELECTRON_DATA_DIR) app.setPath("userData", process.env.SHARKBAY_ELECTRON_DATA_DIR);
@@ -163,7 +172,7 @@ function installApplicationMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-function createMainWindow(): BrowserWindow {
+function createMainWindow(loading = false): BrowserWindow {
   const preload = join(currentDir, "preload.mjs");
   const icon = getAppIconPath();
   const window = new BrowserWindow({
@@ -183,12 +192,19 @@ function createMainWindow(): BrowserWindow {
       preload
     }
   });
+  startup("main-window-created");
 
   window.once("ready-to-show", () => {
-    const showWindow = () => { if (!window.isDestroyed()) window.show(); };
-    const timeout = setTimeout(showWindow, 5000);
-    ipcMain.once(channels.contentReady, () => { clearTimeout(timeout); showWindow(); });
+    if (!window.isDestroyed()) window.show();
+    startup("main-window-shown");
   });
+  const onContentReady = (event: Electron.IpcMainEvent) => {
+    if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) return;
+    startup("initial-project-scan-finished");
+    ipcMain.removeListener(channels.contentReady, onContentReady);
+  };
+  ipcMain.on(channels.contentReady, onContentReady);
+  window.once("closed", () => ipcMain.removeListener(channels.contentReady, onContentReady));
 
   window.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
@@ -207,16 +223,30 @@ function createMainWindow(): BrowserWindow {
     }
   });
 
-  if (app.isPackaged) {
-    void window.loadFile(join(currentDir, "../../dist/renderer/index.html"));
+  if (loading) {
+    const text = app.getLocale().startsWith("zh") ? "正在准备工作区…" : "Preparing your workspace…";
+    const html = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>SharkBay</title><style>
+      :root{color-scheme:light dark}body{margin:0;min-height:100vh;display:grid;place-content:center;text-align:center;font:15px system-ui;color:#526168;background:#f7f8fa}h1{font-size:28px;font-weight:600;color:#22363d}p{margin:0}@media(prefers-color-scheme:dark){body{color:#9cadb4;background:#101719}h1{color:#e3ecee}}
+      </style></head><body><h1>SharkBay</h1><p role="status">${text}</p></body></html>`;
+    // A fast connection may replace this document with the workspace mid-load.
+    void window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`).catch(() => {});
   } else {
-    void window.loadURL(devServerUrl);
+    void loadMainWindowContent(window).catch(() => startup("main-renderer-failed"));
+  }
+
+  return window;
+}
+
+async function loadMainWindowContent(window: BrowserWindow): Promise<void> {
+  if (app.isPackaged) {
+    await window.loadFile(join(currentDir, "../../dist/renderer/index.html"));
+  } else {
+    await window.loadURL(devServerUrl);
     if (process.env.SHARKBAY_OPEN_DEVTOOLS === "1") {
       window.webContents.openDevTools({ mode: "detach" });
     }
   }
-
-  return window;
+  startup("main-renderer-loaded");
 }
 
 function createIslandWindow(config: Pick<AppConfig, "statusChangeNotificationsEnabled" | "agentStatusCompletionSoundEnabled" | "agentStatusApprovalSoundEnabled">): BrowserWindow {
@@ -369,9 +399,14 @@ function createIslandWindow(config: Pick<AppConfig, "statusChangeNotificationsEn
 
 if (ownsWindow) app.whenReady().then(async () => {
   process.env.SHARKBAY_LOCALE = app.getLocale();
+  startup("app-ready");
+  mainWindow = createMainWindow(true);
 
-  const runtime = await ensureRuntime();
+  const runtime = await ensureRuntime(startup);
+  if (isQuitting) { runtime.dispose(); return; }
+  startup("runtime-connected");
   const config = await runtime.call<AppConfig>("config.get");
+  startup("config-loaded");
   appearanceTheme = config.appearanceTheme;
 
   await registerIpcHandlers(runtime, {
@@ -385,6 +420,7 @@ if (ownsWindow) app.whenReady().then(async () => {
       });
     },
   });
+  startup("ipc-ready");
 
   appUpdates = new AppUpdates(electronUpdater.autoUpdater, app.isPackaged, (state) => {
     if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isDestroyed()) {
@@ -423,7 +459,8 @@ if (ownsWindow) app.whenReady().then(async () => {
   //   if (count > 0) app.dock.bounce("informational");
   // });
 
-  mainWindow = createMainWindow();
+  if (!mainWindow || mainWindow.isDestroyed()) mainWindow = createMainWindow();
+  else await loadMainWindowContent(mainWindow);
   islandWindow = createIslandWindow(config);
   appUpdates.start();
 

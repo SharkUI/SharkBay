@@ -1,10 +1,16 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { ArtifactRunManager, type ArtifactRunManagerDeps } from "../src/main/artifact-runs.js";
 import type { TaskViewModel } from "../src/main/tasks.js";
 import type { ArtifactReadyEvent, TerminalCreateInput, TerminalSession } from "../src/shared/types.js";
 import { makeTempRoot } from "./helpers.js";
+
+const managers: ArtifactRunManager[] = [];
+afterEach(() => { for (const manager of managers.splice(0)) manager.dispose(); });
+function makeManager(deps: ArtifactRunManagerDeps): ArtifactRunManager {
+  const manager = new ArtifactRunManager(deps); managers.push(manager); return manager;
+}
 
 describe("ArtifactRunManager", () => {
   it("starts an Artifact agent, validates its page, opens it, and notifies the parent", async () => {
@@ -14,7 +20,7 @@ describe("ArtifactRunManager", () => {
     const ready: ArtifactReadyEvent[] = [];
     const notifications: string[] = [];
     let notifyCalls = 0;
-    const manager = new ArtifactRunManager({
+    const manager = makeManager({
       ...managerDeps(repo, task, created, async (_sessionId, text) => {
         notifications.push(text);
         return { state: ++notifyCalls === 1 ? "draft-pending" : "submitted", session: parentSession(repo) };
@@ -66,7 +72,7 @@ describe("ArtifactRunManager", () => {
     const repo = await makeTempRoot("artifact-runs-exit");
     const task = taskFixture(repo);
     const notifications: string[] = [];
-    const manager = new ArtifactRunManager(managerDeps(repo, task, [], async (_sessionId, text) => {
+    const manager = makeManager(managerDeps(repo, task, [], async (_sessionId, text) => {
       notifications.push(text);
       return { state: "submitted", session: parentSession(repo) };
     }));

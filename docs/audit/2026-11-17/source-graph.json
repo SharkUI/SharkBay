@@ -1,0 +1,575 @@
+{
+  "note": "Static import graph includes type-only imports; string/resource/external entrypoints require manual review. Not a deletion proof.",
+  "roots": [
+    "src/main/hooks/cli/sharkbay-hook.ts",
+    "src/renderer/main.tsx",
+    "src/server/main.ts",
+    "electron/find-popover-preload.mts",
+    "electron/island-preload.mts",
+    "electron/main.ts",
+    "electron/preload.mts"
+  ],
+  "files": 130,
+  "unreachable": [
+    "src/main/token-usage-pricing.ts",
+    "src/plugins/installed-plugins.ts",
+    "src/plugins/plugin-manifest.ts"
+  ],
+  "graph": {
+    "src/core/codegraph-manager.ts": [
+      "src/plugins/bundled/codegraph-detector.ts",
+      "src/shared/types.ts",
+      "src/main/command-path.ts",
+      "src/core/project-uri.ts"
+    ],
+    "src/core/core-runtime.ts": [
+      "src/core/core-service.ts",
+      "src/providers/local/local-provider.ts"
+    ],
+    "src/core/core-service.ts": [
+      "src/main/config.ts",
+      "src/main/project-icons.ts",
+      "src/main/path-safety.ts",
+      "src/shared/types.ts",
+      "src/core/execution-provider.ts",
+      "src/core/project-uri.ts",
+      "src/core/provider-registry.ts",
+      "src/plugins/plugin-host.ts",
+      "src/plugins/bundled-plugins.ts",
+      "src/plugins/bundled/agent-detector.ts",
+      "src/profiles/profile-orchestrator.ts",
+      "src/core/job-scheduler.ts",
+      "src/storage/profile-cache.ts",
+      "src/core/diagnostics.ts",
+      "src/core/codegraph-manager.ts"
+    ],
+    "src/core/diagnostics.ts": [
+      "src/shared/types.ts",
+      "src/core/job-scheduler.ts"
+    ],
+    "src/core/execution-provider.ts": [
+      "src/shared/types.ts"
+    ],
+    "src/core/job-scheduler.ts": [
+      "src/shared/types.ts"
+    ],
+    "src/core/project-uri.ts": [
+      "src/shared/types.ts"
+    ],
+    "src/core/provider-registry.ts": [
+      "src/shared/types.ts",
+      "src/core/execution-provider.ts",
+      "src/core/project-uri.ts"
+    ],
+    "src/main/agent-clis.ts": [
+      "src/main/command-path.ts",
+      "src/shared/types.ts",
+      "src/main/token-usage-collector.ts",
+      "src/main/jsonl-reader.ts",
+      "src/main/command-path.ts"
+    ],
+    "src/main/app-updates.ts": [
+      "src/shared/app-updates.ts"
+    ],
+    "src/main/application-menu.ts": [],
+    "src/main/artifact-runs.ts": [
+      "src/core/project-uri.ts",
+      "src/shared/types.ts",
+      "src/main/tasks.ts"
+    ],
+    "src/main/browser-tabs.ts": [
+      "src/shared/types.ts"
+    ],
+    "src/main/caffeinate.ts": [],
+    "src/main/command-path.ts": [],
+    "src/main/config.ts": [
+      "src/shared/caffeinate.ts",
+      "src/shared/types.ts",
+      "src/shared/schema.ts",
+      "src/main/json-file.ts"
+    ],
+    "src/main/dev-services.ts": [
+      "src/shared/types.ts",
+      "src/core/project-uri.ts"
+    ],
+    "src/main/file-content.ts": [
+      "src/main/config.ts",
+      "src/core/project-uri.ts",
+      "src/main/path-safety.ts",
+      "src/shared/types.ts"
+    ],
+    "src/main/git.ts": [
+      "src/shared/types.ts"
+    ],
+    "src/main/github.ts": [
+      "src/shared/types.ts",
+      "src/main/command-path.ts"
+    ],
+    "src/main/harness.ts": [
+      "src/shared/types.ts",
+      "src/shared/types.ts",
+      "src/main/command-path.ts"
+    ],
+    "src/main/hooks/bridge.ts": [
+      "src/main/hooks/types.ts"
+    ],
+    "src/main/hooks/cli/sharkbay-hook.ts": [],
+    "src/main/hooks/codex-turn-reader.ts": [
+      "src/shared/agent-status.ts"
+    ],
+    "src/main/hooks/connectors/claude-family.ts": [
+      "src/main/hooks/types.ts"
+    ],
+    "src/main/hooks/connectors/cursor.ts": [
+      "src/main/hooks/types.ts"
+    ],
+    "src/main/hooks/connectors/gemini.ts": [
+      "src/main/hooks/types.ts"
+    ],
+    "src/main/hooks/connectors/kiro.ts": [
+      "src/main/hooks/types.ts"
+    ],
+    "src/main/hooks/connectors/opencode.ts": [
+      "src/main/hooks/types.ts"
+    ],
+    "src/main/hooks/connectors/reasonix.ts": [
+      "src/main/hooks/types.ts"
+    ],
+    "src/main/hooks/program-status.ts": [
+      "src/shared/agent-status.ts"
+    ],
+    "src/main/hooks/prompt-store.ts": [],
+    "src/main/hooks/sessions.ts": [],
+    "src/main/hooks/state-manager.ts": [
+      "src/main/hooks/codex-turn-reader.ts",
+      "src/main/hooks/program-status.ts",
+      "src/shared/agent-status.ts",
+      "src/main/hooks/types.ts"
+    ],
+    "src/main/hooks/terminal-approval-detector.ts": [],
+    "src/main/hooks/types.ts": [
+      "src/shared/agent-status.ts"
+    ],
+    "src/main/json-file.ts": [],
+    "src/main/jsonl-reader.ts": [],
+    "src/main/path-safety.ts": [
+      "src/shared/types.ts",
+      "src/core/project-uri.ts"
+    ],
+    "src/main/project-clone.ts": [
+      "src/main/config.ts",
+      "src/shared/types.ts"
+    ],
+    "src/main/project-files.ts": [
+      "src/main/config.ts",
+      "src/main/path-safety.ts",
+      "src/shared/types.ts"
+    ],
+    "src/main/project-icons.ts": [
+      "src/shared/types.ts",
+      "src/shared/schema.ts",
+      "src/main/json-file.ts",
+      "src/main/path-safety.ts"
+    ],
+    "src/main/project-setup.ts": [
+      "src/shared/types.ts",
+      "src/main/hooks/types.ts",
+      "src/main/github.ts",
+      "src/main/harness.ts"
+    ],
+    "src/main/pty.ts": [],
+    "src/main/review-control-server.ts": [],
+    "src/main/review-runs.ts": [
+      "src/core/project-uri.ts",
+      "src/shared/types.ts",
+      "src/main/tasks.ts"
+    ],
+    "src/main/scanner.ts": [
+      "src/shared/types.ts",
+      "src/main/config.ts",
+      "src/main/dev-services.ts",
+      "src/main/git.ts",
+      "src/main/path-safety.ts",
+      "src/main/project-icons.ts",
+      "src/core/project-uri.ts"
+    ],
+    "src/main/secrets.ts": [],
+    "src/main/share-artifact.ts": [
+      "src/main/harness.ts"
+    ],
+    "src/main/share-popover.ts": [
+      "src/shared/ipc-channels.ts"
+    ],
+    "src/main/tasks.ts": [
+      "src/shared/types.ts",
+      "src/shared/types.ts"
+    ],
+    "src/main/teamwork-sync.ts": [],
+    "src/main/telegram/ansi.ts": [],
+    "src/main/telegram/api.ts": [],
+    "src/main/telegram/dispatch.ts": [
+      "src/main/telegram/types.ts"
+    ],
+    "src/main/telegram/format.ts": [],
+    "src/main/telegram/pairing.ts": [
+      "src/main/telegram/types.ts"
+    ],
+    "src/main/telegram/render.ts": [
+      "src/shared/agent-status.ts",
+      "src/main/telegram/types.ts"
+    ],
+    "src/main/telegram/service.ts": [
+      "src/shared/types.ts",
+      "src/main/telegram/api.ts",
+      "src/main/telegram/dispatch.ts",
+      "src/main/telegram/pairing.ts",
+      "src/main/telegram/ansi.ts",
+      "src/main/telegram/format.ts",
+      "src/main/telegram/render.ts",
+      "src/main/telegram/turn.ts",
+      "src/main/telegram/types.ts"
+    ],
+    "src/main/telegram/session-registry.ts": [
+      "src/main/hooks/sessions.ts",
+      "src/main/telegram/types.ts"
+    ],
+    "src/main/telegram/transcript.ts": [],
+    "src/main/telegram/turn.ts": [
+      "src/main/telegram/types.ts"
+    ],
+    "src/main/telegram/types.ts": [],
+    "src/main/terminal.ts": [
+      "src/main/pty.ts",
+      "src/main/config.ts",
+      "src/main/path-safety.ts",
+      "src/core/project-uri.ts",
+      "src/main/command-path.ts",
+      "src/main/harness.ts",
+      "src/shared/types.ts"
+    ],
+    "src/main/token-usage-collector.ts": [
+      "src/main/token-usage-db.ts",
+      "src/main/jsonl-reader.ts"
+    ],
+    "src/main/token-usage-db.ts": [],
+    "src/main/token-usage-pricing.ts": [],
+    "src/main/worktree.ts": [
+      "src/main/config.ts",
+      "src/shared/types.ts"
+    ],
+    "src/plugins/bundled/agent-detector.ts": [
+      "src/shared/types.ts",
+      "src/shared/types.ts",
+      "src/core/execution-provider.ts",
+      "src/plugins/plugin-host.ts"
+    ],
+    "src/plugins/bundled/codegraph-detector.ts": [
+      "src/plugins/plugin-host.ts",
+      "src/plugins/bundled/tool-probe.ts"
+    ],
+    "src/plugins/bundled/core-detectors.ts": [
+      "src/plugins/plugin-host.ts",
+      "src/plugins/bundled/tool-probe.ts"
+    ],
+    "src/plugins/bundled/go-detector.ts": [
+      "src/plugins/plugin-host.ts",
+      "src/plugins/bundled/tool-probe.ts"
+    ],
+    "src/plugins/bundled/java-detector.ts": [
+      "src/plugins/plugin-host.ts",
+      "src/plugins/bundled/tool-probe.ts"
+    ],
+    "src/plugins/bundled/node-detector.ts": [
+      "src/plugins/plugin-host.ts",
+      "src/shared/types.ts",
+      "src/plugins/bundled/tool-probe.ts"
+    ],
+    "src/plugins/bundled/python-detector.ts": [
+      "src/plugins/plugin-host.ts",
+      "src/plugins/bundled/tool-probe.ts"
+    ],
+    "src/plugins/bundled/rust-detector.ts": [
+      "src/plugins/plugin-host.ts",
+      "src/plugins/bundled/tool-probe.ts"
+    ],
+    "src/plugins/bundled/tool-probe.ts": [
+      "src/core/execution-provider.ts",
+      "src/shared/types.ts"
+    ],
+    "src/plugins/bundled-plugins.ts": [
+      "src/plugins/bundled/agent-detector.ts",
+      "src/plugins/bundled/codegraph-detector.ts",
+      "src/plugins/bundled/core-detectors.ts",
+      "src/plugins/bundled/go-detector.ts",
+      "src/plugins/bundled/java-detector.ts",
+      "src/plugins/bundled/node-detector.ts",
+      "src/plugins/bundled/python-detector.ts",
+      "src/plugins/bundled/rust-detector.ts",
+      "src/plugins/plugin-host.ts"
+    ],
+    "src/plugins/installed-plugins.ts": [
+      "src/shared/types.ts",
+      "src/plugins/plugin-manifest.ts",
+      "src/plugins/plugin-host.ts"
+    ],
+    "src/plugins/plugin-host.ts": [
+      "src/shared/types.ts",
+      "src/core/execution-provider.ts"
+    ],
+    "src/plugins/plugin-manifest.ts": [
+      "src/shared/types.ts"
+    ],
+    "src/profiles/profile-orchestrator.ts": [
+      "src/core/provider-registry.ts",
+      "src/core/project-uri.ts",
+      "src/core/job-scheduler.ts",
+      "src/shared/types.ts",
+      "src/plugins/plugin-host.ts",
+      "src/plugins/plugin-host.ts",
+      "src/storage/profile-cache.ts",
+      "src/core/diagnostics.ts"
+    ],
+    "src/providers/local/local-provider.ts": [
+      "src/main/config.ts",
+      "src/main/file-content.ts",
+      "src/main/git.ts",
+      "src/main/github.ts",
+      "src/main/project-files.ts",
+      "src/main/scanner.ts",
+      "src/main/terminal.ts",
+      "src/main/command-path.ts",
+      "src/shared/types.ts",
+      "src/core/execution-provider.ts",
+      "src/core/project-uri.ts"
+    ],
+    "src/renderer/App.tsx": [
+      "src/renderer/hook-snapshots.ts",
+      "src/shared/agent-status.ts",
+      "src/renderer/code-editor.tsx",
+      "src/renderer/update-hint.tsx",
+      "src/renderer/project-start.tsx",
+      "src/renderer/bridge/runtime-status.tsx",
+      "src/renderer/mobile-layout.ts",
+      "src/renderer/clipboard.ts",
+      "src/renderer/terminal-create-menu.tsx",
+      "src/renderer/color-schemes.ts",
+      "src/renderer/prompt-search.ts",
+      "src/shared/caffeinate.ts",
+      "src/renderer/codex-input-state.ts",
+      "src/shared/agent-session-restore.ts",
+      "src/renderer/types.ts",
+      "src/renderer/workflow.ts",
+      "src/renderer/workflow.ts",
+      "src/shared/task-detail-helpers.ts"
+    ],
+    "src/renderer/bridge/runtime-status.tsx": [
+      "src/renderer/bridge/web-bridge.ts"
+    ],
+    "src/renderer/bridge/web-bridge.ts": [
+      "src/renderer/types.ts",
+      "src/shared/types.ts",
+      "src/shared/application-api.ts"
+    ],
+    "src/renderer/clipboard.ts": [],
+    "src/renderer/code-editor.tsx": [
+      "src/renderer/types.ts"
+    ],
+    "src/renderer/codex-input-state.ts": [
+      "src/shared/agent-status.ts"
+    ],
+    "src/renderer/color-schemes.ts": [],
+    "src/renderer/hook-snapshots.ts": [
+      "src/shared/agent-status.ts"
+    ],
+    "src/renderer/main.tsx": [
+      "src/renderer/bridge/web-bridge.ts",
+      "src/renderer/App.tsx"
+    ],
+    "src/renderer/mobile-layout.ts": [],
+    "src/renderer/project-start.tsx": [
+      "src/shared/types.ts",
+      "src/renderer/types.ts"
+    ],
+    "src/renderer/prompt-search.ts": [],
+    "src/renderer/terminal-create-menu.tsx": [
+      "src/renderer/types.ts"
+    ],
+    "src/renderer/types.ts": [
+      "src/shared/agent-status.ts",
+      "src/shared/caffeinate.ts"
+    ],
+    "src/renderer/update-hint.tsx": [
+      "src/shared/app-updates.ts"
+    ],
+    "src/renderer/workflow.ts": [],
+    "src/runtime/agent-runtime.ts": [
+      "src/main/hooks/program-status.ts",
+      "src/main/hooks/bridge.ts",
+      "src/main/hooks/state-manager.ts",
+      "src/main/hooks/prompt-store.ts",
+      "src/main/agent-clis.ts",
+      "src/main/hooks/terminal-approval-detector.ts",
+      "src/main/hooks/connectors/claude-family.ts",
+      "src/main/hooks/connectors/gemini.ts",
+      "src/main/hooks/connectors/kiro.ts",
+      "src/main/hooks/connectors/reasonix.ts",
+      "src/main/hooks/connectors/opencode.ts",
+      "src/main/hooks/connectors/cursor.ts",
+      "src/main/hooks/types.ts",
+      "src/main/review-runs.ts",
+      "src/main/artifact-runs.ts",
+      "src/main/review-control-server.ts",
+      "src/main/harness.ts",
+      "src/main/tasks.ts",
+      "src/shared/application-events.ts",
+      "src/core/core-runtime.ts",
+      "src/core/core-service.ts",
+      "src/shared/types.ts"
+    ],
+    "src/runtime/application-input.ts": [
+      "src/shared/application-api.ts",
+      "src/shared/application-api.ts"
+    ],
+    "src/runtime/application-runtime.ts": [
+      "src/core/core-runtime.ts",
+      "src/core/project-uri.ts",
+      "src/plugins/bundled/codegraph-detector.ts",
+      "src/main/config.ts",
+      "src/main/worktree.ts",
+      "src/main/project-setup.ts",
+      "src/main/harness.ts",
+      "src/main/hooks/sessions.ts",
+      "src/main/token-usage-db.ts",
+      "src/main/token-usage-collector.ts",
+      "src/main/path-safety.ts",
+      "src/runtime/agent-runtime.ts",
+      "src/runtime/task-runtime.ts",
+      "src/runtime/profile-lock.ts",
+      "src/runtime/terminal-state.ts",
+      "src/main/project-clone.ts",
+      "src/runtime/telegram-runtime.ts",
+      "src/shared/application-api.ts",
+      "src/runtime/application-input.ts",
+      "src/shared/types.ts"
+    ],
+    "src/runtime/control-client.ts": [],
+    "src/runtime/control-server.ts": [
+      "src/runtime/application-runtime.ts",
+      "src/runtime/control-client.ts"
+    ],
+    "src/runtime/profile-lock.ts": [],
+    "src/runtime/task-runtime.ts": [
+      "src/main/config.ts",
+      "src/main/git.ts",
+      "src/main/path-safety.ts",
+      "src/main/harness.ts",
+      "src/main/teamwork-sync.ts",
+      "src/main/tasks.ts",
+      "src/shared/application-events.ts",
+      "src/shared/types.ts"
+    ],
+    "src/runtime/telegram-runtime.ts": [
+      "src/main/telegram/types.ts",
+      "src/main/config.ts",
+      "src/main/harness.ts",
+      "src/core/project-uri.ts",
+      "src/main/hooks/sessions.ts",
+      "src/main/tasks.ts",
+      "src/main/secrets.ts",
+      "src/main/telegram/service.ts",
+      "src/main/telegram/session-registry.ts",
+      "src/main/telegram/transcript.ts",
+      "src/shared/types.ts",
+      "src/core/core-runtime.ts",
+      "src/runtime/agent-runtime.ts"
+    ],
+    "src/runtime/terminal-state.ts": [
+      "src/core/core-runtime.ts",
+      "src/shared/types.ts",
+      "src/shared/application-api.ts"
+    ],
+    "src/server/http-server.ts": [
+      "src/runtime/application-runtime.ts",
+      "src/shared/application-api.ts",
+      "src/shared/application-events.ts",
+      "src/main/path-safety.ts",
+      "src/server/session-auth.ts"
+    ],
+    "src/server/main.ts": [
+      "src/main/config.ts",
+      "src/runtime/application-runtime.ts",
+      "src/runtime/control-server.ts",
+      "src/runtime/control-client.ts",
+      "src/server/http-server.ts"
+    ],
+    "src/server/session-auth.ts": [
+      "src/shared/application-api.ts"
+    ],
+    "src/shared/agent-session-restore.ts": [
+      "src/shared/types.ts"
+    ],
+    "src/shared/agent-status.ts": [],
+    "src/shared/app-events.ts": [],
+    "src/shared/app-updates.ts": [],
+    "src/shared/application-api.ts": [
+      "src/shared/types.ts"
+    ],
+    "src/shared/application-events.ts": [],
+    "src/shared/caffeinate.ts": [],
+    "src/shared/ipc-channels.ts": [],
+    "src/shared/schema.ts": [],
+    "src/shared/task-detail-helpers.ts": [
+      "src/shared/types.ts"
+    ],
+    "src/shared/types.ts": [
+      "src/shared/agent-status.ts",
+      "src/shared/caffeinate.ts"
+    ],
+    "src/storage/profile-cache.ts": [
+      "src/shared/types.ts"
+    ],
+    "electron/find-popover-preload.mts": [
+      "src/shared/ipc-channels.ts",
+      "src/shared/types.ts"
+    ],
+    "electron/find-popover.ts": [
+      "src/shared/ipc-channels.ts",
+      "src/shared/types.ts"
+    ],
+    "electron/ipc.ts": [
+      "src/main/browser-tabs.ts",
+      "src/main/caffeinate.ts",
+      "src/main/share-artifact.ts",
+      "src/main/share-popover.ts",
+      "electron/find-popover.ts",
+      "src/shared/ipc-channels.ts",
+      "src/shared/app-events.ts",
+      "src/shared/types.ts",
+      "src/runtime/control-client.ts"
+    ],
+    "electron/island-preload.mts": [
+      "src/shared/ipc-channels.ts",
+      "src/shared/types.ts"
+    ],
+    "electron/main.ts": [
+      "electron/ipc.ts",
+      "src/main/application-menu.ts",
+      "src/main/app-updates.ts",
+      "electron/runtime-client.ts",
+      "src/shared/app-events.ts",
+      "src/shared/ipc-channels.ts",
+      "src/shared/types.ts"
+    ],
+    "electron/preload.mts": [
+      "src/shared/app-events.ts",
+      "src/shared/ipc-channels.ts",
+      "src/shared/app-updates.ts",
+      "src/plugins/plugin-host.ts",
+      "src/shared/types.ts"
+    ],
+    "electron/runtime-client.ts": [
+      "src/main/command-path.ts",
+      "src/runtime/control-client.ts"
+    ]
+  }
+}

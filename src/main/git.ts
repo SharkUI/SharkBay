@@ -58,30 +58,34 @@ export async function readGitHistory(repoPath: string, limit = 50): Promise<GitE
 }
 
 export async function readGitDirtyFiles(repoPath: string): Promise<GitDirtyFile[]> {
-  const raw = await git(repoPath, ["status", "--porcelain=v1", "-uall"]).catch(() => "");
+  const raw = await git(repoPath, ["status", "--porcelain=v1", "-z", "-uall"]).catch(() => "");
   return parseGitDirtyFiles(raw);
 }
 
 export function parseGitDirtyFiles(raw: string): GitDirtyFile[] {
-  return raw.split("\n").flatMap((line) => {
+  const records = raw.split("\0");
+  const files: GitDirtyFile[] = [];
+  for (let index = 0; index < records.length; index++) {
+    const line = records[index]!;
     if (line.length < 4) {
-      return [];
+      continue;
     }
     const staged = line[0] ?? " ";
     const unstaged = line[1] ?? " ";
-    const pathText = line.slice(3).trim();
-    const renamedPath = pathText.includes(" -> ") ? pathText.split(" -> ").pop() ?? pathText : pathText;
-    const filePath = unquotePorcelainPath(renamedPath);
+    // With -z, Git emits the destination first, then the original rename/copy path.
+    const filePath = line.slice(3);
+    if (/[RC]/u.test(`${staged}${unstaged}`)) index++;
     if (!filePath) {
-      return [];
+      continue;
     }
-    return [{
+    files.push({
       path: filePath,
       status: `${staged}${unstaged}`.trim() || "modified",
       staged,
       unstaged,
-    }];
-  });
+    });
+  }
+  return files;
 }
 
 async function readDefaultBranch(repoPath: string): Promise<string | null> {
@@ -90,15 +94,6 @@ async function readDefaultBranch(repoPath: string): Promise<string | null> {
     return symbolic.replace(/^refs\/remotes\/origin\//, "");
   }
   return git(repoPath, ["config", "--get", "init.defaultBranch"]).catch(() => null);
-}
-
-function unquotePorcelainPath(value: string): string {
-  if (value.length >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
-    return value.slice(1, -1)
-      .replace(/\\"/g, "\"")
-      .replace(/\\\\/g, "\\");
-  }
-  return value;
 }
 
 async function git(repoPath: string, args: string[]): Promise<string> {

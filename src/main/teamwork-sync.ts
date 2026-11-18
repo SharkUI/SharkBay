@@ -1,7 +1,9 @@
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
-import { readdir, readFile, mkdir, writeFile, unlink } from "node:fs/promises";
-import { join, dirname } from "node:path";
+import { readdir, readFile, mkdir, mkdtemp, rm, rename } from "node:fs/promises";
+import { join, dirname, basename } from "node:path";
+import { tmpdir } from "node:os";
+import { resolveManagedPath, writeManagedFile } from "./managed-path.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -85,7 +87,8 @@ export class TeamworkSync {
     } catch { /* branch doesn't exist, create it */ }
 
     // Create orphan branch with minimal structure
-    const indexFile = join(this.repoPath, ".git", "tmp-init-index");
+    const indexDir = await mkdtemp(join(tmpdir(), "sharkbay-context-index-"));
+    const indexFile = join(indexDir, "index");
     const env = { ...process.env, GIT_INDEX_FILE: indexFile };
     try {
       await this.gitEnv(["read-tree", "--empty"], env);
@@ -102,7 +105,7 @@ export class TeamworkSync {
       await this.git(["push", "origin", `${commitHash}:refs/heads/${BRANCH}`]);
       await this.git(["fetch", "origin", BRANCH]);
     } finally {
-      await unlink(indexFile).catch(() => {});
+      await rm(indexDir, { recursive: true, force: true });
     }
   }
 
@@ -153,26 +156,43 @@ export class TeamworkSync {
   }
 
   private async listRemoteFiles(): Promise<string[]> {
-    try {
-      const out = await this.git(["ls-tree", "-r", "--name-only", REMOTE_REF, "--", TASKS_PREFIX]);
-      return out ? out.split("\n").filter(Boolean) : [];
-    } catch {
-      return [];
-    }
+    const out = await this.git(["ls-tree", "-r", "--name-only", "-z", REMOTE_REF, "--", TASKS_PREFIX]);
+    return out ? out.split("\0").filter(Boolean) : [];
   }
 
   private async refreshMirrorFromRemote(): Promise<void> {
     const remoteFiles = await this.listRemoteFiles();
-    const mirrorTasksDir = join(this.repoPath, MIRROR_DIR, "tasks");
-    await mkdir(mirrorTasksDir, { recursive: true });
-
-    for (const filePath of remoteFiles) {
-      const content = await this.git(["show", `${REMOTE_REF}:${filePath}`]);
-      const relativePath = filePath.replace(TASKS_PREFIX, "");
-      const localPath = join(mirrorTasksDir, relativePath);
-      await mkdir(dirname(localPath), { recursive: true });
-      await writeFile(localPath, content);
-    }
+    const mirrorTasksDir = await resolveManagedPath(this.repoPath, `${MIRROR_DIR}/tasks`);
+    const parent = await resolveManagedPath(this.repoPath, MIRROR_DIR);
+    await mkdir(parent, { recursive: true });
+    const staging = await mkdtemp(join(parent, ".tasks-stage-"));
+    const previous = `${staging}-previous`;
+    try {
+      for (const filePath of remoteFiles) {
+        if (!filePath.startsWith(TASKS_PREFIX)) throw new Error("Remote task path is unsafe");
+        const content = await this.git(["show", `${REMOTE_REF}:${filePath}`]);
+        const relativePath = filePath.slice(TASKS_PREFIX.length);
+        // Validate the live path as well, even though this write is staged.
+        await resolveManagedPath(this.repoPath, `${MIRROR_DIR}/tasks/${relativePath}`);
+        const stagedRelativePath = `${MIRROR_DIR}/${basename(staging)}/${relativePath}`;
+        const stagedPath = await resolveManagedPath(this.repoPath, stagedRelativePath);
+        await mkdir(dirname(stagedPath), { recursive: true });
+        await writeManagedFile(this.repoPath, stagedRelativePath, content);
+      }
+      let movedPrevious = false;
+      await resolveManagedPath(this.repoPath, `${MIRROR_DIR}/tasks`);
+      try { await rename(mirrorTasksDir, previous); movedPrevious = true; }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+      try { await rename(staging, mirrorTasksDir); }
+      catch (error) {
+        if (movedPrevious) {
+          try { await rename(previous, mirrorTasksDir); }
+          catch (recoveryError) { throw new AggregateError([error, recoveryError], `Mirror recovery failed; previous snapshot retained at ${previous}`); }
+        }
+        throw error;
+      }
+      if (movedPrevious) await rm(previous, { recursive: true, force: true });
+    } finally { await rm(staging, { recursive: true, force: true }); }
   }
 
   private async findPendingTasks(remoteFiles: string[]): Promise<CompletedTask[]> {
@@ -240,7 +260,8 @@ export class TeamworkSync {
   }
 
   private async pushTasks(tasks: CompletedTask[]): Promise<void> {
-    const indexFile = join(this.repoPath, ".git", "tmp-sync-index");
+    const indexDir = await mkdtemp(join(tmpdir(), "sharkbay-context-index-"));
+    const indexFile = join(indexDir, "index");
     const env = { ...process.env, GIT_INDEX_FILE: indexFile };
 
     try {
@@ -276,7 +297,7 @@ export class TeamworkSync {
       await this.git(["update-ref", `refs/remotes/${REMOTE_REF}`, commitHash]);
       await this.git(["push", "origin", `${commitHash}:refs/heads/${BRANCH}`]);
     } finally {
-      await unlink(indexFile).catch(() => {});
+      await rm(indexDir, { recursive: true, force: true });
     }
   }
 

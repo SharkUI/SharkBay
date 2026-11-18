@@ -1,6 +1,6 @@
 # Release And Packaging
 
-SharkBay packages with Electron Builder for macOS.
+SharkBay packages with Electron Builder for macOS. The [current facts table](current-facts.md) is the canonical summary of process ownership, shipped capabilities and release semantics.
 
 ## Commands
 
@@ -101,7 +101,7 @@ Task `N6T8V2-u3960864-m81ae10` records the acceptance environment and results.
 The Electron Builder config in `package.json` includes:
 
 - `dist/renderer/**/*`
-- `dist-electron/**/*`
+- `dist-electron/**/*`, with explicit exclusions for compiled tests, source maps, declarations and build metadata
 - `package.json`
 - `resources/` as extra resources
 
@@ -172,7 +172,7 @@ Local builds use ad-hoc signing unless signing and notarization credentials are 
 
 ## Known Packaging Note
 
-`tsconfig.node.json` currently includes `tests/**/*.ts`, and Electron Builder includes all of `dist-electron/**/*`. Review packaged contents before a public release if compiled tests should be excluded.
+`tsconfig.node.json` includes tests for compilation and checking, while Electron Builder explicitly excludes `dist-electron/tests/**/*`, source maps, declarations and build metadata from the desktop package. Check the actual artifact manifest for release acceptance; TypeScript include patterns alone do not describe shipped contents.
 
 ## Shared runtime package
 

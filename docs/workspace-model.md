@@ -1,5 +1,7 @@
 # Workspace Model
 
+状态：历史设计提案。这里的模型、路线与示例不代表当前已实现能力或已批准产品方向。当前行为见 [Current facts](current-facts.md)，产品边界遵循仓库 AGENTS.md；涉及新平台、账户或协作存储的目标需重新核对这些约束。
+
 ## 1. 目标
 
 Workspace 是 SharkBay 的核心工作边界。它不是简单的项目列表，也不是多个机器的聚合视图，而是：

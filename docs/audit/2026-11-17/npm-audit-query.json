@@ -1,0 +1,24 @@
+{
+  "target": "2fc9c935892d04748c01579f819da701eb163150",
+  "completed_at_utc": "2026-11-17T14:41:26.167959+00:00",
+  "authorization": "User explicitly allowed dependency names and versions to npm official advisory service",
+  "command": [
+    "npm",
+    "audit",
+    "--package-lock-only",
+    "--ignore-scripts",
+    "--json",
+    "--fetch-retries=0",
+    "--fetch-timeout=20000"
+  ],
+  "exit_code": 1,
+  "meaning": "Successful advisory response reporting affected dependency packages, not a transport failure",
+  "counts": {
+    "info": 0,
+    "low": 1,
+    "moderate": 5,
+    "high": 23,
+    "critical": 4,
+    "total": 33
+  }
+}

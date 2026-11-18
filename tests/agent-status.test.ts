@@ -547,6 +547,7 @@ describe("deployed hook transport", () => {
     const bridge = new HookBridge({ socketDir: root, socketPathFile: path.join(root, "socket-path") });
     const manager = new AgentHookStateManager(); managers.push(manager); manager.registerConnector(new CodexConnector());
     bridge.on("event", (message) => manager.handleMessage(message));
+    const children = new Set<import("node:child_process").ChildProcess>();
     try {
       await bridge.start(root);
       for (const [hook, state] of [["UserPromptSubmit", "working"], ["Stop", "done"]] as const) {
@@ -554,7 +555,10 @@ describe("deployed hook transport", () => {
           const child = spawn(process.execPath, [path.join(root, "bin/sharkbay-hook"), "--source", "codex"], {
             env: { ...process.env, SHARKBAY_TERMINAL_SESSION_ID: "exact-terminal", SHARKBAY_AGENT_LAUNCH_TOKEN: "launch" }, stdio: ["pipe", "ignore", "pipe"],
           });
-          child.on("error", reject); child.on("close", (code) => code === 0 ? resolve() : reject(new Error(`Hook exited ${code}`)));
+          children.add(child);
+          const timeout = setTimeout(() => { child.kill(); reject(new Error("Hook transport timed out")); }, 3000);
+          child.on("error", (error) => { clearTimeout(timeout); reject(error); });
+          child.on("close", (code) => { clearTimeout(timeout); children.delete(child); code === 0 ? resolve() : reject(new Error(`Hook exited ${code}`)); });
           child.stdin.end(JSON.stringify({ hook_event_name: hook, session_id: "provider-id", turn_id: "turn-a", cwd: root }));
         });
         await vi.waitFor(() => expect(manager.getStatus(root, "provider-id")).toMatchObject({ terminalSessionId: "exact-terminal", state, evidence: { origin: "hook" } }));
@@ -562,6 +566,6 @@ describe("deployed hook transport", () => {
       const published = readFileSync(path.join(root, ".sharkbay/logs/hooks.log"), "utf8").trim().split("\n").map(line => JSON.parse(line)).filter(row => row.status);
       expect(published.at(-1).status).toMatchObject({ terminalSessionId: "exact-terminal", turnId: "turn-a", event: "turn_end", state: "done", evidence: { origin: "hook" } });
       expect(published.at(-1).status).not.toHaveProperty("prompt");
-    } finally { await bridge.stop(); }
+    } finally { for (const child of children) child.kill(); await bridge.stop(); }
   });
 });

@@ -13,5 +13,5 @@
     },
     "noEmit": true
   },
-  "include": ["src/renderer/**/*.ts", "src/renderer/**/*.tsx", "src/usage-window/**/*.ts", "src/usage-window/**/*.tsx", "src/shared/**/*.ts"]
+  "include": ["tests/**/*.test.tsx", "src/renderer/**/*.ts", "src/renderer/**/*.tsx", "src/usage-window/**/*.ts", "src/usage-window/**/*.tsx", "src/shared/**/*.ts"]
 }

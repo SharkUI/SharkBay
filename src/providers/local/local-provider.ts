@@ -1,9 +1,8 @@
-import { execFile } from "node:child_process";
+import { runProcessCommand } from "../../main/process-command.js";
 import { EventEmitter } from "node:events";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 import { getConfiguredRoots } from "../../main/config.js";
 import { readLocalProjectFile, writeLocalProjectFile, deleteLocalProjectFile, renameLocalProjectFile } from "../../main/file-content.js";
 import { readGitDirtyFiles, readGitHistory, readGitMetadata } from "../../main/git.js";
@@ -57,7 +56,6 @@ import {
 } from "../../core/execution-provider.js";
 import { parseProjectUri } from "../../core/project-uri.js";
 
-const execFileAsync = promisify(execFile);
 type CommandPathResolver = (command: string) => Promise<string | null>;
 
 export class LocalProvider extends EventEmitter implements ExecutionProvider {
@@ -258,14 +256,16 @@ export class LocalProvider extends EventEmitter implements ExecutionProvider {
       if (options.env?.PATH) {
         env.PATH = prependPathDirectories(options.env.PATH, commandSearchPaths);
       }
-      const result = await execFileAsync("/bin/sh", ["-lc", command], {
+      options.signal?.throwIfAborted();
+      const result = await runProcessCommand("/bin/sh", ["-lc", command], {
         cwd,
         timeout: options.timeoutMs ?? 8000,
+        signal: options.signal,
         env,
-        maxBuffer: 1024 * 1024,
       });
       return { stdout: result.stdout, stderr: result.stderr, exitCode: 0 };
     } catch (error) {
+      options.signal?.throwIfAborted();
       const detail = error as { stdout?: unknown; stderr?: unknown; code?: unknown };
       return {
         stdout: String(detail.stdout ?? ""),

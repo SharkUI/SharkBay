@@ -1,0 +1,21 @@
+$ node  /tmp/sharkbay-audit-resource-repro/cases.mjs
+exit=0
+{"case":"timeout_ignored","final":{"status":"completed"},"events":[{"status":"queued"},{"status":"running"},{"status":"completed"}]}
+{"case":"nested_install_deadlock","nestedStarted":0,"parentsFinished":0}
+{"case":"flush_first_failure","error":"injected SQLite write failure"}
+{"case":"flush_retry","insertCalls":1,"expected":2}
+
+$ node  /tmp/sharkbay-audit-resource-repro/extra.mjs
+exit=0
+{"case":"signalled_command","resolved":true,"result":{"stdout":"","stderr":""}}
+{"case":"uname_fields","actual":{"platform":"darwin","name":"Darwin","version":"arm64","arch":"26.1.0","kernel":"arm64"},"expected":{"version":"26.1.0","arch":"arm64","kernel":"26.1.0"}}
+
+$ node --expose-gc /tmp/sharkbay-audit-resource-repro/reader.mjs
+exit=0
+{"case":"reader_scale","bytes":1048576,"lines":4096,"durationMs":8,"peakRss":57982976,"initialRss":48611328,"retainedPartial":0,"finalOffset":1048576}
+{"case":"reader_scale","bytes":8388608,"lines":32768,"durationMs":36,"peakRss":68190208,"initialRss":67633152,"retainedPartial":0,"finalOffset":8388608}
+{"case":"reader_lifecycle","rounds":20,"result":"passed"}
+
+$ node  /tmp/sharkbay-audit-resource-repro/remove-active.mjs
+exit=0
+{"case":"remove_active_index","calls":["status","sync","uninit"],"aborted":false,"hasActiveJobs":true}

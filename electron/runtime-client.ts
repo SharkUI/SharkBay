@@ -5,9 +5,10 @@ import { app } from "electron";
 import { resolveCommandPath } from "../src/main/command-path.js";
 import { RuntimeClient, defaultRuntimeDataPath } from "../src/runtime/control-client.js";
 
-export async function ensureRuntime(): Promise<RuntimeClient> {
+export async function ensureRuntime(report: (stage: string) => void = () => {}): Promise<RuntimeClient> {
   const dataPath = process.env.SHARKBAY_RUNTIME_DATA_DIR ?? defaultRuntimeDataPath();
-  try { return await RuntimeClient.connect(dataPath); }
+  report("runtime-connect-started");
+  try { const client = await RuntimeClient.connect(dataPath); report("existing-runtime-connected"); return client; }
   catch (error) { if (!["ENOENT", "ECONNREFUSED"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error; }
   await mkdir(dataPath, { recursive: true, mode: 0o700 });
   const node = process.env.SHARKBAY_NODE_PATH ?? (app.isPackaged ? join(process.resourcesPath, "runtime", "bin", process.platform === "win32" ? "node.exe" : "node") : await resolveCommandPath("node"));
@@ -21,13 +22,15 @@ export async function ensureRuntime(): Promise<RuntimeClient> {
     const child = spawn(node, args, { cwd: root, env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined }, detached: true, stdio: ["ignore", log.fd, log.fd] });
     child.once("error", (error) => { spawnError = error; });
     child.unref();
+    report("runtime-spawned");
   } finally { await log.close(); }
   const deadline = Date.now() + 15000;
   while (Date.now() < deadline) {
     if (spawnError) throw spawnError;
-    try { return await RuntimeClient.connect(dataPath); }
+    try { const client = await RuntimeClient.connect(dataPath); report("runtime-handshake-ready"); return client; }
     catch (error) { if (!["ENOENT", "ECONNREFUSED"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error; }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
+  report("runtime-connect-timeout");
   throw new Error(`Runtime did not start. See ${join(dataPath, "runtime.log")}`);
 }

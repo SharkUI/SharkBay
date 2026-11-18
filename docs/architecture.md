@@ -1,5 +1,7 @@
 # Architecture
 
+The [current facts table](current-facts.md) records the canonical product and runtime contract.
+
 SharkBay has one independent Node application runtime, a shared React workbench, and Electron/browser clients. GitHub remains the only identity, permission, and collaboration system.
 
 ## Process Model
@@ -85,9 +87,11 @@ Path safety is enforced in the shared runtime. Renderer-supplied paths are re-re
 Key boundaries:
 
 - Product entry points call `resolveRepoPath` with persisted configured projects, so directories must be inside a manually configured project.
-- file tree listing rejects unsafe directory paths and only marks contained, known text-like files as editable.
+- File listing and the built-in CodeMirror editor use the same runtime path boundary; file reads and writes additionally validate size and content.
+- Managed `.sharkbay` protocol, mirror and artifact paths reject symlinks in existing path components. Managed writes open the final file without following symlinks, reject multiple hard links and use the open handle for truncation and permissions. Task IDs must be safe filename identifiers before parsing or reserving outputs. These checks are not a filesystem transaction against concurrent replacement of ancestor directories by another process.
+- Git metadata paths come from `git rev-parse --git-path`, so linked worktrees can use their legitimate shared Git directory. Context sync uses a unique private temporary index and removes it after each operation; it does not write through a guessed `<worktree>/.git` directory or change the user's index.
 - terminal cwd is resolved through the same allowed-project boundary.
-- BrowserView navigation accepts only `http:` and `https:` URLs; invalid or unsafe schemes become `about:blank`.
+- BrowserView URL normalization supports HTTP(S) and local file previews; browser network APIs require authenticated sessions. HTTP/WS access on loopback and LAN requires the same host-issued grant/cookie flow as other addresses. Revoke invalidates all sessions and grants and closes their connections.
 - Teamwork launch bootstrap is prepared in the runtime after cwd safety checks and Teamwork install detection.
 - Teamwork context cleanup is restricted to the repository owner.
 
@@ -98,8 +102,8 @@ SharkBay shells out to local tools for user-visible project workflows:
 - `git` for repository status, history, sync, and Teamwork context transport.
 - `gh` for Teamwork identity and repository permission checks.
 - `lsof` on macOS for terminal cwd/title inspection.
-- `/bin/zsh -lc command -v ...` and fallback paths for CLI discovery.
-- user shells through `@lydell/node-pty` (or `bun-pty` under Bun) for terminal tabs and service commands.
+- The configured login shell supplies PATH; command discovery checks that PATH plus known fallback and version-manager directories. Fish joins its PATH into a single colon-separated line.
+- User shells through `@lydell/node-pty` for terminal tabs and service commands. The current runtime does not select bun-pty.
 
 ## Packaging
 
@@ -110,10 +114,14 @@ SharkBay shells out to local tools for user-visible project workflows:
 - `npm run prepare:runtime` stages the current ordinary Node binary, Node license, production dependencies, runtime and renderer outside ASAR; Electron Builder includes this directory as `Resources/runtime`.
 - Electron native dependency rebuilding is disabled: SQLite/PTY belong to the bundled Node environment. Build on the target OS/architecture; do not copy a development `node_modules` across platforms.
 
-`tsconfig.node.json` currently includes tests in the Node build output. Review packaged contents before release if artifact size or source exposure matters.
+Tests remain part of TypeScript checking, but package rules exclude compiled tests, source maps, declarations and build metadata. Verify the actual package manifest before a release.
 
 ## Tests
 
 Vitest tests cover main-process helpers and pure renderer workflow behavior, including scanner, Git parsing, path safety, terminal logic, browser URL normalization, Teamwork harness/sync/tasks, IPC channels, and build config. There is no broad React DOM/component test suite yet.
 
 The integration boundary and acceptance plan are recorded in [Shared runtime plan](shared-runtime-plan.md).
+
+## Plugin and Profile Scope
+
+Bundled plugins register in code; no installed-plugin filesystem scan or third-party executable loading is connected. Machine profiles supply installation preconditions and support cached detector results; the current Agent-list shortcut performs enabled CLI detection directly. Project profile APIs have no current application/UI consumer. The [historical profiles proposal](execution-target-profiles.md) is not an implementation tracker for unsupported targets or marketplace features.

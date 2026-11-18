@@ -32,7 +32,7 @@ describe("Core bundled detectors", () => {
     const patch = await detector.run(ctx);
 
     expect(patch.hostname).toBe("host.local");
-    expect(patch.os?.platform).toBe("darwin");
+    expect(patch.os).toMatchObject({ platform: "darwin", version: "25.4.0", kernel: "25.4.0", arch: "arm64" });
     expect(patch.shell?.path).toBe("/bin/zsh");
   });
 });

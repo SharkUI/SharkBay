@@ -236,11 +236,16 @@ export class AgentSessionWatcher extends EventEmitter<AgentSessionWatcherEvents>
     try {
       for await (const { line, offset } of reader.read(stat.size, this.readCancellation.signal)) {
         if (line === null) { console.warn(`Agent session scan: oversized JSONL record skipped in ${file.filePath} at ${offset}`); continue; }
-        this.processLine(state, line, offset);
+        try {
+          this.processLine(state, line, offset);
+        } catch (error) {
+          state.reader = new JsonlReader(file.filePath, offset);
+          throw error;
+        }
       }
       return reader.offset > before;
     } finally {
-      state.offset = reader.offset;
+      state.offset = state.reader.offset;
     }
   }
 

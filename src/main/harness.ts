@@ -1,11 +1,13 @@
 import type { GitHubIdentity, HarnessFileIssue, HarnessUpdateStatus } from "../shared/types.js";
 export type { GitHubIdentity, HarnessFileIssue, HarnessUpdateStatus } from "../shared/types.js";
-import { access, chmod, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { access, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { randomBytes, randomUUID } from "node:crypto";
 import { resolveCommandPath } from "./command-path.js";
+import { resolveManagedPath, writeManagedFile } from "./managed-path.js";
+import { isSafeTaskId } from "../shared/task-id.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -334,15 +336,17 @@ function reviewFocusLine(status: string): string {
  * file with no read-then-write race. Also ensures the reviews directory exists.
  */
 export async function reserveReviewPath(repoPath: string, taskId: string): Promise<string> {
-  const dir = join(repoPath, ".sharkbay", "reviews");
+  if (!isSafeTaskId(taskId)) throw new Error("Task id is unsafe");
+  const dir = await resolveManagedPath(repoPath, ".sharkbay/reviews");
   await mkdir(dir, { recursive: true });
   const tag = taskId.split("-")[0] || taskId;
   for (let attempt = 0; attempt < 10; attempt++) {
     const relativePath = `.sharkbay/reviews/${tag}-${shortReviewHash()}.md`;
     try {
-      await writeFile(join(repoPath, relativePath), "", { flag: "wx" });
+      await writeFile(await resolveManagedPath(repoPath, relativePath), "", { flag: "wx" });
       return relativePath;
-    } catch {
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       // Name already taken — try another random code.
     }
   }
@@ -399,15 +403,17 @@ export function artifactPrompt(artifact: ArtifactPromptInput, options: Bootstrap
  * ensures the artifacts directory exists.
  */
 export async function reserveArtifactPath(repoPath: string, taskId: string): Promise<string> {
+  if (!isSafeTaskId(taskId)) throw new Error("Task id is unsafe");
   const tag = taskId.split("-")[0] || taskId;
-  const dir = join(repoPath, ".sharkbay", "artifacts");
+  const dir = await resolveManagedPath(repoPath, ".sharkbay/artifacts");
   await mkdir(dir, { recursive: true });
   for (let attempt = 0; attempt < 10; attempt++) {
     const relativePath = `.sharkbay/artifacts/${tag}-${shortReviewHash()}.html`;
     try {
-      await writeFile(join(repoPath, relativePath), "", { flag: "wx" });
+      await writeFile(await resolveManagedPath(repoPath, relativePath), "", { flag: "wx" });
       return relativePath;
-    } catch {
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       // Name already taken — try another random code.
     }
   }
@@ -491,27 +497,23 @@ function managedHarnessFiles(options: ProtocolOptions): ManagedHarnessFile[] {
 }
 
 async function writeManagedHarnessFiles(repoPath: string, options: ProtocolOptions): Promise<void> {
-  const sbDir = join(repoPath, ".sharkbay");
-  const harnessDir = join(sbDir, "harness");
-
-  await mkdir(harnessDir, { recursive: true });
-  await mkdir(join(sbDir, "tasks"), { recursive: true });
-  await mkdir(join(sbDir, "team-context"), { recursive: true });
-
-  await writeFile(join(sbDir, "machine-id"), options.machineId, "utf-8");
-  for (const file of managedHarnessFiles(options)) {
-    await writeFile(join(repoPath, file.path), file.content, "utf-8");
-    if (file.executable) await chmod(join(repoPath, file.path), 0o755);
-  }
+  const files = managedHarnessFiles(options);
+  const directories = [".sharkbay/harness", ".sharkbay/tasks", ".sharkbay/team-context"];
+  for (const relative of [...directories, ".sharkbay/machine-id", ...files.map(file => file.path)]) await resolveManagedPath(repoPath, relative);
+  for (const relative of directories) await mkdir(await resolveManagedPath(repoPath, relative), { recursive: true });
+  await writeManagedFile(repoPath, ".sharkbay/machine-id", options.machineId);
+  for (const file of files) await writeManagedFile(repoPath, file.path, file.content, file.executable);
 }
 
 export async function getHarnessUpdateStatus(repoPath: string): Promise<HarnessUpdateStatus> {
+  await resolveManagedPath(repoPath, ".sharkbay/harness/protocol.md");
   if (!await hasSharkbayHarnessDir(repoPath)) return { required: false, files: [] };
   const options = await resolveProtocolOptions(repoPath, "", { resolveIdentity: false, generateMachineId: false });
   return compareManagedHarnessFiles(repoPath, options);
 }
 
 export async function updateHarnessFiles(repoPath: string): Promise<HarnessUpdateStatus> {
+  await resolveManagedPath(repoPath, ".sharkbay/harness/protocol.md");
   const options = await resolveProtocolOptions(repoPath, "", { resolveIdentity: true, generateMachineId: true });
   await writeManagedHarnessFiles(repoPath, options);
   if (await isGitWorktree(repoPath)) {
@@ -526,7 +528,7 @@ export async function installHarness(
 ): Promise<void> {
   await writeManagedHarnessFiles(repoPath, options);
   if (await isGitWorktree(repoPath)) {
-    await backupLocalExclude(repoPath, join(repoPath, ".sharkbay", "harness"));
+    await backupLocalExclude(repoPath);
     await ensureLocalExclude(repoPath);
   }
 }
@@ -542,7 +544,7 @@ export async function isGitWorktree(repoPath: string): Promise<boolean> {
 
 export async function isHarnessInstalled(repoPath: string): Promise<boolean> {
   try {
-    await access(join(repoPath, ".sharkbay", "harness", "protocol.md"));
+    await access(await resolveManagedPath(repoPath, ".sharkbay/harness/protocol.md"));
     return true;
   } catch {
     return false;
@@ -551,7 +553,7 @@ export async function isHarnessInstalled(repoPath: string): Promise<boolean> {
 
 export async function getMachineId(repoPath: string): Promise<string | null> {
   try {
-    return (await readFile(join(repoPath, ".sharkbay", "machine-id"), "utf-8")).trim();
+    return (await readFile(await resolveManagedPath(repoPath, ".sharkbay/machine-id"), "utf-8")).trim();
   } catch {
     return null;
   }
@@ -573,6 +575,7 @@ type HarnessUninstallResult = {
 };
 
 export async function uninstallHarness(repoPath: string): Promise<HarnessUninstallResult> {
+  await resolveManagedPath(repoPath, ".sharkbay/harness");
   const removedPaths: string[] = [];
   const skippedPaths: string[] = [];
 
@@ -591,29 +594,36 @@ export async function uninstallHarness(repoPath: string): Promise<HarnessUninsta
 
 
 
-async function backupLocalExclude(repoPath: string, harnessDir: string): Promise<void> {
-  const backupPath = join(harnessDir, EXCLUDE_BACKUP_FILE);
+async function backupLocalExclude(repoPath: string): Promise<void> {
+  const backupRelative = `.sharkbay/harness/${EXCLUDE_BACKUP_FILE}`;
+  const markerRelative = `.sharkbay/harness/${EXCLUDE_MISSING_MARKER}`;
+  const backupPath = await resolveManagedPath(repoPath, backupRelative);
+  const markerPath = await resolveManagedPath(repoPath, markerRelative);
   try {
     await access(backupPath);
     return;
-  } catch {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     // First install in this worktree; capture the current local exclude state.
   }
 
-  const excludePath = join(repoPath, ".git", "info", "exclude");
+  const excludePath = await resolveLocalExcludePath(repoPath);
   try {
     const content = await readFile(excludePath, "utf-8");
-    await writeFile(backupPath, content, "utf-8");
-    await rm(join(harnessDir, EXCLUDE_MISSING_MARKER), { force: true });
-  } catch {
-    await writeFile(backupPath, "", "utf-8");
-    await writeFile(join(harnessDir, EXCLUDE_MISSING_MARKER), "true\n", "utf-8");
+    await writeManagedFile(repoPath, backupRelative, content);
+    await rm(markerPath, { force: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    await writeManagedFile(repoPath, backupRelative, "");
+    await writeManagedFile(repoPath, markerRelative, "true\n");
   }
 }
 
 async function restoreLocalExclude(repoPath: string): Promise<string[]> {
-  const backupPath = join(repoPath, ".sharkbay", "harness", EXCLUDE_BACKUP_FILE);
-  const excludePath = join(repoPath, ".git", "info", "exclude");
+  if (!await isGitWorktree(repoPath)) return [];
+  const backupPath = await resolveManagedPath(repoPath, `.sharkbay/harness/${EXCLUDE_BACKUP_FILE}`);
+  const markerPath = await resolveManagedPath(repoPath, `.sharkbay/harness/${EXCLUDE_MISSING_MARKER}`);
+  const excludePath = await resolveLocalExcludePath(repoPath);
   let content: string;
   try {
     content = await readFile(excludePath, "utf-8");
@@ -636,7 +646,7 @@ async function restoreLocalExclude(repoPath: string): Promise<string[]> {
   if (cleaned.removedLines.length === 0) return [];
 
   try {
-    await access(join(repoPath, ".sharkbay", "harness", EXCLUDE_MISSING_MARKER));
+    await access(markerPath);
     if (cleaned.content.length === 0) {
       await rm(excludePath, { force: true });
     } else {
@@ -672,7 +682,7 @@ export function cleanLocalExcludeContent(content: string): { content: string; re
 async function compareManagedHarnessFiles(repoPath: string, options: ProtocolOptions): Promise<HarnessUpdateStatus> {
   const files: HarnessFileIssue[] = [];
   for (const file of managedHarnessFiles(options)) {
-    const filePath = join(repoPath, file.path);
+    const filePath = await resolveManagedPath(repoPath, file.path);
     let current: string;
     try {
       current = await readFile(filePath, "utf-8");
@@ -697,8 +707,8 @@ async function compareManagedHarnessFiles(repoPath: string, options: ProtocolOpt
 }
 
 export async function ensureLocalExclude(repoPath: string): Promise<void> {
-  const excludePath = join(repoPath, ".git", "info", "exclude");
-  await mkdir(join(repoPath, ".git", "info"), { recursive: true });
+  const excludePath = await resolveLocalExcludePath(repoPath);
+  await mkdir(dirname(excludePath), { recursive: true });
 
   let content = "";
   try {
@@ -717,6 +727,11 @@ export async function ensureLocalExclude(repoPath: string): Promise<void> {
   } else {
     await writeFile(excludePath, content.endsWith("\n") || content === "" ? content : `${content}\n`, "utf-8");
   }
+}
+
+async function resolveLocalExcludePath(repoPath: string): Promise<string> {
+  const { stdout } = await execFileAsync("git", ["-C", repoPath, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude"], { timeout: 3_000 });
+  return resolve(repoPath, stdout.trimEnd());
 }
 
 export type AgentLaunchResult = {
@@ -812,7 +827,7 @@ async function resolveProtocolOptions(
 async function readExistingProtocolOptions(repoPath: string): Promise<Partial<{ githubLogin: string; githubUserId: number; machineId: string; repo: string }>> {
   let content = "";
   try {
-    content = await readFile(join(repoPath, ".sharkbay", "harness", "protocol.md"), "utf-8");
+    content = await readFile(await resolveManagedPath(repoPath, ".sharkbay/harness/protocol.md"), "utf-8");
   } catch {
     return {};
   }

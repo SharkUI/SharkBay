@@ -66,11 +66,11 @@ export class BotApi {
   }
 
   /** Long polling. Uses a longer timeout than normal calls (timeout + slack). */
-  getUpdates(offset: number, timeoutSec = 30): Promise<unknown[]> {
+  getUpdates(offset: number, timeoutSec = 30, signal?: AbortSignal): Promise<unknown[]> {
     return this.call<unknown[]>(
       "getUpdates",
       { offset, timeout: timeoutSec, allowed_updates: ["message", "callback_query"] },
-      { timeoutMs: (timeoutSec + 10) * 1000, retries: 0 },
+      { timeoutMs: (timeoutSec + 10) * 1000, retries: 0, signal },
     );
   }
 
@@ -109,7 +109,7 @@ export class BotApi {
   private async call<T>(
     method: string,
     body: Record<string, unknown>,
-    opts: { timeoutMs?: number; retries?: number } = {},
+    opts: { timeoutMs?: number; retries?: number; signal?: AbortSignal } = {},
   ): Promise<T> {
     const url = `${this.baseUrl}/bot${this.token}/${method}`;
     const timeoutMs = opts.timeoutMs ?? this.timeoutMs;
@@ -118,9 +118,10 @@ export class BotApi {
     let attempt = 0;
     for (;;) {
       try {
-        const result = await this.once<T>(url, body, timeoutMs);
+        const result = await this.once<T>(url, body, timeoutMs, opts.signal);
         return result;
       } catch (error) {
+        if (opts.signal?.aborted) throw error;
         const retryAfter = error instanceof TelegramApiError ? error.retryAfter : undefined;
         const retriable = retryAfter !== undefined || isTransient(error);
         if (!retriable || attempt >= maxRetries) throw error;
@@ -130,9 +131,12 @@ export class BotApi {
     }
   }
 
-  private async once<T>(url: string, body: Record<string, unknown>, timeoutMs: number): Promise<T> {
+  private async once<T>(url: string, body: Record<string, unknown>, timeoutMs: number, signal?: AbortSignal): Promise<T> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const abort = () => controller.abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) controller.abort();
+    const timer = setTimeout(abort, timeoutMs);
     try {
       const response = await this.fetchImpl(url, {
         method: "POST",
@@ -147,6 +151,7 @@ export class BotApi {
       return payload.result as T;
     } finally {
       clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
     }
   }
 }

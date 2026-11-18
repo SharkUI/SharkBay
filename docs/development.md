@@ -3,7 +3,7 @@
 ## Requirements
 
 - macOS
-- Node.js `>=20.11`
+- Node.js `>=22.12`
 - npm
 - Git
 - Native build tooling if Node native module prebuilds are unavailable
@@ -112,3 +112,17 @@ npm run verify:shared
 `verify:shared` uses a temporary profile/config and Git fixture, ordinary Node, an isolated Electron userData directory and Chrome profile. It creates a terminal from the desktop UI, observes/takes control in the browser, reloads without creating a replacement PTY, checks client termination survival, then explicitly stops the runtime. It does not enable global Hooks or send Agent prompts. Chrome defaults to the macOS application path; `SHARKBAY_TEST_CHROME` can select another binary. Screenshots are kept in ignored `.sharkbay/validation/shared-runtime/` for visual inspection.
 
 For manual isolation, set `SHARKBAY_RUNTIME_DATA_DIR` and `SHARKBAY_ELECTRON_DATA_DIR` to separate directories and `SHARKBAY_CONFIG_PATH` to an existing fixture config. Do not point test instances at repositories or Agent settings managed by the daily desktop app.
+
+
+## Startup diagnostics
+
+The desktop shows a small loading page while connecting to the runtime. It replaces that page with the workspace after IPC registration; the initial project scan continues without keeping the window hidden. Telegram connection starts after core startup and does not delay the HTTP/control endpoints or desktop.
+
+Startup records use the `[startup]` prefix with UTC timestamp, process ID, scope, stage, elapsed milliseconds and process uptime. They do not contain config values, project paths or credentials. Default locations:
+
+- Desktop: `~/Library/Application Support/SharkBay/startup.log` (`userData/startup.log` if overridden).
+- Runtime: `~/.sharkbay/runtime/runtime.log` (or the selected runtime data directory).
+
+For a cold start, compare `app-ready`, `main-window-shown`, `runtime-spawned`, `runtime-connected`, `main-renderer-loaded` and `initial-project-scan-finished` in the desktop log. Runtime/server milestones distinguish profile lock, config, SQLite, agents, core readiness, Telegram initialization, HTTP listening and control-socket readiness. With an already-running runtime the desktop instead records `existing-runtime-connected`; no cold-start phases should be inferred from that warm connection.
+
+Closing the desktop leaves the shared runtime running. Replacing the app alone does not reload backend code; stop the old runtime explicitly before cold-start acceptance of a runtime change. Automated isolated tests cover startup coordination with every collaborator mocked; they do not start the full ApplicationRuntime or measure actual desktop launch time.

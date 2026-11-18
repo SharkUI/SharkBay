@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -6,17 +6,22 @@ import { SessionPromptStore } from "../src/main/hooks/prompt-store.js";
 
 describe("SessionPromptStore", () => {
   let dir: string;
+  const stores: SessionPromptStore[] = [];
+  const openStore = () => { const store = new SessionPromptStore(dir); stores.push(store); return store; };
 
   beforeEach(() => {
+    vi.useFakeTimers();
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "sharkbay-prompts-"));
   });
 
   afterEach(() => {
+    for (const store of stores.splice(0)) store.flushSync();
     fs.rmSync(dir, { recursive: true, force: true });
+    vi.useRealTimers();
   });
 
   it("records and returns the latest prompt via get()", () => {
-    const store = new SessionPromptStore(dir);
+    const store = openStore();
     store.record("sess-1", "first prompt");
     store.record("sess-1", "second prompt");
     store.record("sess-2", "other session");
@@ -28,7 +33,7 @@ describe("SessionPromptStore", () => {
   });
 
   it("returns full history via getHistory()", () => {
-    const store = new SessionPromptStore(dir);
+    const store = openStore();
     store.record("sess-1", "first");
     store.record("sess-1", "second");
     store.record("sess-1", "third");
@@ -39,7 +44,7 @@ describe("SessionPromptStore", () => {
   });
 
   it("normalizes whitespace and ignores empty prompts", () => {
-    const store = new SessionPromptStore(dir);
+    const store = openStore();
     store.record("s", "  hello\n  world  ");
     store.record("s2", "   ");
     expect(store.get("s")).toBe("hello world");
@@ -47,12 +52,12 @@ describe("SessionPromptStore", () => {
   });
 
   it("persists history across instances (survives restart)", async () => {
-    const store = new SessionPromptStore(dir);
+    const store = openStore();
     store.record("restored-session", "prompt one");
     store.record("restored-session", "prompt two");
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    vi.advanceTimersByTime(500);
 
-    const reloaded = new SessionPromptStore(dir);
+    const reloaded = openStore();
     expect(reloaded.getHistory("restored-session")).toEqual(["prompt one", "prompt two"]);
     expect(reloaded.get("restored-session")).toBe("prompt two");
   });
@@ -61,13 +66,19 @@ describe("SessionPromptStore", () => {
     const oldData = { "old-session": { text: "legacy prompt", updatedAt: 1000 } };
     fs.writeFileSync(path.join(dir, "session-prompts.json"), JSON.stringify(oldData));
 
-    const store = new SessionPromptStore(dir);
+    const store = openStore();
     expect(store.getHistory("old-session")).toEqual(["legacy prompt"]);
     expect(store.get("old-session")).toBe("legacy prompt");
   });
 
+  it("does not recreate a cleaned fixture after pending writes are flushed", () => {
+    const store = openStore(); store.record("session", "prompt"); store.flushSync();
+    fs.rmSync(dir, { recursive: true, force: true });
+    vi.advanceTimersByTime(1000); expect(fs.existsSync(dir)).toBe(false);
+  });
+
   it("truncates very long prompts", () => {
-    const store = new SessionPromptStore(dir);
+    const store = openStore();
     store.record("s", "x".repeat(20000));
     expect(store.get("s")?.length).toBe(10000);
   });

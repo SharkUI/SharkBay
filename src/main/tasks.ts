@@ -3,6 +3,7 @@ export type { TaskViewModel } from "../shared/types.js";
 import { readFile, readdir } from "node:fs/promises";
 import { watch, type FSWatcher } from "node:fs";
 import { join } from "node:path";
+import { isSafeTaskId } from "../shared/task-id.js";
 
 export async function parseTaskFile(filePath: string): Promise<TaskViewModel | null> {
   let raw: string;
@@ -19,7 +20,7 @@ export async function parseTaskFile(filePath: string): Promise<TaskViewModel | n
   const body = match[2] ?? "";
   const sections = parseBodySections(body);
 
-  if (!fm["taskId"] || !fm["title"]) return null;
+  if (!fm["taskId"] || !isSafeTaskId(fm["taskId"]) || !fm["title"]) return null;
 
   const isTeam = filePath.includes("team-context/tasks");
 
@@ -101,7 +102,7 @@ export function watchTasks(repoPath: string, onChange: (tasks: TaskViewModel[]) 
     timer = setTimeout(() => { void scanTasks(repoPath).then(onChange); }, 200);
   };
 
-  for (const sub of ["tasks", "team-context/tasks"]) {
+  for (const sub of ["tasks", "team-context"]) {
     try {
       const w = watch(join(repoPath, ".sharkbay", sub), { recursive: true }, debounced);
       watchers.push(w);

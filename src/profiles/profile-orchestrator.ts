@@ -10,6 +10,11 @@ import type { DiagnosticsCollector } from "../core/diagnostics.js";
 const DEFAULT_DEPTH: ProfileDepth = "standard";
 
 export class ProfileOrchestrator {
+  private revision = 0;
+  invalidate(): void { this.revision += 1; }
+  private signature(): string {
+    return JSON.stringify(this.pluginHost.listPlugins().filter((plugin) => plugin.enabled).map(({ id, version }) => [id, version]).sort());
+  }
   constructor(
     private readonly providers: ExecutionProviderRegistry,
     private readonly pluginHost: PluginHost,
@@ -19,11 +24,13 @@ export class ProfileOrchestrator {
   ) {}
 
   async readMachineProfile(runtime: IpcRuntimeLike, targetId: string, options?: ProfileReadOptions): Promise<MachineProfile> {
+    const revision = this.revision;
+    const signature = this.signature();
     const depth: ProfileDepth = options?.depth ?? DEFAULT_DEPTH;
     const cacheKey = `${targetId}|${depth}`;
     if (!options?.refresh) {
-      const cached = await this.cache.readMachineProfile(runtime, cacheKey);
-      if (cached) {
+      const cached = await this.cache.readMachineProfile(runtime, cacheKey, signature);
+      if (cached && revision === this.revision) {
         this.diagnostics?.recordCacheHit("machine");
         return cached;
       }
@@ -39,10 +46,10 @@ export class ProfileOrchestrator {
         targetId,
         priority: options?.refresh ? "interactive" : "background",
         timeoutMs: 5000,
-        dedupeKey: `machine:${targetId}:${detector.pluginId}:${detector.id}`,
-        run: async () => {
+        dedupeKey: `machine:${revision}:${signature}:${targetId}:${detector.pluginId}:${detector.id}`,
+        run: async (signal) => {
           try {
-            return await detector.run(ctx);
+            return await detector.run({ ...ctx, run: (command, options) => { signal.throwIfAborted(); return ctx.run(command, { ...options, signal }); } });
           } catch (error) {
             return { warnings: [{ code: "detector-failed", message: `${detector.id}: ${error instanceof Error ? error.message : String(error)}`, source: detector.pluginId }] };
           }
@@ -50,18 +57,22 @@ export class ProfileOrchestrator {
       })
     ));
     const profile = mergeMachineProfile(base, patches);
-    await this.cache.writeMachineProfile(runtime, cacheKey, profile);
+    if (revision !== this.revision) return this.readMachineProfile(runtime, targetId, { ...options, refresh: true });
+    await this.cache.writeMachineProfile(runtime, cacheKey, profile, signature);
+    if (revision !== this.revision) return this.readMachineProfile(runtime, targetId, { ...options, refresh: true });
     return profile;
   }
 
   async readProjectProfile(runtime: IpcRuntimeLike, projectUri: string, options?: ProfileReadOptions): Promise<ProjectProfile> {
+    const revision = this.revision;
+    const signature = this.signature();
     const depth: ProfileDepth = options?.depth ?? DEFAULT_DEPTH;
     const cacheKey = `${projectUri}|${depth}`;
     const provider = this.providers.providerForUri(projectUri);
     const currentFingerprint = await provider.readProjectFingerprint?.(runtime, projectUri).catch(() => undefined);
     if (!options?.refresh) {
-      const cached = await this.cache.readProjectProfileWithFingerprint(runtime, cacheKey);
-      if (cached && (!currentFingerprint || fingerprintsMatch(cached.fingerprint, currentFingerprint))) {
+      const cached = await this.cache.readProjectProfileWithFingerprint(runtime, cacheKey, signature);
+      if (cached && revision === this.revision && (!currentFingerprint || fingerprintsMatch(cached.fingerprint, currentFingerprint))) {
         this.diagnostics?.recordCacheHit("project");
         return cached.value;
       }
@@ -79,10 +90,10 @@ export class ProfileOrchestrator {
         projectUri,
         priority: options?.refresh ? "interactive" : "background",
         timeoutMs: 5000,
-        dedupeKey: `project:${projectUri}:${detector.pluginId}:${detector.id}`,
-        run: async () => {
+        dedupeKey: `project:${revision}:${signature}:${projectUri}:${detector.pluginId}:${detector.id}`,
+        run: async (signal) => {
           try {
-            return await detector.run(ctx);
+            return await detector.run({ ...ctx, run: (command, options) => { signal.throwIfAborted(); return ctx.run(command, { ...options, signal }); } });
           } catch (error) {
             return { warnings: [{ code: "detector-failed", message: `${detector.id}: ${error instanceof Error ? error.message : String(error)}`, source: detector.pluginId }] };
           }
@@ -90,7 +101,9 @@ export class ProfileOrchestrator {
       })
     ));
     const profile = mergeProjectProfile(base, patches, projectUri);
-    await this.cache.writeProjectProfile(runtime, cacheKey, profile, currentFingerprint);
+    if (revision !== this.revision) return this.readProjectProfile(runtime, projectUri, { ...options, refresh: true });
+    await this.cache.writeProjectProfile(runtime, cacheKey, profile, currentFingerprint, signature);
+    if (revision !== this.revision) return this.readProjectProfile(runtime, projectUri, { ...options, refresh: true });
     return profile;
   }
 }

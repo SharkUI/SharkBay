@@ -1,0 +1,170 @@
+{
+  "scope": "All 29 findings: source/document remediation and permitted isolated verification. No desktop or full ApplicationRuntime acceptance.",
+  "base_commit": "2fc9c935892d04748c01579f819da701eb163150",
+  "recorded_at": "2026-11-17T15:49:59.127657+00:00",
+  "checks": [
+    {
+      "command": "npm test -- --reporter=json --outputFile=docs/audit/2026-11-17/fixes/final-tests.json",
+      "exit_code": 0,
+      "files": 89,
+      "passed_tests": 647,
+      "failed_tests": 0,
+      "skipped_tests": 0,
+      "evidence": "final-tests.json"
+    },
+    {
+      "command": "npm run typecheck",
+      "exit_code": 0,
+      "configs": [
+        "renderer",
+        "node",
+        "runtime"
+      ],
+      "evidence": "typecheck-final.log"
+    },
+    {
+      "command": "npm run build",
+      "exit_code": 0,
+      "execution": "compile only; no application start or packaging",
+      "evidence": "build-final.log",
+      "warning": "Renderer chunk exceeds Vite 500 kB advisory threshold; chunking not changed in this remediation."
+    },
+    {
+      "command": "npm audit --package-lock-only --ignore-scripts --json",
+      "exit_code": 0,
+      "vulnerabilities": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      },
+      "evidence": "npm-audit-final.json"
+    },
+    {
+      "command": "npm ls --all --json",
+      "exit_code": 0,
+      "evidence": "dependency-tree-final.json"
+    },
+    {
+      "command": "npm ci --dry-run --ignore-scripts --no-audit --no-fund",
+      "exit_code": 0,
+      "evidence": "dependency-ci-dry-run.log"
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0,
+      "evidence": "diff-final.log"
+    },
+    {
+      "check": "Local links in 11 current-context documents",
+      "broken_targets": 0
+    },
+    {
+      "check": "Removed orphan modules absent from dist-electron",
+      "obsolete_outputs": [
+        "src/plugins/installed-plugins.js",
+        "src/plugins/plugin-manifest.js",
+        "src/main/token-usage-pricing.js"
+      ],
+      "present": []
+    },
+    {
+      "check": "Indirect automatic indexing mutation",
+      "expected_exit_code": 1,
+      "restored": true,
+      "evidence": "codegraph-mutation.log"
+    }
+  ],
+  "not_executed": [
+    "SharkBay desktop or Electron binary",
+    "Complete ApplicationRuntime or its integration suite",
+    "Real project CodeGraph indexing",
+    "Real Agent CLIs, installations or PTY host suite (except two fixture-only harness parameter tests)",
+    "Packaging/signing/notarization/update installation",
+    "Updates or deployment to host 103",
+    "External GitHub/Telegram writes"
+  ],
+  "source_sha256": {
+    "package-lock.json": "a3b6a73b2b98b573514208bd3cfaa9fb93d58da9f2862a9b17908e13812c3928",
+    "package.json": "f965219ae8530402d84884c793150d864a68e762b596f1cd71379ab02cd33d61",
+    "scripts/build-desktop.mjs": "e748654dafe29db39e81c86a67f059877a45eb818f12228a92630bedf46ad54d",
+    "src/core/codegraph-manager.ts": "2e44c1ccb77d55215188219105f792f2a5cfa41fce55ea70e998481b821b07be",
+    "src/core/core-runtime.ts": "fd1409b4e34e5b0899b615fd790c638f1cdcc37dd7ee0b8bb9d10d942a78a329",
+    "src/core/core-service.ts": "1291460867652b8f946c28ff89641d8c0f687d017e17bb6900d6414cd4a52bcc",
+    "src/core/execution-provider.ts": "35b83941d5f68cd985186d61a28bfbde6bb3ac52c4b469b9f6b2a18b8c673929",
+    "src/core/job-scheduler.ts": "84881a655536cfa7956ad150860ca4e81297bf1f7ccd5a2353c83b86976183f6",
+    "src/main/agent-clis.ts": "5e9f09caea2f17ff4ea98061b1460322435c55ca822a0d894769bcae44490892",
+    "src/main/command-path.ts": "7ca9ea64173f6874b34a4c740866ba514e804f8865934575456811dc0ebff288",
+    "src/main/file-content.ts": "1f940260960daa2ca2687388075cd7ac48e7f52849c221b4420e0fa0bd323750",
+    "src/main/git.ts": "b9f9e7f7b661a6b6fe0e8df3a171ac46e06b320304b85add31496cfe509e7ec6",
+    "src/main/harness.ts": "8cf445d1aa40c60640174bd92dca88b7ea52af456779a2f35bd9d6bc62da978a",
+    "src/main/managed-path.ts": "65e2abaa599b4ffaaae8cf691565a633689a8381ac7cb8ac04e2c94523a9c6d5",
+    "src/main/process-command.ts": "f7c2139ab43bf018a61f53ac18fdd86cfb58d14ab3a87919b5cf55bd9a580b1f",
+    "src/main/tasks.ts": "0fbc6a98b2989393d547b308388d5c2c7929b9d8a64a0e67e8f86a89deba6ef0",
+    "src/main/teamwork-sync.ts": "25d70cc5b69284aad8fdc70cee74226fd36cfb1fdeb330926786a7368cda0015",
+    "src/main/telegram/api.ts": "d1ff62b2d463f37495fcac2932c0032bba35733ee62045c75d19786e997a7df3",
+    "src/main/telegram/service.ts": "b463768cd5ce42e56a80aba9d812d3918baf8956f1c9bdc0805d4b4d916ee0db",
+    "src/main/telegram/turn.ts": "dee5059efff36e0c3abcc7ec6e2a1d63f80c3d75c0dbe8a55699f8c1458b3b04",
+    "src/main/token-usage-collector.ts": "61c80f6c46963f0cd2c30c7af569bc7324324edf2ba9d9c85b1a5f19a6004156",
+    "src/plugins/bundled/core-detectors.ts": "1db9c05ca2fe6df3330f212ad4cdf556cd21140f26e94e0a6155f08c8a8404fd",
+    "src/profiles/profile-orchestrator.ts": "96368d76a0c858aff0a6bc063d106804c1bc6fe38c000367e4f94580faa6563f",
+    "src/providers/local/local-provider.ts": "f758cfd06e3bf0f269a4b7ca986df533b075b30f0aa65b14cbbc3ccda6c5ed2f",
+    "src/renderer/App.tsx": "7b44b42d9429d63395c7cb913223e9644ce67490cd5090c7465dde7659946b6b",
+    "src/renderer/codegraph-panel.tsx": "872b3eb5e37f2d32ec4125698a15100c2c819946ebf338e754451ad84e0973ee",
+    "src/renderer/types.ts": "aa390fc641e9025271916320a1be6bfa83a9c919da4856b6e7436c902618df5c",
+    "src/runtime/application-input.ts": "cc6572708f44c8894f677df7ee130ff00cb167286bd666361591a3621e59df41",
+    "src/runtime/application-runtime.ts": "f9370fad6b485da7edf318ade8f23cefbb298d9f30fafdcab7ce25c0973d1c84",
+    "src/server/http-server.ts": "7ff9739f3b18723930322efef844b96234eb6f7a7ccd60f89f9d338412f3596c",
+    "src/server/main.ts": "2f6afd583337da0bf30c872e4df64066e0e4f44a7ef635f2cba575be110bf0bf",
+    "src/server/session-auth.ts": "3baff24350eb3340d8e394d8c8fae6d85a99635bb54870742cb908c344e31630",
+    "src/shared/task-id.ts": "c477b4a74b4916ccd03f77be515cae500972e19483a7e9efb342308515ec95f7",
+    "src/shared/types.ts": "c5f8959ffb6d8f6fb1fd2c024074ff80eb4281715024fe40a71b748ff486f36f",
+    "src/storage/profile-cache.ts": "0d8f6c7418df7a83f34f08667907bf660d8a37f7f3315384a55e67840d344636",
+    "tests/agent-clis.test.ts": "1df8b2c9ded1ab4be500118b8a5338a8f8130f505241c73e95b782c7c7946028",
+    "tests/agent-session-reader.test.ts": "6d7431c1291c47590c99c38227df875412a508a3ba1ddf08ab04088077168c00",
+    "tests/agent-status.test.ts": "6cebb54862ea1c00e4b5089fe82fd34964de3edc71cdbd78b04ad7f9d1ead8e1",
+    "tests/artifact-runs.test.ts": "8da87aac187a29a776a19faa4c85d2eeb704e5a2367dfdf41b779e3a06459c2f",
+    "tests/codegraph-manager.test.ts": "f1da8b668160111ad26fa4303ee191e5bf592b2ee8b703f85047c6d250326206",
+    "tests/codegraph-manual-index.test.tsx": "87f52b53ce55a68ebfa00ec2c3e56479e6c6b972a3657b29dc801529caf66412",
+    "tests/command-path.test.ts": "1e2f06d2b76030846f4f587d392054388c1eedf315f77f125bb30a6988b430bf",
+    "tests/core-detectors.test.ts": "28e919f72fb24e9d252eff0e3922fabad12222ea0aa4267b1243dedd1ca59a84",
+    "tests/core-runtime.test.ts": "ed7e868855588a215ebec272f762b8bae1586a7d87e3fc15f95444c295f32cff",
+    "tests/dependency-compatibility.test.ts": "ec8cd8989f2635bf84e704d1b6093566fa1b0c52edb7dd75e3abc7fa9e3159cd",
+    "tests/desktop-build.test.ts": "86c87975d4108f2731a2a0b67a3b0cb75f98b26bcbf1afecc2769ee0be372ea3",
+    "tests/file-boundaries.test.ts": "91b51e9fabdce2ef5a305e85a5a9504fb48cae1a25abc5b6bdbd3989bc98f253",
+    "tests/fixture-cleanup.test.ts": "31bf5488a2a3d92ab59724acf61ded0712cc5684f9cb818db87d3c9aea4762bc",
+    "tests/git.test.ts": "913e4a15f1b41d1ba8ca3b2483bc5c43181aa6cf1d0271a0758970fe9fc3c9c2",
+    "tests/harness-boundaries.test.ts": "e376f7f83f182e310872bb9d4481bfdba0febf66372000e323dc66f15923b33a",
+    "tests/harness.test.ts": "51e200bb66037e58912f264f6bb279168f2231549b86ea403ece21fe23de892b",
+    "tests/helpers.ts": "26f94171b3708228bded8f40ff96ec1684891465788aa43ff4ab208c7ba31258",
+    "tests/hook-sessions.test.ts": "6f152b35ffd584ced1df159f52f46bc80bcf17ce20d1e524185cf34a19be64e2",
+    "tests/install-tool.test.ts": "ebdc6936aada0c6cac4d2a1469d0878c7e8c74095e77b36fda681b39bb5784e8",
+    "tests/job-scheduler.test.ts": "45aa1dc4a85b7409bf4d03e4f32f8ca0e4304c5351d17381d8a3ccf24a4130d1",
+    "tests/local-provider.test.ts": "9cb25c455d0907c999822397a56954458d3473a621ba6302f1580d0073f25b63",
+    "tests/process-command.test.ts": "022092cce9aae4b8c28441cef56c5f203f0eef4c5d5640f8a3de4d73a6b99661",
+    "tests/profile-cache.test.ts": "347b4d9fc149a6c9a5b111df07607993526cb500df961bfee1626c78e5a2ed86",
+    "tests/profile-orchestrator.test.ts": "8c0d332acafd42c7e8949ae75a7bf3ee5ecbf7a69a08bb711b28838ab6082c13",
+    "tests/profile-plugin-state.test.ts": "b98ba6a1a9dffd7e4cdec673720bab3d30efe58588bcf6a7ff26bdedaa83ecd1",
+    "tests/prompt-store.test.ts": "6694654f3421a57e90306c1c865db25e853825349d81a71ac707b4abcd6730b8",
+    "tests/reasonix-hooks.test.ts": "e0af99b8ed840115ecd282332ebd943058fb7b39eae1d346b135a235a3f7adc7",
+    "tests/teamwork-mirror.test.ts": "adb9cb97c3ae82c697d8befc0b2fcca6d95d720e8117f687738bd63b3f97e4ea",
+    "tests/telegram-api.test.ts": "4eafb46110b5cca1bdc2a442049f215bfee978ce6acadc458e19f103923e41ba",
+    "tests/telegram-background-errors.test.ts": "300544de3a7ea3a85f3e9047766a792268d024f4eb46c06cf695a4238eebbc44",
+    "tests/telegram-state-boundaries.test.ts": "e707e8d585242401910323f121de08bd713d38654c2ef2f38b60ed55f1f3f976",
+    "tests/telegram-turn.test.ts": "2003a08a7f577b871a3aeb3638235944bf838fdc441386022169b5026192ced2",
+    "tests/terminal.test.ts": "f04f57ae3f6ddfda60848253065cd9f34f002f0bb537dfa2381d745433cd3a60",
+    "tests/token-usage-collector.test.ts": "5868fd8ab3a157a5eb301b7bbf170dfb0c450ad6ac6c467c7241ce9765c09365",
+    "tests/token-usage-db.test.ts": "4d318cb21570afc5720e53ab16041f5b4eb99709b532dd23eb7d7d9c47a7bbde",
+    "tests/web-runtime-integration.test.ts": "0f941741a3bc2a40de7df4844106ab915ae8265e5db095444732f91b7d1fe6b1",
+    "tests/web-runtime-security.test.ts": "54a7bbae7e92e3d06313c250746717ec2b2d11fdd2294bcab7fedafc065e2010",
+    "tests/web-server-auth.test.ts": "56c267378b679d8fc6509b7b3d14efb7826c3c4e9d0539055d2e6786ea0e6cac",
+    "tests/worktree-protocol.test.ts": "9d6b3ff2740cc78423acc4025b6dab74005dc5180c6f0154781dcaa8af17e0ab",
+    "tsconfig.renderer.json": "0a2d89af45b5bef12c2fc197e0ea1b26d7b41e403db891c6bfe906bcfb7f126a",
+    "vite.config.ts": "4dcfaf32c55f331604ca201ad003e918206588837c3cb1725f0a9fe36c73c494",
+    "vitest.config.ts": "645589cb9af88f19e0bcd79cf59c838c8e8f88820003b883ff62c59ccd8297c5",
+    "vitest.host.config.ts": "182b8fc02d808170a1b8fe7a4a7b18f415c3c7ddee0e8171e2ffc398bbef1af3",
+    "vitest.integration.config.ts": "5fe160c95f4015a83fa821908bb045b46801d157765ce99f38d448e0c588c6bb"
+  }
+}

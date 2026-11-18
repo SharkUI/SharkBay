@@ -1,0 +1,12 @@
+import {JobScheduler} from './src/core/job-scheduler.js';
+import {TokenUsageCollector} from './src/main/token-usage-collector.js';
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+const events=[];const a=new JobScheduler({maxConcurrentPerTarget:1});a.on('update',j=>events.push({status:j.status}));
+await a.schedule({kind:'install',targetId:'local',timeoutMs:5,run:async()=>{await wait(25);return 'late'}});
+await wait(0);console.log(JSON.stringify({case:'timeout_ignored',final:events.at(-1),events}));
+const b=new JobScheduler();let nestedStarted=0;let parentsFinished=0;
+for(let i=0;i<2;i++)b.schedule({kind:'install',targetId:'local',timeoutMs:10,run:async()=>{await wait(1);return b.schedule({kind:'machine-profile',targetId:'local',timeoutMs:10,run:async()=>{nestedStarted++;return true}})}}).then(()=>parentsFinished++);
+await wait(40);console.log(JSON.stringify({case:'nested_install_deadlock',nestedStarted,parentsFinished}));
+let inserts=0;const db={insertBatch(items){inserts++;if(inserts===1)throw Error('injected SQLite write failure');console.log(JSON.stringify({case:'unexpected_retry',items:items.length}))}};
+const c=new TokenUsageCollector(db);c.processLine(JSON.stringify({type:'assistant',message:{model:'test',usage:{input_tokens:1,output_tokens:1}}}),'fixture',0,{agentId:'claude',sessionId:'s',projectPath:'/fixture'});
+try{c.flush()}catch(e){console.log(JSON.stringify({case:'flush_first_failure',error:e.message}))};c.flush();console.log(JSON.stringify({case:'flush_retry',insertCalls:inserts,expected:2}));

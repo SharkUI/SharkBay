@@ -1,5 +1,7 @@
 # Workspace Agent Platform Requirements and Architecture
 
+状态：历史设计提案。这里的模型、路线与示例不代表当前已实现能力或已批准产品方向。当前行为见 [Current facts](current-facts.md)，产品边界遵循仓库 AGENTS.md；涉及新平台、账户或协作存储的目标需重新核对这些约束。
+
 ## 1. 背景
 
 SharkBay 当前是一个 local-first macOS developer workbench：扫描用户配置的本地目录，识别 Git 项目，展示 Git 状态、文件树、dev service，并提供项目维度的终端空间。

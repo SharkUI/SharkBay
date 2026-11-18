@@ -10,15 +10,18 @@
     "dev": "npm run build:runtime && concurrently -k \"vite --host 127.0.0.1\" \"tsc -p tsconfig.node.json --watch --preserveWatchOutput\" \"wait-on tcp:5184 dist-electron/electron/main.js && electron .\"",
     "typecheck": "tsc -p tsconfig.renderer.json --noEmit && tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.runtime.json --noEmit",
     "lint": "npm run typecheck",
-    "test": "vitest run",
-    "build": "npm run build:runtime && tsc -p tsconfig.node.json && vite build",
+    "test": "vitest run --maxWorkers=1",
+    "build": "npm run build:runtime && npm run build:desktop && vite build",
     "pack": "npm run build && npm run prepare:runtime && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --dir",
     "dist": "npm run build && npm run prepare:runtime && electron-builder --mac",
     "build:runtime": "node scripts/build-runtime.mjs",
     "start:runtime": "node dist-runtime/src/server/main.js",
     "verify:webui": "npm run build:runtime && vite build && node scripts/verify-webui-runtime.mjs",
     "prepare:runtime": "node scripts/prepare-runtime-bundle.mjs",
-    "verify:shared": "npm run build && node scripts/verify-shared-runtime.mjs"
+    "verify:shared": "npm run build && node scripts/verify-shared-runtime.mjs",
+    "build:desktop": "node scripts/build-desktop.mjs",
+    "test:host": "vitest run --config vitest.host.config.ts --maxWorkers=1",
+    "test:integration": "vitest run --config vitest.integration.config.ts --maxWorkers=1"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.2",
@@ -46,7 +49,7 @@
     "@xterm/xterm": "^6.0.0",
     "better-sqlite3": "^11.7.0",
     "codemirror": "^6.0.2",
-    "electron-updater": "^6.8.9",
+    "electron-updater": "^6.8.11",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "telegramify-markdown": "1.3.3",
@@ -54,26 +57,25 @@
     "@xterm/headless": "6.0.0",
     "ws": "^8.18.3"
   },
-  "optionalDependencies": {
-    "bun-pty": "^0.4.8"
-  },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
-    "@types/node": "^20.11.30",
+    "@types/node": "^22.12.0",
     "@types/react": "^18.2.67",
     "@types/react-dom": "^18.2.22",
-    "@vitejs/plugin-react": "^4.2.1",
-    "concurrently": "^8.2.2",
-    "electron": "^29.1.0",
-    "electron-builder": "^26.8.1",
+    "@vitejs/plugin-react": "^6.3.0",
+    "concurrently": "^10.0.7",
+    "electron": "^45.3.3",
+    "electron-builder": "^26.18.0",
     "typescript": "^5.4.2",
-    "vite": "^5.1.6",
-    "vitest": "^1.4.0",
-    "wait-on": "^7.2.0",
-    "@types/ws": "^8.18.1"
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0",
+    "wait-on": "^9.5.1",
+    "@types/ws": "^8.18.1",
+    "react-test-renderer": "18.3.1",
+    "@types/react-test-renderer": "^18.3.2"
   },
   "engines": {
-    "node": ">=20.11"
+    "node": ">=22.12"
   },
   "build": {
     "appId": "xyz.sharkbay.app",
@@ -96,6 +98,7 @@
       "!dist-electron/**/*.tsbuildinfo",
       "!dist-electron/vite.config.*",
       "!dist-electron/vitest.config.*",
+      "!dist-electron/vitest.*.config.*",
       "!node_modules/**/*.map",
       "!node_modules/**/*.d.ts",
       "!node_modules/**/*.d.ts.map",
@@ -165,5 +168,8 @@
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "npmRebuild": false
+  },
+  "overrides": {
+    "minimatch@>=7.0.0 <11.0.1": "^11.0.1"
   }
 }

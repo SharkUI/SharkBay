@@ -611,7 +611,8 @@ describe("harness install", () => {
 
     expect(result.injected).toBe(true);
     const sessionMatch = result.initialCommand.match(/^SHARKBAY_SESSION_ID='([^']+)' claude '--session-id' '([^']+)'/);
-    expect(sessionMatch?.[1]).toBe(sessionMatch?.[2]);
+    expect(sessionMatch, "bootstrap must expose both session identities").not.toBeNull();
+    expect(sessionMatch![1]).toBe(sessionMatch![2]);
     expect(result.initialCommand).toContain("claude '--session-id'");
     expect(result.initialCommand).toContain("'I'\\''m working in SharkBay Task Protocol mode");
     await expect(fs.readFile(path.join(repo, "CLAUDE.md"), "utf8")).resolves.toBe("# Project Claude Rules\n\nKeep this text.\n");
@@ -625,13 +626,15 @@ describe("harness install", () => {
     const geminiResult = await prepareAgentLaunch(repo, "gemini", "gemini");
     const geminiSessionMatch = geminiResult.initialCommand.match(/^SHARKBAY_SESSION_ID='([^']+)' gemini '--session-id' '([^']+)'/);
     expect(geminiResult.injected).toBe(true);
-    expect(geminiSessionMatch?.[1]).toBe(geminiSessionMatch?.[2]);
+    expect(geminiSessionMatch, "bootstrap must expose both session identities").not.toBeNull();
+    expect(geminiSessionMatch![1]).toBe(geminiSessionMatch![2]);
     expect(geminiResult.initialCommand).toContain("gemini '--session-id'");
     expect(geminiResult.initialCommand).toContain("'-i' 'I'\\''m working in SharkBay Task Protocol mode");
     const qwenResult = await prepareAgentLaunch(repo, "qwen", "qwen");
     const qwenSessionMatch = qwenResult.initialCommand.match(/^SHARKBAY_SESSION_ID='([^']+)' qwen '--session-id' '([^']+)'/);
     expect(qwenResult.injected).toBe(true);
-    expect(qwenSessionMatch?.[1]).toBe(qwenSessionMatch?.[2]);
+    expect(qwenSessionMatch, "bootstrap must expose both session identities").not.toBeNull();
+    expect(qwenSessionMatch![1]).toBe(qwenSessionMatch![2]);
     expect(qwenResult.initialCommand).toContain("qwen '--session-id'");
     expect(qwenResult.initialCommand).toContain("'-i' 'I'\\''m working in SharkBay Task Protocol mode");
     await expect(prepareAgentLaunch(repo, "kiro", "kiro-cli chat")).resolves.toMatchObject({

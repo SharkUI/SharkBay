@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 let fakeHome = "";
 vi.mock("node:os", async (orig) => {
@@ -13,6 +13,8 @@ vi.mock("node:os", async (orig) => {
 import { parseHookSessions } from "../src/main/hooks/sessions.js";
 
 const tmp = fs.mkdtempSync(path.join(tmpdir(), "sb-sessions-"));
+afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
+beforeEach(() => { fakeHome = ""; });
 
 function writeLog(repo: string, sid: string): void {
   const logPath = path.join(repo, ".sharkbay", "logs", "hooks.log");

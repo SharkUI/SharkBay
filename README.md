@@ -34,11 +34,11 @@ Review starts correctly from projects identified by `local:` or `file:` URIs, fi
 
 ### Shared Runtime and Browser Access
 
-The macOS app and WebUI connect to one local Node runtime. Open the runtime's local or LAN address in a browser to access your projects and existing terminals; one client controls each terminal while others observe. Closing the desktop client leaves sessions running, and you can take control from another connected client.
+The macOS app and WebUI connect to one local Node runtime. Open a host-issued connection link in a browser to access your projects and existing terminals; one client controls each terminal while others observe. Closing the desktop client leaves sessions running, and you can take control from another connected client.
 
 The WebUI adapts to phones and tablets with full-screen project navigation, touch terminal keys, and preserved input drafts across reconnects. The packaged app includes Node and its runtime dependencies.
 
-The runtime listens on all IPv4 interfaces at port `17777` by default. Open `http://<host-LAN-IP>:17777/` directly from another device on the LAN; local and LAN access does not require a connection token or session cookie. The host firewall must allow the connection. Host and Origin checks remain enforced, and non-LAN clients retain the existing authorization requirement. Project development URLs are not rewritten or proxied.
+The runtime listens on all IPv4 interfaces at port `17777` by default. Use the host's **Open in Browser** action or runtime connection link from another device. All browser API and WebSocket access, including local and LAN clients, requires a one-time grant exchanged for a session cookie. The host firewall must allow the connection; Host and Origin checks also remain enforced. Revoking access invalidates all grants and sessions. Project development URLs are not rewritten or proxied.
 
 ### Multi-Agent Support
 
@@ -118,7 +118,7 @@ Electron · React · TypeScript · Vite · xterm · @lydell/node-pty · CodeMirr
 ## Development Requirements
 
 - macOS
-- Node.js >= 20.11
+- Node.js >= 22.12
 - Git
 - `gh` CLI (only for team context sync)
 

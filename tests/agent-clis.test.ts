@@ -1,12 +1,12 @@
 import { promises as fs } from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { makeTempRoot } from "./helpers.js";
 import { agentSessionWatcherPollInterval, prependPathDirectories, resolveCommandPath, resolveCommandSearchPaths, shouldRefreshDiscovery } from "../src/main/agent-clis.js";
 
 describe("agent cli discovery", () => {
   it("finds executables in fallback directories when they are absent from PATH", async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), "sharkbay-agent-clis-"));
+    const root = await makeTempRoot("agent-clis");
     const home = path.join(root, "home");
     const bin = path.join(home, ".local", "bin");
     const command = `sharkbay-fallback-${process.pid}-${Date.now()}`;
@@ -19,7 +19,7 @@ describe("agent cli discovery", () => {
   });
 
   it("finds executables installed into nvm versioned node bins", async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), "sharkbay-agent-clis-"));
+    const root = await makeTempRoot("agent-clis");
     const home = path.join(root, "home");
     const bin = path.join(home, ".nvm", "versions", "node", "v22.22.1", "bin");
     const command = `sharkbay-nvm-${process.pid}-${Date.now()}`;
@@ -32,7 +32,7 @@ describe("agent cli discovery", () => {
   });
 
   it("includes nvm versioned node bins in command search paths", async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), "sharkbay-agent-clis-"));
+    const root = await makeTempRoot("agent-clis");
     const home = path.join(root, "home");
     const bin = path.join(home, ".nvm", "versions", "node", "v22.22.1", "bin");
     await fs.mkdir(bin, { recursive: true });

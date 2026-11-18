@@ -1,0 +1,46 @@
+[
+  {
+    "check": "batch-1-tests",
+    "command": [
+      "node",
+      "node_modules/vitest/vitest.mjs",
+      "run",
+      "--maxWorkers=1",
+      "--minWorkers=1",
+      "--no-file-parallelism",
+      "tests/file-boundaries.test.ts",
+      "tests/agent-session-reader.test.ts",
+      "tests/token-usage-collector.test.ts",
+      "tests/telegram-background-errors.test.ts",
+      "tests/telegram-service.test.ts",
+      "tests/telegram-api.test.ts",
+      "tests/telegram-render.test.ts",
+      "tests/telegram-turn.test.ts",
+      "tests/codex-sessions.test.ts",
+      "tests/jsonl-reader.test.ts",
+      "tests/web-runtime-security.test.ts"
+    ],
+    "exit_code": 0,
+    "seconds": 4.459
+  },
+  {
+    "check": "batch-1-typecheck",
+    "command": [
+      "npm",
+      "run",
+      "typecheck"
+    ],
+    "exit_code": 0,
+    "seconds": 1.368
+  },
+  {
+    "check": "batch-1-diff",
+    "command": [
+      "git",
+      "diff",
+      "--check"
+    ],
+    "exit_code": 0,
+    "seconds": 0.013
+  }
+]

@@ -1,12 +1,12 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { getRuntimeConfigPath } from "../src/main/config.js";
 import { toLocalProjectUri } from "../src/core/project-uri.js";
 import { SharkBayCoreService } from "../src/core/core-service.js";
 import { LocalProvider } from "../src/providers/local/local-provider.js";
 import { PluginHost, type ProjectDetector } from "../src/plugins/plugin-host.js";
-import { createGitRepoFixture, makeTempRoot, makeTestRuntime, writeJson } from "./helpers.js";
+import { createGitRepoFixture, makeTempRoot as createRoot, makeTestRuntime as createRuntime, writeJson } from "./helpers.js";
 
 function pluginWithProjectDetector(detector: ProjectDetector) {
   return {
@@ -44,7 +44,14 @@ describe("ProfileOrchestrator", () => {
 
   it("runs bundled machine detectors through provider command contexts", async () => {
     const runtime = await makeTestRuntime("machine-profile-orchestrator");
-    const core = new SharkBayCoreService([new LocalProvider()]);
+    const provider = new LocalProvider();
+    vi.spyOn(provider, "createMachineProbeContext").mockImplementation(async (_paths, targetId) => ({
+      target: await provider.resolveTarget(runtime, targetId),
+      which: async (command) => command === "codex" ? "/fixture/codex" : null,
+      readTextFile: async () => null,
+      run: async (command) => ({ stdout: command.startsWith("hostname") ? "fixture" : command.startsWith("uname") ? "Darwin 25.4.0 arm64" : command.includes("SHELL") ? "/bin/zsh" : "fixture 1", stderr: "", exitCode: 0 }),
+    }));
+    const core = new SharkBayCoreService([provider]);
 
     const profile = await core.readMachineProfile(runtime, "local");
 
@@ -151,3 +158,8 @@ describe("ProfileOrchestrator", () => {
     expect(runs).toBe(2);
   });
 });
+
+const cleanupRoots: string[] = [];
+async function makeTestRuntime(prefix: string) { const runtime = await createRuntime(prefix); cleanupRoots.push(path.dirname(runtime.userDataPath)); return runtime; }
+async function makeTempRoot(prefix: string) { const root = await createRoot(prefix); cleanupRoots.push(root); return root; }
+afterEach(async () => { await Promise.all(cleanupRoots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true }))); });

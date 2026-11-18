@@ -8,7 +8,7 @@ function jsonResponse(body: unknown): Response {
 
 describe("BotApi", () => {
   it("getMe returns the result on ok", async () => {
-    const fetchImpl = vi.fn<Parameters<FetchLike>, ReturnType<FetchLike>>(async () =>
+    const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse({ ok: true, result: { id: 1, is_bot: true, first_name: "Bot", username: "my_bot" } }),
     );
     const api = new BotApi({ token: "t", fetch: fetchImpl });
@@ -42,7 +42,7 @@ describe("BotApi", () => {
   });
 
   it("omits undefined params from the request body", async () => {
-    const fetchImpl = vi.fn<Parameters<FetchLike>, ReturnType<FetchLike>>(async () =>
+    const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse({ ok: true, result: { message_id: 1, chat: { id: 2 } } }),
     );
     const api = new BotApi({ token: "t", fetch: fetchImpl });

@@ -312,7 +312,9 @@ describe("terminal cwd validation", () => {
     });
 
     try {
-      manager.input({ sessionId: session.id, data: "printf 'sharkbay-terminal-ok\\n'\n" });
+      const command = "printf 'sharkbay-terminal-%s\\n' 'ok'\n";
+      expect(command).not.toContain("sharkbay-terminal-ok");
+      manager.input({ sessionId: session.id, data: command });
       await expect(output).resolves.toContain("sharkbay-terminal-ok");
     } finally {
       manager.close({ sessionId: session.id });

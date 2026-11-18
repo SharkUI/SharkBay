@@ -14,6 +14,7 @@ export class TokenUsageCollector {
   private db: TokenUsageDb;
   private batch: TokenEvent[] = [];
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private disposed = false;
   private codexTotalUsageBySource = new Map<string, string>();
   private readonly batchSize = 50;
   private readonly flushIntervalMs = 5000;
@@ -28,16 +29,14 @@ export class TokenUsageCollector {
     lineByteOffset: number,
     session: CollectorSessionState
   ): void {
+    if (this.batch.length >= this.batchSize) this.flush();
     const event = this.extractUsage(line, sourceFile, lineByteOffset, session);
     if (!event) return;
 
     this.batch.push(event);
     if (this.batch.length >= this.batchSize) {
       this.flush();
-    } else if (!this.flushTimer) {
-      this.flushTimer = setTimeout(() => this.flush(), this.flushIntervalMs);
-      this.flushTimer.unref?.();
-    }
+    } else this.scheduleFlush();
   }
 
   flush(): void {
@@ -46,9 +45,28 @@ export class TokenUsageCollector {
       this.flushTimer = null;
     }
     if (this.batch.length === 0) return;
-    const items = this.batch;
+    try {
+      this.db.insertBatch(this.batch);
+    } catch (error) {
+      this.scheduleFlush();
+      throw error;
+    }
     this.batch = [];
-    this.db.insertBatch(items);
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    this.flush();
+  }
+
+  private scheduleFlush(): void {
+    if (this.flushTimer || this.disposed) return;
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = null;
+      try { this.flush(); }
+      catch { console.warn("Usage batch write failed; retaining events for retry"); }
+    }, this.flushIntervalMs);
+    this.flushTimer.unref?.();
   }
 
   private extractUsage(
@@ -292,6 +310,7 @@ export class TokenUsageCollector {
         const endTs = typeof turn.end_timestamp === "string" ? turn.end_timestamp : null;
         const recordedAt = endTs ?? new Date().toISOString();
 
+        if (this.batch.length >= this.batchSize) this.flush();
         this.batch.push({
           agentId: "kiro",
           sessionId,

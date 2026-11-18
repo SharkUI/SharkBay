@@ -1,0 +1,1472 @@
+[
+  {
+    "path": ".agents/skills/design-semantic-interfaces/SKILL.md",
+    "lines": 133,
+    "bytes": 7976,
+    "test": false
+  },
+  {
+    "path": "AGENTS.md",
+    "lines": 68,
+    "bytes": 2978,
+    "test": false
+  },
+  {
+    "path": "CHANGELOG.md",
+    "lines": 366,
+    "bytes": 19739,
+    "test": false
+  },
+  {
+    "path": "README.md",
+    "lines": 151,
+    "bytes": 5268,
+    "test": false
+  },
+  {
+    "path": "docs/agent-status.md",
+    "lines": 75,
+    "bytes": 10415,
+    "test": false
+  },
+  {
+    "path": "docs/agents.md",
+    "lines": 64,
+    "bytes": 2517,
+    "test": false
+  },
+  {
+    "path": "docs/architecture.md",
+    "lines": 119,
+    "bytes": 9643,
+    "test": false
+  },
+  {
+    "path": "docs/development.md",
+    "lines": 114,
+    "bytes": 4867,
+    "test": false
+  },
+  {
+    "path": "docs/execution-target-profiles.md",
+    "lines": 1507,
+    "bytes": 40794,
+    "test": false
+  },
+  {
+    "path": "docs/index.md",
+    "lines": 23,
+    "bytes": 1320,
+    "test": false
+  },
+  {
+    "path": "docs/product.md",
+    "lines": 34,
+    "bytes": 2568,
+    "test": false
+  },
+  {
+    "path": "docs/release.md",
+    "lines": 183,
+    "bytes": 8865,
+    "test": false
+  },
+  {
+    "path": "docs/roadmap.md",
+    "lines": 41,
+    "bytes": 2254,
+    "test": false
+  },
+  {
+    "path": "docs/shared/README.md",
+    "lines": 8,
+    "bytes": 456,
+    "test": false
+  },
+  {
+    "path": "docs/shared-runtime-plan.md",
+    "lines": 29,
+    "bytes": 2381,
+    "test": false
+  },
+  {
+    "path": "docs/tasks-protocol-helper.md",
+    "lines": 272,
+    "bytes": 7917,
+    "test": false
+  },
+  {
+    "path": "docs/tasks.md",
+    "lines": 98,
+    "bytes": 4352,
+    "test": false
+  },
+  {
+    "path": "docs/testing.md",
+    "lines": 45,
+    "bytes": 1567,
+    "test": false
+  },
+  {
+    "path": "docs/workspace-agent-platform.md",
+    "lines": 555,
+    "bytes": 17630,
+    "test": false
+  },
+  {
+    "path": "docs/workspace-model.md",
+    "lines": 392,
+    "bytes": 7739,
+    "test": false
+  },
+  {
+    "path": "electron/find-popover-preload.mts",
+    "lines": 15,
+    "bytes": 806,
+    "test": false
+  },
+  {
+    "path": "electron/find-popover.ts",
+    "lines": 93,
+    "bytes": 2928,
+    "test": false
+  },
+  {
+    "path": "electron/ipc.ts",
+    "lines": 229,
+    "bytes": 14744,
+    "test": false
+  },
+  {
+    "path": "electron/island-preload.mts",
+    "lines": 46,
+    "bytes": 1897,
+    "test": false
+  },
+  {
+    "path": "electron/main.ts",
+    "lines": 486,
+    "bytes": 16448,
+    "test": false
+  },
+  {
+    "path": "electron/preload.mts",
+    "lines": 388,
+    "bytes": 21159,
+    "test": false
+  },
+  {
+    "path": "electron/runtime-client.ts",
+    "lines": 33,
+    "bytes": 2186,
+    "test": false
+  },
+  {
+    "path": "init.md",
+    "lines": 1428,
+    "bytes": 37857,
+    "test": false
+  },
+  {
+    "path": "scripts/README.md",
+    "lines": 31,
+    "bytes": 791,
+    "test": false
+  },
+  {
+    "path": "scripts/build-runtime.mjs",
+    "lines": 10,
+    "bytes": 484,
+    "test": false
+  },
+  {
+    "path": "scripts/check-source-graph.mjs",
+    "lines": 26,
+    "bytes": 1743,
+    "test": false
+  },
+  {
+    "path": "scripts/prepare-runtime-bundle.mjs",
+    "lines": 22,
+    "bytes": 1618,
+    "test": false
+  },
+  {
+    "path": "scripts/verify-packaged-runtime.mjs",
+    "lines": 58,
+    "bytes": 4412,
+    "test": false
+  },
+  {
+    "path": "scripts/verify-shared-runtime.mjs",
+    "lines": 124,
+    "bytes": 12229,
+    "test": false
+  },
+  {
+    "path": "scripts/verify-webui-runtime.mjs",
+    "lines": 57,
+    "bytes": 4497,
+    "test": false
+  },
+  {
+    "path": "src/core/codegraph-manager.ts",
+    "lines": 339,
+    "bytes": 13667,
+    "test": false
+  },
+  {
+    "path": "src/core/core-runtime.ts",
+    "lines": 27,
+    "bytes": 1379,
+    "test": false
+  },
+  {
+    "path": "src/core/core-service.ts",
+    "lines": 446,
+    "bytes": 18967,
+    "test": false
+  },
+  {
+    "path": "src/core/diagnostics.ts",
+    "lines": 121,
+    "bytes": 3984,
+    "test": false
+  },
+  {
+    "path": "src/core/execution-provider.ts",
+    "lines": 138,
+    "bytes": 4570,
+    "test": false
+  },
+  {
+    "path": "src/core/job-scheduler.ts",
+    "lines": 137,
+    "bytes": 4518,
+    "test": false
+  },
+  {
+    "path": "src/core/project-uri.ts",
+    "lines": 62,
+    "bytes": 2314,
+    "test": false
+  },
+  {
+    "path": "src/core/provider-registry.ts",
+    "lines": 37,
+    "bytes": 1179,
+    "test": false
+  },
+  {
+    "path": "src/main/agent-clis.ts",
+    "lines": 490,
+    "bytes": 16401,
+    "test": false
+  },
+  {
+    "path": "src/main/app-updates.ts",
+    "lines": 107,
+    "bytes": 3448,
+    "test": false
+  },
+  {
+    "path": "src/main/application-menu.ts",
+    "lines": 131,
+    "bytes": 3604,
+    "test": false
+  },
+  {
+    "path": "src/main/artifact-runs.ts",
+    "lines": 232,
+    "bytes": 9385,
+    "test": false
+  },
+  {
+    "path": "src/main/browser-tabs.ts",
+    "lines": 371,
+    "bytes": 12216,
+    "test": false
+  },
+  {
+    "path": "src/main/caffeinate.ts",
+    "lines": 29,
+    "bytes": 811,
+    "test": false
+  },
+  {
+    "path": "src/main/command-path.ts",
+    "lines": 160,
+    "bytes": 5083,
+    "test": false
+  },
+  {
+    "path": "src/main/config.ts",
+    "lines": 426,
+    "bytes": 19107,
+    "test": false
+  },
+  {
+    "path": "src/main/dev-services.ts",
+    "lines": 259,
+    "bytes": 8394,
+    "test": false
+  },
+  {
+    "path": "src/main/file-content.ts",
+    "lines": 127,
+    "bytes": 6357,
+    "test": false
+  },
+  {
+    "path": "src/main/git.ts",
+    "lines": 110,
+    "bytes": 3340,
+    "test": false
+  },
+  {
+    "path": "src/main/github.ts",
+    "lines": 175,
+    "bytes": 6123,
+    "test": false
+  },
+  {
+    "path": "src/main/harness.ts",
+    "lines": 1105,
+    "bytes": 45331,
+    "test": false
+  },
+  {
+    "path": "src/main/hooks/bridge.ts",
+    "lines": 152,
+    "bytes": 5347,
+    "test": false
+  },
+  {
+    "path": "src/main/hooks/cli/sharkbay-hook.ts",
+    "lines": 78,
+    "bytes": 2227,
+    "test": false
+  },
+  {
+    "path": "src/main/hooks/codex-turn-reader.ts",
+    "lines": 43,
+    "bytes": 2222,
+    "test": false
+  },
+  {
+    "path": "src/main/hooks/connectors/claude-family.ts",
+    "lines": 312,
+    "bytes": 13839,
+    "test": false
+  },
+  {
+    "path": "src/main/hooks/connectors/cursor.ts",
+    "lines": 120,
+    "bytes": 4833,
+    "test": false
+  },
+  {
+    "path": "src/main/hooks/connectors/gemini.ts",
+    "lines": 113,
+    "bytes": 4664,
+    "test": false
+  },
+  {
+    "path": "src/main/hooks/connectors/kiro.ts",
+    "lines": 112,
+    "bytes": 4504,
+    "test": false
+  },
+  {
+    "path": "src/main/hooks/connectors/opencode.ts",
+    "lines": 251,
+    "bytes": 9667,
+    "test": false
+  },
+  {
+    "path": "src/main/hooks/connectors/reasonix.ts",
+    "lines": 184,
+    "bytes": 6074,
+    "test": false
+  },
+  {
+    "path": "src/main/hooks/program-status.ts",
+    "lines": 111,
+    "bytes": 6072,
+    "test": false
+  },
+  {
+    "path": "src/main/hooks/prompt-store.ts",
+    "lines": 115,
+    "bytes": 4099,
+    "test": false
+  },
+  {
+    "path": "src/main/hooks/sessions.ts",
+    "lines": 198,
+    "bytes": 5951,
+    "test": false
+  },
+  {
+    "path": "src/main/hooks/state-manager.ts",
+    "lines": 414,
+    "bytes": 25631,
+    "test": false
+  },
+  {
+    "path": "src/main/hooks/terminal-approval-detector.ts",
+    "lines": 98,
+    "bytes": 3406,
+    "test": false
+  },
+  {
+    "path": "src/main/hooks/types.ts",
+    "lines": 86,
+    "bytes": 2674,
+    "test": false
+  },
+  {
+    "path": "src/main/json-file.ts",
+    "lines": 87,
+    "bytes": 2597,
+    "test": false
+  },
+  {
+    "path": "src/main/jsonl-reader.ts",
+    "lines": 50,
+    "bytes": 2027,
+    "test": false
+  },
+  {
+    "path": "src/main/path-safety.ts",
+    "lines": 120,
+    "bytes": 4581,
+    "test": false
+  },
+  {
+    "path": "src/main/project-clone.ts",
+    "lines": 35,
+    "bytes": 1634,
+    "test": false
+  },
+  {
+    "path": "src/main/project-files.ts",
+    "lines": 164,
+    "bytes": 5100,
+    "test": false
+  },
+  {
+    "path": "src/main/project-icons.ts",
+    "lines": 345,
+    "bytes": 11618,
+    "test": false
+  },
+  {
+    "path": "src/main/project-setup.ts",
+    "lines": 17,
+    "bytes": 957,
+    "test": false
+  },
+  {
+    "path": "src/main/pty.ts",
+    "lines": 9,
+    "bytes": 304,
+    "test": false
+  },
+  {
+    "path": "src/main/review-control-server.ts",
+    "lines": 238,
+    "bytes": 8814,
+    "test": false
+  },
+  {
+    "path": "src/main/review-runs.ts",
+    "lines": 313,
+    "bytes": 12633,
+    "test": false
+  },
+  {
+    "path": "src/main/scanner.ts",
+    "lines": 160,
+    "bytes": 5088,
+    "test": false
+  },
+  {
+    "path": "src/main/secrets.ts",
+    "lines": 54,
+    "bytes": 1721,
+    "test": false
+  },
+  {
+    "path": "src/main/share-artifact.ts",
+    "lines": 113,
+    "bytes": 3841,
+    "test": false
+  },
+  {
+    "path": "src/main/share-popover.ts",
+    "lines": 175,
+    "bytes": 6315,
+    "test": false
+  },
+  {
+    "path": "src/main/tasks.ts",
+    "lines": 219,
+    "bytes": 7427,
+    "test": false
+  },
+  {
+    "path": "src/main/teamwork-sync.ts",
+    "lines": 404,
+    "bytes": 13760,
+    "test": false
+  },
+  {
+    "path": "src/main/telegram/ansi.ts",
+    "lines": 115,
+    "bytes": 3151,
+    "test": false
+  },
+  {
+    "path": "src/main/telegram/api.ts",
+    "lines": 171,
+    "bytes": 6057,
+    "test": false
+  },
+  {
+    "path": "src/main/telegram/dispatch.ts",
+    "lines": 45,
+    "bytes": 1698,
+    "test": false
+  },
+  {
+    "path": "src/main/telegram/format.ts",
+    "lines": 16,
+    "bytes": 540,
+    "test": false
+  },
+  {
+    "path": "src/main/telegram/pairing.ts",
+    "lines": 89,
+    "bytes": 3045,
+    "test": false
+  },
+  {
+    "path": "src/main/telegram/render.ts",
+    "lines": 136,
+    "bytes": 5642,
+    "test": false
+  },
+  {
+    "path": "src/main/telegram/service.ts",
+    "lines": 1004,
+    "bytes": 43364,
+    "test": false
+  },
+  {
+    "path": "src/main/telegram/session-registry.ts",
+    "lines": 54,
+    "bytes": 1943,
+    "test": false
+  },
+  {
+    "path": "src/main/telegram/transcript.ts",
+    "lines": 318,
+    "bytes": 11674,
+    "test": false
+  },
+  {
+    "path": "src/main/telegram/turn.ts",
+    "lines": 122,
+    "bytes": 4950,
+    "test": false
+  },
+  {
+    "path": "src/main/telegram/types.ts",
+    "lines": 57,
+    "bytes": 1668,
+    "test": false
+  },
+  {
+    "path": "src/main/terminal.ts",
+    "lines": 750,
+    "bytes": 25847,
+    "test": false
+  },
+  {
+    "path": "src/main/token-usage-collector.ts",
+    "lines": 459,
+    "bytes": 15455,
+    "test": false
+  },
+  {
+    "path": "src/main/token-usage-db.ts",
+    "lines": 366,
+    "bytes": 12206,
+    "test": false
+  },
+  {
+    "path": "src/main/token-usage-pricing.ts",
+    "lines": 9,
+    "bytes": 226,
+    "test": false
+  },
+  {
+    "path": "src/main/worktree.ts",
+    "lines": 27,
+    "bytes": 1189,
+    "test": false
+  },
+  {
+    "path": "src/plugins/bundled/agent-detector.ts",
+    "lines": 136,
+    "bytes": 4951,
+    "test": false
+  },
+  {
+    "path": "src/plugins/bundled/codegraph-detector.ts",
+    "lines": 35,
+    "bytes": 1099,
+    "test": false
+  },
+  {
+    "path": "src/plugins/bundled/core-detectors.ts",
+    "lines": 142,
+    "bytes": 4827,
+    "test": false
+  },
+  {
+    "path": "src/plugins/bundled/go-detector.ts",
+    "lines": 64,
+    "bytes": 2334,
+    "test": false
+  },
+  {
+    "path": "src/plugins/bundled/java-detector.ts",
+    "lines": 100,
+    "bytes": 3845,
+    "test": false
+  },
+  {
+    "path": "src/plugins/bundled/node-detector.ts",
+    "lines": 187,
+    "bytes": 7966,
+    "test": false
+  },
+  {
+    "path": "src/plugins/bundled/python-detector.ts",
+    "lines": 125,
+    "bytes": 5046,
+    "test": false
+  },
+  {
+    "path": "src/plugins/bundled/rust-detector.ts",
+    "lines": 72,
+    "bytes": 2775,
+    "test": false
+  },
+  {
+    "path": "src/plugins/bundled/tool-probe.ts",
+    "lines": 36,
+    "bytes": 1369,
+    "test": false
+  },
+  {
+    "path": "src/plugins/bundled-plugins.ts",
+    "lines": 24,
+    "bytes": 923,
+    "test": false
+  },
+  {
+    "path": "src/plugins/installed-plugins.ts",
+    "lines": 52,
+    "bytes": 1848,
+    "test": false
+  },
+  {
+    "path": "src/plugins/plugin-host.ts",
+    "lines": 139,
+    "bytes": 4631,
+    "test": false
+  },
+  {
+    "path": "src/plugins/plugin-manifest.ts",
+    "lines": 77,
+    "bytes": 3164,
+    "test": false
+  },
+  {
+    "path": "src/profiles/profile-orchestrator.ts",
+    "lines": 181,
+    "bytes": 8617,
+    "test": false
+  },
+  {
+    "path": "src/providers/local/local-provider.ts",
+    "lines": 338,
+    "bytes": 12702,
+    "test": false
+  },
+  {
+    "path": "src/renderer/App.tsx",
+    "lines": 6888,
+    "bytes": 343191,
+    "test": false
+  },
+  {
+    "path": "src/renderer/bridge/runtime-status.tsx",
+    "lines": 29,
+    "bytes": 1686,
+    "test": false
+  },
+  {
+    "path": "src/renderer/bridge/web-bridge.ts",
+    "lines": 223,
+    "bytes": 15946,
+    "test": false
+  },
+  {
+    "path": "src/renderer/clipboard.ts",
+    "lines": 20,
+    "bytes": 624,
+    "test": false
+  },
+  {
+    "path": "src/renderer/code-editor.tsx",
+    "lines": 201,
+    "bytes": 8320,
+    "test": false
+  },
+  {
+    "path": "src/renderer/codex-input-state.ts",
+    "lines": 39,
+    "bytes": 1955,
+    "test": false
+  },
+  {
+    "path": "src/renderer/color-schemes.ts",
+    "lines": 562,
+    "bytes": 258119,
+    "test": false
+  },
+  {
+    "path": "src/renderer/hook-snapshots.ts",
+    "lines": 33,
+    "bytes": 2903,
+    "test": false
+  },
+  {
+    "path": "src/renderer/main.tsx",
+    "lines": 22,
+    "bytes": 603,
+    "test": false
+  },
+  {
+    "path": "src/renderer/mobile-layout.ts",
+    "lines": 35,
+    "bytes": 1440,
+    "test": false
+  },
+  {
+    "path": "src/renderer/project-start.tsx",
+    "lines": 120,
+    "bytes": 6358,
+    "test": false
+  },
+  {
+    "path": "src/renderer/prompt-search.ts",
+    "lines": 22,
+    "bytes": 1306,
+    "test": false
+  },
+  {
+    "path": "src/renderer/sharkbay-api.d.ts",
+    "lines": 9,
+    "bytes": 135,
+    "test": false
+  },
+  {
+    "path": "src/renderer/terminal-create-menu.tsx",
+    "lines": 45,
+    "bytes": 2247,
+    "test": false
+  },
+  {
+    "path": "src/renderer/types.ts",
+    "lines": 874,
+    "bytes": 24374,
+    "test": false
+  },
+  {
+    "path": "src/renderer/update-hint.tsx",
+    "lines": 58,
+    "bytes": 2584,
+    "test": false
+  },
+  {
+    "path": "src/renderer/workflow.ts",
+    "lines": 125,
+    "bytes": 4786,
+    "test": false
+  },
+  {
+    "path": "src/runtime/agent-runtime.ts",
+    "lines": 491,
+    "bytes": 26188,
+    "test": false
+  },
+  {
+    "path": "src/runtime/application-input.ts",
+    "lines": 71,
+    "bytes": 6418,
+    "test": false
+  },
+  {
+    "path": "src/runtime/application-runtime.ts",
+    "lines": 274,
+    "bytes": 19437,
+    "test": false
+  },
+  {
+    "path": "src/runtime/control-client.ts",
+    "lines": 73,
+    "bytes": 3858,
+    "test": false
+  },
+  {
+    "path": "src/runtime/control-server.ts",
+    "lines": 68,
+    "bytes": 4296,
+    "test": false
+  },
+  {
+    "path": "src/runtime/profile-lock.ts",
+    "lines": 65,
+    "bytes": 3094,
+    "test": false
+  },
+  {
+    "path": "src/runtime/task-runtime.ts",
+    "lines": 208,
+    "bytes": 8325,
+    "test": false
+  },
+  {
+    "path": "src/runtime/telegram-runtime.ts",
+    "lines": 274,
+    "bytes": 13651,
+    "test": false
+  },
+  {
+    "path": "src/runtime/terminal-state.ts",
+    "lines": 97,
+    "bytes": 5229,
+    "test": false
+  },
+  {
+    "path": "src/server/http-server.ts",
+    "lines": 215,
+    "bytes": 14215,
+    "test": false
+  },
+  {
+    "path": "src/server/main.ts",
+    "lines": 108,
+    "bytes": 5959,
+    "test": false
+  },
+  {
+    "path": "src/server/session-auth.ts",
+    "lines": 55,
+    "bytes": 2689,
+    "test": false
+  },
+  {
+    "path": "src/shared/agent-session-restore.ts",
+    "lines": 82,
+    "bytes": 4002,
+    "test": false
+  },
+  {
+    "path": "src/shared/agent-status.ts",
+    "lines": 49,
+    "bytes": 2634,
+    "test": false
+  },
+  {
+    "path": "src/shared/app-events.ts",
+    "lines": 9,
+    "bytes": 327,
+    "test": false
+  },
+  {
+    "path": "src/shared/app-updates.ts",
+    "lines": 13,
+    "bytes": 530,
+    "test": false
+  },
+  {
+    "path": "src/shared/application-api.ts",
+    "lines": 68,
+    "bytes": 4835,
+    "test": false
+  },
+  {
+    "path": "src/shared/application-events.ts",
+    "lines": 13,
+    "bytes": 467,
+    "test": false
+  },
+  {
+    "path": "src/shared/caffeinate.ts",
+    "lines": 10,
+    "bytes": 425,
+    "test": false
+  },
+  {
+    "path": "src/shared/ipc-channels.ts",
+    "lines": 102,
+    "bytes": 4398,
+    "test": false
+  },
+  {
+    "path": "src/shared/schema.ts",
+    "lines": 3,
+    "bytes": 158,
+    "test": false
+  },
+  {
+    "path": "src/shared/task-detail-helpers.ts",
+    "lines": 68,
+    "bytes": 2855,
+    "test": false
+  },
+  {
+    "path": "src/shared/types.ts",
+    "lines": 1069,
+    "bytes": 23975,
+    "test": false
+  },
+  {
+    "path": "src/storage/profile-cache.ts",
+    "lines": 90,
+    "bytes": 3865,
+    "test": false
+  },
+  {
+    "path": "tasks/runtime-packaging/verification.md",
+    "lines": 17,
+    "bytes": 1258,
+    "test": false
+  },
+  {
+    "path": "tests/agent-clis.test.ts",
+    "lines": 87,
+    "bytes": 3773,
+    "test": true
+  },
+  {
+    "path": "tests/agent-detector.test.ts",
+    "lines": 47,
+    "bytes": 1447,
+    "test": true
+  },
+  {
+    "path": "tests/agent-session-reader.test.ts",
+    "lines": 31,
+    "bytes": 2040,
+    "test": true
+  },
+  {
+    "path": "tests/agent-session-restore.test.ts",
+    "lines": 60,
+    "bytes": 3497,
+    "test": true
+  },
+  {
+    "path": "tests/agent-status-attribution.test.ts",
+    "lines": 73,
+    "bytes": 6608,
+    "test": true
+  },
+  {
+    "path": "tests/agent-status-coalescing.test.ts",
+    "lines": 157,
+    "bytes": 10423,
+    "test": true
+  },
+  {
+    "path": "tests/agent-status.test.ts",
+    "lines": 567,
+    "bytes": 42019,
+    "test": true
+  },
+  {
+    "path": "tests/app-update-lifecycle.test.ts",
+    "lines": 129,
+    "bytes": 5770,
+    "test": true
+  },
+  {
+    "path": "tests/app-updates.test.ts",
+    "lines": 121,
+    "bytes": 5439,
+    "test": true
+  },
+  {
+    "path": "tests/application-menu.test.ts",
+    "lines": 116,
+    "bytes": 4084,
+    "test": true
+  },
+  {
+    "path": "tests/artifact-runs.test.ts",
+    "lines": 167,
+    "bytes": 5989,
+    "test": true
+  },
+  {
+    "path": "tests/browser-tab-close.test.ts",
+    "lines": 69,
+    "bytes": 3576,
+    "test": true
+  },
+  {
+    "path": "tests/browser-tabs.test.ts",
+    "lines": 148,
+    "bytes": 5645,
+    "test": true
+  },
+  {
+    "path": "tests/build-config.test.ts",
+    "lines": 84,
+    "bytes": 3651,
+    "test": true
+  },
+  {
+    "path": "tests/caffeinate-mode.test.ts",
+    "lines": 19,
+    "bytes": 825,
+    "test": true
+  },
+  {
+    "path": "tests/caffeinate.test.ts",
+    "lines": 81,
+    "bytes": 2974,
+    "test": true
+  },
+  {
+    "path": "tests/codegraph-manager.test.ts",
+    "lines": 308,
+    "bytes": 12888,
+    "test": true
+  },
+  {
+    "path": "tests/codegraph-manual-index.test.ts",
+    "lines": 20,
+    "bytes": 881,
+    "test": true
+  },
+  {
+    "path": "tests/codex-input-state.test.ts",
+    "lines": 199,
+    "bytes": 7588,
+    "test": true
+  },
+  {
+    "path": "tests/codex-sessions.test.ts",
+    "lines": 59,
+    "bytes": 2380,
+    "test": true
+  },
+  {
+    "path": "tests/config-migration.test.ts",
+    "lines": 109,
+    "bytes": 4434,
+    "test": true
+  },
+  {
+    "path": "tests/core-agent-list.test.ts",
+    "lines": 83,
+    "bytes": 3237,
+    "test": true
+  },
+  {
+    "path": "tests/core-detectors.test.ts",
+    "lines": 38,
+    "bytes": 1426,
+    "test": true
+  },
+  {
+    "path": "tests/core-provider-registry.test.ts",
+    "lines": 30,
+    "bytes": 1014,
+    "test": true
+  },
+  {
+    "path": "tests/core-runtime.test.ts",
+    "lines": 26,
+    "bytes": 1363,
+    "test": true
+  },
+  {
+    "path": "tests/dev-services.test.ts",
+    "lines": 156,
+    "bytes": 5863,
+    "test": true
+  },
+  {
+    "path": "tests/diagnostics.test.ts",
+    "lines": 58,
+    "bytes": 2410,
+    "test": true
+  },
+  {
+    "path": "tests/file-boundaries.test.ts",
+    "lines": 29,
+    "bytes": 2011,
+    "test": true
+  },
+  {
+    "path": "tests/git.test.ts",
+    "lines": 41,
+    "bytes": 1724,
+    "test": true
+  },
+  {
+    "path": "tests/github.test.ts",
+    "lines": 208,
+    "bytes": 8151,
+    "test": true
+  },
+  {
+    "path": "tests/harness.test.ts",
+    "lines": 731,
+    "bytes": 38156,
+    "test": true
+  },
+  {
+    "path": "tests/helpers.ts",
+    "lines": 33,
+    "bytes": 1304,
+    "test": true
+  },
+  {
+    "path": "tests/hook-sessions.test.ts",
+    "lines": 140,
+    "bytes": 6828,
+    "test": true
+  },
+  {
+    "path": "tests/hook-snapshots.test.ts",
+    "lines": 35,
+    "bytes": 3356,
+    "test": true
+  },
+  {
+    "path": "tests/hooks-connectors.test.ts",
+    "lines": 137,
+    "bytes": 6838,
+    "test": true
+  },
+  {
+    "path": "tests/install-tool.test.ts",
+    "lines": 165,
+    "bytes": 6635,
+    "test": true
+  },
+  {
+    "path": "tests/ipc-channels.test.ts",
+    "lines": 110,
+    "bytes": 5121,
+    "test": true
+  },
+  {
+    "path": "tests/island-auto-expand.test.ts",
+    "lines": 221,
+    "bytes": 8393,
+    "test": true
+  },
+  {
+    "path": "tests/job-scheduler.test.ts",
+    "lines": 54,
+    "bytes": 1570,
+    "test": true
+  },
+  {
+    "path": "tests/jsonl-reader.test.ts",
+    "lines": 43,
+    "bytes": 2518,
+    "test": true
+  },
+  {
+    "path": "tests/local-provider.test.ts",
+    "lines": 47,
+    "bytes": 2185,
+    "test": true
+  },
+  {
+    "path": "tests/node-detector.test.ts",
+    "lines": 61,
+    "bytes": 2355,
+    "test": true
+  },
+  {
+    "path": "tests/opencode-hooks.test.ts",
+    "lines": 155,
+    "bytes": 5850,
+    "test": true
+  },
+  {
+    "path": "tests/path-safety.test.ts",
+    "lines": 26,
+    "bytes": 1155,
+    "test": true
+  },
+  {
+    "path": "tests/plugin-host.test.ts",
+    "lines": 56,
+    "bytes": 2259,
+    "test": true
+  },
+  {
+    "path": "tests/plugin-manifest.test.ts",
+    "lines": 46,
+    "bytes": 1586,
+    "test": true
+  },
+  {
+    "path": "tests/profile-cache.test.ts",
+    "lines": 29,
+    "bytes": 1104,
+    "test": true
+  },
+  {
+    "path": "tests/profile-lock.test.ts",
+    "lines": 91,
+    "bytes": 5491,
+    "test": true
+  },
+  {
+    "path": "tests/profile-orchestrator.test.ts",
+    "lines": 153,
+    "bytes": 6258,
+    "test": true
+  },
+  {
+    "path": "tests/project-files.test.ts",
+    "lines": 80,
+    "bytes": 4276,
+    "test": true
+  },
+  {
+    "path": "tests/project-icons.test.ts",
+    "lines": 37,
+    "bytes": 1755,
+    "test": true
+  },
+  {
+    "path": "tests/prompt-search.test.ts",
+    "lines": 54,
+    "bytes": 2186,
+    "test": true
+  },
+  {
+    "path": "tests/prompt-store.test.ts",
+    "lines": 74,
+    "bytes": 2715,
+    "test": true
+  },
+  {
+    "path": "tests/python-detector.test.ts",
+    "lines": 27,
+    "bytes": 1659,
+    "test": true
+  },
+  {
+    "path": "tests/reasonix-hooks.test.ts",
+    "lines": 139,
+    "bytes": 5328,
+    "test": true
+  },
+  {
+    "path": "tests/renderer-workflow.test.ts",
+    "lines": 76,
+    "bytes": 3988,
+    "test": true
+  },
+  {
+    "path": "tests/review-control-server.test.ts",
+    "lines": 132,
+    "bytes": 5291,
+    "test": true
+  },
+  {
+    "path": "tests/review-runs.test.ts",
+    "lines": 337,
+    "bytes": 12699,
+    "test": true
+  },
+  {
+    "path": "tests/runtime-packaging.test.ts",
+    "lines": 30,
+    "bytes": 1552,
+    "test": true
+  },
+  {
+    "path": "tests/scanner.test.ts",
+    "lines": 116,
+    "bytes": 4782,
+    "test": true
+  },
+  {
+    "path": "tests/task-detail-helpers.test.ts",
+    "lines": 109,
+    "bytes": 4950,
+    "test": true
+  },
+  {
+    "path": "tests/task-runtime-install.test.ts",
+    "lines": 66,
+    "bytes": 3028,
+    "test": true
+  },
+  {
+    "path": "tests/task-runtime.test.ts",
+    "lines": 27,
+    "bytes": 1487,
+    "test": true
+  },
+  {
+    "path": "tests/tasks.test.ts",
+    "lines": 231,
+    "bytes": 7806,
+    "test": true
+  },
+  {
+    "path": "tests/teamwork-sync.test.ts",
+    "lines": 329,
+    "bytes": 12248,
+    "test": true
+  },
+  {
+    "path": "tests/telegram-ansi.test.ts",
+    "lines": 41,
+    "bytes": 1391,
+    "test": true
+  },
+  {
+    "path": "tests/telegram-api.test.ts",
+    "lines": 68,
+    "bytes": 2623,
+    "test": true
+  },
+  {
+    "path": "tests/telegram-dispatch.test.ts",
+    "lines": 44,
+    "bytes": 1999,
+    "test": true
+  },
+  {
+    "path": "tests/telegram-pairing.test.ts",
+    "lines": 74,
+    "bytes": 3118,
+    "test": true
+  },
+  {
+    "path": "tests/telegram-render.test.ts",
+    "lines": 108,
+    "bytes": 3838,
+    "test": true
+  },
+  {
+    "path": "tests/telegram-service.test.ts",
+    "lines": 23,
+    "bytes": 767,
+    "test": true
+  },
+  {
+    "path": "tests/telegram-session-registry.test.ts",
+    "lines": 66,
+    "bytes": 2593,
+    "test": true
+  },
+  {
+    "path": "tests/telegram-transcript.test.ts",
+    "lines": 258,
+    "bytes": 11160,
+    "test": true
+  },
+  {
+    "path": "tests/telegram-turn.test.ts",
+    "lines": 115,
+    "bytes": 5090,
+    "test": true
+  },
+  {
+    "path": "tests/terminal-approval-detector.test.ts",
+    "lines": 151,
+    "bytes": 5366,
+    "test": true
+  },
+  {
+    "path": "tests/terminal-bootstrap.test.ts",
+    "lines": 115,
+    "bytes": 4367,
+    "test": true
+  },
+  {
+    "path": "tests/terminal-close-resize.test.ts",
+    "lines": 77,
+    "bytes": 3806,
+    "test": true
+  },
+  {
+    "path": "tests/terminal-state.test.ts",
+    "lines": 86,
+    "bytes": 5089,
+    "test": true
+  },
+  {
+    "path": "tests/terminal.test.ts",
+    "lines": 457,
+    "bytes": 18012,
+    "test": true
+  },
+  {
+    "path": "tests/token-usage-collector.test.ts",
+    "lines": 136,
+    "bytes": 7724,
+    "test": true
+  },
+  {
+    "path": "tests/token-usage-db.test.ts",
+    "lines": 61,
+    "bytes": 1583,
+    "test": true
+  },
+  {
+    "path": "tests/web-runtime-integration.test.ts",
+    "lines": 314,
+    "bytes": 25397,
+    "test": true
+  },
+  {
+    "path": "tests/web-runtime-security.test.ts",
+    "lines": 73,
+    "bytes": 4809,
+    "test": true
+  },
+  {
+    "path": "vite.config.ts",
+    "lines": 33,
+    "bytes": 699,
+    "test": false
+  },
+  {
+    "path": "vitest.config.ts",
+    "lines": 19,
+    "bytes": 411,
+    "test": false
+  }
+]

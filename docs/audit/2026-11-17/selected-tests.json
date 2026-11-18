@@ -1,0 +1,25 @@
+{
+  "command": [
+    "node",
+    "node_modules/vitest/vitest.mjs",
+    "run",
+    "--maxWorkers=1",
+    "--minWorkers=1",
+    "--no-file-parallelism",
+    "tests/build-config.test.ts",
+    "tests/runtime-packaging.test.ts",
+    "tests/app-updates.test.ts",
+    "tests/app-update-lifecycle.test.ts",
+    "tests/application-menu.test.ts",
+    "tests/renderer-workflow.test.ts",
+    "tests/hook-snapshots.test.ts",
+    "tests/codex-input-state.test.ts",
+    "tests/task-detail-helpers.test.ts",
+    "tests/prompt-search.test.ts",
+    "tests/codegraph-manual-index.test.ts",
+    "tests/jsonl-reader.test.ts",
+    "tests/agent-status-coalescing.test.ts"
+  ],
+  "exit_code": 0,
+  "seconds": 2.36
+}

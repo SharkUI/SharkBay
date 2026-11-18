@@ -1,9 +1,13 @@
 import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildCodeGraphCommandEnv, CodeGraphManager, ensureGitExcludeEntry, removeGitExcludeEntry, runCodeGraphCommandInGroup } from "../src/core/codegraph-manager.js";
 import { toLocalProjectUri } from "../src/core/project-uri.js";
+
+let fixture: string;
+beforeEach(async () => { fixture = await fs.mkdtemp(path.join(tmpdir(), "sharkbay-codegraph-regression-")); });
+afterEach(async () => { await fs.rm(fixture, { recursive: true, force: true }); });
 
 describe("CodeGraphManager", () => {
   it("prepends the resolved CLI directory to PATH for npm shims", () => {
@@ -28,7 +32,7 @@ describe("CodeGraphManager", () => {
       },
     );
 
-    const result = await manager.readProjectStatus(toLocalProjectUri("/tmp/sharkbay-codegraph-project"), true);
+    const result = await manager.readProjectStatus(toLocalProjectUri(path.join(fixture, "project")), true);
 
     expect(result.state).toBe("uninitialized");
     expect(result.summary).toBe("CodeGraph not initialized");
@@ -67,7 +71,7 @@ describe("CodeGraphManager", () => {
       },
     );
 
-    const result = await manager.ensureProjectStatus(toLocalProjectUri("/tmp/sharkbay-codegraph-project"), true);
+    const result = await manager.ensureProjectStatus(toLocalProjectUri(path.join(fixture, "project")), true);
 
     expect(result.state).toBe("indexed");
     expect(result.stats).toMatchObject({ files: 2, nodes: 12, edges: 18 });
@@ -82,7 +86,7 @@ describe("CodeGraphManager", () => {
       },
     );
 
-    const result = await manager.readProjectStatus(toLocalProjectUri("/tmp/sharkbay-codegraph-project"), true);
+    const result = await manager.readProjectStatus(toLocalProjectUri(path.join(fixture, "project")), true);
 
     expect(result.state).toBe("not-installed");
     expect(result.summary).toBe("CodeGraph CLI not installed");
@@ -107,9 +111,9 @@ describe("CodeGraphManager", () => {
       },
     );
 
-    const uri = toLocalProjectUri("/tmp/sharkbay-codegraph-cancel");
+    const uri = toLocalProjectUri(path.join(fixture, "cancel"));
     const pending = manager.ensureProjectStatus(uri, true);
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await vi.waitFor(() => expect(seenSignals).toHaveLength(1));
 
     expect(manager.hasActiveJobs()).toBe(true);
     expect(seenSignals[0]).toBeInstanceOf(AbortSignal);
@@ -139,7 +143,7 @@ describe("CodeGraphManager", () => {
       },
     );
 
-    const uri = toLocalProjectUri("/tmp/sharkbay-codegraph-cancel-2");
+    const uri = toLocalProjectUri(path.join(fixture, "cancel-2"));
     const pending = manager.ensureProjectStatus(uri, true);
     await new Promise((resolve) => setTimeout(resolve, 10));
 
@@ -165,8 +169,8 @@ describe("CodeGraphManager", () => {
       },
     );
 
-    const a = manager.ensureProjectStatus(toLocalProjectUri("/tmp/sharkbay-codegraph-a"), true);
-    const b = manager.ensureProjectStatus(toLocalProjectUri("/tmp/sharkbay-codegraph-b"), true);
+    const a = manager.ensureProjectStatus(toLocalProjectUri(path.join(fixture, "a")), true);
+    const b = manager.ensureProjectStatus(toLocalProjectUri(path.join(fixture, "b")), true);
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(manager.hasActiveJobs()).toBe(true);
 
@@ -190,7 +194,7 @@ describe("runCodeGraphCommandInGroup", () => {
     const started = Date.now();
     const pending = runCodeGraphCommandInGroup("/bin/sh", ["-c", "sleep 30"], { cwd: process.cwd(), timeout: 60_000, signal: controller.signal });
     setTimeout(() => controller.abort(), 20);
-    await expect(pending).rejects.toThrow(/cancelled/i);
+    await expect(pending).rejects.toThrow(/cancelled|aborted/i);
     // Should reject promptly on abort, well under the 30s sleep.
     expect(Date.now() - started).toBeLessThan(5_000);
   });
@@ -305,4 +309,31 @@ describe("removeGitExcludeEntry", () => {
     expect(exists).toBe(false);
     await fs.rm(dir, { recursive: true });
   });
+});
+
+it("rejects commands terminated by a signal", async () => {
+  await expect(runCodeGraphCommandInGroup(process.execPath, ["-e", "process.kill(process.pid, 'SIGTERM')"], { cwd: fixture, timeout: 1000 })).rejects.toMatchObject({ signal: "SIGTERM" });
+});
+it("does not spawn a command with an already aborted signal", async () => {
+  const controller = new AbortController(); controller.abort(new Error("already cancelled"));
+  await expect(runCodeGraphCommandInGroup("/missing-command", [], { cwd: fixture, timeout: 1000, signal: controller.signal })).rejects.toThrow("already cancelled");
+});
+it("waits for a cancelled sync to settle before removing the index", async () => {
+  let entered!: () => void, finish!: () => void;
+  const started = new Promise<void>((resolve) => { entered = resolve; });
+  let signal: AbortSignal | undefined; const calls: string[] = [];
+  const manager = new CodeGraphManager(async () => "/fixture/codegraph", async (_command, args, options) => {
+    calls.push(args[0]!);
+    if (args[0] === "status") return { stdout: JSON.stringify({ initialized: true, pendingChanges: { modified: 1 } }), stderr: "" };
+    if (args[0] === "sync") { signal = options.signal; entered(); await new Promise<void>((resolve) => { finish = resolve; }); signal?.throwIfAborted(); }
+    return { stdout: "", stderr: "" };
+  });
+  const uri = toLocalProjectUri(fixture);
+  const sync = manager.ensureProjectStatus(uri, true); await started;
+  const removal = manager.removeProjectIndexes([uri]);
+  expect(signal?.aborted).toBe(true);
+  expect(calls).not.toContain("uninit");
+  expect((await manager.ensureProjectStatus(uri, true)).state).toBe("disabled");
+  finish(); await sync; await removal;
+  expect(calls).toEqual(["status", "sync", "uninit"]); expect(manager.hasActiveJobs()).toBe(false);
 });

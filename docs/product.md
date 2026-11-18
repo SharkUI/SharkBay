@@ -1,6 +1,8 @@
 # Product Notes
 
-SharkBay is a local-first project workbench for macOS. It is built for developers who keep multiple local repositories active and want one place to see repository state, open terminals, launch development services, inspect files, use local agent CLIs, and coordinate task context.
+SharkBay is a lightweight GitHub-native development coordination tool for individuals and small teams using coding-agent CLIs across multiple repositories. GitHub remains its identity, permission and collaboration source; local state represents execution context. The macOS client and browser workbench share a local Node runtime.
+
+The [current facts table](current-facts.md) defines current behavior and separates implemented capabilities from historical proposals.
 
 ## Current Product Surface
 
@@ -11,7 +13,7 @@ SharkBay is a local-first project workbench for macOS. It is built for developer
 - **Browser tabs**: open web URLs in embedded project browser tabs.
 - **TASKS tab**: show protocol status, install protocol, list task records, and inspect raw Markdown task details.
 - **Git tab**: show repository facts, dirty files, and recent reflog history.
-- **Files tab**: lazily browse project files and open editable files in a terminal editor.
+- **Files tab**: lazily browse project files and edit and save supported text files in the built-in CodeMirror editor.
 - **Settings**: manage configured projects, project status, and appearance theme.
 
 ## Project Discovery
@@ -26,9 +28,9 @@ Task Protocol does not replace Git commits or code review. It gives humans and a
 
 ## Product Boundaries
 
-- SharkBay is a desktop app, not a web service.
+- Electron and WebUI are clients of the same local runtime; browser access requires a host-issued connection grant, including on loopback and LAN.
 - It is desktop-first and currently has an `1180px` minimum window width.
 - It only operates on user-configured projects.
-- It does not run agents invisibly; agent CLIs launch in visible terminal tabs.
+- Agent CLIs run in runtime-owned terminal sessions that clients can observe; disconnecting a client does not stop those sessions.
 - It does not sync repository data unless a feature explicitly requires it, such as task protocol.
-- It does not provide a full IDE editor. File actions open terminal-based editor/diff commands.
+- It includes a focused text editor and terminal-based workflows; it does not implement a full IDE.

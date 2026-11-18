@@ -8,6 +8,22 @@ import type { TokenUsageCollector } from "../src/main/token-usage-collector.js";
 const directories: string[] = [];
 afterEach(async () => { await Promise.all(directories.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))); });
 describe("isolated session polling", () => {
+  it("retries the same byte position after a consumer fails", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "sharkbay-session-retry-")); directories.push(root);
+    const projects = path.join(root, "claude"); const project = path.join(projects, "fixture"); await mkdir(project, { recursive: true });
+    const first = JSON.stringify({ entrypoint: "cli", cwd: "/fixture/中文", sessionId: "fixture" }) + "\n";
+    await writeFile(path.join(project, "session.jsonl"), first + "{}\n");
+    const processLine = vi.fn().mockImplementationOnce(() => {}).mockImplementationOnce(() => { throw new Error("storage unavailable"); });
+    const watcher = new AgentSessionWatcher({ codexSessionsRoot: path.join(root, "codex"), claudeProjectsRoot: projects });
+    watcher.setUsageCollector({ processLine } as unknown as TokenUsageCollector);
+    try {
+      await expect(watcher.scan()).rejects.toThrow("storage unavailable");
+      await watcher.scan();
+      expect(processLine).toHaveBeenCalledTimes(3);
+      expect(processLine.mock.calls[2]![2]).toBe(Buffer.byteLength(first));
+      expect(processLine.mock.calls[2]![3]).toMatchObject({ projectPath: "/fixture/中文", sessionId: "fixture" });
+    } finally { await watcher.stop(); }
+  });
   it("handles append, UTF-8 byte positions, partial records and truncation", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "sharkbay-session-read-")); directories.push(root);
     const projects = path.join(root, "claude"); const project = path.join(projects, "fixture"); await mkdir(project, { recursive: true });

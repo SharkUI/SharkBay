@@ -1,0 +1,40 @@
+{
+  "node": "v24.14.1",
+  "system": "Darwin",
+  "os_release": "27.0.0",
+  "architecture": "arm64",
+  "dependencies": {
+    "typescript": {
+      "locked": "5.9.3",
+      "installed": "5.9.3"
+    },
+    "vitest": {
+      "locked": "1.6.1",
+      "installed": "1.6.1"
+    },
+    "vite": {
+      "locked": "5.4.21",
+      "installed": "5.4.21"
+    },
+    "electron": {
+      "locked": "29.4.6",
+      "installed": "29.4.6"
+    },
+    "better-sqlite3": {
+      "locked": "11.10.0",
+      "installed": "11.10.0"
+    },
+    "@lydell/node-pty": {
+      "locked": "1.2.0-beta.12",
+      "installed": "1.2.0-beta.12"
+    },
+    "ws": {
+      "locked": "8.23.0",
+      "installed": "8.23.0"
+    },
+    "electron-updater": {
+      "locked": "6.8.9",
+      "installed": "6.8.9"
+    }
+  }
+}

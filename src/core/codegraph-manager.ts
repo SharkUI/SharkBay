@@ -1,5 +1,5 @@
-import { execFile } from "node:child_process";
-import { spawn } from "node:child_process";
+import { runProcessCommand } from "../main/process-command.js";
+export { terminateProcessGroup } from "../main/process-command.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { CODEGRAPH_PLUGIN_ID } from "../plugins/bundled/codegraph-detector.js";
@@ -9,9 +9,6 @@ import { parseProjectUri } from "./project-uri.js";
 
 type CommandRunner = (command: string, args: string[], options: { cwd: string; timeout: number; signal?: AbortSignal }) => Promise<{ stdout: string; stderr: string }>;
 type CommandResolver = (command: string) => Promise<string | null>;
-
-// Grace period between SIGTERM and SIGKILL when terminating a CodeGraph process group.
-const processGroupKillGraceMs = 2_000;
 
 type CodeGraphStatusJson = {
   initialized?: boolean;
@@ -40,83 +37,7 @@ export function runCodeGraphCommandInGroup(
   args: string[],
   options: { cwd: string; timeout: number; signal?: AbortSignal },
 ): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: options.cwd,
-      env: buildCodeGraphCommandEnv(command),
-      detached: true,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    let stdout = "";
-    let stderr = "";
-    let settled = false;
-    const maxBuffer = 1024 * 1024;
-
-    const finish = (fn: () => void) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      fn();
-    };
-
-    const onTimeout = () => {
-      terminateProcessGroup(child.pid);
-      finish(() => reject(new Error(`CodeGraph command timed out after ${options.timeout}ms`)));
-    };
-
-    const onAbort = () => {
-      terminateProcessGroup(child.pid);
-      finish(() => reject(new Error("CodeGraph command cancelled")));
-    };
-
-    const timer = options.timeout > 0 ? setTimeout(onTimeout, options.timeout) : null;
-    const signal = options.signal;
-    if (signal) {
-      if (signal.aborted) { onAbort(); return; }
-      signal.addEventListener("abort", onAbort, { once: true });
-    }
-
-    function cleanup() {
-      if (timer) clearTimeout(timer);
-      if (signal) signal.removeEventListener("abort", onAbort);
-    }
-
-    child.stdout?.on("data", (chunk: Buffer) => {
-      if (stdout.length < maxBuffer) stdout += chunk.toString("utf8");
-    });
-    child.stderr?.on("data", (chunk: Buffer) => {
-      if (stderr.length < maxBuffer) stderr += chunk.toString("utf8");
-    });
-
-    child.on("error", (error) => finish(() => reject(error)));
-    child.on("close", (code) => {
-      if (code === 0 || code === null) finish(() => resolve({ stdout, stderr }));
-      else finish(() => reject(Object.assign(new Error(`CodeGraph command exited with code ${code}`), { stdout, stderr, code })));
-    });
-  });
-}
-
-/**
- * Send SIGTERM to the whole process group (negative PID), then escalate to
- * SIGKILL after a short grace period if anything is still alive.
- */
-export function terminateProcessGroup(pid: number | undefined, graceMs: number = processGroupKillGraceMs): void {
-  if (!pid) return;
-  try {
-    process.kill(-pid, "SIGTERM");
-  } catch {
-    // Group already gone, or single-process fallback below.
-    try { process.kill(pid, "SIGTERM"); } catch { /* already exited */ }
-    return;
-  }
-  setTimeout(() => {
-    try {
-      process.kill(-pid, "SIGKILL");
-    } catch {
-      // Group exited within the grace period — nothing left to kill.
-    }
-  }, graceMs).unref?.();
+  return runProcessCommand(command, args, { ...options, env: buildCodeGraphCommandEnv(command) });
 }
 
 const defaultRunner: CommandRunner = (command, args, options) => runCodeGraphCommandInGroup(command, args, options);
@@ -137,6 +58,7 @@ export class CodeGraphManager {
   // Cancellable maintenance (init/sync) jobs, keyed by projectUri. Read-only
   // status probes are short and are not tracked here.
   private readonly activeMaintenanceJobs = new Map<string, AbortController>();
+  private readonly removals = new Map<string, Promise<void>>();
 
   constructor(
     private readonly resolveCommand: CommandResolver = resolveCommandPath,
@@ -153,12 +75,13 @@ export class CodeGraphManager {
 
   /** Cancel an in-flight init/sync job for a single project, if any. */
   cancelProject(projectUri: string): void {
-    this.activeMaintenanceJobs.get(projectUri)?.abort();
+    this.activeMaintenanceJobs.get(projectUri)?.abort(new Error("CodeGraph indexing cancelled"));
   }
 
   /** Cancel all in-flight init/sync jobs. Used during app shutdown (issue #15). */
-  cancelAll(): void {
-    for (const controller of this.activeMaintenanceJobs.values()) controller.abort();
+  async cancelAll(): Promise<void> {
+    for (const controller of this.activeMaintenanceJobs.values()) controller.abort(new Error("CodeGraph indexing cancelled"));
+    await Promise.allSettled([...this.activeStatusJobs.values(), ...this.removals.values()]);
   }
 
   /** True when at least one init/sync job is currently running. */
@@ -167,11 +90,12 @@ export class CodeGraphManager {
   }
 
   private runStatusJob(mode: "read" | "ensure", projectUri: string, enabled: boolean): Promise<CodeGraphProjectStatus> {
+    if (this.removals.has(projectUri)) return Promise.resolve(status(projectUri, "disabled", "CodeGraph index is being removed"));
     const jobKey = `${mode}:${enabled ? "enabled" : "disabled"}:${projectUri}`;
     const existing = this.activeStatusJobs.get(jobKey);
     if (existing) return existing;
 
-    const controller = mode === "ensure" ? new AbortController() : null;
+    const controller = mode === "ensure" && enabled ? new AbortController() : null;
     if (controller) this.activeMaintenanceJobs.set(projectUri, controller);
 
     const job = this.readProjectStatusOnce(projectUri, enabled, mode, controller?.signal).finally(() => {
@@ -185,8 +109,20 @@ export class CodeGraphManager {
   }
 
   async removeProjectIndexes(projectUris: string[]): Promise<void> {
-    const codegraphPath = await this.resolveCommand("codegraph");
-    await Promise.all(projectUris.map((projectUri) => this.removeProjectIndex(projectUri, codegraphPath)));
+    for (const projectUri of projectUris) {
+      let removal = this.removals.get(projectUri);
+      if (!removal) {
+        this.cancelProject(projectUri);
+        const maintenance = this.activeStatusJobs.get(`ensure:enabled:${projectUri}`);
+        removal = (async () => {
+          await maintenance;
+          const codegraphPath = await this.resolveCommand("codegraph");
+          await this.removeProjectIndex(projectUri, codegraphPath);
+        })().finally(() => this.removals.delete(projectUri));
+        this.removals.set(projectUri, removal);
+      }
+      await removal;
+    }
   }
 
   private async readProjectStatusOnce(projectUri: string, enabled: boolean, mode: "read" | "ensure", signal?: AbortSignal): Promise<CodeGraphProjectStatus> {
@@ -201,21 +137,24 @@ export class CodeGraphManager {
     if (!codegraphPath) return status(projectUri, "not-installed", "CodeGraph CLI not installed");
 
     try {
-      let current = await this.readStatusJson(codegraphPath, parsed.path);
+      let current = await this.readStatusJson(codegraphPath, parsed.path, signal);
       if (!current.initialized) {
         if (mode === "read") {
           return status(projectUri, "uninitialized", "CodeGraph not initialized");
         }
+        signal?.throwIfAborted();
         await this.runCommand(codegraphPath, ["init", "-i", parsed.path], { cwd: parsed.path, timeout: 120_000, signal });
+        signal?.throwIfAborted();
         await ensureGitExcludeEntry(parsed.path, ".codegraph").catch(() => {});
-        current = await this.readStatusJson(codegraphPath, parsed.path);
+        current = await this.readStatusJson(codegraphPath, parsed.path, signal);
       }
       if (current.initialized && pendingChangeCount(current) > 0) {
         if (mode === "read") {
           return indexedStatus(projectUri, current);
         }
+        signal?.throwIfAborted();
         await this.runCommand(codegraphPath, ["sync", "-q", parsed.path], { cwd: parsed.path, timeout: 120_000, signal });
-        current = await this.readStatusJson(codegraphPath, parsed.path);
+        current = await this.readStatusJson(codegraphPath, parsed.path, signal);
       }
 
       if (!current.initialized) {
@@ -229,8 +168,8 @@ export class CodeGraphManager {
     }
   }
 
-  private async readStatusJson(codegraphPath: string, projectPath: string): Promise<CodeGraphStatusJson> {
-    const result = await this.runCommand(codegraphPath, ["status", "--json", projectPath], { cwd: projectPath, timeout: 20_000 });
+  private async readStatusJson(codegraphPath: string, projectPath: string, signal?: AbortSignal): Promise<CodeGraphStatusJson> {
+    const result = await this.runCommand(codegraphPath, ["status", "--json", projectPath], { cwd: projectPath, timeout: 20_000, signal });
     const parsed = JSON.parse(result.stdout) as unknown;
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as CodeGraphStatusJson : {};
   }

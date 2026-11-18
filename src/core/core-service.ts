@@ -131,9 +131,9 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
           priority: "interactive",
           timeoutMs: 5000,
           dedupeKey: `agent-list:${targetId}:${detector.pluginId}:${detector.id}`,
-          run: async () => {
+          run: async (signal) => {
             try {
-              return await detector.run(ctx);
+              return await detector.run({ ...ctx, run: (command, options) => ctx.run(command, { ...options, signal }) });
             } catch {
               return {};
             }
@@ -183,14 +183,15 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
       targetId: input.targetId,
       priority: "interactive",
       timeoutMs: 120000,
-      run: async () => {
+      run: async (signal) => {
         for (const step of recipe.steps) {
+          signal.throwIfAborted();
           if (step.kind !== "command") {
             pushLog("info", `${step.kind}: ${step.kind === "openUrl" ? step.url : step.markdown}`);
             continue;
           }
           pushLog("command", `$ ${step.command}`);
-          const commandResult = await provider.runCommand(runtime, input.targetId, step.command, { timeoutMs: 120000 });
+          const commandResult = await provider.runCommand(runtime, input.targetId, step.command, { timeoutMs: 120000, signal });
           pushLog("stdout", commandResult.stdout.trim());
           pushLog("stderr", commandResult.stderr.trim());
           if (commandResult.exitCode !== 0) {
@@ -199,16 +200,15 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
         }
         const verifyCommand = [recipe.verification.command, ...(recipe.verification.args ?? [])].map(shellQuote).join(" ");
         pushLog("command", `$ ${verifyCommand}`);
-        const verification = await provider.runCommand(runtime, input.targetId, verifyCommand, { timeoutMs: 10000 });
+        signal.throwIfAborted();
+        const verification = await provider.runCommand(runtime, input.targetId, verifyCommand, { timeoutMs: 10000, signal });
         pushLog("stdout", verification.stdout.trim());
         pushLog("stderr", verification.stderr.trim());
         const verified = verification.exitCode === 0;
-        if (verified) {
-          await this.readMachineProfile(runtime, input.targetId, { refresh: true });
-        }
         return { ok: verified, recipeId: recipe.id, targetId: input.targetId, logs, verified, ...(verified ? {} : { error: "Verification failed" }) };
       },
     });
+    if (result.verified) await this.readMachineProfile(runtime, input.targetId, { refresh: true });
     return result;
   }
 
@@ -301,9 +301,10 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
     }
     const config = await getConfiguredRoots(runtime);
     const safeRepo = await resolveProjectUri(input.projectUri, config.configuredRoots, config.configuredProjects);
+    const currentEnabled = this.isCodeGraphPluginEnabled();
     return mode === "ensure"
-      ? this.codeGraph.ensureProjectStatus(safeRepo.projectUri, enabled)
-      : this.codeGraph.readProjectStatus(safeRepo.projectUri, enabled);
+      ? this.codeGraph.ensureProjectStatus(safeRepo.projectUri, currentEnabled)
+      : this.codeGraph.readProjectStatus(safeRepo.projectUri, currentEnabled);
   }
 
   removeCodeGraphIndexes(runtime: IpcRuntimeLike, input: { projectUris: string[] }): Promise<void> {
@@ -311,8 +312,12 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
     return this.codeGraph.removeProjectIndexes(input.projectUris);
   }
 
-  cancelAllCodeGraphJobs(): void {
-    this.codeGraph.cancelAll();
+  cancelAllCodeGraphJobs(): Promise<void> {
+    return this.codeGraph.cancelAll();
+  }
+
+  stopJobs(): Promise<void> {
+    return this.scheduler.stop();
   }
 
   readMachineProfile(runtime: IpcRuntimeLike, targetId: string, options?: ProfileReadOptions): Promise<MachineProfile> {
@@ -329,6 +334,7 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
 
   applyDisabledPlugins(disabledIds: string[]): void {
     this.pluginHost.applyEnabledState(disabledIds);
+    this.profiles.invalidate();
   }
 
   listPlugins(): PluginSummary[] {
@@ -337,6 +343,7 @@ export class SharkBayCoreService extends EventEmitter<SharkBayCoreServiceEvents>
 
   setPluginEnabled(pluginId: string, enabled: boolean): PluginSummary[] {
     this.pluginHost.setEnabled(pluginId, enabled);
+    this.profiles.invalidate();
     return this.pluginHost.listPlugins();
   }
 

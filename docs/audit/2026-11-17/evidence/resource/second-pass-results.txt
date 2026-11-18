@@ -1,0 +1,10 @@
+fish fixture output: /fixture/custom-tools\n/fixture/final-bin\n
+command: SHELL=/tmp/sharkbay-audit-resource-repro/fishfixture/fish node /tmp/sharkbay-audit-resource-repro/fishfixture/probe.mjs
+exit=0
+{"case":"fish_paths","paths":["/fixture/final-bin"]}
+
+TypeScript two emit fixture /tmp/sharkbay-audit-build-repro
+first tsc exit=0; remove obsolete.ts; second tsc exit=0
+obsolete_source_exists: False
+obsolete_emitted_js_exists: True
+remaining_js: [current.js, obsolete.js]

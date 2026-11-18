@@ -1,12 +1,14 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { HookBridge } from "../src/main/hooks/bridge.js";
 import { ReasonixConnector } from "../src/main/hooks/connectors/reasonix.js";
 import { AgentHookStateManager } from "../src/main/hooks/state-manager.js";
 
 describe("Reasonix status hooks", () => {
+  const cleanups: Array<() => Promise<void>> = [];
+  afterEach(async () => { for (const cleanup of cleanups.splice(0)) await cleanup(); });
   it.each([
     ["SessionStart", "session_start"],
     ["SessionEnd", "session_end"],
@@ -55,13 +57,15 @@ describe("Reasonix status hooks", () => {
     });
   });
 
-  it("drives working, approval, and stopped project state", () => {
+  it("drives working, approval, and stopped project state", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "sharkbay-reasonix-state-"));
     const manager = new AgentHookStateManager();
     const states: string[] = [];
     manager.registerConnector(new ReasonixConnector());
     manager.on("stateChange", (event) => states.push(event.state));
 
-    const payload = { cwd: "/tmp/sharkbay-project", sharkbaySessionId: "session-123" };
+    cleanups.push(async () => { manager.dispose(); await fs.rm(root, { recursive: true, force: true }); });
+    const payload = { cwd: root, sharkbaySessionId: "session-123" };
     manager.handleMessage({ source: "reasonix", payload: { ...payload, event: "UserPromptSubmit", prompt: "Fix it" } });
     manager.handleMessage({ source: "reasonix", payload: { ...payload, event: "Notification", message: "approval needed: bash" } });
     manager.handleMessage({ source: "reasonix", payload: { ...payload, event: "Stop" } });

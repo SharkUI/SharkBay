@@ -1,0 +1,19 @@
+{
+  "boundary_regressions": {
+    "command": [
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/harness-boundaries.test.ts",
+      "--maxWorkers=1",
+      "--minWorkers=1",
+      "--no-file-parallelism"
+    ],
+    "exit_code": 0,
+    "passed": 23,
+    "source": "tool execution recorded after adding leaf swap regression"
+  },
+  "typecheck": {
+    "exit_code": 0,
+    "seconds": 1.345
+  }
+}

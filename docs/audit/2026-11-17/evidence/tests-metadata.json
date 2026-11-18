@@ -1,0 +1,1921 @@
+[
+  {
+    "file": "agent-clis.test.ts",
+    "lines": 87,
+    "imports": [
+      "node:fs",
+      "node:os",
+      "node:path",
+      "vitest",
+      "../src/main/agent-clis.js"
+    ],
+    "case_names": [
+      "finds executables in fallback directories when they are absent from PATH",
+      "finds executables installed into nvm versioned node bins",
+      "includes nvm versioned node bins in command search paths",
+      "prepends command search paths without duplicating existing PATH entries",
+      "ignores invalid command names",
+      "refreshes transcript discovery only after the interval, but always on a cold cache",
+      "uses fast session polling only shortly after transcript activity"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "agent-detector.test.ts",
+    "lines": 47,
+    "imports": [
+      "vitest",
+      "../src/plugins/bundled/agent-detector.js",
+      "../src/core/execution-provider.js"
+    ],
+    "case_names": [
+      "reports available and missing agent CLIs in machine profile shape"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "agent-session-reader.test.ts",
+    "lines": 31,
+    "imports": [
+      "node:fs/promises",
+      "node:os",
+      "node:path",
+      "vitest",
+      "../src/main/agent-clis.js",
+      "../src/main/token-usage-collector.js"
+    ],
+    "case_names": [
+      "handles append, UTF-8 byte positions, partial records and truncation"
+    ],
+    "mock": false,
+    "cleanup": true,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "agent-session-restore.test.ts",
+    "lines": 60,
+    "imports": [
+      "vitest",
+      "../src/shared/agent-session-restore.js"
+    ],
+    "case_names": [
+      "infers supported agents from task frontmatter agent names",
+      "builds agent-specific restore commands",
+      "prefers detected executable paths when available",
+      "includes configured launch flags before restore arguments"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "agent-status-attribution.test.ts",
+    "lines": 73,
+    "imports": [
+      "node:fs",
+      "node:events",
+      "node:os",
+      "node:path",
+      "vitest",
+      "../src/runtime/agent-runtime.js",
+      "../src/shared/types.js",
+      "../src/core/core-runtime.js"
+    ],
+    "case_names": [
+      "keeps exact terminal ids and prompts in reconnect snapshots for a resumed conversation",
+      "isolates live done and prompt history when two terminals resume one provider id",
+      "event",
+      "event",
+      "event",
+      "does not let a child session or an unowned Stop replace the terminal"
+    ],
+    "mock": true,
+    "cleanup": true,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "agent-status-coalescing.test.ts",
+    "lines": 157,
+    "imports": [
+      "node:fs",
+      "node:os",
+      "node:path",
+      "vitest",
+      "../src/main/hooks/state-manager.js",
+      "../src/main/hooks/connectors/claude-family.js",
+      "../src/main/hooks/program-status.js"
+    ],
+    "case_names": [
+      "reduces 200 tool updates to a leading and latest trailing notification/log without delaying internal state",
+      "\\n",
+      "coalesces OSC progress while preserving immediate blocked, waiting and outcome changes",
+      "preserves the event clock, turn identity and latest monotonic evidence during sustained activity",
+      "keeps delivering progress during a continuous burst instead of waiting for silence",
+      "publishes process evidence immediately even when the displayed completion is unchanged",
+      "publishes stale evidence without inventing a newer observation time",
+      "folds every child lifecycle event before coalescing its notifications",
+      "retains all asynchronous question answers before releasing the wait",
+      "does not resurrect an elicitation cleared before a pending update was sent",
+      "keeps independent terminal queues and discards updates after close, replacement or disposal"
+    ],
+    "mock": false,
+    "cleanup": true,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "agent-status.test.ts",
+    "lines": 567,
+    "imports": [
+      "node:fs",
+      "node:os",
+      "node:path",
+      "vitest",
+      "../src/main/hooks/state-manager.js",
+      "../src/main/hooks/connectors/claude-family.js",
+      "../src/main/hooks/program-status.js",
+      "../src/main/hooks/codex-turn-reader.js",
+      "../src/shared/agent-status.js"
+    ],
+    "case_names": [
+      "clears the dialog even when a hook and OSC boundary agree on initial idle",
+      "binds the first elicitation to an exact terminal",
+      "accepts a new elicitation after OSC completion while retaining the old hook isolation",
+      "keeps separate elicitation requests pending and preserves intervening completion",
+      "expires elicitation evidence without destroying the displaced idle fact",
+      "prioritizes project session states strictly by red, yellow, blue, green, then gray",
+      "tracks all async questions beyond PostToolUse and unrelated work",
+      "does not release Claude",
+      "keeps children live after the lead Stop and clears only on their end",
+      "does not reopen OSC completion for an old hook child roster, including after a repeated lead Stop",
+      "UserPromptSubmit",
+      "Stop",
+      "UserPromptSubmit",
+      "Stop",
+      "distinguishes initial idle, failure and interrupt; old same-turn tool hooks cannot reopen it",
+      "keeps background shells in monitoring after the lead finishes, then settles on an empty inventory",
+      "ignores a delayed Stop from the previous turn after a new prompt",
+      "reports startup failure even when no provider hook ever arrived",
+      "expires evidence without emitting a completion and revives on a new observation",
+      "preserves precise terminal identity independently of PID ancestry",
+      "uses sustained OSC disagreement only after hook silence; old working cannot reopen done",
+      "does not let an old OSC wait reopen a completed hook turn and then turn it working",
+      "still accepts an OSC wait from work begun after a completed hook turn",
+      "does not reopen a completed hook turn for children held by the program roster",
+      "retains the current provider turn when OSC takes over, rejecting an old Stop",
+      "keeps watching the current rollout after OSC fallback",
+      "keeps the lead",
+      "processes valid async answers even when another reply item is malformed",
+      "does not let OpenCode",
+      "arbitrates against the combined async-wait state rather than only the working lead",
+      "treats a normalized new session as idle even without a connector boundary flag",
+      "does not treat Claude",
+      "cancels an OSC disagreement if the program agrees again before the silence deadline",
+      "clears a skipped async question without waiting for a nonexistent answer hook",
+      "fills a missing Codex Stop from an exact current-turn rollout",
+      "clears a full child-only roster and admits a new root afterwards",
+      "tracks ordered working transitions across OSC 9999, waits and completion",
+      "preserves native OSC verdicts, lead state and monitoring without leaking a live verdict",
+      "does not let child work hold a program invocation boundary open",
+      "keeps the last result at the shell prompt but does not give it to the next invocation",
+      "does not turn unrelated shell markers or resets into agent completion evidence",
+      "releases live records at a shell prompt and handles a split full terminal reset",
+      "parses split OSC frames, auth blocks and question waits without reading display text",
+      "answers a program-status capability probe once on the host",
+      "folds child work into root status and releases it when the child completes",
+      "ignores a completed rollout for another turn and supports appended partial records",
+      "retains observed completion for a turn whose prompt hook arrives later",
+      "finds recent completion in a large rollout without replaying its full history",
+      "carries exact terminal identity from the generated CLI through the Unix socket",
+      "\\n"
+    ],
+    "mock": false,
+    "cleanup": true,
+    "temp": true,
+    "process": true
+  },
+  {
+    "file": "app-update-lifecycle.test.ts",
+    "lines": 129,
+    "imports": [
+      "node:events",
+      "vitest",
+      "../src/shared/ipc-channels.js"
+    ],
+    "case_names": [
+      "checks automatically but only quits after an explicit ready-update request",
+      "update-downloaded",
+      "waits for desktop cleanup before installing and ignores repeated quit events",
+      "update-downloaded",
+      "before-quit",
+      "before-quit",
+      "before-quit",
+      "preserves normal quit and bounds cleanup time",
+      "before-quit",
+      "rejects update controls from other windows or subframes"
+    ],
+    "mock": true,
+    "cleanup": true,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "app-updates.test.ts",
+    "lines": 121,
+    "imports": [
+      "node:events",
+      "vitest",
+      "../src/main/app-updates.js"
+    ],
+    "case_names": [
+      "only enables stable upgrades and automatic download/install on normal quit",
+      "does not check or install in development",
+      "checks at startup and every four hours, and stops polling on exit",
+      "keeps a single check/download in flight and makes a manual request visible",
+      "update-not-available",
+      "reports progress, waits for the download, and never restarts automatically",
+      "update-available",
+      "download-progress",
+      "update-downloaded",
+      "does not install before an update is downloaded",
+      "update-available",
+      "handles a rejected download and retries on the next check",
+      "update-available",
+      "error",
+      "update-not-available",
+      "keeps background check failures quiet and reports native validation failures",
+      "update-downloaded",
+      "error"
+    ],
+    "mock": true,
+    "cleanup": true,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "application-menu.test.ts",
+    "lines": 116,
+    "imports": [
+      "electron",
+      "vitest",
+      "../src/main/application-menu.js"
+    ],
+    "case_names": [
+      "puts Settings in the macOS app menu",
+      "puts New Terminal Tab in the macOS File menu",
+      "keeps Settings reachable from File outside macOS",
+      "keeps New Terminal Tab reachable from File outside macOS",
+      "puts Find with CmdOrCtrl+F in the Edit menu"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "artifact-runs.test.ts",
+    "lines": 167,
+    "imports": [
+      "node:fs",
+      "node:path",
+      "vitest",
+      "../src/main/artifact-runs.js",
+      "../src/main/tasks.js",
+      "../src/shared/types.js",
+      "./helpers.js"
+    ],
+    "case_names": [
+      "starts an Artifact agent, validates its page, opens it, and notifies the parent",
+      "marks the run failed and removes an empty reservation when the Artifact terminal exits",
+      "-"
+    ],
+    "mock": false,
+    "cleanup": true,
+    "temp": true,
+    "process": true
+  },
+  {
+    "file": "browser-tab-close.test.ts",
+    "lines": 69,
+    "imports": [
+      "node:fs",
+      "node:vm",
+      "typescript",
+      "vitest"
+    ],
+    "case_names": [
+      "waits for browser close to finish before removing the tab",
+      "reports close errors and still removes a stale tab"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "browser-tabs.test.ts",
+    "lines": 148,
+    "imports": [
+      "vitest",
+      "../src/main/browser-tabs.js"
+    ],
+    "case_names": [
+      "keeps web and file URLs and falls back to blank for unsafe schemes",
+      "scales renderer CSS bounds to BrowserView bounds",
+      "falls back to unscaled bounds for invalid zoom factors",
+      "opens requested new windows as internal browser sessions",
+      "allows certificate errors only for private or local HTTPS hosts",
+      "allows certificate errors only from managed browser views"
+    ],
+    "mock": true,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "build-config.test.ts",
+    "lines": 84,
+    "imports": [
+      "vitest",
+      "node:fs",
+      "node:path",
+      "node:url",
+      "../vite.config.js"
+    ],
+    "case_names": [
+      "uses relative renderer asset paths for packaged file URLs",
+      "does not emit renderer source maps by default",
+      "excludes non-runtime files from packaged app contents",
+      "copies dock icons and the independent Node runtime",
+      "signs the macOS app with Apple Events automation support"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "caffeinate-mode.test.ts",
+    "lines": 19,
+    "imports": [
+      "vitest",
+      "../src/shared/caffeinate.js"
+    ],
+    "case_names": [
+      "defaults to auto and keeps an explicit mode over the legacy setting"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "caffeinate.test.ts",
+    "lines": 81,
+    "imports": [
+      "node:events",
+      "node:child_process",
+      "vitest",
+      "../src/main/caffeinate.js"
+    ],
+    "case_names": [
+      "starts one parent-bound assertion and releases it when work stops",
+      "spawn",
+      "does not let an old process exit clear a new assertion",
+      "spawn",
+      "spawn",
+      "exit",
+      "reports spawn failure and allows a later activation to retry",
+      "error",
+      "spawn",
+      "does not spawn a macOS command on other platforms"
+    ],
+    "mock": true,
+    "cleanup": true,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "codegraph-manager.test.ts",
+    "lines": 308,
+    "imports": [
+      "node:fs",
+      "node:os",
+      "node:path",
+      "vitest",
+      "../src/core/codegraph-manager.js",
+      "../src/core/project-uri.js"
+    ],
+    "case_names": [
+      "prepends the resolved CLI directory to PATH for npm shims",
+      ":",
+      "reads status without initializing an enabled local project",
+      "initializes and syncs an enabled local project when ensuring status",
+      "reports not installed without running project commands",
+      "passes an abort signal into init/sync commands and tracks active jobs",
+      "cancelling an in-flight ensure aborts its signal and returns a cancelled status",
+      "cancelAll aborts every active maintenance job",
+      "captures stdout from a real detached process",
+      "terminates the process group when the abort signal fires",
+      "rejects with a timeout error and kills the process when the timeout elapses",
+      "creates exclude file with the entry when file does not exist",
+      "appends entry to existing exclude file",
+      "does not duplicate entry if already present",
+      "recognizes entry with trailing slash as already present",
+      "handles file without trailing newline",
+      "creates .git/info directory if missing",
+      "removes the entry from exclude file",
+      "removes entry with trailing slash",
+      "does nothing when entry is not present",
+      "does nothing when exclude file does not exist"
+    ],
+    "mock": false,
+    "cleanup": true,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "codegraph-manual-index.test.ts",
+    "lines": 20,
+    "imports": [
+      "node:fs",
+      "typescript",
+      "vitest"
+    ],
+    "case_names": [
+      "does not invoke indexing from any automatic React effect"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "codex-input-state.test.ts",
+    "lines": 199,
+    "imports": [
+      "vitest",
+      "../src/renderer/codex-input-state.js"
+    ],
+    "case_names": [
+      "detects a collapsed asynchronous question while Codex still reports Working",
+      "keeps the waiting state while the question is open",
+      "detects multiple pending questions",
+      "recognizes the expanded footer when a narrow terminal wraps it",
+      "recognizes a pending question above unused terminal rows",
+      "clears the waiting state once the live question footer disappears",
+      "ignores question footers in scrollback and ordinary text mentioning questions",
+      "does not classify a permission approval as a user question",
+      "recognizes the running indicator shown in the reported terminal",
+      "does not infer completion from prose and a bare idle prompt",
+      "uses a new progress indicator after an earlier turn completed",
+      "preserves a fresh working hook while the old completion footer is still being redrawn",
+      "keeps working when queued input pushes the progress indicator above the last eight lines",
+      "recognizes working above unused rows in the live terminal",
+      "reports approval for unanswered questions despite a simultaneous Working indicator",
+      "leaves hook state intact when no live Codex footer is available",
+      "keeps authoritative working when a partial redraw exposes only the input prompt"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "codex-sessions.test.ts",
+    "lines": 59,
+    "imports": [
+      "vitest",
+      "../src/main/agent-clis.js"
+    ],
+    "case_names": [
+      "binds codex-tui sessions by cwd and summarizes assistant messages",
+      "ignores non-tui codex logs and system prompt content",
+      "binds claude cli transcripts by cwd and summarizes assistant content"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "config-migration.test.ts",
+    "lines": 109,
+    "imports": [
+      "node:fs",
+      "node:path",
+      "vitest",
+      "../src/main/config.js",
+      "./helpers.js"
+    ],
+    "case_names": [
+      "defaults new configs to the Morning appearance",
+      "persists missing modern config fields and preserves local roots",
+      "preserves manually disabled status change notifications",
+      "persists and clears terminal appearance settings"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "core-agent-list.test.ts",
+    "lines": 83,
+    "imports": [
+      "vitest",
+      "../src/core/core-service.js",
+      "../src/providers/local/local-provider.js",
+      "../src/plugins/plugin-host.js",
+      "./helpers.js"
+    ],
+    "case_names": [
+      "builds UI agent buttons from agent detection plugins",
+      "refreshes local agent detection instead of reusing stale missing CLI cache"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": true,
+    "process": true
+  },
+  {
+    "file": "core-detectors.test.ts",
+    "lines": 38,
+    "imports": [
+      "vitest",
+      "../src/plugins/bundled/core-detectors.js",
+      "../src/core/execution-provider.js"
+    ],
+    "case_names": [
+      "ignores shell startup control sequences when parsing machine profile output"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "core-provider-registry.test.ts",
+    "lines": 30,
+    "imports": [
+      "vitest",
+      "../src/core/project-uri.js",
+      "../src/core/provider-registry.js",
+      "../src/core/execution-provider.js"
+    ],
+    "case_names": [
+      "parses final project URI target identities",
+      "routes project URIs to registered providers"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "core-runtime.test.ts",
+    "lines": 26,
+    "imports": [
+      "vitest",
+      "../src/core/core-runtime.js",
+      "../src/shared/types.js"
+    ],
+    "case_names": [
+      "disposes once and waits for active terminal exit",
+      "terminalExit",
+      "still closes terminals when cancelling background jobs fails"
+    ],
+    "mock": true,
+    "cleanup": true,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "dev-services.test.ts",
+    "lines": 156,
+    "imports": [
+      "node:fs",
+      "node:path",
+      "vitest",
+      "../src/main/dev-services.js",
+      "../src/core/project-uri.js",
+      "./helpers.js"
+    ],
+    "case_names": [
+      "discovers a root package.json dev script",
+      "discovers root dev:* scripts with script-key labels",
+      "discovers direct child dev scripts with command labels",
+      "discovers Python virtualenv CLI web commands",
+      "does not expose Python CLI web commands without an installed virtualenv script",
+      "uses package manager metadata and lockfiles for the dev command"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "diagnostics.test.ts",
+    "lines": 58,
+    "imports": [
+      "vitest",
+      "../src/core/diagnostics.js",
+      "../src/core/job-scheduler.js"
+    ],
+    "case_names": [
+      "records completed job and derives detector aggregate",
+      "tracks cache hits/misses per category",
+      "machine",
+      "ignores jobs that did not start",
+      "counts only failing jobs as failures in aggregates"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "file-boundaries.test.ts",
+    "lines": 29,
+    "imports": [
+      "node:fs/promises",
+      "node:path",
+      "node:os",
+      "vitest",
+      "../src/main/path-safety.js",
+      "../src/main/file-content.js",
+      "../src/main/config.js"
+    ],
+    "case_names": [
+      "rejects new files below a symlinked parent outside the project",
+      "rejects the project root as a file operation target",
+      "does not swallow rename validation or accept sibling paths sharing the project prefix"
+    ],
+    "mock": false,
+    "cleanup": true,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "git.test.ts",
+    "lines": 41,
+    "imports": [
+      "vitest",
+      "../src/main/git.js",
+      "./helpers.js",
+      "node:child_process",
+      "node:util",
+      "node:path"
+    ],
+    "case_names": [
+      "returns compact dirty file rows from porcelain output",
+      "keeps the first dirty path intact when status starts with an unstaged marker"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": true,
+    "process": true
+  },
+  {
+    "file": "github.test.ts",
+    "lines": 208,
+    "imports": [
+      "vitest",
+      "../src/main/github.js"
+    ],
+    "case_names": [
+      "requests the latest three open items while retaining full repository totals",
+      "keeps PRs available when issue listing fails",
+      "returns zero totals when gh is unavailable",
+      "offers Homebrew installation when gh is missing, quoting the resolved executable",
+      "leaves installation to the official site when Homebrew is unavailable",
+      "checks authentication with the resolved CLI, without exposing its output",
+      "offers login when gh is installed but authentication fails",
+      "parses open issues with author login and label names",
+      "drops issue rows missing a number or url",
+      "parses pull requests with draft and review decision",
+      "returns the first release as the latest, falling back to tag for name",
+      "returns null release for empty or malformed output"
+    ],
+    "mock": true,
+    "cleanup": false,
+    "temp": false,
+    "process": true
+  },
+  {
+    "file": "harness.test.ts",
+    "lines": 731,
+    "imports": [
+      "node:child_process",
+      "node:fs",
+      "node:path",
+      "node:util",
+      "vitest",
+      "../src/main/harness.js",
+      "../src/core/core-service.js",
+      "../src/providers/local/local-provider.js",
+      "../src/plugins/bundled/codegraph-detector.js",
+      "../src/plugins/plugin-host.js",
+      "../src/shared/types.js",
+      "./helpers.js"
+    ],
+    "case_names": [
+      "writes only local harness files and ignores the sharkbay directory",
+      "resolves Reasonix session id from the launch environment",
+      "returns restored session id directly from the restore environment",
+      "resolves Codex session id from the Codex thread environment",
+      "prefers the current Codex thread over a stale restored session id",
+      "keeps another agent",
+      "resolves Codex session id from an ancestor transcript with current metadata",
+      "resolves OpenCode session id from the active process logs",
+      "installs without touching existing user root instruction files",
+      "installs into a directory that is not a git worktree",
+      "reports harness drift and updates managed files only when requested",
+      "injects a protocol bootstrap prompt without creating agent entry files",
+      "builds a status-specific, read-only review prompt",
+      "injects a review prompt override instead of the bootstrap prompt",
+      "reserves a short, unique review report path per task tag",
+      "builds an artifact-generation prompt",
+      "injects an artifact prompt override instead of the bootstrap prompt",
+      "reserves a short, unique artifact path per task tag",
+      "passes an artifact payload through to terminal creation",
+      "passes CodeGraph plugin enabled state into terminal bootstrap preparation",
+      "passes a review payload through to terminal creation",
+      "keeps existing user entry files unchanged during bootstrap preparation",
+      "uses agent-specific bootstrap command arguments",
+      "skips bootstrap injection when protocol is not installed or the agent is unsupported",
+      "uninstalls local harness files and removes only SharkBay exclude entries",
+      "restores preexisting local exclude content exactly",
+      "preserves user exclude edits made after install while removing SharkBay",
+      "cleans local exclude content without touching unrelated lines"
+    ],
+    "mock": false,
+    "cleanup": true,
+    "temp": true,
+    "process": true
+  },
+  {
+    "file": "hook-sessions.test.ts",
+    "lines": 140,
+    "imports": [
+      "node:fs",
+      "node:os",
+      "node:path",
+      "vitest",
+      "../src/main/hooks/sessions.js"
+    ],
+    "case_names": [
+      "backfills model from ~/.kiro/sessions/cli when hook payload has none",
+      "leaves model null when no Kiro session file exists",
+      "backfills model from transcript_path (last model in transcript)",
+      "excludes sessions where session_created_reason is subagent",
+      "keeps sessions when kiro session file does not exist",
+      "keeps sessions with subagent reason but no parent_session_id"
+    ],
+    "mock": true,
+    "cleanup": false,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "hook-snapshots.test.ts",
+    "lines": 35,
+    "imports": [
+      "vitest",
+      "../src/renderer/hook-snapshots.js",
+      "../src/shared/agent-status.js"
+    ],
+    "case_names": [
+      "orders live and hydrated evidence by authority revision even when the clock moves backwards",
+      "does not copy a newer legacy done row to a stale restored alias in another terminal",
+      "does not guess a restored alias shared by two tabs",
+      "rejects cross-project or cross-agent attribution even with a matching terminal id",
+      "keeps two distinct terminal rows for the same resumed provider conversation"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "hooks-connectors.test.ts",
+    "lines": 137,
+    "imports": [
+      "node:fs",
+      "node:os",
+      "node:path",
+      "vitest",
+      "../src/main/hooks/connectors/claude-family.js",
+      "../src/main/hooks/state-manager.js",
+      "../src/main/hooks/connectors/gemini.js",
+      "../src/main/hooks/connectors/kiro.js",
+      "../src/main/hooks/connectors/cursor.js",
+      "../src/main/hooks/connectors/reasonix.js",
+      "../src/main/hooks/connectors/opencode.js"
+    ],
+    "case_names": [
+      "uninstalls every Claude managed event while preserving user hooks and detects extra-event remnants",
+      "installs Codex hooks using Codex inline TOML matcher groups",
+      "normalizes Codex Interrupt as the end of the active turn",
+      "stops a working Codex session when its turn is interrupted"
+    ],
+    "mock": false,
+    "cleanup": true,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "install-tool.test.ts",
+    "lines": 165,
+    "imports": [
+      "vitest",
+      "../src/core/core-service.js",
+      "../src/providers/local/local-provider.js",
+      "../src/plugins/plugin-host.js",
+      "../src/plugins/bundled/agent-detector.js",
+      "../src/core/execution-provider.js",
+      "../src/shared/types.js",
+      "./helpers.js"
+    ],
+    "case_names": [
+      "has install recipes for every detected bundled agent CLI",
+      "runs install recipe steps, verifies, and refreshes machine profile",
+      "runs the Kiro script recipe and verifies the detected command",
+      "lists recipes compatible with target kind, OS, and preconditions",
+      "emits installLog events with installId/recipeId/stream for each step",
+      "rejects install recipes that do not support the target OS"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": true,
+    "process": true
+  },
+  {
+    "file": "ipc-channels.test.ts",
+    "lines": 110,
+    "imports": [
+      "vitest",
+      "../src/shared/ipc-channels.js"
+    ],
+    "case_names": [
+      "exposes only the current generic workbench channels"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": true
+  },
+  {
+    "file": "island-auto-expand.test.ts",
+    "lines": 221,
+    "imports": [
+      "node:fs",
+      "node:vm",
+      "vitest"
+    ],
+    "case_names": [
+      "click",
+      "mouseenter",
+      "does not expand for a pre-existing stopped session on startup",
+      "does not treat working to unknown as an attention event",
+      "keeps completed execution after acknowledgement while canceling its pending reminder",
+      "cancels pending expansion when the session closes",
+      "keeps the deadline when only prompt metadata changes",
+      "waits independently for each session, ignoring a later stopped pulse",
+      "recognizes a real stop after a temporary unknown gap",
+      "restarts confirmation when stopped changes to approval",
+      "collapses an automatic panel once only working and unknown remain",
+      "preserves a manually opened panel when sessions are working",
+      "keeps an automatic panel open after the user hovers to inspect it",
+      "does not reopen a panel dismissed during confirmation",
+      "cancels a delayed window shrink when the panel reopens"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "job-scheduler.test.ts",
+    "lines": 54,
+    "imports": [
+      "vitest",
+      "../src/core/job-scheduler.js"
+    ],
+    "case_names": [
+      "dedupes matching jobs",
+      "limits concurrency per target"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "jsonl-reader.test.ts",
+    "lines": 43,
+    "imports": [
+      "node:fs/promises",
+      "node:os",
+      "node:path",
+      "vitest",
+      "../src/main/jsonl-reader.js"
+    ],
+    "case_names": [
+      "preserves UTF-8, CRLF byte offsets and unfinished records across appends",
+      "bounds a huge unfinished line and resumes at the following record",
+      "honors a snapshot boundary and cancellation without consuming later data"
+    ],
+    "mock": false,
+    "cleanup": true,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "local-provider.test.ts",
+    "lines": 47,
+    "imports": [
+      "node:fs",
+      "node:path",
+      "vitest",
+      "../src/main/config.js",
+      "../src/core/project-uri.js",
+      "../src/providers/local/local-provider.js",
+      "./helpers.js"
+    ],
+    "case_names": [
+      "exposes local files and project profile through the final provider interface",
+      "uses the shared command path resolver for machine probe lookup"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "node-detector.test.ts",
+    "lines": 61,
+    "imports": [
+      "node:fs",
+      "node:path",
+      "vitest",
+      "../src/main/config.js",
+      "../src/core/project-uri.js",
+      "../src/core/core-service.js",
+      "../src/providers/local/local-provider.js",
+      "./helpers.js"
+    ],
+    "case_names": [
+      "detects package manager, framework hints, commands, and services"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "opencode-hooks.test.ts",
+    "lines": 155,
+    "imports": [
+      "node:fs",
+      "node:os",
+      "node:path",
+      "vitest",
+      "../src/main/hooks/connectors/opencode.js"
+    ],
+    "case_names": [
+      "maps session.created to session_start",
+      "maps session.status.busy to prompt (working)",
+      "maps session.idle to turn_end",
+      "maps tool running to tool_start",
+      "maps tool completed to tool_end",
+      "maps tool error to tool_end",
+      "maps permission.updated to attention",
+      "returns null for unknown event types",
+      "returns null for non-object input",
+      "returns null when event_type is missing",
+      "installs plugin and registers in config"
+    ],
+    "mock": false,
+    "cleanup": true,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "path-safety.test.ts",
+    "lines": 26,
+    "imports": [
+      "node:fs",
+      "node:path",
+      "vitest",
+      "./helpers.js",
+      "../src/main/path-safety.js"
+    ],
+    "case_names": [
+      "uses path-segment containment instead of string prefix matching",
+      "rejects traversal outside configured projects"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "plugin-host.test.ts",
+    "lines": 56,
+    "imports": [
+      "vitest",
+      "../src/plugins/plugin-host.js",
+      "../src/plugins/bundled-plugins.js"
+    ],
+    "case_names": [
+      "filters detectors by plugin enabled state",
+      "reflects enabled state in plugin summaries",
+      "loads all bundled plugins with non-empty manifests"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "plugin-manifest.test.ts",
+    "lines": 46,
+    "imports": [
+      "vitest",
+      "../src/plugins/plugin-manifest.js"
+    ],
+    "case_names": [
+      "parses marketplace-ready plugin metadata and permissions",
+      "rejects invalid plugin manifests"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "profile-cache.test.ts",
+    "lines": 29,
+    "imports": [
+      "vitest",
+      "../src/storage/profile-cache.js",
+      "./helpers.js",
+      "../src/shared/types.js"
+    ],
+    "case_names": [
+      "stores profile cache under runtime user data"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": true,
+    "process": true
+  },
+  {
+    "file": "profile-lock.test.ts",
+    "lines": 91,
+    "imports": [
+      "node:child_process",
+      "node:events",
+      "node:fs/promises",
+      "node:os",
+      "node:path",
+      "typescript",
+      "vitest",
+      "../src/runtime/profile-lock.js",
+      "./lock.mjs"
+    ],
+    "case_names": [
+      "recovers both locks after their owner crashes",
+      "allows only one concurrent replacement owner",
+      "keeps a single owner when independent processes recover the same crash",
+      "keeps live, malformed and permission-denied owners locked",
+      "rolls back its data lock if a shared config still has a live owner"
+    ],
+    "mock": true,
+    "cleanup": true,
+    "temp": true,
+    "process": true
+  },
+  {
+    "file": "profile-orchestrator.test.ts",
+    "lines": 153,
+    "imports": [
+      "node:fs",
+      "node:path",
+      "vitest",
+      "../src/main/config.js",
+      "../src/core/project-uri.js",
+      "../src/core/core-service.js",
+      "../src/providers/local/local-provider.js",
+      "../src/plugins/plugin-host.js",
+      "./helpers.js"
+    ],
+    "case_names": [
+      "runs bundled project detectors through provider probe contexts",
+      "runs bundled machine detectors through provider command contexts",
+      "keeps project profile usable when a detector fails",
+      "invalidates project profile cache when a manifest changes",
+      "uses cached profiles unless refresh is requested"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": true,
+    "process": true
+  },
+  {
+    "file": "project-files.test.ts",
+    "lines": 80,
+    "imports": [
+      "node:fs",
+      "node:path",
+      "vitest",
+      "../src/main/project-files.js",
+      "../src/core/project-uri.js",
+      "./helpers.js"
+    ],
+    "case_names": [
+      "returns a sorted editable project file tree inside configured projects",
+      "rejects repositories outside configured projects",
+      "classifies common editable file names and extensions"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "project-icons.test.ts",
+    "lines": 37,
+    "imports": [
+      "node:fs",
+      "node:path",
+      "vitest",
+      "../src/main/project-icons.js",
+      "./helpers.js"
+    ],
+    "case_names": [
+      "returns empty array for non-existent project",
+      "discovers icons in a bare pnpm workspace package dir",
+      "expands package.json workspace globs"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "prompt-search.test.ts",
+    "lines": 54,
+    "imports": [
+      "vitest",
+      "../src/renderer/prompt-search.js"
+    ],
+    "case_names": [
+      "returns an empty list for blank prompts",
+      "uses the whole first line when it is short",
+      "takes the first non-empty line and trims it",
+      "caps the primary key so it fits within one row (width - margin), and adds shorter fallbacks",
+      "shrinks the primary key on narrow terminals",
+      "keeps a minimum key width even on very narrow terminals",
+      "dedupes keys when the line is shorter than a fallback width",
+      "falls back to a finite width (as if cols=80) when cols is not finite"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "prompt-store.test.ts",
+    "lines": 74,
+    "imports": [
+      "vitest",
+      "node:fs",
+      "node:os",
+      "node:path",
+      "../src/main/hooks/prompt-store.js"
+    ],
+    "case_names": [
+      "records and returns the latest prompt via get()",
+      "returns full history via getHistory()",
+      "normalizes whitespace and ignores empty prompts",
+      "persists history across instances (survives restart)",
+      "migrates old single-prompt format",
+      "truncates very long prompts"
+    ],
+    "mock": false,
+    "cleanup": true,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "python-detector.test.ts",
+    "lines": 27,
+    "imports": [
+      "node:fs",
+      "node:path",
+      "vitest",
+      "../src/main/config.js",
+      "../src/core/project-uri.js",
+      "../src/core/core-service.js",
+      "../src/providers/local/local-provider.js",
+      "./helpers.js"
+    ],
+    "case_names": [
+      "identifies a uv project and surfaces lock/manifest"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "reasonix-hooks.test.ts",
+    "lines": 139,
+    "imports": [
+      "node:fs",
+      "node:os",
+      "node:path",
+      "vitest",
+      "../src/main/hooks/bridge.js",
+      "../src/main/hooks/connectors/reasonix.js",
+      "../src/main/hooks/state-manager.js"
+    ],
+    "case_names": [
+      "preserves Reasonix tool payloads",
+      "drives working, approval, and stopped project state",
+      "installs and removes only SharkBay-managed Reasonix hooks",
+      "adds SharkBay"
+    ],
+    "mock": false,
+    "cleanup": true,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "renderer-workflow.test.ts",
+    "lines": 76,
+    "imports": [
+      "vitest",
+      "../src/renderer/workflow.js"
+    ],
+    "case_names": [
+      "skips terminal resize dimensions from hidden or unmeasured surfaces",
+      "resolves selected candidate by id",
+      "resolves project row hook activity from candidate or path keys",
+      "prefers local service URLs and keeps them over later documentation links",
+      "observes service URLs across streamed terminal chunks",
+      "formats session model names without collapsing Codex model versions",
+      "keeps URLs intact when ANSI styling splits host and port"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "review-control-server.test.ts",
+    "lines": 132,
+    "imports": [
+      "node:child_process",
+      "node:fs",
+      "node:util",
+      "vitest",
+      "../src/main/review-control-server.js",
+      "./helpers.js"
+    ],
+    "case_names": [
+      "serves the deployed CLI over an independent request-response socket"
+    ],
+    "mock": false,
+    "cleanup": true,
+    "temp": true,
+    "process": true
+  },
+  {
+    "file": "review-runs.test.ts",
+    "lines": 337,
+    "imports": [
+      "node:fs",
+      "node:path",
+      "vitest",
+      "../src/main/review-runs.js",
+      "../src/main/tasks.js",
+      "../src/shared/types.js",
+      "./helpers.js"
+    ],
+    "case_names": [
+      "notifies the task owner when a GUI Review resolves its live Terminal",
+      "does not notify a GUI Review mapping outside the task project",
+      "starts a GUI Review without notification when no live owner mapping exists",
+      "reports a UI-specific missing reviewer error",
+      "defaults to the non-Codex parent agent and allows an explicit installed reviewer",
+      "validates completion and retries parent notification after a draft clears",
+      "fails a running Review when its reviewer terminal exits",
+      "removes the reserved empty report when reviewer startup fails",
+      "-"
+    ],
+    "mock": false,
+    "cleanup": true,
+    "temp": true,
+    "process": true
+  },
+  {
+    "file": "runtime-packaging.test.ts",
+    "lines": 30,
+    "imports": [
+      "node:fs/promises",
+      "node:module",
+      "node:os",
+      "node:path",
+      "vitest"
+    ],
+    "case_names": [
+      "runtime resources include production dependencies through Electron Builder"
+    ],
+    "mock": false,
+    "cleanup": true,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "scanner.test.ts",
+    "lines": 116,
+    "imports": [
+      "node:fs",
+      "node:child_process",
+      "node:path",
+      "node:util",
+      "vitest",
+      "./helpers.js",
+      "../src/main/config.js",
+      "../src/main/scanner.js"
+    ],
+    "case_names": [
+      "finds git repositories in configured roots",
+      "ignores directories without .git",
+      "reports unavailable roots",
+      "discovers project dev services from package.json scripts",
+      "adds git dirty worktree state to project rows",
+      "keeps discovering repositories nested below four directory levels",
+      "adds package-declared local icon candidates to project rows",
+      "scans only individually configured projects in the app project list"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": true,
+    "process": true
+  },
+  {
+    "file": "task-detail-helpers.test.ts",
+    "lines": 109,
+    "imports": [
+      "vitest",
+      "../src/shared/task-detail-helpers.js",
+      "../src/shared/types.js"
+    ],
+    "case_names": [
+      "indexes the newest task title for each agent session",
+      "shortens task tab titles by Unicode grapheme without splitting emoji",
+      "normalizes task file status annotations with or without a separating space",
+      "detects new task file records with or without a separating space",
+      "routes task file rows to diff only when the row has diffable state",
+      "extracts artifact and review paths from record lines",
+      "falls back from structured commits to legacy commit and raw frontmatter commits"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "task-runtime-install.test.ts",
+    "lines": 66,
+    "imports": [
+      "node:child_process",
+      "node:fs",
+      "node:path",
+      "node:util",
+      "vitest",
+      "./helpers.js"
+    ],
+    "case_names": [
+      "installs local Harness for a GitHub remote without gh authentication",
+      "falls back to local-only install for read-only GitHub remotes"
+    ],
+    "mock": true,
+    "cleanup": false,
+    "temp": true,
+    "process": true
+  },
+  {
+    "file": "task-runtime.test.ts",
+    "lines": 27,
+    "imports": [
+      "vitest",
+      "../src/runtime/task-runtime.js"
+    ],
+    "case_names": [
+      "keeps project sync independent across views and stops all instances with the host"
+    ],
+    "mock": true,
+    "cleanup": true,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "tasks.test.ts",
+    "lines": 231,
+    "imports": [
+      "node:path",
+      "vitest",
+      "../src/main/tasks.js",
+      "./helpers.js"
+    ],
+    "case_names": [
+      "adds GitHub avatar URLs and sorts tasks by created time descending",
+      "extracts all lines from multi-line task sections",
+      "keeps local completed task when it has commit metadata missing from team mirror",
+      "overlays locally-appended Artifacts/Reviews onto an already-synced team task"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "teamwork-sync.test.ts",
+    "lines": 329,
+    "imports": [
+      "node:child_process",
+      "node:fs",
+      "node:path",
+      "node:util",
+      "vitest",
+      "../src/main/harness.js",
+      "../src/main/teamwork-sync.js",
+      "./helpers.js"
+    ],
+    "case_names": [
+      "coalesces overlapping sync requests",
+      "creates the context branch and syncs completed local tasks",
+      "updates an existing remote task when the local record is newer",
+      "does not overwrite a newer remote task with an older local record"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": true,
+    "process": true
+  },
+  {
+    "file": "telegram-ansi.test.ts",
+    "lines": 41,
+    "imports": [
+      "vitest",
+      "../src/main/telegram/ansi.js"
+    ],
+    "case_names": [
+      "removes CSI color sequences",
+      "removes cursor-movement CSI sequences",
+      "removes OSC sequences terminated by BEL or ESC backslash",
+      "applies carriage-return overwrite within a line",
+      "applies backspace editing",
+      "keeps newlines and trims trailing blank lines",
+      "expands tabs to spaces and trims trailing whitespace",
+      "returns empty string for pure control noise"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "telegram-api.test.ts",
+    "lines": 68,
+    "imports": [
+      "vitest",
+      "../src/main/telegram/api.js"
+    ],
+    "case_names": [
+      "getMe returns the result on ok",
+      "throws TelegramApiError on ok:false",
+      "retries on 429 honoring retry_after, then succeeds",
+      "omits undefined params from the request body",
+      "stops retrying after maxRetries on non-429 transient error"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "telegram-dispatch.test.ts",
+    "lines": 44,
+    "imports": [
+      "vitest",
+      "../src/main/telegram/dispatch.js"
+    ],
+    "case_names": [
+      "routes plain text to the agent",
+      "routes // passthrough to the agent dropping exactly one slash",
+      "keeps a single leading slash for known bot commands with args",
+      "resolves bot command even with a group mention suffix",
+      "rejects an unknown single-slash command instead of forwarding it",
+      "treats ",
+      "does not trigger passthrough on mid-message double slash",
+      "trims leading whitespace before classifying",
+      "bot command name is case-insensitive"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "telegram-pairing.test.ts",
+    "lines": 74,
+    "imports": [
+      "vitest",
+      "../src/main/telegram/pairing.js"
+    ],
+    "case_names": [
+      "pairs a user with a valid code and invalidates it (one-time)",
+      "rejects a mismatched code",
+      "rejects an expired code",
+      "rejects when no code is active",
+      "does not re-pair an already paired user",
+      "revokes a user, making access immediately invalid",
+      "records github id and pairedAt, and lists users",
+      "seeds from initial users"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "telegram-render.test.ts",
+    "lines": 108,
+    "imports": [
+      "vitest",
+      "../src/main/telegram/render.js",
+      "../src/main/telegram/types.js"
+    ],
+    "case_names": [
+      "maps states to badges",
+      "renders coarse buckets",
+      "packs index, badge, project, agent/model and title into one line",
+      "omits model when null",
+      "truncates overly long labels with an ellipsis",
+      "includes header, buttons, refresh, and footer",
+      "handles empty list",
+      "parses numeric reply (1-based)",
+      "parses button callback",
+      "rejects out-of-range and unknown",
+      "returns single chunk under the limit",
+      "splits on line boundaries",
+      "hard-splits an over-long single line"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "telegram-service.test.ts",
+    "lines": 23,
+    "imports": [
+      "vitest",
+      "../src/main/telegram/service.js"
+    ],
+    "case_names": [
+      "splits Codex text and Enter to avoid TUI paste-mode submit loss",
+      "splits Claude text and Enter (same TUI paste-mode issue)",
+      "keeps the existing single write for non-TUI agents"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "telegram-session-registry.test.ts",
+    "lines": 66,
+    "imports": [
+      "vitest",
+      "../src/main/telegram/session-registry.js",
+      "../src/main/hooks/sessions.js"
+    ],
+    "case_names": [
+      "merges projects and sorts newest first",
+      "annotates live state and action subtitle",
+      "applies a limit but reports the true total",
+      "countOnline counts working + approval"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "telegram-transcript.test.ts",
+    "lines": 258,
+    "imports": [
+      "vitest",
+      "../src/main/telegram/transcript.js"
+    ],
+    "case_names": [
+      "returns only the closing summary after the last tool",
+      "keeps all text for a pure-text turn (no tools)",
+      "falls back to last text when the turn ends on a tool",
+      "ignores empty text blocks and malformed lines",
+      "returns empty string when there is no assistant text",
+      "uses the kiro parser for kiro",
+      "uses the codex parser for codex",
+      "uses the claude parser for claude",
+      "returns null for unsupported agents (fallback to PTY)",
+      "returns null when kiro transcript has no text",
+      "prefers assistant transcript text over task_complete tail",
+      "uses task_complete only when no assistant text exists",
+      "falls back to assistant text after the last tool",
+      "keeps all assistant text for a pure-text turn",
+      "returns only the closing summary after the last tool",
+      "returns text from the last end_turn message",
+      "returns all text blocks within a single end_turn message",
+      "returns empty when no end_turn message exists (triggers retry)",
+      "ignores intermediate text from tool_use messages",
+      "renders text and tool activity, skipping thinking",
+      "renders clean status messages and tool activity",
+      "renders text and tool activity, skipping thinking",
+      "finds the last Prompt index for kiro",
+      "returns 0 when no prompt or unsupported agent",
+      "finds the last Codex user message index",
+      "finds the last Claude user prompt index and skips tool results"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "telegram-turn.test.ts",
+    "lines": 115,
+    "imports": [
+      "vitest",
+      "../src/main/telegram/turn.js"
+    ],
+    "case_names": [
+      "finalizes after working then stopped",
+      "does NOT finalize on a stale stopped before working is seen",
+      "ignores events for a different hook session / project",
+      "ignores PTY data from another PTY (no cross-talk)",
+      "treats this PTY",
+      "holds during approval and does not finalize",
+      "releases approval then finalizes on next stopped",
+      "finalizes on turnEnd after working",
+      "conservative silence fallback needs working + two ticks past threshold",
+      "silence does nothing before working was seen",
+      "ptyExit and stop finalize immediately",
+      "is idempotent once done"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "terminal-approval-detector.test.ts",
+    "lines": 151,
+    "imports": [
+      "vitest",
+      "../src/main/hooks/terminal-approval-detector.js"
+    ],
+    "case_names": [
+      "fires when the approval footer is the last line after output settles",
+      "does not fire until output settles",
+      "does not fire twice for the same approval prompt",
+      "re-fires after the footer leaves and returns as the last line",
+      "ignores untracked sessions",
+      "stops detecting after untrack",
+      "handles the footer split across chunks in one burst",
+      "detects the footer through ANSI escape sequences",
+      "does not fire on incidental mentions of the phrase",
+      "does not fire when the footer is only in replayed scrollback (regression)"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "terminal-bootstrap.test.ts",
+    "lines": 115,
+    "imports": [
+      "node:fs",
+      "node:path",
+      "vitest",
+      "../src/core/project-uri.js",
+      "../src/main/config.js",
+      "../src/main/terminal.js",
+      "./helpers.js"
+    ],
+    "case_names": [],
+    "mock": true,
+    "cleanup": false,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "terminal-close-resize.test.ts",
+    "lines": 77,
+    "imports": [
+      "node:fs",
+      "node:vm",
+      "typescript",
+      "vitest"
+    ],
+    "case_names": [
+      "does not send a resize once closing starts",
+      "ignores a queued resize rejection after closing starts",
+      "ignores a queued resize after another client removes the tab",
+      "reports resize failures for a terminal that remains open",
+      "still reports a failure of the close request itself"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "terminal-state.test.ts",
+    "lines": 86,
+    "imports": [
+      "node:events",
+      "@xterm/headless",
+      "vitest",
+      "../src/runtime/terminal-state.js",
+      "../src/core/core-runtime.js",
+      "../src/shared/application-api.js",
+      "../src/shared/types.js"
+    ],
+    "case_names": [
+      "terminalUpdate",
+      "terminalData",
+      "restores alternate-screen truecolor across takeover and resize snapshots",
+      "terminalData",
+      "recovers its output queue after an attach callback fails",
+      "terminalData",
+      "rejects a stale queued resize after takeover and accepts the new owner",
+      "does not resurrect closed screens and releases listeners on disposal",
+      "terminalUpdate",
+      "terminalData"
+    ],
+    "mock": false,
+    "cleanup": true,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "terminal.test.ts",
+    "lines": 457,
+    "imports": [
+      "node:fs",
+      "node:path",
+      "vitest",
+      "../src/main/config.js",
+      "../src/main/terminal.js",
+      "../src/core/project-uri.js",
+      "./helpers.js",
+      "../src/shared/agent-session-restore.js"
+    ],
+    "case_names": [
+      "starts shells without interactive TTY-only flags or Apple session restore",
+      "allows configured project directories",
+      "derives titles from project-relative cwd and foreground commands",
+      "tracks submitted command lines from terminal input",
+      "skips cwd inspection when the title does not depend on cwd",
+      "limits cwd inspection frequency without slowing foreground checks",
+      "rejects directories outside configured projects",
+      "creates and closes a terminal session in a safe cwd",
+      "ignores invalid resize dimensions without surfacing pty errors",
+      "accepts input and streams command output",
+      "exposes the terminal id and protects a pending draft from notifications",
+      "runs initial commands without echoing the command text",
+      "can start a service session with an initial command and service metadata"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "token-usage-collector.test.ts",
+    "lines": 136,
+    "imports": [
+      "node:fs",
+      "node:os",
+      "node:path",
+      "vitest",
+      "../src/main/token-usage-collector.js",
+      "../src/main/token-usage-db.js"
+    ],
+    "case_names": [
+      "reports oversized Kiro JSON without reading it or marking it indexed",
+      "cancels historical backfill between files while retaining collected events",
+      "deduplicates Codex token counts when total usage does not advance",
+      "builds stable Codex total usage keys from known token fields",
+      "treats a transcript as unchanged only when size and mtime both match"
+    ],
+    "mock": true,
+    "cleanup": true,
+    "temp": true,
+    "process": false
+  },
+  {
+    "file": "token-usage-db.test.ts",
+    "lines": 61,
+    "imports": [
+      "vitest",
+      "../src/main/token-usage-db.js"
+    ],
+    "case_names": [
+      "maps SQL usage report rows to renderer-facing camelCase fields",
+      "normalizes fresh and total input consistently for Codex and Claude cache fields"
+    ],
+    "mock": false,
+    "cleanup": false,
+    "temp": false,
+    "process": false
+  },
+  {
+    "file": "web-runtime-integration.test.ts",
+    "lines": 314,
+    "imports": [
+      "vitest",
+      "node:child_process",
+      "node:crypto",
+      "node:fs/promises",
+      "node:os",
+      "node:path",
+      "node:http",
+      "node:url",
+      "ws",
+      "../src/renderer/bridge/web-bridge.js",
+      "../src/runtime/control-client.js",
+      "../src/runtime/control-server.js",
+      "../src/runtime/application-runtime.js",
+      "../src/server/http-server.js",
+      "../src/main/config.js",
+      "../src/core/project-uri.js"
+    ],
+    "case_names": [
+      "compresses static text when accepted and preserves clients that decline gzip",
+      "caches content-hashed assets while keeping entry HTML and APIs fresh across upgrades",
+      "shares one actual PTY between the desktop transport and browser without tying it to client lifetime",
+      "discovers a canonical profile alias and rejects non-private local endpoints",
+      "keeps host administration off the network command endpoint",
+      "resolves Review project URIs before filesystem access on desktop and WebUI",
+      "protects HTTP/WS, Host, Origin and command envelopes",
+      "reads actual projects/tasks/files, writes inside the project and isolates artifacts",
+      "derives Artifact task metadata on the host without accepting client paths",
+      "deduplicates terminal creation, restores the same PTY, transfers control and cleans up"
+    ],
+    "mock": true,
+    "cleanup": true,
+    "temp": true,
+    "process": true
+  },
+  {
+    "file": "web-runtime-security.test.ts",
+    "lines": 73,
+    "imports": [
+      "vitest",
+      "node:fs/promises",
+      "node:os",
+      "node:path",
+      "../src/server/session-auth.js",
+      "../src/runtime/application-input.js",
+      "../src/runtime/profile-lock.js"
+    ],
+    "case_names": [
+      "exchanges once, expires grants and sessions, and revokes pending access",
+      "rate limits grant guessing",
+      "rejects host path injection and malformed terminal inputs",
+      "rejects both identical data directories and shared config, including aliases"
+    ],
+    "mock": false,
+    "cleanup": true,
+    "temp": true,
+    "process": false
+  }
+]

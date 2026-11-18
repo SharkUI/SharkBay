@@ -1,11 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { SharkBayCoreService } from "../src/core/core-service.js";
 import { LocalProvider } from "../src/providers/local/local-provider.js";
 import { PluginHost } from "../src/plugins/plugin-host.js";
 import { agentBundledPlugin, createAgentInstallRecipes } from "../src/plugins/bundled/agent-detector.js";
 import type { CommandResult, RunCommandOptions } from "../src/core/execution-provider.js";
 import type { InstallLogEvent, IpcRuntimeLike, MachineProfile } from "../src/shared/types.js";
-import { makeTestRuntime } from "./helpers.js";
+import { makeTestRuntime as createRuntime } from "./helpers.js";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+const roots: string[] = [];
+async function makeTestRuntime(prefix: string) { const runtime = await createRuntime(prefix); roots.push(path.dirname(runtime.userDataPath)); return runtime; }
+afterEach(async () => { await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true }))); });
 
 function pluginHostWithAgentPlugin(): PluginHost {
   const host = new PluginHost();
@@ -18,6 +23,10 @@ class InstallTestProvider extends LocalProvider {
   platform: MachineProfile["os"]["platform"] = "darwin";
   npmAvailable = true;
   curlAvailable = true;
+
+  override async createMachineProbeContext(runtime: IpcRuntimeLike, targetId: string) {
+    return { target: await this.resolveTarget(runtime, targetId), which: async (command: string) => command === "codex" ? "/fixture/codex" : null, readTextFile: async () => null, run: (command: string, options?: RunCommandOptions) => this.runCommand(runtime, targetId, command, options) };
+  }
 
   override readMachineProfile(_runtime: IpcRuntimeLike, _targetId: string): Promise<MachineProfile> {
     return Promise.resolve({
@@ -162,4 +171,13 @@ describe("CoreService installTool", () => {
       error: "Recipe does not support windows",
     });
   });
+});
+
+it("completes simultaneous installs without holding slots while refreshing profiles", async () => {
+  const runtime = await makeTestRuntime("install-tool-concurrent");
+  const provider = new InstallTestProvider();
+  const core = new SharkBayCoreService([provider], pluginHostWithAgentPlugin());
+  const results = await Promise.all([core.installTool(runtime, { targetId: "local", recipeId: "codex.npm.global" }), core.installTool(runtime, { targetId: "local", recipeId: "claude.npm.global" })]);
+  expect(results.every((result) => result.verified)).toBe(true);
+  await core.stopJobs();
 });

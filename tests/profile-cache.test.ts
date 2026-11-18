@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { ProfileCache, cacheFilePath } from "../src/storage/profile-cache.js";
-import { makeTestRuntime } from "./helpers.js";
+import { makeTestRuntime as createRuntime } from "./helpers.js";
 import type { MachineProfile } from "../src/shared/types.js";
 
 describe("ProfileCache", () => {
@@ -27,3 +29,7 @@ describe("ProfileCache", () => {
     expect(cacheFilePath(runtime, "machine-profiles", "local")).toContain(runtime.userDataPath);
   });
 });
+
+const cleanupRoots: string[] = [];
+async function makeTestRuntime(prefix: string) { const runtime = await createRuntime(prefix); cleanupRoots.push(path.dirname(runtime.userDataPath)); return runtime; }
+afterEach(async () => { await Promise.all(cleanupRoots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true }))); });

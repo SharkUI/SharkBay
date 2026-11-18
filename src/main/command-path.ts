@@ -42,7 +42,7 @@ function detectShell(): { bin: string; name: "fish" | "posix" } {
 }
 
 function shellPathCommand(shellName: "fish" | "posix"): string {
-  if (shellName === "fish") return "string split : $PATH";
+  if (shellName === "fish") return "string join : $PATH";
   return "echo \"$PATH\"";
 }
 

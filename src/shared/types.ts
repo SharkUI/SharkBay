@@ -500,9 +500,10 @@ export type WriteFileInput = {
   projectUri: string;
   relativePath: string;
   content: string;
+  create?: "file" | "directory";
 };
 
-export type WriteFileFailureReason = "not-found" | "permission" | "unsafe-path" | "too-large" | "io-error";
+export type WriteFileFailureReason = "not-found" | "permission" | "unsafe-path" | "too-large" | "already-exists" | "io-error";
 
 export type WriteFileResult =
   | { ok: true; size: number; relativePath: string }

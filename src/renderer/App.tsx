@@ -9,6 +9,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import defaultProjectIconUrl from "./assets/shark-fin.png";
 import { CodeEditor } from "./code-editor";
+import { CodeGraphPanel } from "./codegraph-panel";
 import { UpdateHint } from "./update-hint";
 import { ProjectStart } from "./project-start";
 import { RuntimeStatus } from "./bridge/runtime-status";
@@ -28,7 +29,6 @@ import type {
   BrowserBounds,
   BrowserSession,
   BrowserUpdateEvent,
-  CodeGraphProjectStatus,
   DiagnosticsSnapshot,
   GitHubInfo,
   GitHubRelease,
@@ -87,12 +87,6 @@ type SettingsSection = "general" | "agent-clis" | "appearance" | "extensions" | 
 type Toast = {
   tone: "info" | "error" | "success";
   message: string;
-};
-
-type CodeGraphStatusView = {
-  loading: boolean;
-  status: CodeGraphProjectStatus | null;
-  error: string | null;
 };
 
 type RefreshOptions = {
@@ -538,21 +532,9 @@ async function listProjectFiles(project: ProjectCandidate | ProjectDetail, direc
   return handler({ projectUri: project.uri, directoryPath });
 }
 
-async function readCodeGraphStatus(projectUri: string): Promise<CodeGraphProjectStatus> {
-  const handler = getBridge().codeGraph?.getStatus;
-  if (!handler) throw new Error("CodeGraph status is not exposed by the preload API.");
-  return handler({ projectUri });
-}
-
 async function readProjectGitHub(projectUri: string): Promise<GitHubInfo> {
   const handler = getBridge().projects?.getGitHub;
   if (!handler) throw new Error("GitHub info is not exposed by the preload API.");
-  return handler({ projectUri });
-}
-
-async function ensureCodeGraphStatus(projectUri: string): Promise<CodeGraphProjectStatus> {
-  const handler = getBridge().codeGraph?.ensureStatus;
-  if (!handler) throw new Error("CodeGraph status maintenance is not exposed by the preload API.");
   return handler({ projectUri });
 }
 
@@ -3676,35 +3658,10 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
   const isLocal = candidate.providerKind === "local";
   const availableTabs = detailTabs.filter((tab) => !tab.localOnly || isLocal);
   const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>("git");
-  const [codeGraphStatus, setCodeGraphStatus] = useState<CodeGraphStatusView>({ loading: false, status: null, error: null });
   const currentDetail = detail?.uri === candidate.uri ? detail : null;
   const visibleDetailTab = availableTabs.some((tab) => tab.id === activeDetailTab)
     ? activeDetailTab
     : availableTabs[0]?.id ?? "git";
-
-  useEffect(() => {
-    let cancelled = false;
-    setCodeGraphStatus({ loading: true, status: null, error: null });
-    void readCodeGraphStatus(candidate.uri)
-      .then((status) => {
-        if (!cancelled) setCodeGraphStatus({ loading: false, status, error: null });
-      })
-      .catch((error) => {
-        if (!cancelled) setCodeGraphStatus({ loading: false, status: null, error: asMessage(error) });
-      });
-    return () => { cancelled = true; };
-  }, [candidate.uri]);
-
-  async function maintainCodeGraph() {
-    const projectUri = candidate.uri;
-    setCodeGraphStatus((current) => ({ ...current, loading: true, error: null }));
-    try {
-      const status = await ensureCodeGraphStatus(projectUri);
-      setCodeGraphStatus((current) => current.status?.projectUri === projectUri ? { loading: false, status, error: null } : current);
-    } catch (error) {
-      setCodeGraphStatus((current) => current.status?.projectUri === projectUri ? { ...current, loading: false, error: asMessage(error) } : current);
-    }
-  }
 
   function handleDetailTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, tab: DetailTab) {
     const currentIndex = availableTabs.findIndex((item) => item.id === tab);
@@ -3761,7 +3718,7 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
         </div>
       ) : null}
       <div aria-labelledby="project-detail-tab-files" className="detail-tab-panel" hidden={visibleDetailTab !== "files"} id="project-detail-tabpanel-files" role="tabpanel">
-        <FilesDetailTab active={visibleDetailTab === "files"} candidate={candidate} codeGraphStatus={codeGraphStatus} onMaintainCodeGraph={maintainCodeGraph} detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} onOpenTerminal={onOpenTerminal} />
+        <FilesDetailTab active={visibleDetailTab === "files"} candidate={candidate} detail={detail} setToast={setToast} onOpenFileInEditor={onOpenFileInEditor} onOpenGitDiff={onOpenGitDiff} onOpenTerminal={onOpenTerminal} />
       </div>
     </div>
   );
@@ -4696,11 +4653,9 @@ function GitHistoryItems({ events }: { events: NonNullable<ProjectDetail["gitHis
 }
 
 
-function FilesDetailTab({ active, candidate, codeGraphStatus, onMaintainCodeGraph, detail, setToast, onOpenFileInEditor, onOpenGitDiff, onOpenTerminal }: {
+function FilesDetailTab({ active, candidate, detail, setToast, onOpenFileInEditor, onOpenGitDiff, onOpenTerminal }: {
   active: boolean;
   candidate: ProjectCandidate;
-  codeGraphStatus: CodeGraphStatusView;
-  onMaintainCodeGraph: () => void;
   detail: ProjectDetail | null;
   setToast: (toast: Toast) => void;
   onOpenFileInEditor: (relativePath: string) => Promise<void>;
@@ -4832,19 +4787,10 @@ function FilesDetailTab({ active, candidate, codeGraphStatus, onMaintainCodeGrap
     setCreating(null);
     if (!name) return;
     const relativePath = parentPath ? `${parentPath}/${name}` : name;
-    if (kind === "file") {
-      const handler = getBridge().projects?.writeFile;
-      if (!handler) { setToast({ tone: "error", message: "Create file is not available." }); return; }
-      const result = await handler({ projectUri: candidate.uri, relativePath, content: "" });
-      if (!result.ok) { setToast({ tone: "error", message: result.message }); return; }
-    } else {
-      // Create directory by writing a placeholder then deleting it, or use writeFile with trailing slash
-      // Simplest: write a .gitkeep inside the directory
-      const handler = getBridge().projects?.writeFile;
-      if (!handler) { setToast({ tone: "error", message: "Create folder is not available." }); return; }
-      const result = await handler({ projectUri: candidate.uri, relativePath: `${relativePath}/.gitkeep`, content: "" });
-      if (!result.ok) { setToast({ tone: "error", message: result.message }); return; }
-    }
+    const handler = getBridge().projects?.writeFile;
+    if (!handler) { setToast({ tone: "error", message: "Create is not available." }); return; }
+    const result = await handler({ projectUri: candidate.uri, relativePath, content: "", create: kind });
+    if (!result.ok) { setToast({ tone: "error", message: result.message }); return; }
     void refreshDirectory(parentPath);
   }
 
@@ -4879,47 +4825,9 @@ function FilesDetailTab({ active, candidate, codeGraphStatus, onMaintainCodeGrap
 
   return (
     <>
-      <CodeGraphStatusSummary codeGraphStatus={codeGraphStatus} onMaintainCodeGraph={onMaintainCodeGraph} onOpenTerminal={onOpenTerminal} />
+      <CodeGraphPanel projectUri={candidate.uri} api={getBridge().codeGraph} onOpenTerminal={onOpenTerminal} />
       {fileContent}
     </>
-  );
-}
-
-function CodeGraphStatusSummary({ codeGraphStatus, onMaintainCodeGraph, onOpenTerminal }: { codeGraphStatus: CodeGraphStatusView; onMaintainCodeGraph: () => void; onOpenTerminal: (options: { title?: string; initialCommand?: string }) => Promise<void> }) {
-  if (!codeGraphStatus.loading && codeGraphStatus.status?.state === "not-installed") {
-    return (
-      <section className="subpanel confirm-panel protocol-action-card codegraph-status-card" aria-label="CodeGraph status summary">
-        <div>
-          <h4>Install CodeGraph</h4>
-          <p className="summary-text">CodeGraph provides code intelligence (symbol search, call graphs, impact analysis). Install it to enable the Files index.</p>
-        </div>
-        <div className="button-row">
-          <button className="button compact" type="button" onClick={() => {
-            void onOpenTerminal({ title: "Install CodeGraph", initialCommand: "npm i -g @colbymchenry/codegraph" });
-          }}>Install CodeGraph</button>
-        </div>
-      </section>
-    );
-  }
-
-  const line = codeGraphStatus.loading
-    ? "Checking CodeGraph index."
-    : codeGraphStatus.error
-      ? `CodeGraph status unavailable: ${codeGraphStatus.error}`
-      : codeGraphStatus.status?.summary ?? "CodeGraph status unavailable.";
-
-  return (
-    <section className="subpanel codegraph-status-card" aria-label="CodeGraph status summary">
-      <h4>CodeGraph</h4>
-      <div className="codegraph-status-line">{line}</div>
-      {codeGraphStatus.status && !["disabled", "unsupported"].includes(codeGraphStatus.status.state) ? (
-        <div className="button-row">
-          <button className="button compact" type="button" disabled={codeGraphStatus.loading} onClick={onMaintainCodeGraph}>
-            {codeGraphStatus.status.state === "uninitialized" ? "Build index" : "Sync index"}
-          </button>
-        </div>
-      ) : null}
-    </section>
   );
 }
 

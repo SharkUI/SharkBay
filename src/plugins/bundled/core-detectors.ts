@@ -77,9 +77,9 @@ export function createCoreMachineDetector(): MachineDetector {
         os: {
           platform: platformFromUname(unameParts[0]),
           name: unameParts[0] || null,
-          version: unameParts[2] || null,
-          arch: unameParts[1] || null,
-          kernel: unameParts[2] || null,
+          version: unameParts[1] || null,
+          arch: unameParts[2] || null,
+          kernel: unameParts[1] || null,
         },
         shell: {
           path: shell || null,
