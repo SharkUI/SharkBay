@@ -1,6 +1,6 @@
 # Release And Packaging
 
-SharkBay packages with Electron Builder for macOS. The [current facts table](current-facts.md) is the canonical summary of process ownership, shipped capabilities and release semantics.
+SharkBay packages with Electron Builder for macOS 13 Ventura or later on Apple Silicon (arm64). The [current facts table](current-facts.md) is the canonical summary of process ownership, shipped capabilities and release semantics.
 
 ## Commands
 
@@ -156,6 +156,18 @@ codesign --verify --deep --strict --verbose=2 "release/mac-arm64/SharkBay.app"
 
 Keep all Apple credentials out of the repo; pass them through the environment
 (or CI secrets) only.
+
+On the configured release Mac, the existing notarytool keychain profile is
+`sharkbay-release`. Select it explicitly; an unset environment variable does
+not mean the stored credentials are missing:
+
+```bash
+xcrun notarytool history --keychain-profile sharkbay-release
+APPLE_KEYCHAIN_PROFILE=sharkbay-release npm run dist -- --publish never
+```
+
+The profile name is configuration, not the password. Keep the credential itself
+in the keychain.
 
 ## Release Checks
 

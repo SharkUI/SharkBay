@@ -22,7 +22,7 @@
 brew install --cask SharkUI/tap/sharkbay
 ```
 
-macOS on Apple Silicon (arm64).
+macOS 13 Ventura or later on Apple Silicon (arm64).
 
 Or download the signed and notarized app from [GitHub Releases](https://github.com/SharkUI/SharkBay/releases/latest).
 

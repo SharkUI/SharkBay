@@ -12,6 +12,7 @@
 - Creating a file or folder no longer overwrites an existing item, and Git filenames containing Unicode, whitespace or control characters are parsed correctly.
 
 ### Changed
+- macOS builds now require macOS 13 Ventura or later.
 - Updated Electron and build dependencies, removed unused plugin and pricing modules, and separated isolated tests from host and full-runtime integration tests.
 - Desktop builds clean obsolete compiled modules before packaging. CodeGraph remains manually triggered.
 
