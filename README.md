@@ -26,9 +26,9 @@ macOS 13 Ventura or later on Apple Silicon (arm64).
 
 Or download the signed and notarized app from [GitHub Releases](https://github.com/SharkUI/SharkBay/releases/latest).
 
-### New in 0.3.11
+### New in 0.3.12
 
-More reliable agent status and startup, authenticated browser access, safer file/worktree operations, and fixes for Telegram and background jobs. Finish active work and stop the previous shared runtime before upgrading; the released 0.3.11 build requires a host-issued connection link. Current source behavior is described below. See the [changelog](CHANGELOG.md#0311--2026-11-18).
+Add existing host folders or clone repositories directly from the WebUI, with a unified folder picker. Local and LAN browsers can open `http://<host-ip>:17777/` without a connection code; reachable local-network devices are trusted to operate projects and terminals. Terminal query replies no longer duplicate between the renderer and runtime. Finish active work and stop the previous shared runtime before upgrading. See the [changelog](CHANGELOG.md#0312--2026-11-18).
 
 ## Features
 

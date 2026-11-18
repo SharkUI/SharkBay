@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.3.12] — 2026-11-18
+
+### Added
+- Add existing host project folders or clone repositories directly from the WebUI using the same runtime commands as the desktop app.
+- The WebUI folder picker groups parent/home navigation and path entry in one toolbar, with a scrolling folder list and fixed Cancel/Confirm actions. Dark themes and short viewports are supported.
+
+### Changed
+- Local and LAN browsers can open `http://<host-ip>:17777/` directly without a connection grant or session cookie. Command-line startup and connections to an existing daemon print ordinary addresses.
+- Host/Origin checks, command validation and terminal control ownership remain enforced. Other networks still require authorization; revoking grants/sessions does not revoke local/LAN network trust.
+
+### Fixed
+- The controlling renderer answers terminal queries while the runtime's headless emulator replies only when no controller is attached, avoiding duplicate input to interactive coding-agent CLIs.
+
+### Upgrade Note
+- Finish active terminal work and explicitly stop the previous shared runtime before starting this version. Updating or reopening the desktop app alone can reuse an older runtime and will not activate these changes.
+- Reachable devices on local/private networks can operate host projects and terminals. Limit access to the host network and port accordingly.
+- Requires macOS 13 Ventura or later on Apple Silicon (arm64).
+
 ## [0.3.11] — 2026-11-18
 
 ### Fixed
