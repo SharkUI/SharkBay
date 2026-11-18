@@ -48,8 +48,9 @@ export class TerminalState {
     const terminal = new Xterm.Terminal({ cols: session.cols ?? 80, rows: session.rows ?? 24, scrollback: 2000, allowProposedApi: true });
     const serializer = new Serialization.SerializeAddon();
     terminal.loadAddon(serializer);
-    // Only the host emulator answers terminal queries; observers only render output.
-    terminal.onData((data) => { this.core.inputTerminal({ sessionId: session.id, data }); });
+    // The controlling renderer answers queries (including its actual theme colors).
+    // Without a controller, keep headless query replies available to background PTYs.
+    terminal.onData((data) => { if (!this.owners.has(session.id)) this.core.inputTerminal({ sessionId: session.id, data }); });
     this.screens.set(session.id, { terminal, serializer, queue: Promise.resolve(), sequence: 0 });
   }
   attach(sessionId: string, send: (frame: TerminalFrame) => void): Promise<void> {

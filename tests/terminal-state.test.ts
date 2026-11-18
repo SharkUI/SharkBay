@@ -14,6 +14,38 @@ function fixture() {
   return { state, core, frames, session };
 }
 describe("terminal screen lifecycle", () => {
+  it.each(["\x1b[6n", "\x1b[5n", "\x1b[c", "\x1b[>c", "\x1b[?6n", "\x1b[?25$p", "\x1bP$qm\x1b\\"])("answers query %j once through the controller, with host fallback after disconnect", async (query) => {
+    const { state, core, frames } = fixture();
+    const controller = new Xterm.Terminal({ cols: 80, rows: 24, allowProposedApi: true });
+    const observer = new Xterm.Terminal({ cols: 80, rows: 24, allowProposedApi: true, disableStdin: true });
+    const replies: string[] = [];
+    controller.onData((data) => { state.assertControl("terminal", "web"); replies.push(data); });
+    observer.onData((data) => replies.push(data));
+    try {
+      state.claim("terminal", "web");
+      core.emit("terminalData", { sessionId: "terminal", data: query, stream: "stdout" });
+      await state.attach("terminal", () => {}); // Drain the host parser before delivering its output frame.
+      expect(frames).toHaveLength(1);
+      await Promise.all([controller, observer].map((term) => new Promise<void>((done) => term.write(frames[0]!.data, done))));
+      expect(replies).toHaveLength(1);
+      expect(core.inputTerminal).not.toHaveBeenCalled();
+
+      state.claim("terminal", "desktop");
+      core.emit("terminalData", { sessionId: "terminal", data: query, stream: "stdout" });
+      await state.attach("terminal", () => {});
+      expect(core.inputTerminal).not.toHaveBeenCalled();
+      state.releaseClient("web"); // A stale disconnect must not change the current reply authority.
+      core.emit("terminalData", { sessionId: "terminal", data: query, stream: "stdout" });
+      await state.attach("terminal", () => {});
+      expect(core.inputTerminal).not.toHaveBeenCalled();
+
+      state.releaseClient("desktop");
+      core.emit("terminalData", { sessionId: "terminal", data: query, stream: "stdout" });
+      await state.attach("terminal", () => {});
+      expect(core.inputTerminal).toHaveBeenCalledExactlyOnceWith({ sessionId: "terminal", data: replies[0] });
+    } finally { controller.dispose(); observer.dispose(); await state.dispose(); }
+  });
+
   it.each(["\x1b[43mSTALE", "\x1b[48;2;255;", "\x1b]11;rgb:"])("replaces queued color and parser state when replaying a snapshot after %j", async (pending) => {
     const { state, core } = fixture();
     const observer = new Xterm.Terminal({ cols: 80, rows: 24, allowProposedApi: true });
