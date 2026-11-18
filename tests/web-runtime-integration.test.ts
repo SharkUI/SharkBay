@@ -29,17 +29,8 @@ async function waitFor<T>(read: () => T | undefined, timeout = 5000): Promise<T>
   while (Date.now() < end) { const result = read(); if (result !== undefined) return result; await new Promise((done) => setTimeout(done, 20)); }
   throw new Error("Timed out waiting for runtime event");
 }
-const cookies = new Map<string, string>();
-async function authorizedCookie(origin = server.origin): Promise<string> {
-  const existing = cookies.get(origin);
-  if (existing && (await fetch(`${origin}/api/capabilities`, { headers: { Cookie: existing } })).ok) return existing;
-  const token = new URLSearchParams(new URL(server.connectionUrl()).hash.slice(1)).get("connect");
-  const response = await fetch(`${origin}/api/session`, { method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
-  expect(response.status).toBe(200);
-  const cookie = response.headers.get("set-cookie")!.split(";")[0]!; cookies.set(origin, cookie); return cookie;
-}
 async function connect(origin = server.origin): Promise<Browser> {
-  const cookie = await authorizedCookie(origin);
+  const cookie = "";
   const capabilities = await fetch(`${origin}/api/capabilities`, { headers: { Cookie: cookie } });
   expect(capabilities.status).toBe(200);
   const socket = new WebSocket(origin.replace("http:", "ws:") + "/api/events", { headers: { Origin: origin, Cookie: cookie } });
@@ -143,7 +134,7 @@ describe("local Web runtime end to end", () => {
     const desktop = await RuntimeClient.connect(runtime.paths.userDataPath); desktops.push(desktop);
     const local = path.join(directory, "Local % 空间"); await mkdir(local);
     const alias = path.join(directory, "local-alias"); await symlink(local, alias);
-    expect((await fetch(`${browser.origin}/api/command`, { method: "POST", headers: { "Content-Type": "application/json", Origin: browser.origin }, body: JSON.stringify({ requestId: "unauthorized-add", method: "config.addProject", input: { path: local } }) })).status).toBe(401);
+    expect((await fetch(`${browser.origin}/api/command`, { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://untrusted.example" }, body: JSON.stringify({ requestId: "cross-site-add", method: "config.addProject", input: { path: local } }) })).status).toBe(403);
     const listing = await command(browser, "projects.listHostDirectories", { path: directory });
     expect(listing.ok).toBe(true);
     expect(listing.result.path).toBe(directory);
@@ -217,7 +208,7 @@ describe("local Web runtime end to end", () => {
   });
   it("protects HTTP/WS, Host, Origin and command envelopes", async () => {
     expect((await fetch(server.origin)).status).toBe(200);
-    expect((await fetch(`${server.origin}/api/capabilities`)).status).toBe(401);
+    expect((await fetch(`${server.origin}/api/capabilities`)).status).toBe(200);
     const wrongHost = await new Promise<number>((done) => { http.get(server.origin, { headers: { Host: "attacker.invalid" } }, (response) => { response.resume(); done(response.statusCode!); }); });
     expect(wrongHost).toBe(403);
     expect((await fetch(`${server.origin}/api/session`, { method: "POST", headers: { Origin: "https://attacker.invalid", "Content-Type": "application/json" }, body: "{}" })).status).toBe(403);
@@ -249,7 +240,7 @@ describe("local Web runtime end to end", () => {
     const page = await fetch(origin);
     expect(page.status).toBe(200);
     expect(page.headers.get("content-security-policy")).toContain(origin.replace("http:", "ws:"));
-    expect((await fetch(`${origin}/api/capabilities`)).status).toBe(401);
+    expect((await fetch(`${origin}/api/capabilities`)).status).toBe(200);
     const wrongHost = await new Promise<number>((done, reject) => { http.get(origin, { headers: { Host: new URL(server.origin).host } }, (response) => { response.resume(); done(response.statusCode!); }).on("error", reject); });
     expect(wrongHost).toBe(403);
     expect((await fetch(`${origin}/api/session`, { method: "POST", headers: { Origin: server.origin, "Content-Type": "application/json" }, body: "{}" })).status).toBe(403);
@@ -261,10 +252,10 @@ describe("local Web runtime end to end", () => {
       expect(status).toBe(403);
     }
   });
-  it.each([{ mode: "loopback", address: "127.0.0.1" }, { mode: "LAN HTTP", address: lanAddress }].filter((entry) => entry.address))("runs the authorized Web bridge through snapshots, revoke and reconnects over $mode", async ({ address }) => {
+  it.each([{ mode: "loopback", address: "127.0.0.1" }, { mode: "LAN HTTP", address: lanAddress }].filter((entry) => entry.address))("runs the cookie-free Web bridge through snapshots, revoke and reconnects over $mode", async ({ address }) => {
     const nativeFetch = globalThis.fetch;
     const origin = server.origin.replace("127.0.0.1", address!);
-    const location = new URL(server.connectionUrl()); location.host = new URL(origin).host;
+    const location = new URL(origin);
     let cookie = "";
     const sockets: WebSocket[] = [];
     class BrowserSocket extends WebSocket {
@@ -296,10 +287,9 @@ describe("local Web runtime end to end", () => {
       bridge.terminal!.inputFire!({ sessionId: session.id, data: "do not replay" }); expect(notices).toHaveLength(1);
       await waitFor(() => bridge!.runtime.connection() === "connected" ? true : undefined);
       const terminals = await bridge.runtime.listTerminals(); expect(terminals).toHaveLength(1); expect(terminals[0]!.session.pid).toBe(session.pid);
-      server.revoke(); await waitFor(() => bridge!.runtime.connection() === "unauthorized" ? true : undefined);
-      await expect(bridge.runtime.listTerminals()).rejects.toThrow(/disconnected/i);
-      location.hash = new URL(server.connectionUrl()).hash; window.dispatchEvent(new Event("hashchange"));
-      await waitFor(() => bridge!.runtime.connection() === "connected" ? true : undefined);
+      server.revoke();
+      expect(bridge.runtime.connection()).toBe("connected");
+      expect(cookie).toBe(""); expect(location.hash).toBe("");
       expect((await bridge.runtime.listTerminals())[0]!.session.pid).toBe(session.pid);
       await bridge.terminal!.close!({ sessionId: session.id }); off(); offNotice();
     } finally { bridge?.runtime.dispose(); for (const socket of sockets) socket.terminate(); vi.unstubAllGlobals(); }
@@ -353,7 +343,7 @@ describe("local Web runtime end to end", () => {
     expect(sessions).toHaveLength(1); expect(sessions[0].session.pid).toBe(session.pid);
     expect(() => process.kill(session.pid, 0)).not.toThrow();
     server.revoke();
-    expect((await fetch(`${server.origin}/api/capabilities`)).status).toBe(401);
+    expect((await fetch(`${server.origin}/api/capabilities`)).status).toBe(200);
     const create = runtime.core.createTerminal.bind(runtime.core);
     let release!: () => void;
     const gate = new Promise<void>((done) => { release = done; });

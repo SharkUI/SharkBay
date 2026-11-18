@@ -28,17 +28,17 @@ Or download the signed and notarized app from [GitHub Releases](https://github.c
 
 ### New in 0.3.11
 
-More reliable agent status and startup, authenticated browser access, safer file/worktree operations, and fixes for Telegram and background jobs. Finish active work and stop the previous shared runtime before upgrading; browser access now needs a fresh host-issued connection link. See the [changelog](CHANGELOG.md#0311--2026-11-18).
+More reliable agent status and startup, authenticated browser access, safer file/worktree operations, and fixes for Telegram and background jobs. Finish active work and stop the previous shared runtime before upgrading; the released 0.3.11 build requires a host-issued connection link. Current source behavior is described below. See the [changelog](CHANGELOG.md#0311--2026-11-18).
 
 ## Features
 
 ### Shared Runtime and Browser Access
 
-The macOS app and WebUI connect to one local Node runtime. Open a host-issued connection link in a browser to access your projects and existing terminals; one client controls each terminal while others observe. Closing the desktop client leaves sessions running, and you can take control from another connected client.
+The macOS app and WebUI connect to one local Node runtime. Open `http://<host-ip>:17777/` from a local or LAN browser to access your projects and existing terminals; one client controls each terminal while others observe. Closing the desktop client leaves sessions running, and you can take control from another connected client.
 
 The WebUI adapts to phones and tablets with full-screen project navigation, touch terminal keys, and preserved input drafts across reconnects. The packaged app includes Node and its runtime dependencies.
 
-The runtime listens on all IPv4 interfaces at port `17777` by default. Use the host's **Open in Browser** action or runtime connection link from another device. All browser API and WebSocket access, including local and LAN clients, requires a one-time grant exchanged for a session cookie. The host firewall must allow the connection; Host and Origin checks also remain enforced. Revoking access invalidates all grants and sessions. Project development URLs are not rewritten or proxied.
+The runtime listens on all IPv4 interfaces at port `17777` by default. Local and LAN browsers connect directly without a code, connection fragment or session cookie. Reachable devices on these networks can operate host projects and terminals. Other networks still require a host-issued connection link. The host firewall must allow the connection; Host and Origin checks remain enforced. Revoking access invalidates explicit grants and sessions, but local/LAN network trust remains in effect. Project development URLs are not rewritten or proxied.
 
 ### Multi-Agent Support
 

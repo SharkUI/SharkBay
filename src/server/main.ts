@@ -20,7 +20,7 @@ let configPath: string | undefined;
 for (let index = 0; index < args.length; index++) {
   const key = args[index];
   if (key === "--help") {
-    console.log("SharkBay WebUI\n  npm start -- [--port 17777] [--data-dir path] [--config path] [--project path ...]\nUse --stop to stop the shared runtime and its terminals. Listens on all IPv4 interfaces; all browser access requires a one-time host-issued connection link. Existing host projects are copied into a separate WebUI profile on first start.\nIn the host terminal: Enter/connect = one-time local and LAN links; revoke = disconnect all browsers.");
+    console.log("SharkBay WebUI\n  npm run start:runtime -- [--port 17777] [--data-dir path] [--config path] [--project path ...]\nUse --stop to stop the shared runtime and its terminals. Local and LAN browsers can open http://IP:17777/ directly. Other networks require a host-issued connection link. Existing host projects are copied into a separate WebUI profile on first start.\nIn the host terminal: Enter/connect = local and LAN addresses; revoke = revoke grant/session access (local and LAN access remains available).");
     process.exit(0);
   }
   if (key === "--stop") { stopRequested = true; continue; }
@@ -46,7 +46,8 @@ if (existing) {
     if (stopRequested) { await existing.call("stop"); console.log("SharkBay runtime stop requested."); }
     else {
       for (const project of projects) await existing.call("config.addProject", { path: project });
-      console.log(`Existing SharkBay runtime connection: ${await existing.call<string>("connect")}`);
+      const hello = await existing.call<{ origin: string }>("hello", { protocol: 1 });
+      console.log(`Existing SharkBay WebUI: ${hello.origin}`);
     }
   } finally { existing.dispose(); }
   process.exit(0);
@@ -84,18 +85,17 @@ try {
   startup("control-ready");
   console.log(`SharkBay WebUI: ${server.origin}\nHost profile: ${userDataPath}\nProjects: ${config.configuredProjects.length}`);
   const connect = () => {
-    const link = server.connectionUrl();
-    console.log(`One-time WebUI connection link (expires in 5 minutes): ${link}`);
+    console.log(`SharkBay WebUI: ${server.origin}`);
     const addresses = new Set(Object.values(os.networkInterfaces()).flatMap((entries) => entries?.filter((entry) => entry.family === "IPv4" && !entry.internal).map((entry) => entry.address) ?? []));
-    for (const address of addresses) console.log(`One-time LAN connection link: ${server.connectionUrl().replace("127.0.0.1", address)}`);
+    for (const address of addresses) console.log(`SharkBay LAN WebUI: ${server.origin.replace("127.0.0.1", address)}`);
   };
   if (!background) connect();
   const terminal = readline.createInterface({ input: process.stdin });
   terminal.on("line", (line) => {
     const command = line.trim();
     if (!command || command === "connect") connect();
-    else if (command === "revoke") { server.revoke(); console.log("All browser authorization revoked. PTYs remain running."); }
-    else console.log("Enter/connect: one-time connection links; revoke: revoke all browser access; Ctrl-C: stop runtime.");
+    else if (command === "revoke") { server.revoke(); console.log("Grant/session access revoked. Local and LAN access remains available. PTYs remain running."); }
+    else console.log("Enter/connect: local and LAN addresses; revoke: revoke grant/session access; Ctrl-C: stop runtime.");
   });
   let stopping = false;
   const stop = async () => {

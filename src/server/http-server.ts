@@ -28,7 +28,7 @@ export async function createWebServer(runtime: ApplicationRuntime, options: { po
   let disposed = false;
   const send = (client: Client, value: unknown) => {
     if (client.socket.readyState !== WebSocket.OPEN) return;
-    try { auth.authenticate(`sharkbay_session=${client.session}`); }
+    try { auth.authenticate(`sharkbay_session=${client.session}`, client.address); }
     catch { client.socket.close(4001, "Authorization expired or revoked"); return; }
     const encoded = JSON.stringify(value);
     if (client.socket.bufferedAmount + Buffer.byteLength(encoded) > maxClientQueue) { client.socket.terminate(); return; }
@@ -74,7 +74,7 @@ export async function createWebServer(runtime: ApplicationRuntime, options: { po
           res.setHeader("Set-Cookie", `sharkbay_session=${session}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800`);
           json(res, 200, { ok: true }); return;
         }
-        const session = auth.authenticate(req.headers.cookie);
+        const session = auth.authenticate(req.headers.cookie, req.socket.remoteAddress);
         if (req.method === "GET" && url.pathname === "/api/preview") {
           const result = await runtime.readPreview(url.searchParams.get("url") ?? "");
           res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "X-Content-Type-Options": "nosniff",
@@ -91,7 +91,7 @@ export async function createWebServer(runtime: ApplicationRuntime, options: { po
         if (!client || client.session !== session) throw new ApplicationError("CLIENT_NOT_CONNECTED", "Wait for the runtime connection to recover", 409);
         const input = await body(req) as { requestId?: unknown; method?: unknown; input?: unknown };
         if (!input || typeof input.requestId !== "string" || !/^[a-zA-Z0-9_-]{8,100}$/.test(input.requestId) || typeof input.method !== "string") throw new ApplicationError("INVALID_REQUEST", "Invalid command envelope");
-        auth.authenticate(req.headers.cookie);
+        auth.authenticate(req.headers.cookie, req.socket.remoteAddress);
         if (clients.get(client.id) !== client || client.socket.readyState !== WebSocket.OPEN) throw new ApplicationError("CLIENT_NOT_CONNECTED", "Wait for the runtime connection to recover", 409);
         const now = Date.now();
         for (const [key, request] of requests) if (request.expires <= now) requests.delete(key);
@@ -152,7 +152,7 @@ export async function createWebServer(runtime: ApplicationRuntime, options: { po
       checkHost(req); checkOrigin(req);
       if (new URL(req.url ?? "/", origin).pathname !== "/api/events") throw new ApplicationError("NOT_FOUND", "Not found", 404);
       const address = req.socket.remoteAddress;
-      const session = auth.authenticate(req.headers.cookie);
+      const session = auth.authenticate(req.headers.cookie, address);
       ws.handleUpgrade(req, socket, head, (connection) => {
         const client: Client = { id: randomUUID(), session, address, socket: connection, alive: true };
         clients.set(client.id, client);
@@ -162,12 +162,12 @@ export async function createWebServer(runtime: ApplicationRuntime, options: { po
         connection.on("close", () => { clients.delete(client.id); runtime.terminals.releaseClient(client.id); });
         connection.on("message", (raw, binary) => {
           void (async () => {
-            auth.authenticate(req.headers.cookie);
+            auth.authenticate(req.headers.cookie, address);
             if (binary) throw new ApplicationError("INVALID_MESSAGE", "Text messages are required");
             const message = JSON.parse(raw.toString()) as { type?: unknown; sessionId?: unknown; data?: unknown };
             if (!message || typeof message.sessionId !== "string" || message.sessionId.length > 128) throw new ApplicationError("INVALID_MESSAGE", "Invalid terminal message");
             await runtime.requireTerminal(message.sessionId);
-            auth.authenticate(req.headers.cookie);
+            auth.authenticate(req.headers.cookie, address);
             if (clients.get(client.id) !== client || connection.readyState !== WebSocket.OPEN) throw new ApplicationError("CLIENT_NOT_CONNECTED", "Wait for the runtime connection to recover", 409);
             if (message.type === "attach") {
               if (!runtime.terminals.owner(message.sessionId)) runtime.terminals.claim(message.sessionId, client.id);
@@ -191,7 +191,7 @@ export async function createWebServer(runtime: ApplicationRuntime, options: { po
   runtime.on("event", onEvent);
   const heartbeat = setInterval(() => {
     for (const client of clients.values()) {
-      try { auth.authenticate(`sharkbay_session=${client.session}`); } catch { client.socket.close(4001, "Authorization expired"); continue; }
+      try { auth.authenticate(`sharkbay_session=${client.session}`, client.address); } catch { client.socket.close(4001, "Authorization expired"); continue; }
       if (!client.alive) { client.socket.terminate(); continue; }
       client.alive = false; client.socket.ping();
     }
@@ -206,7 +206,7 @@ export async function createWebServer(runtime: ApplicationRuntime, options: { po
   return {
     origin,
     connectionUrl: () => `${origin}/#connect=${auth.issueGrant()}`,
-    revoke: () => { auth.revokeAll(); for (const client of clients.values()) client.socket.close(4001, "Authorization revoked"); },
+    revoke: () => { auth.revokeAll(); for (const client of clients.values()) if (client.session !== "lan") client.socket.close(4001, "Authorization revoked"); },
     async dispose() {
       if (disposed) return;
       disposed = true; clearInterval(heartbeat); auth.revokeAll();

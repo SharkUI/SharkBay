@@ -8,11 +8,20 @@ import { acquireProfileLock } from "../src/runtime/profile-lock.js";
 
 afterEach(() => { vi.useRealTimers(); });
 describe("browser connection authorization", () => {
-  it("requires a session regardless of the peer network", () => {
+  it.each(["127.0.0.1", "::1", "::ffff:127.0.0.1", "10.0.0.103", "172.16.0.1", "172.31.255.255", "192.168.0.1", "::ffff:192.168.1.2", "169.254.1.2"])("allows direct access from %s without a cookie", (address) => {
+    const auth = new SessionAuth();
+    expect(auth.authenticate(undefined, address)).toBe("lan");
+    auth.revokeAll();
+    expect(auth.authenticate(undefined, address)).toBe("lan");
+  });
+  it.each([undefined, "", "8.8.8.8", "203.0.113.1", "172.15.255.255", "172.32.0.1", "192.169.0.1", "10.0.0.256", "10.evil.example", "::ffff:8.8.8.8", "2001:db8::1"])("requires authorization outside local networks: %s", (address) => {
+    expect(() => new SessionAuth().authenticate(undefined, address)).toThrow(/fresh connection/);
+  });
+  it("requires a real session for a public peer and supports revocation", () => {
     const auth = new SessionAuth();
     expect(() => auth.authenticate(undefined)).toThrow(/fresh connection/);
     expect(() => auth.authenticate("sharkbay_session=lan")).toThrow(/fresh connection/);
-    const session = auth.exchange(auth.issueGrant(), "192.168.1.103");
+    const session = auth.exchange(auth.issueGrant(), "203.0.113.1");
     expect(auth.authenticate(`sharkbay_session=${session}`)).toBe(session);
     auth.revokeAll();
     expect(() => auth.authenticate(`sharkbay_session=${session}`)).toThrow(/fresh connection/);

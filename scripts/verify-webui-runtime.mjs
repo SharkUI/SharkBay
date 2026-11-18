@@ -25,6 +25,8 @@ async function until(read) {
 try {
   const link = await until(() => output.match(/SharkBay WebUI: (http:\/\/127\.0\.0\.1:\d+)/)?.[1]);
   const url = new URL(link), origin = url.origin;
+  const existing = execFileSync(process.execPath, ["dist-runtime/src/server/main.js", "--data-dir", path.join(directory, "data"), "--config", config], { env, encoding: "utf8" });
+  assert.ok(existing.includes(origin)); assert.doesNotMatch(existing, /#connect=/);
   const index = await fetch(origin); assert.equal(index.status, 200);
   const html = await index.text(); const asset = html.match(/src="([^"]+\.js)"/)?.[1]; assert.ok(asset); assert.equal((await fetch(new URL(asset, origin))).status, 200);
   const capabilities = await fetch(`${origin}/api/capabilities`);
@@ -44,6 +46,7 @@ try {
   await until(() => messages.find((message) => message.payload?.reset));
   socket.send(JSON.stringify({ type: "input", sessionId: session.id, data: "printf '%s%s\\n' 'compiled-web-' 'ok'\r" }));
   await until(() => messages.find((message) => message.name === "terminal:data" && message.payload.data.includes("compiled-web-ok")));
+  assert.doesNotMatch(output, /#connect=/);
   console.log("NODE_WEBUI_OK compiled CLI, static assets, direct access without grants/cookies, WS and actual PTY output");
   socket.terminate(); child.kill("SIGTERM");
   const [code] = await exited; assert.equal(code, 0);

@@ -9,7 +9,37 @@ import { createWebServer } from "../src/server/http-server.js";
 import { SessionAuth } from "../src/server/session-auth.js";
 import type { ApplicationRuntime } from "../src/runtime/application-runtime.js";
 
-it("requires grants for HTTP and WS and revokes local browser access", async () => {
+it("allows direct local HTTP and WS without cookies while preserving request checks", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "sharkbay-direct-server-"));
+  await writeFile(path.join(root, "index.html"), "<html>fixture</html>");
+  const runtime = Object.assign(new EventEmitter(), { execute: vi.fn(async () => ({ fixture: true })), terminals: { releaseClient: vi.fn() } });
+  const server = await createWebServer(runtime as unknown as ApplicationRuntime, { port: 0, staticRoot: root });
+  let socket: WebSocket | undefined;
+  try {
+    const origin = server.origin;
+    const response = await fetch(`${origin}/api/capabilities`);
+    expect(response.status).toBe(200); expect(response.headers.get("set-cookie")).toBeNull();
+    socket = new WebSocket(`${origin.replace("http:", "ws:")}/api/events`, { origin });
+    const hello = once(socket, "message"); await once(socket, "open");
+    const clientId = JSON.parse((await hello)[0].toString()).clientId;
+    const command = (requestOrigin: string) => fetch(`${origin}/api/command`, {
+      method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json", "x-sharkbay-request": "1", "x-sharkbay-client": clientId },
+      body: JSON.stringify({ requestId: "direct-request-1", method: "fixture" }),
+    });
+    expect((await command("https://untrusted.example")).status).toBe(403);
+    expect((await command(origin)).status).toBe(200);
+    server.revoke();
+    expect((await command(origin)).status).toBe(200);
+    expect(socket.readyState).toBe(WebSocket.OPEN);
+    expect(runtime.execute).toHaveBeenCalledOnce();
+  } finally { socket?.terminate(); await server.dispose(); await rm(root, { recursive: true, force: true }); }
+});
+
+it("requires grants and enforces in-flight revocation for modeled public peers", async () => {
+  // The transport uses loopback; model a public TCP peer at the authentication boundary.
+  const originalAuthenticate = SessionAuth.prototype.authenticate;
+  const authenticatePublic = function (this: SessionAuth, cookie: string | undefined) { return originalAuthenticate.call(this, cookie, "203.0.113.1"); };
+  const peer = vi.spyOn(SessionAuth.prototype, "authenticate").mockImplementation(authenticatePublic);
   const root = await mkdtemp(path.join(os.tmpdir(), "sharkbay-auth-server-"));
   await writeFile(path.join(root, "index.html"), "<html>fixture</html>");
   const runtime = Object.assign(new EventEmitter(), {
@@ -55,9 +85,8 @@ it("requires grants for HTTP and WS and revokes local browser access", async () 
     // Revoke after authentication but before the command body finishes arriving.
     let authenticated!: () => void;
     const reachedBody = new Promise<void>(resolve => { authenticated = resolve; });
-    const originalAuthenticate = SessionAuth.prototype.authenticate;
-    const authSpy = vi.spyOn(SessionAuth.prototype, "authenticate").mockImplementation(function (this: SessionAuth, value) {
-      const result = originalAuthenticate.call(this, value);
+    peer.mockImplementation(function (this: SessionAuth, value) {
+      const result = authenticatePublic.call(this, value);
       authenticated();
       return result;
     });
@@ -65,7 +94,7 @@ it("requires grants for HTTP and WS and revokes local browser access", async () 
     const slowResponse = new Promise<number>(resolve => slow.on("response", res => { res.resume(); resolve(res.statusCode!); }));
     slow.write('{"requestId":"slow-request-1",');
     await reachedBody;
-    authSpy.mockRestore();
+    peer.mockImplementation(authenticatePublic);
     const pendingToken = new URLSearchParams(new URL(server.connectionUrl()).hash.slice(1)).get("connect");
     const closed = once(socket, "close");
     server.revoke();
@@ -81,5 +110,6 @@ it("requires grants for HTTP and WS and revokes local browser access", async () 
     socket?.terminate();
     await server.dispose();
     await rm(root, { recursive: true, force: true });
+    peer.mockRestore();
   }
 });
