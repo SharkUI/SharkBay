@@ -13,6 +13,7 @@ import { CodeGraphPanel } from "./codegraph-panel";
 import { UpdateHint } from "./update-hint";
 import { ProjectStart } from "./project-start";
 import { RuntimeStatus } from "./bridge/runtime-status";
+import { HostFolderPicker } from "./host-folder-picker";
 import { useCompactWebLayout, useWebViewport } from "./mobile-layout";
 import { copyText } from "./clipboard";
 import { TerminalCreateMenu } from "./terminal-create-menu";
@@ -488,12 +489,15 @@ async function renameProjectAlias(uri: string, name: string): Promise<void> {
   await handler({ uri, name });
 }
 
-async function pickAndAddProjects(): Promise<string[]> {
-  const picker = getBridge().config?.pickProjectFolder;
-  if (!picker) throw new Error("Folder picker is not exposed by the preload API.");
-  const result = await picker();
-  if (result.cancelled || result.paths.length === 0) return [];
-  const projectPath = result.paths[0];
+async function pickAndAddProjects(selectedPath?: string): Promise<string[]> {
+  let projectPath = selectedPath;
+  if (!projectPath) {
+    const picker = getBridge().config?.pickProjectFolder;
+    if (!picker) throw new Error("Folder picker is not exposed by the preload API.");
+    const result = await picker();
+    if (result.cancelled) return [];
+    projectPath = result.paths[0];
+  }
   if (!projectPath) return [];
   const addHandler = getBridge().config?.addProject;
   if (!addHandler) throw new Error("Project add is not exposed by the preload API.");
@@ -501,10 +505,10 @@ async function pickAndAddProjects(): Promise<string[]> {
   return [projectPath];
 }
 
-async function cloneRemoteProject(url: string): Promise<string | null> {
+async function cloneRemoteProject(url: string, parentPath?: string): Promise<string | null> {
   const handler = getBridge().config?.cloneProject;
   if (!handler) throw new Error("Remote project cloning is not exposed by the preload API.");
-  const result = await handler({ url });
+  const result = await handler({ url, parentPath });
   return result.cancelled ? null : result.path;
 }
 
@@ -899,15 +903,16 @@ export function App() {
               setToast={setToast}
               onRefresh={refreshWorkspace}
               onOpenSettings={() => setView("settings")}
-              onPickProject={async () => {
-                const paths = await pickAndAddProjects();
+              onPickProject={async (selectedPath) => {
+                const paths = await pickAndAddProjects(selectedPath);
                 if (paths.length) {
                   setToast({ tone: "success", message: "Project added." });
                   await refreshProjects({ showToast: false });
                 }
+                return paths.length > 0;
               }}
-              onCloneProject={async (url) => {
-                const projectPath = await cloneRemoteProject(url);
+              onCloneProject={async (url, parentPath) => {
+                const projectPath = await cloneRemoteProject(url, parentPath);
                 if (projectPath) {
                   setToast({ tone: "success", message: "Project cloned." });
                   await refreshProjects({ showToast: false });
@@ -1077,8 +1082,8 @@ function DashboardView({
   setToast: (toast: Toast) => void;
   onRefresh: () => Promise<void>;
   onOpenSettings: () => void;
-  onPickProject: () => Promise<void>;
-  onCloneProject: (url: string) => Promise<string | null>;
+  onPickProject: (selectedPath?: string) => Promise<boolean>;
+  onCloneProject: (url: string, parentPath?: string) => Promise<string | null>;
   onRemoveProject: (uri: string) => Promise<void>;
   onRenameProject: (uri: string, name: string) => Promise<void>;
   onUninstallProtocol: (repoPath: string, cleanTeamContext?: boolean) => Promise<void>;
@@ -1148,6 +1153,8 @@ function DashboardView({
   const [addProjectModalOpen, setAddProjectModalOpen] = useState(false);
   const [remoteProjectUrl, setRemoteProjectUrl] = useState("");
   const [addingProject, setAddingProject] = useState<"local" | "remote" | null>(null);
+  const [folderPickerPurpose, setFolderPickerPurpose] = useState<"local" | "remote" | null>(null);
+  const [addProjectError, setAddProjectError] = useState("");
   const agentClisByTargetRef = useRef<Record<string, AgentCli[]>>({});
   const agentClisForRestoreRef = useRef<AgentCli[]>(agentClis);
   useEffect(() => { agentClisForRestoreRef.current = agentClis; }, [agentClis]);
@@ -1243,6 +1250,8 @@ function DashboardView({
 
   function openAddProjectModal() {
     setRemoteProjectUrl("");
+    setFolderPickerPurpose(null);
+    setAddProjectError("");
     setAddProjectModalOpen(true);
   }
 
@@ -1252,31 +1261,36 @@ function DashboardView({
     setRemoteProjectUrl("");
   }
 
-  async function addLocalProjectFromModal() {
+  async function addLocalProjectFromModal(selectedPath?: string) {
+    if (!selectedPath && getBridge().projects?.listHostDirectories) { setFolderPickerPurpose("local"); return; }
+    setAddProjectError("");
     setAddingProject("local");
     try {
-      await onPickProject();
-      setAddProjectModalOpen(false);
-      setRemoteProjectUrl("");
+      if (await onPickProject(selectedPath)) {
+        setAddProjectModalOpen(false);
+        setRemoteProjectUrl("");
+      }
     } catch (error) {
-      setToast({ tone: "error", message: asMessage(error) });
+      setAddProjectError(asMessage(error));
     } finally {
       setAddingProject(null);
     }
   }
 
-  async function cloneRemoteProjectFromModal() {
+  async function cloneRemoteProjectFromModal(parentPath?: string) {
     const url = remoteProjectUrl.trim();
     if (!url) return;
+    if (!parentPath && getBridge().projects?.listHostDirectories) { setFolderPickerPurpose("remote"); return; }
+    setAddProjectError("");
     setAddingProject("remote");
     try {
-      const projectPath = await onCloneProject(url);
+      const projectPath = await onCloneProject(url, parentPath);
       if (projectPath) {
         setAddProjectModalOpen(false);
         setRemoteProjectUrl("");
       }
     } catch (error) {
-      setToast({ tone: "error", message: asMessage(error) });
+      setAddProjectError(asMessage(error));
     } finally {
       setAddingProject(null);
     }
@@ -1497,18 +1511,38 @@ function DashboardView({
       </section>
       {addProjectModalOpen ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeAddProjectModal(); }}>
-          <section aria-modal="true" className="modal-panel add-project-dialog" role="dialog" aria-labelledby="add-project-title">
+          <section aria-modal="true" className={cx("modal-panel add-project-dialog", folderPickerPurpose && "has-folder-picker")} role="dialog" aria-labelledby="add-project-title" onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.stopPropagation();
+              if (addingProject) return;
+              if (folderPickerPurpose) { setFolderPickerPurpose(null); setAddProjectError(""); } else closeAddProjectModal();
+            }
+            if (event.key === "Tab") {
+              const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled)"));
+              const first = controls[0], last = controls[controls.length - 1];
+              if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+              else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+            }
+          }}>
             <div className="modal-header">
               <div>
-                <h3 id="add-project-title">Add Project</h3>
+                <h3 id="add-project-title">{folderPickerPurpose === "local" ? "Choose Project Folder" : folderPickerPurpose === "remote" ? "Choose Clone Destination" : "Add Project"}</h3>
               </div>
-              <button aria-label="Close" className="icon-button" disabled={Boolean(addingProject)} type="button" onClick={closeAddProjectModal}><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+              <button aria-label="Close" className="icon-button" disabled={Boolean(addingProject)} type="button" onClick={() => {
+                if (folderPickerPurpose) { setFolderPickerPurpose(null); setAddProjectError(""); } else closeAddProjectModal();
+              }}><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
             </div>
-            {getBridge().config?.pickProjectFolder ? <div className="add-project-body">
+            {addProjectError && !folderPickerPurpose ? <p className="host-folder-error" role="alert">{addProjectError}</p> : null}
+            {folderPickerPurpose && getBridge().projects?.listHostDirectories ? <div className="add-project-body">
+              <HostFolderPicker load={getBridge().projects!.listHostDirectories!} purpose={folderPickerPurpose} busy={Boolean(addingProject)} operationError={addProjectError} onCancel={() => { setFolderPickerPurpose(null); setAddProjectError(""); }} onSelect={(selectedPath) => {
+                if (folderPickerPurpose === "local") void addLocalProjectFromModal(selectedPath);
+                else void cloneRemoteProjectFromModal(selectedPath);
+              }} />
+            </div> : <div className="add-project-body">
               <section className="add-project-section">
                 <div className="add-project-copy">
                   <h4>Local Directory</h4>
-                  <p>Select an existing folder on this computer.</p>
+                  <p>{getBridge().runtime?.host === "web" ? "Select an existing folder on the SharkBay host." : "Select an existing folder on this computer."}</p>
                 </div>
                 <button className="button secondary" disabled={Boolean(addingProject)} type="button" onClick={() => void addLocalProjectFromModal()}>
                   {addingProject === "local" ? "Opening..." : "Choose Folder"}
@@ -1536,9 +1570,6 @@ function DashboardView({
                 </div>
                 <p className="add-project-note">Clone into a parent folder you choose, then add the cloned project.</p>
               </form>
-            </div> : <div className="add-project-body">
-              <p>项目位于 SharkBay 运行主机上。在主机终端添加项目，然后刷新项目列表。</p>
-              <code>npm run start:runtime -- --project /absolute/path/to/project</code>
             </div>}
           </section>
         </div>

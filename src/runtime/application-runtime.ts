@@ -23,6 +23,7 @@ import { createRuntimeTelegram } from "./telegram-runtime.js";
 import { ApplicationError, type ApplicationMethod, type ApplicationMethodMap, type RuntimeTerminal } from "../shared/application-api.js";
 import { validateApplicationInput } from "./application-input.js";
 import { createStartupTimer } from "../main/startup-timing.js";
+import { listHostDirectories, resolveHostDirectory } from "./host-directories.js";
 
 type Handlers = { [M in ApplicationMethod]: (input: ApplicationMethodMap[M]["input"], clientId: string) => ApplicationMethodMap[M]["result"] | Promise<ApplicationMethodMap[M]["result"]> };
 import type { RuntimePaths } from "../shared/types.js";
@@ -51,6 +52,15 @@ export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] 
     const resolveRepo = (repoPath: string) => resolveRuntimeRepoPath(this.paths, fileURLToLocalPath(repoPath));
     this.handlers = {
       "config.get": () => loadRuntimeConfig(this.paths),
+      "config.addProject": async (input) => {
+        const value = input.path ?? input.uri;
+        if (!value?.trim()) throw new ApplicationError("INVALID_INPUT", "Project path required");
+        return addConfiguredProject(this.paths, { path: await resolveHostDirectory(fileURLToLocalPath(value)) });
+      },
+      "config.cloneProject": async (input) => {
+        if (!input.url.trim() || input.url.trim().startsWith("-")) throw new ApplicationError("INVALID_INPUT", "Remote repository URL is required");
+        return cloneProject(this.paths, { ...input, parentPath: await resolveHostDirectory(input.parentPath) });
+      },
       "config.renameProject": async (input) => { await resolveRepo(fileURLToLocalPath(input.uri)); return renameProject(this.paths, input); },
       "config.removeProject": async (input) => { await resolveRepo(fileURLToLocalPath(input.uri ?? input.path ?? "")); return removeConfiguredProject(this.paths, input); },
       "config.createWorktree": async (input) => createWorktree(this.paths, { ...input, sourceProjectPath: await resolveRepo(input.sourceProjectPath) }),
@@ -58,6 +68,7 @@ export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] 
       "config.setTerminalAppearance": (input) => setTerminalAppearance(this.paths, input),
       "config.setStatusChangeNotifications": (input) => setStatusChangeNotificationsEnabled(this.paths, input),
       "projects.scan": () => this.core.scanProjects(this.paths),
+      "projects.listHostDirectories": (input) => listHostDirectories(input.path),
       "projects.getSetupStatus": async (input) => readProjectSetupStatus(await resolveRepo(input.repoPath), this.agents.hookConnectors, path.join(this.paths.userDataPath, "bin", "sharkbay-hook")),
       "projects.getDetail": (input) => this.core.getProjectDetail(this.paths, input),
       "projects.getGitHub": (input) => this.core.readProjectGitHub(this.paths, input),
@@ -177,16 +188,14 @@ export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] 
     const input = validateApplicationInput(method, value);
     const handler = this.handlers[method as ApplicationMethod] as (input: unknown, clientId: string) => unknown;
     const action = () => Promise.resolve(handler(input, clientId));
-    const operation = (method.startsWith("config.") || method === "plugins.setEnabled" ? this.queueConfig(action) : Promise.resolve().then(action)).then((result) => {
-      if (method.startsWith("config.") && method !== "config.get") this.emit("event", "runtime:config", result);
+    const operation = (method.startsWith("config.") || method === "plugins.setEnabled" ? this.queueConfig(action) : Promise.resolve().then(action)).then(async (result) => {
+      if (method.startsWith("config.") && method !== "config.get") this.emit("event", "runtime:config", method === "config.cloneProject" ? await loadRuntimeConfig(this.paths) : result);
       return result;
     });
     this.pending.add(operation);
     try { return await operation; } finally { this.pending.delete(operation); }
   }
 
-  // These methods are available only over the owner-only local control socket.
-  // They cannot be selected through the HTTP command endpoint.
   private queueConfig<T>(action: () => Promise<T>): Promise<T> {
     const operation = this.configQueue.then(action);
     this.configQueue = operation.catch(() => {});
@@ -202,17 +211,7 @@ export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] 
 
   private async executeLocalCommand(method: string, input: any, clientId: string): Promise<unknown> {
     if (!this.started || this.disposal) throw new ApplicationError("RUNTIME_UNAVAILABLE", "Runtime is not ready", 503);
-    if (method === "config.addProject") {
-      const value = input?.path ?? input?.uri;
-      if (typeof value !== "string" || !value.trim()) throw new Error("Project path required");
-      const project = await realpath(fileURLToLocalPath(value));
-      if (!(await stat(project)).isDirectory()) throw new Error("Project must be a directory");
-      return this.queueConfig(() => addConfiguredProject(this.paths, { path: project }));
-    }
-    if (method === "config.cloneProject") {
-      if (typeof input?.url !== "string" || typeof input?.parentPath !== "string") throw new Error("Clone URL and parent path required");
-      return this.queueConfig(() => cloneProject(this.paths, input));
-    }
+    // Host-only administration stays on the owner-only local control socket.
     if (method === "config.setCaffeinateMode") {
       if (!["off", "on", "auto"].includes(input?.mode)) throw new Error("Invalid power mode");
       return this.queueConfig(() => setCaffeinateMode(this.paths, input));

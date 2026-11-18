@@ -8,6 +8,8 @@ const repo: Rule = { required: ["repoPath"], strings: ["repoPath"] };
 const session: Rule = { required: ["sessionId"], strings: ["sessionId"] };
 export const applicationInputRules: Record<ApplicationMethod, Rule> = {
   "config.get": {},
+  "config.addProject": { strings: ["path", "uri"] },
+  "config.cloneProject": { required: ["url", "parentPath"], strings: ["url", "parentPath"] },
   "config.renameProject": { required: ["uri", "name"], strings: ["uri", "name"] },
   "config.removeProject": { strings: ["uri", "path"] },
   "config.createWorktree": { required: ["sourceProjectPath", "branchName"], strings: ["sourceProjectPath", "branchName"] },
@@ -15,6 +17,7 @@ export const applicationInputRules: Record<ApplicationMethod, Rule> = {
   "config.setTerminalAppearance": { strings: ["colorScheme", "fontFamily"], numbers: ["fontSize", "lineHeight"], optional: ["colorScheme", "fontFamily", "fontSize", "lineHeight"] },
   "config.setStatusChangeNotifications": { booleans: ["enabled", "completionEnabled", "approvalEnabled"] },
   "projects.scan": {}, "projects.getSetupStatus": repo,
+  "projects.listHostDirectories": { strings: ["path"] },
   "projects.getDetail": uri, "projects.getGitHub": uri,
   "projects.listFiles": { ...uri, strings: ["projectUri", "directoryPath"] },
   "projects.readFile": file, "projects.writeFile": { ...file, required: [...file.required!, "content"], strings: [...file.strings!, "content", "create"] },

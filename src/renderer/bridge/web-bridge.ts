@@ -168,12 +168,15 @@ export async function createWebBridge(): Promise<SharkBayBridge & { runtime: Web
     config: {
       get: () => request("config.get", undefined),
       listRoots: () => request("config.get", undefined),
+      addProject: (input) => request("config.addProject", input),
+      cloneProject: (input) => request("config.cloneProject", { url: input.url ?? "", parentPath: input.parentPath ?? "" }),
       renameProject: (input) => request("config.renameProject", input), removeProject: (input) => request("config.removeProject", input),
       createWorktree: (input) => request("config.createWorktree", input),
       setAppearanceTheme: (input) => request("config.setAppearanceTheme", input), setTerminalAppearance: (input) => request("config.setTerminalAppearance", input),
       setStatusChangeNotifications: (input) => request("config.setStatusChangeNotifications", input),
     },
     projects: {
+      listHostDirectories: (input) => request("projects.listHostDirectories", input),
       scan: async () => { const result = await request("projects.scan", undefined); return { candidates: result.candidates, roots: result.roots.map((root) => ({ ...root, path: root.path ?? root.inputPath })) }; }, getSetupStatus: (input) => request("projects.getSetupStatus", input),
       getDetail: (input) => request("projects.getDetail", input), getGitHub: (input) => request("projects.getGitHub", input),
       listFiles: (input) => request("projects.listFiles", { projectUri: input.projectUri, directoryPath: input.directoryPath }),

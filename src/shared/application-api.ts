@@ -9,9 +9,12 @@ type Command<I, R> = { input: I; result: R };
 export type RuntimeTerminal = { session: T.TerminalSession; projectUri: string; projectName: string; displayPath: string; ownerId: string | null };
 export type TerminalFrame = T.TerminalDataEvent & { sequence: number; reset?: boolean; cols?: number; rows?: number };
 export type RuntimeCapabilities = { host: "web"; projectsManagedOnHost: true; artifacts: true; reviews: true; usage: true };
+export type HostDirectoryListing = { path: string; parentPath: string | null; directories: Array<{ name: string; path: string }> };
 
 export type ApplicationMethodMap = {
   "config.get": Command<void, T.AppConfig>;
+  "config.addProject": Command<T.ProjectConfigInput, T.AppConfig>;
+  "config.cloneProject": Command<Required<T.CloneProjectInput>, T.CloneProjectResult>;
   "config.renameProject": Command<T.RenameProjectInput, T.AppConfig>;
   "config.removeProject": Command<T.RemoveProjectInput, T.AppConfig>;
   "config.createWorktree": Command<T.CreateWorktreeInput, T.CreateWorktreeResult>;
@@ -19,6 +22,7 @@ export type ApplicationMethodMap = {
   "config.setTerminalAppearance": Command<T.TerminalAppearanceInput, T.AppConfig>;
   "config.setStatusChangeNotifications": Command<T.StatusChangeNotificationsInput, T.AppConfig>;
   "projects.scan": Command<void, T.ScanProjectsResult>;
+  "projects.listHostDirectories": Command<{ path?: string }, HostDirectoryListing>;
   "projects.getSetupStatus": Command<{ repoPath: string }, T.ProjectSetupStatus>;
   "projects.getDetail": Command<{ projectUri: string }, T.ProjectDetail>;
   "projects.getGitHub": Command<{ projectUri: string }, T.GitHubInfo>;

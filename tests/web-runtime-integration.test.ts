@@ -138,9 +138,52 @@ describe("local Web runtime end to end", () => {
       await expect(RuntimeClient.connect(runtime.paths.userDataPath)).rejects.toThrow("privately");
     } finally { await chmod(socketDirectory, 0o700); }
   });
-  it("keeps host administration off the network command endpoint", async () => {
+  it("adds host directories and clones repositories through the browser with desktop parity", async () => {
     const browser = await connect();
-    expect((await command(browser, "config.addProject", { path: directory })).status).toBe(404);
+    const desktop = await RuntimeClient.connect(runtime.paths.userDataPath); desktops.push(desktop);
+    const local = path.join(directory, "Local % 空间"); await mkdir(local);
+    const alias = path.join(directory, "local-alias"); await symlink(local, alias);
+    expect((await fetch(`${browser.origin}/api/command`, { method: "POST", headers: { "Content-Type": "application/json", Origin: browser.origin }, body: JSON.stringify({ requestId: "unauthorized-add", method: "config.addProject", input: { path: local } }) })).status).toBe(401);
+    const listing = await command(browser, "projects.listHostDirectories", { path: directory });
+    expect(listing.ok).toBe(true);
+    expect(listing.result.path).toBe(directory);
+    expect(listing.result.parentPath).toBe(path.dirname(directory));
+    expect(listing.result.directories).toContainEqual({ name: "local-alias", path: alias });
+    expect(listing.result.directories.some((entry: any) => entry.name === "private.txt")).toBe(false);
+    expect((await command(browser, "projects.listHostDirectories", { path: "relative" })).status).toBe(400);
+    expect((await command(browser, "projects.listHostDirectories", { path: path.join(directory, "private.txt") })).ok).toBe(false);
+    expect((await command(browser, "config.addProject", { path: alias })).result.configuredProjects).toContain(local);
+    await command(browser, "config.addProject", { path: local });
+    await desktop.call("config.addProject", { uri: pathToFileURL(local).href });
+    expect((await desktop.call("config.get")).configuredProjects.filter((entry: string) => entry === local)).toHaveLength(1);
+    expect((await command(browser, "config.addProject", { path: path.join(directory, "missing") })).ok).toBe(false);
+    expect((await command(browser, "config.addProject", { path: "relative" })).status).toBe(400);
+    expect((await command(browser, "config.cloneProject", { url: "--upload-pack=bad", parentPath: directory })).status).toBe(400);
+    expect((await command(browser, "config.cloneProject", { url: project })).status).toBe(400);
+    const destination = path.join(directory, "Clone 空间"); await mkdir(destination);
+    const configs: any[] = [];
+    const onConfig = (name: string, payload: unknown) => { if (name === "runtime:config") configs.push(payload); };
+    desktop.on("event", onConfig);
+    const cloned = await command(browser, "config.cloneProject", { url: project, parentPath: destination });
+    expect(cloned.result).toEqual({ cancelled: false, path: path.join(destination, "project") });
+    await waitFor(() => configs.find((config) => config.configuredProjects?.includes(cloned.result.path)));
+    desktop.off("event", onConfig);
+    expect((await desktop.call("config.get")).configuredProjects).toContain(cloned.result.path);
+    expect((await command(browser, "config.cloneProject", { url: project, parentPath: destination })).ok).toBe(false);
+    const desktopDestination = path.join(directory, "desktop-clone"); await mkdir(desktopDestination);
+    const desktopClone = await desktop.call("config.cloneProject", { url: project, parentPath: desktopDestination });
+    expect(desktopClone).toEqual({ cancelled: false, path: path.join(desktopDestination, "project") });
+    expect((await command(browser, "config.get")).result.configuredProjects).toContain(desktopClone.path);
+    const scan = await command(browser, "projects.scan");
+    expect(scan.result.candidates.some((entry: any) => entry.uri === toLocalProjectUri(local))).toBe(true);
+    expect(scan.result.candidates.some((entry: any) => entry.uri === toLocalProjectUri(cloned.result.path))).toBe(true);
+    await command(browser, "config.removeProject", { path: local });
+    await command(browser, "config.removeProject", { path: cloned.result.path });
+    await desktop.call("config.removeProject", { path: desktopClone.path });
+  });
+  it("keeps desktop-only administration off the network command endpoint", async () => {
+    const browser = await connect();
+    expect((await command(browser, "config.setCaffeinateMode", { mode: "off" })).status).toBe(404);
     expect((await command(browser, "desktop.sessions")).status).toBe(404);
     const desktop = await RuntimeClient.connect(runtime.paths.userDataPath); desktops.push(desktop);
     expect((await desktop.call("config.get")).caffeinateMode).toBe("auto");
