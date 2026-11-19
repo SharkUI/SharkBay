@@ -12,12 +12,12 @@ agent: Codex GPT-6
 sessionId: 01a1edf1-0eb3-7c32-ae19-51cc6395dc3f
 branch: main
 createdAt: 2026-11-18T15:07:00Z
-updatedAt: 2026-11-19T02:58:39Z
+updatedAt: 2026-11-19T07:05:10Z
 completedAt: 2026-11-19T02:58:39Z
 ---
 
 ## Summary
-已通过 TasksDetailTab 的项目 key 修复 WebUI 切换项目后 Tasks 列表/详情沿用旧项目状态的问题。回归测试及隔离真实 Safari 的切换、空项目、隐藏后切换、文件刷新与页面刷新验证通过；修改尚未提交、发布或安装。
+已通过 TasksDetailTab 的项目 key 修复 WebUI 切换项目后 Tasks 列表/详情沿用旧项目状态的问题。回归测试及隔离真实 Safari 的切换、空项目、隐藏后切换、文件刷新与页面刷新验证通过；修改尚未提交或正式发布；已由 B7N4P2 测试包安装到 103。
 
 ## Files
 - .sharkbay/tasks/T8P4W2-u3960864-m81ae10-fix-webui-project-tasks.md
@@ -48,6 +48,8 @@ completedAt: 2026-11-19T02:58:39Z
 - 2026-11-19 续做：`npx vitest run tests/project-tasks-switch.test.ts tests/renderer-workflow.test.ts tests/task-runtime.test.ts tests/tasks.test.ts --maxWorkers=1` 4 文件/15 tests 通过；`npm run typecheck`、`npm run build:runtime`、`npx vite build`、`git diff --check` 通过。
 - Safari 真实编译 WebUI、三个隔离项目完成上述状态转换并检查最终截图：Beta 选中且只有 Beta watcher updated，Tasks 选中；错误/迟到响应由真实 React 回归覆盖。刷新页面沿用默认 Git 标签，重新打开 Tasks 内容正确，未改变既有刷新语义。
 - 隔离 Runtime 16087 已正常 --stop，进程退出及 runtime.lock 释放通过，临时项目/config 已清理。工作区其他 Island 等变更保留，未产生提交；本次修复未包含在已发布的 v0.3.12 或 103 安装包中。
+
+- 后续安装任务 B7N4P2-u3960864-m81ae10 已将包含本修复的测试包覆盖并启动 103，包内及实际提供的 WebUI 静态资源摘要一致；正式 v0.3.12 发布未变。
 
 ## Notes
 - 团队上下文只读；保持现有布局，不改变用户配置和真实项目任务。
