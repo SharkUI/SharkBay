@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.13] — 2026-11-20
+
+### Added
+- The Codex prompt bar in the desktop app and WebUI shares one attachment picker. Choose or paste files, remove attachments from an individual draft, and send them with an optional prompt. PNG and JPEG files become visual attachments. Codex receives host paths for other files.
+- Attach up to four files totaling 64 MiB per prompt. Each PNG or JPEG is limited to 8 MiB.
+- Desktop General settings can hide the Island notification area independently of notification sounds.
+
+### Fixed
+- Paste clipboard images directly into the Codex terminal in the WebUI.
+- Submit Codex prompts with a single Enter press while preserving line breaks.
+- Refresh the Tasks view when switching projects in the WebUI.
+
+### Upgrade Note
+- Finish active terminal work and explicitly stop the previous shared runtime before starting this version. Updating or reopening the desktop app alone can reuse an older runtime.
+- Requires macOS 13 Ventura or later on Apple Silicon (arm64).
+
 ## [0.3.12] — 2026-11-18
 
 ### Added

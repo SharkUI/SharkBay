@@ -6,10 +6,12 @@ import { showSharePopover, type ShowSharePopoverInput } from "../src/main/share-
 import { closeFindPopover, focusFindPopover, isFindPopoverOpen, sendFindResult, showFindPopover } from "./find-popover.js";
 import { ipcChannels as channels } from "../src/shared/ipc-channels.js";
 import { appChannels } from "../src/shared/app-events.js";
+import { attachmentPromptForm, type AttachmentPromptInput } from "../src/shared/application-api.js";
 import type { AppConfig, AppearanceTheme, BrowserActionInput, BrowserCloseInput, BrowserCreateInput, BrowserFindInput, BrowserFoundInPageEvent, BrowserNavigateInput, BrowserResizeInput, BrowserSession, BrowserStopFindInput, BrowserUpdateEvent, CloneProjectInput, CloneProjectResult, FindPopoverOpenInput } from "../src/shared/types.js";
 import type { RuntimeClient } from "../src/runtime/control-client.js";
 
 export type IpcCallbacks = {
+  onIslandEnabledChanged?: (enabled: boolean) => void;
   onAppearanceThemeChanged?: (theme: AppearanceTheme) => void;
   onStatusChangeNotificationsChanged?: (config: Pick<AppConfig, "statusChangeNotificationsEnabled" | "agentStatusCompletionSoundEnabled" | "agentStatusApprovalSoundEnabled">) => void;
 };
@@ -33,6 +35,7 @@ export async function registerIpcHandlers(client: RuntimeClient, callbacks: IpcC
   runtimeClient = client;
   client.on("event", (name, payload) => {
     if (name === "runtime:config") {
+      callbacks.onIslandEnabledChanged?.((payload as AppConfig).islandEnabled !== false);
       callbacks.onAppearanceThemeChanged?.((payload as AppConfig).appearanceTheme);
       callbacks.onStatusChangeNotificationsChanged?.(payload as AppConfig);
     }
@@ -42,7 +45,7 @@ export async function registerIpcHandlers(client: RuntimeClient, callbacks: IpcC
   client.on("disconnected", () => { for (const window of BrowserWindow.getAllWindows()) if (!window.isDestroyed()) window.webContents.send(channels.runtimeConnection, "disconnected"); });
   const methods: Record<string, string> = {
     [channels.listRoots]: "config.get", [channels.addProject]: "config.addProject", [channels.removeProject]: "config.removeProject", [channels.renameProject]: "config.renameProject", [channels.createWorktree]: "config.createWorktree",
-    [channels.setAppearanceTheme]: "config.setAppearanceTheme", [channels.setStatusChangeNotifications]: "config.setStatusChangeNotifications", [channels.setCaffeinateMode]: "config.setCaffeinateMode", [channels.setTerminalAppearance]: "config.setTerminalAppearance",
+    [channels.setAppearanceTheme]: "config.setAppearanceTheme", [channels.setStatusChangeNotifications]: "config.setStatusChangeNotifications", [channels.setIslandEnabled]: "config.setIslandEnabled", [channels.setCaffeinateMode]: "config.setCaffeinateMode", [channels.setTerminalAppearance]: "config.setTerminalAppearance",
     [channels.scanProjects]: "projects.scan", [channels.getProjectDetail]: "projects.getDetail", [channels.projectSetupStatus]: "projects.getSetupStatus", [channels.readProjectGitHub]: "projects.getGitHub", [channels.listProjectFiles]: "projects.listFiles", [channels.readProjectFile]: "projects.readFile", [channels.writeProjectFile]: "projects.writeFile", [channels.deleteProjectFile]: "projects.deleteFile", [channels.renameProjectFile]: "projects.renameFile",
     [channels.codeGraphGetStatus]: "codeGraph.getStatus", [channels.codeGraphEnsureStatus]: "codeGraph.ensureStatus", [channels.listAgentClis]: "agents.listClis", [channels.listInstallRecipes]: "agents.listInstallRecipes", [channels.installTool]: "agents.installTool", [channels.setHooksEnabled]: "agents.setHooksEnabled", [channels.hookGetSessions]: "hooks.getSessions", [channels.pathExistsOnTarget]: "targets.pathExists", [channels.listPlugins]: "plugins.list", [channels.setPluginEnabled]: "plugins.setEnabled", [channels.readDiagnostics]: "diagnostics.read",
     [channels.createTerminal]: "terminal.create", [channels.terminalInput]: "terminal.input", [channels.resizeTerminal]: "terminal.resize", [channels.closeTerminal]: "terminal.close", [channels.startReview]: "reviews.start", [channels.cancelReview]: "reviews.cancel", [channels.recordSessionPrompt]: "terminal.recordPrompt", [channels.recordPromptHistoryEntry]: "terminal.recordPromptHistoryEntry", [channels.loadSessionPromptHistory]: "terminal.loadPromptHistory",
@@ -64,6 +67,19 @@ export async function registerIpcHandlers(client: RuntimeClient, callbacks: IpcC
   handle(channels.runtimeAttach, (input) => client.call("terminal.attach", input));
   handle(channels.runtimeClaim, (input) => client.call("terminal.claim", input));
   handle(channels.runtimeConnect, () => client.call("connect"));
+  handle(channels.terminalSubmitAttachments, async (input: AttachmentPromptInput) => {
+    const form = attachmentPromptForm(input);
+    const { origin, token } = await client.call<{ origin: string; token: string }>("terminal.attachmentUpload");
+    const url = new URL("/api/terminal/attachment-prompt", origin);
+    url.searchParams.set("sessionId", input.sessionId);
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { Origin: origin, "X-SharkBay-Request": "1", "X-SharkBay-Attachment-Token": token, "X-SharkBay-Request-Id": input.requestId },
+      body: form,
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error?.message ?? "Could not send the prompt.");
+  });
   handle(channels.setCaffeinateActive, async (input: { active: boolean }) => { await caffeinate.setActive(input.active === true); });
   browserManager.on("update", (event: BrowserUpdateEvent, ownerWindow) => {
     const windows = event.reason === "created" ? [ownerWindow] : BrowserWindow.getAllWindows();

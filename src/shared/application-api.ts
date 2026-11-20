@@ -1,5 +1,51 @@
 import type * as T from "./types.js";
 
+export const promptImageTypes = ["image/png", "image/jpeg"];
+export const maxPromptImageBytes = 8 * 1024 * 1024;
+export const maxPromptAttachmentTotalBytes = 64 * 1024 * 1024;
+export const maxPromptAttachments = 4;
+
+export function promptAttachmentImageType(name: string, type: string): "image/png" | "image/jpeg" | undefined {
+  const filename = name.toLowerCase();
+  if (type === "image/png" || filename.endsWith(".png")) return "image/png";
+  if (type === "image/jpeg" || filename.endsWith(".jpg") || filename.endsWith(".jpeg")) return "image/jpeg";
+  return undefined;
+}
+
+export function promptAttachmentSizeError(files: readonly { name: string; type: string; size: number }[]): string | undefined {
+  if (files.some(({ name, type, size }) => size > maxPromptImageBytes && promptAttachmentImageType(name, type))) {
+    return "Each PNG or JPEG image must be 8 MiB or smaller.";
+  }
+  if (files.reduce((total, file) => total + file.size, 0) > maxPromptAttachmentTotalBytes) {
+    return "Attachments must be 64 MiB or smaller in total.";
+  }
+  return undefined;
+}
+
+export type AttachmentPromptInput = {
+  sessionId: string;
+  text: string;
+  requestId: string;
+  files: { name: string; type: string; data: ArrayBuffer }[];
+};
+
+export function attachmentPromptForm(input: AttachmentPromptInput): FormData {
+  if (typeof input?.text !== "string" || !Array.isArray(input.files) || !input.files.length || input.files.length > maxPromptAttachments) {
+    throw new Error(`Attach up to ${maxPromptAttachments} files per prompt.`);
+  }
+  if (input.files.some((file) => typeof file?.name !== "string" || typeof file.type !== "string" || !(file.data instanceof ArrayBuffer))) {
+    throw new Error("Invalid attachment file.");
+  }
+  const sizeError = promptAttachmentSizeError(input.files.map(({ name, type, data }) => ({ name, type, size: data.byteLength })));
+  if (sizeError) throw new Error(sizeError);
+  const form = new FormData();
+  form.set("prompt", input.text);
+  for (const file of input.files) {
+    form.append("file", new Blob([file.data], { type: file.type }), file.name);
+  }
+  return form;
+}
+
 export class ApplicationError extends Error {
   constructor(readonly code: string, message: string, readonly status = 400) { super(message); }
 }

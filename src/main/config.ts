@@ -27,6 +27,7 @@ export function createDefaultConfig(): AppConfig {
     statusChangeNotificationsEnabled: true,
     agentStatusCompletionSoundEnabled: true,
     agentStatusApprovalSoundEnabled: true,
+    islandEnabled: true,
     caffeinateMode: "auto",
     telegram: createDefaultTelegramConfig(),
     updatedAt: today(),
@@ -188,6 +189,15 @@ export async function setStatusChangeNotificationsEnabled(runtime: IpcRuntimeLik
   return config;
 }
 
+export async function setIslandEnabled(runtime: IpcRuntimeLike, input: { enabled: boolean }): Promise<AppConfig> {
+  const configPath = getRuntimeConfigPath(runtime);
+  const config = await loadAppConfig(configPath);
+  config.islandEnabled = input.enabled;
+  config.updatedAt = today();
+  await saveAppConfig(config, configPath);
+  return config;
+}
+
 export async function setCaffeinateMode(runtime: IpcRuntimeLike, input: CaffeinateModeInput): Promise<AppConfig> {
   const configPath = getRuntimeConfigPath(runtime);
   const config = await loadAppConfig(configPath);
@@ -256,6 +266,7 @@ function normalizeAppConfig(value: unknown): AppConfig {
     agentStatusApprovalSoundEnabled: typeof value.agentStatusApprovalSoundEnabled === "boolean"
       ? value.agentStatusApprovalSoundEnabled
       : legacyStatusSoundsEnabled,
+    islandEnabled: value.islandEnabled !== false,
     caffeinateMode: normalizeCaffeinateMode(value.caffeinateMode, value.caffeinateWhenTerminalWorkingEnabled),
     ...(terminalColorScheme ? { terminalColorScheme } : {}),
     ...(terminalFontFamily ? { terminalFontFamily } : {}),
@@ -339,6 +350,7 @@ function shouldPersistMigratedConfig(raw: unknown, normalized: AppConfig): boole
   if (raw.statusChangeNotificationsEnabled !== normalized.statusChangeNotificationsEnabled) return true;
   if (raw.agentStatusCompletionSoundEnabled !== normalized.agentStatusCompletionSoundEnabled) return true;
   if (raw.agentStatusApprovalSoundEnabled !== normalized.agentStatusApprovalSoundEnabled) return true;
+  if (raw.islandEnabled !== normalized.islandEnabled) return true;
   if (raw.caffeinateMode !== normalized.caffeinateMode) return true;
   if (raw.terminalColorScheme !== normalized.terminalColorScheme) return true;
   if (raw.terminalFontFamily !== normalized.terminalFontFamily) return true;

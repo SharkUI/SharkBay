@@ -13,6 +13,7 @@ export type AppConfig = {
   statusChangeNotificationsEnabled: boolean;
   agentStatusCompletionSoundEnabled: boolean;
   agentStatusApprovalSoundEnabled: boolean;
+  islandEnabled: boolean;
   caffeinateMode: CaffeinateMode;
   terminalColorScheme?: string;
   terminalFontFamily?: string;

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { createCoreRuntime } from "../core/core-runtime.js";
 import { toLocalProjectUri } from "../core/project-uri.js";
 import { CODEGRAPH_PLUGIN_ID } from "../plugins/bundled/codegraph-detector.js";
-import { addConfiguredProject, setCaffeinateMode, loadRuntimeConfig, renameProject, removeConfiguredProject, setAppearanceTheme, setTerminalAppearance, setStatusChangeNotificationsEnabled, setPluginEnabledConfig } from "../main/config.js";
+import { addConfiguredProject, setIslandEnabled, setCaffeinateMode, loadRuntimeConfig, renameProject, removeConfiguredProject, setAppearanceTheme, setTerminalAppearance, setStatusChangeNotificationsEnabled, setPluginEnabledConfig } from "../main/config.js";
 import { createWorktree } from "../main/worktree.js";
 import { readProjectSetupStatus } from "../main/project-setup.js";
 import { reserveArtifactPath, resolveGitHubIdentity } from "../main/harness.js";
@@ -212,6 +212,12 @@ export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] 
   private async executeLocalCommand(method: string, input: any, clientId: string): Promise<unknown> {
     if (!this.started || this.disposal) throw new ApplicationError("RUNTIME_UNAVAILABLE", "Runtime is not ready", 503);
     // Host-only administration stays on the owner-only local control socket.
+    if (method === "config.setIslandEnabled") {
+      if (typeof input?.enabled !== "boolean") throw new Error("Enabled required");
+      const config = await this.queueConfig(() => setIslandEnabled(this.paths, input));
+      this.emit("event", "runtime:config", config);
+      return config;
+    }
     if (method === "config.setCaffeinateMode") {
       if (!["off", "on", "auto"].includes(input?.mode)) throw new Error("Invalid power mode");
       return this.queueConfig(() => setCaffeinateMode(this.paths, input));

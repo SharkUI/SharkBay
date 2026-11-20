@@ -1,12 +1,13 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { createDefaultConfig, getRuntimeConfigPath, loadAppConfig, setCaffeinateMode, setTerminalAppearance } from "../src/main/config.js";
+import { createDefaultConfig, getRuntimeConfigPath, loadAppConfig, setIslandEnabled, setCaffeinateMode, setTerminalAppearance } from "../src/main/config.js";
 import { createGitRepoFixture, makeTestRuntime, writeJson } from "./helpers.js";
 
 describe("config migration", () => {
   it("defaults new configs to the Morning appearance", () => {
     expect(createDefaultConfig().appearanceTheme).toBe("morning");
+    expect(createDefaultConfig().islandEnabled).toBe(true);
     expect(createDefaultConfig().caffeinateMode).toBe("auto");
   });
 
@@ -31,10 +32,24 @@ describe("config migration", () => {
       disabledPluginIds: [],
       appearanceTheme: "night",
       statusChangeNotificationsEnabled: true,
+      islandEnabled: true,
       caffeinateMode: "auto",
     }));
+    expect(persisted.islandEnabled).toBe(true);
     expect(persisted.configuredProjects).toEqual([project]);
     expect(persisted.disabledPluginIds).toEqual([]);
+  });
+
+  it("persists disabling and re-enabling Island without changing sounds", async () => {
+    const runtime = await makeTestRuntime("config-island");
+    for (const enabled of [false, true]) {
+      const configured = await setIslandEnabled(runtime, { enabled });
+      expect(configured.islandEnabled).toBe(enabled);
+      const loaded = await loadAppConfig(getRuntimeConfigPath(runtime));
+      expect(loaded.islandEnabled).toBe(enabled);
+      expect(loaded.agentStatusCompletionSoundEnabled).toBe(true);
+      expect(loaded.agentStatusApprovalSoundEnabled).toBe(true);
+    }
   });
 
   it.each(["off", "on", "auto"] as const)("persists caffeinate mode %s", async (mode) => {

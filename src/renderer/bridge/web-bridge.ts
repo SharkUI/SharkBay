@@ -1,6 +1,6 @@
 import type { SharkBayBridge } from "../types.js";
 import type { TerminalSession } from "../../shared/types.js";
-import type { ApplicationMethod, ApplicationMethodMap, RuntimeTerminal, TerminalFrame } from "../../shared/application-api.js";
+import { attachmentPromptForm, maxPromptImageBytes, promptImageTypes, type ApplicationMethod, type ApplicationMethodMap, type AttachmentPromptInput, type RuntimeTerminal, type TerminalFrame } from "../../shared/application-api.js";
 
 export type ConnectionState = "connecting" | "connected" | "disconnected" | "unauthorized";
 export type WebRuntimeBridge = {
@@ -15,6 +15,8 @@ export type WebRuntimeBridge = {
   attachTerminal: (sessionId: string) => void;
   canControl: (sessionId: string) => boolean;
   takeControl: (sessionId: string) => Promise<void>;
+  attachClipboardImage?: (sessionId: string, image: Blob) => Promise<void>;
+  submitAttachmentPrompt?: (input: AttachmentPromptInput) => Promise<void>;
   previewUrl: (url: string) => string;
 };
 
@@ -161,6 +163,23 @@ export async function createWebBridge(): Promise<SharkBayBridge & { runtime: Web
     onControl: (callback) => subscribe("control", callback), onTerminalsChanged: (callback) => subscribe("terminals", callback), onNotice: (callback) => subscribe("notice", callback),
     listTerminals, attachTerminal, canControl,
     takeControl: async (sessionId) => { await request("terminal.claim", { sessionId }); owners.set(sessionId, clientId); publish("control", undefined); attachTerminal(sessionId); },
+    attachClipboardImage: async (sessionId, image) => {
+      if (!canControl(sessionId)) throw new Error("Take control of this terminal to paste an image.");
+      if (!promptImageTypes.includes(image.type)) throw new Error("Paste a PNG or JPEG image.");
+      if (image.size > maxPromptImageBytes) throw new Error("Clipboard image exceeds 8 MiB.");
+      const response = await fetch(`/api/terminal/clipboard-image?sessionId=${encodeURIComponent(sessionId)}`, {
+        method: "POST", headers: { "Content-Type": image.type, "X-SharkBay-Request": "1", "X-SharkBay-Client": clientId! }, body: image,
+      });
+      if (!response.ok) throw new Error((await response.json()).error?.message ?? "Could not attach clipboard image.");
+    },
+    submitAttachmentPrompt: async (input) => {
+      const { sessionId, requestId } = input;
+      if (!canControl(sessionId)) throw new Error("Take control of this terminal to send a prompt.");
+      const response = await fetch(`/api/terminal/attachment-prompt?sessionId=${encodeURIComponent(sessionId)}`, {
+        method: "POST", headers: { "X-SharkBay-Request": "1", "X-SharkBay-Client": clientId!, "X-SharkBay-Request-Id": requestId }, body: attachmentPromptForm(input),
+      });
+      if (!response.ok) throw new Error((await response.json()).error?.message ?? "Could not send the prompt.");
+    },
     previewUrl: (url) => `/api/preview?url=${encodeURIComponent(url)}`,
   };
   return {

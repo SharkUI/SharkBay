@@ -18,6 +18,7 @@ const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? "http://127.0.0.1:5184";
 
 let mainWindow: BrowserWindow | null = null;
 let islandWindow: BrowserWindow | null = null;
+let islandEnabled = true;
 let appearanceTheme: AppearanceTheme = "morning";
 let isQuitting = false;
 let appUpdates: AppUpdates | null = null;
@@ -249,6 +250,16 @@ async function loadMainWindowContent(window: BrowserWindow): Promise<void> {
   startup("main-renderer-loaded");
 }
 
+function setIslandEnabled(enabled: boolean): void {
+  if (islandEnabled === enabled) return;
+  islandEnabled = enabled;
+  if (!islandWindow || islandWindow.isDestroyed()) return;
+  islandWindow.webContents.send("island:collapse");
+  islandWindow.setIgnoreMouseEvents(true, { forward: true });
+  if (enabled) islandWindow.show();
+  else islandWindow.hide();
+}
+
 function createIslandWindow(config: Pick<AppConfig, "statusChangeNotificationsEnabled" | "agentStatusCompletionSoundEnabled" | "agentStatusApprovalSoundEnabled">): BrowserWindow {
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width: screenWidth } = primaryDisplay.size;
@@ -308,7 +319,7 @@ function createIslandWindow(config: Pick<AppConfig, "statusChangeNotificationsEn
       agentStatusCompletionSoundEnabled: config.agentStatusCompletionSoundEnabled !== false,
       agentStatusApprovalSoundEnabled: config.agentStatusApprovalSoundEnabled !== false,
     });
-    window.show();
+    if (islandEnabled) window.show();
   });
 
   ipcMain.on("island:setExpanded", (_event, expanded: boolean, height?: number) => {
@@ -408,8 +419,10 @@ if (ownsWindow) app.whenReady().then(async () => {
   const config = await runtime.call<AppConfig>("config.get");
   startup("config-loaded");
   appearanceTheme = config.appearanceTheme;
+  islandEnabled = config.islandEnabled !== false;
 
   await registerIpcHandlers(runtime, {
+    onIslandEnabledChanged: setIslandEnabled,
     onAppearanceThemeChanged: setAppearanceTheme,
     onStatusChangeNotificationsChanged: (preferences) => {
       if (!islandWindow || islandWindow.isDestroyed()) return;

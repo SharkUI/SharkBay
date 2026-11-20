@@ -4,8 +4,9 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { ApplicationRuntime } from "./application-runtime.js";
 import { runtimeControlPath, runtimeProtocolVersion } from "./control-client.js";
+import type { createWebServer } from "../server/http-server.js";
 
-export async function createRuntimeControl(runtime: ApplicationRuntime, web: { origin: string; connectionUrl(): string; revoke(): void }, stop?: () => void) {
+export async function createRuntimeControl(runtime: ApplicationRuntime, web: Awaited<ReturnType<typeof createWebServer>>, stop?: () => void) {
   const socketPath = runtimeControlPath(await realpath(runtime.paths.userDataPath));
   await mkdir(path.dirname(socketPath), { recursive: true, mode: 0o700 });
   const directory = await lstat(path.dirname(socketPath));
@@ -17,6 +18,7 @@ export async function createRuntimeControl(runtime: ApplicationRuntime, web: { o
   const server = net.createServer((socket) => {
     clients.add(socket);
     const clientId = `desktop-${randomUUID()}`;
+    let attachmentUpload: ReturnType<typeof web.openDesktopAttachmentUpload> | undefined;
     let ready = false, buffer = "";
     const send = (value: unknown) => {
       if (socket.destroyed) return;
@@ -28,7 +30,7 @@ export async function createRuntimeControl(runtime: ApplicationRuntime, web: { o
     runtime.on("event", event);
     socket.setEncoding("utf8");
     socket.on("error", () => {});
-    socket.on("close", () => { clients.delete(socket); runtime.off("event", event); runtime.terminals.releaseClient(clientId); });
+    socket.on("close", () => { attachmentUpload?.close(); clients.delete(socket); runtime.off("event", event); runtime.terminals.releaseClient(clientId); });
     socket.on("data", (chunk) => {
       buffer += chunk;
       if (buffer.length > 2 * 1024 * 1024) { socket.destroy(); return; }
@@ -47,6 +49,10 @@ export async function createRuntimeControl(runtime: ApplicationRuntime, web: { o
               if (!ready) throw new Error("Runtime handshake required");
               if (request.method === "connect") result = web.connectionUrl();
               else if (request.method === "revoke") web.revoke();
+              else if (request.method === "terminal.attachmentUpload") {
+                attachmentUpload ??= web.openDesktopAttachmentUpload(clientId);
+                result = { origin: web.origin, token: attachmentUpload.token };
+              }
               else if (request.method === "stop" && stop) setTimeout(stop, 50);
               else if (request.method === "terminal.attach") {
                 const sessionId = request.input?.sessionId;

@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { appChannels } from "../src/shared/app-events.js";
+import type { AttachmentPromptInput } from "../src/shared/application-api.js";
 import { ipcChannels as channels } from "../src/shared/ipc-channels.js";
 import type { AppUpdateState } from "../src/shared/app-updates.js";
 import type { PluginSummary } from "../src/plugins/plugin-host.js";
@@ -175,6 +176,7 @@ const runtime = {
   attachTerminal: (sessionId: string) => { void ipcRenderer.invoke(channels.runtimeAttach, { sessionId }).catch((error) => console.error(error.message)); },
   canControl: (sessionId: string) => runtimeState === "connected" && !!runtimeClientId && runtimeOwners.get(sessionId) === runtimeClientId,
   takeControl: async (sessionId: string) => { await ipcRenderer.invoke(channels.runtimeClaim, { sessionId }); await listRuntimeTerminals(); await ipcRenderer.invoke(channels.runtimeAttach, { sessionId }); },
+  submitAttachmentPrompt: (input: AttachmentPromptInput): Promise<void> => ipcRenderer.invoke(channels.terminalSubmitAttachments, input),
   previewUrl: (url: string) => url,
 };
 const sharkBayApi = {
@@ -208,6 +210,7 @@ const sharkBayApi = {
     createWorktree: (input: CreateWorktreeInput) => invoke<CreateWorktreeResult>(channels.createWorktree, input),
     setAppearanceTheme: (input: AppearanceThemeInput) => invoke<AppConfig>(channels.setAppearanceTheme, input),
     setStatusChangeNotifications: (input: StatusChangeNotificationsInput) => invoke<AppConfig>(channels.setStatusChangeNotifications, input),
+    setIslandEnabled: (input: { enabled: boolean }) => invoke<AppConfig>(channels.setIslandEnabled, input),
     setCaffeinateMode: (input: CaffeinateModeInput) => invoke<AppConfig>(channels.setCaffeinateMode, input),
     setTerminalAppearance: (input: TerminalAppearanceInput) => invoke<AppConfig>(channels.setTerminalAppearance, input)
   },

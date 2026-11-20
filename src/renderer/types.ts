@@ -20,6 +20,7 @@ export type AppConfig = {
   statusChangeNotificationsEnabled?: boolean;
   agentStatusCompletionSoundEnabled?: boolean;
   agentStatusApprovalSoundEnabled?: boolean;
+  islandEnabled?: boolean;
   caffeinateMode?: CaffeinateMode;
   terminalColorScheme?: string;
   terminalFontFamily?: string;
@@ -431,6 +432,7 @@ export type ArtifactRunStartedEvent = {
 };
 
 export type TerminalUpdateEvent = {
+  reason?: "created" | "closed";
   session: TerminalSession;
 };
 
@@ -690,6 +692,7 @@ export type SharkBayBridge = {
     createWorktree?: (input: { sourceProjectPath: string; branchName: string }) => Promise<{ targetPath: string; branchName: string }>;
     setAppearanceTheme?: (input: { theme: AppearanceTheme }) => Promise<AppConfig>;
     setStatusChangeNotifications?: (input: { enabled?: boolean; completionEnabled?: boolean; approvalEnabled?: boolean }) => Promise<AppConfig>;
+    setIslandEnabled?: (input: { enabled: boolean }) => Promise<AppConfig>;
     setCaffeinateMode?: (input: { mode: CaffeinateMode }) => Promise<AppConfig>;
     setTerminalAppearance?: (input: { colorScheme?: string | null; fontFamily?: string | null; fontSize?: number | null; lineHeight?: number | null }) => Promise<AppConfig>;
   };

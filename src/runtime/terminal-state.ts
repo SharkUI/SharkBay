@@ -58,6 +58,7 @@ export class TerminalState {
     return this.enqueue(screen, () => send(this.snapshot(sessionId, screen)));
   }
   owner(sessionId: string): string | null { return this.owners.get(sessionId) ?? null; }
+  acceptsBracketedPaste(sessionId: string): boolean { return this.screen(sessionId).terminal.modes.bracketedPasteMode; }
   claim(sessionId: string, clientId: string): { ownerId: string } {
     this.screen(sessionId);
     this.owners.set(sessionId, clientId);

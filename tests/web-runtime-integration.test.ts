@@ -14,6 +14,7 @@ import { ApplicationRuntime } from "../src/runtime/application-runtime.js";
 import { createWebServer } from "../src/server/http-server.js";
 import { createDefaultConfig, saveAppConfig } from "../src/main/config.js";
 import { toLocalProjectUri } from "../src/core/project-uri.js";
+import { attachmentPromptForm, maxPromptAttachmentTotalBytes, maxPromptImageBytes, promptAttachmentSizeError } from "../src/shared/application-api.js";
 
 type Message = { type: string; clientId?: string; name?: string; code?: string; payload?: any };
 type Browser = { cookie: string; origin: string; socket: WebSocket; clientId: string; messages: Message[] };
@@ -96,6 +97,108 @@ describe("local Web runtime end to end", () => {
       await response.arrayBuffer();
     }
   });
+  it("submits mixed attachments from both clients through the same controlled Codex PTY", async () => {
+    const owner = await connect();
+    const observer = await connect();
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKklEQVR4nGM4EWhCU8QwasGoBaMWjFowasGoBaMWjFowasGoBaMWDBULAHWBNEy+MpZVAAAAAElFTkSuQmCC", "base64");
+    const paste = (browser: Browser, sessionId: string, data = png, origin = browser.origin) => fetch(
+      `${browser.origin}/api/terminal/clipboard-image?sessionId=${sessionId}`,
+      { method: "POST", headers: { Origin: origin, "Content-Type": "image/png", "X-SharkBay-Request": "1", "X-SharkBay-Client": browser.clientId }, body: new Uint8Array(data) },
+    );
+    const imageFile = { name: "fixture.png", type: "image/png", data: Uint8Array.from(png).buffer };
+    const csv = new Uint8Array(maxPromptImageBytes + 1).fill(0x0a);
+    csv.set(new TextEncoder().encode("a,b\n1,2\n"));
+    const csvFile = { name: "report with spaces.csv", type: "text/csv", data: csv.buffer };
+    const atBudget = { name: csvFile.name, type: csvFile.type, size: maxPromptAttachmentTotalBytes };
+    expect(promptAttachmentSizeError([atBudget])).toBeUndefined();
+    expect(promptAttachmentSizeError([atBudget, { ...atBudget, size: 1 }])).toContain("64 MiB");
+    const postAttachments = (origin: string, authorization: Record<string, string>, sessionId: string, requestId: string, body: FormData) => fetch(
+      `${origin}/api/terminal/attachment-prompt?sessionId=${sessionId}`,
+      { method: "POST", headers: { Origin: origin, "X-SharkBay-Request": "1", ...authorization, "X-SharkBay-Request-Id": requestId }, body },
+    );
+    const submit = (origin: string, authorization: Record<string, string>, sessionId: string, requestId: string, text: string, files = [imageFile, csvFile]) => postAttachments(
+      origin, authorization, sessionId, requestId, attachmentPromptForm({ sessionId, requestId, text, files }),
+    );
+    await writeFile(path.join(project, "clipboard-fixture.cjs"), `
+      process.stdin.setRawMode(true);
+      process.stdout.write("\\x1b[?2004hCLIPBOARD_FIXTURE_READY\\n");
+      process.stdin.on("data", chunk => process.stdout.write("CLIPBOARD_FIXTURE_INPUT " + JSON.stringify(chunk.toString()) + "\\n"));
+    `);
+    // Exercise the PTY protocol without depending on a locally installed agent.
+    const { result: session } = await command(owner, "terminal.create", {
+      cwdUri: uri, agentId: "codex", initialCommand: `"${process.execPath}" clipboard-fixture.cjs # resume`,
+    });
+    const desktop = await RuntimeClient.connect(runtime.paths.userDataPath); desktops.push(desktop);
+    try {
+      expect(session.agentId).toBe("codex");
+      await waitFor(() => owner.messages.find((message) => message.name === "terminal:data" && message.payload.sessionId === session.id && message.payload.data.includes("CLIPBOARD_FIXTURE_READY")));
+      expect((await paste(observer, session.id)).status).toBe(409);
+      expect((await paste(owner, session.id, png, "http://cross-site.test")).status).toBe(403);
+      expect((await paste(owner, session.id, Buffer.from("not an image"))).status).toBe(415);
+      expect((await paste(owner, session.id, Buffer.alloc(maxPromptImageBytes + 1))).status).toBe(413);
+      expect((await paste(owner, session.id)).status).toBe(200);
+      const marker = "CLIPBOARD_FIXTURE_INPUT ";
+      const terminalInput = () => owner.messages
+        .filter((message) => message.name === "terminal:data" && message.payload.sessionId === session.id)
+        .map((message) => message.payload.data).join("").split("\n").slice(0, -1)
+        .filter((line) => line.startsWith(marker)).map((line) => JSON.parse(line.slice(marker.length)) as string).join("");
+      const pasted = await waitFor(() => terminalInput() || undefined);
+      const imageUrl = /^\x1b\[200~(file:\/\/.+\.png)\x1b\[201~$/.exec(pasted)?.[1];
+      expect(imageUrl).toBeDefined();
+      expect(await readFile(new URL(imageUrl!))).toEqual(png);
+
+      const requestId = randomUUID();
+      const prompt = "Describe the attachments\n第二行";
+      const webAuth = { "X-SharkBay-Client": owner.clientId };
+      const observerAuth = { "X-SharkBay-Client": observer.clientId };
+      const { origin: desktopOrigin, token } = await desktop.call<{ origin: string; token: string }>("terminal.attachmentUpload");
+      const desktopAuth = { "X-SharkBay-Attachment-Token": token };
+      expect((await submit(owner.origin, observerAuth, session.id, requestId, prompt)).status).toBe(409);
+      expect((await submit(desktopOrigin, desktopAuth, session.id, requestId, prompt)).status).toBe(409);
+      expect((await submit(owner.origin, webAuth, session.id, requestId, prompt, [imageFile, { ...imageFile, data: new ArrayBuffer(1) }])).status).toBe(415);
+      const oversizedImage = new FormData();
+      oversizedImage.set("prompt", prompt);
+      oversizedImage.append("file", new Blob([csv], { type: "application/octet-stream" }), "oversized.PNG");
+      expect((await postAttachments(owner.origin, webAuth, session.id, requestId, oversizedImage)).status).toBe(413);
+      expect(terminalInput()).toBe(pasted);
+      const attempts = await Promise.all([
+        submit(owner.origin, webAuth, session.id, requestId, prompt),
+        submit(owner.origin, webAuth, session.id, requestId, prompt),
+      ]);
+      expect(attempts.map((response) => response.status)).toEqual([200, 200]);
+      expect((await submit(owner.origin, webAuth, session.id, requestId, "different text")).status).toBe(409);
+      expect((await submit(owner.origin, webAuth, session.id, randomUUID(), "", [imageFile])).status).toBe(200);
+      await desktop.call("terminal.claim", { sessionId: session.id });
+      expect((await submit(desktopOrigin, { "X-SharkBay-Attachment-Token": randomUUID() }, session.id, randomUUID(), prompt)).status).toBe(409);
+      if (lanAddress) {
+        const lanOrigin = desktopOrigin.replace("127.0.0.1", lanAddress);
+        expect((await submit(lanOrigin, desktopAuth, session.id, randomUUID(), prompt)).status).toBe(409);
+      }
+      expect((await submit(desktopOrigin, desktopAuth, session.id, randomUUID(), prompt)).status).toBe(200);
+      desktop.dispose();
+      await waitFor(() => runtime.terminals.owner(session.id) === null || undefined);
+      expect((await submit(desktopOrigin, desktopAuth, session.id, randomUUID(), prompt)).status).toBe(409);
+      const inputs = await waitFor(() => {
+        const data = terminalInput().slice(pasted.length).split("\r");
+        return data.length >= 4 ? data : undefined;
+      });
+      expect(inputs).toHaveLength(4);
+      expect(inputs[3]).toBe("");
+      expect(inputs[1]).toMatch(/^\x1b\[200~file:\/\/[^\x1b]+\.png\x1b\[201~$/);
+      for (const index of [0, 2]) {
+        const format = /^\x1b\[200~(file:\/\/[^\x1b]+\.png)\x1b\[201~\x1b\[200~([^\x1b]+?)\n\nAttached files \(local paths\):\n- ("[^\n]+")\x1b\[201~$/;
+        const mixed = inputs[index]!.match(format);
+        expect(mixed?.[2]).toBe(prompt);
+        expect(await readFile(new URL(mixed![1]!))).toEqual(png);
+        const filePath = JSON.parse(mixed![3]!) as string;
+        expect(path.basename(filePath)).toBe("2-report with spaces.csv");
+        expect((await readFile(filePath)).equals(csv)).toBe(true);
+      }
+    } finally {
+      await command(owner, "terminal.claim", { sessionId: session.id });
+      await command(owner, "terminal.close", { sessionId: session.id });
+    }
+  });
   it("shares one actual PTY between the desktop transport and browser without tying it to client lifetime", async () => {
     const desktop = await RuntimeClient.connect(runtime.paths.userDataPath); desktops.push(desktop);
     const hello = await desktop.call("hello", { protocol: 1 }); expect(hello.pid).toBe(process.pid);
@@ -175,8 +278,19 @@ describe("local Web runtime end to end", () => {
   it("keeps desktop-only administration off the network command endpoint", async () => {
     const browser = await connect();
     expect((await command(browser, "config.setCaffeinateMode", { mode: "off" })).status).toBe(404);
+    expect((await command(browser, "config.setIslandEnabled", { enabled: false })).status).toBe(404);
     expect((await command(browser, "desktop.sessions")).status).toBe(404);
     const desktop = await RuntimeClient.connect(runtime.paths.userDataPath); desktops.push(desktop);
+    const islandConfigs: any[] = [];
+    const onIslandConfig = (name: string, payload: unknown) => { if (name === "runtime:config") islandConfigs.push(payload); };
+    desktop.on("event", onIslandConfig);
+    await expect(desktop.call("config.setIslandEnabled", { enabled: "false" })).rejects.toThrow("Enabled required");
+    for (const enabled of [false, true]) {
+      expect((await desktop.call("config.setIslandEnabled", { enabled })).islandEnabled).toBe(enabled);
+      await waitFor(() => islandConfigs.find((config) => config.islandEnabled === enabled));
+      expect((await desktop.call("config.get")).islandEnabled).toBe(enabled);
+    }
+    desktop.off("event", onIslandConfig);
     expect((await desktop.call("config.get")).caffeinateMode).toBe("auto");
     expect((await desktop.call("config.setCaffeinateMode", { mode: "off" })).caffeinateMode).toBe("off");
     expect((await command(browser, "config.get")).result.caffeinateMode).toBe("off");

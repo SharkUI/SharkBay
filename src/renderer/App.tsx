@@ -21,6 +21,7 @@ import { colorSchemes, getColorScheme } from "./color-schemes";
 import { promptSearchKeys } from "./prompt-search";
 import { isCaffeinateActive, normalizeCaffeinateMode, type CaffeinateMode } from "../shared/caffeinate";
 import { codexActivityWithHook, codexTerminalActivity } from "./codex-input-state";
+import { maxPromptAttachments, promptAttachmentSizeError } from "../shared/application-api";
 import { buildAgentSessionRestoreCommand, inferAgentSessionRestoreAgent, type AgentSessionRestoreCommand } from "../shared/agent-session-restore";
 import type {
   AgentCli,
@@ -750,6 +751,7 @@ export function App() {
   const [terminalLineHeight, setTerminalLineHeight] = useState<number | null>(null);
   const [agentStatusCompletionSoundEnabled, setAgentStatusCompletionSoundEnabled] = useState(true);
   const [agentStatusApprovalSoundEnabled, setAgentStatusApprovalSoundEnabled] = useState(true);
+  const [islandEnabled, setIslandEnabled] = useState(true);
   const [terminalWorking, setTerminalWorking] = useState(false);
   const [caffeinateMode, setCaffeinateMode] = useState<CaffeinateMode>("auto");
   const caffeinateActive = isCaffeinateActive(caffeinateMode, terminalWorking);
@@ -781,6 +783,7 @@ export function App() {
         const legacyStatusSoundsEnabled = rootConfig.statusChangeNotificationsEnabled !== false;
         setAgentStatusCompletionSoundEnabled(rootConfig.agentStatusCompletionSoundEnabled ?? legacyStatusSoundsEnabled);
         setAgentStatusApprovalSoundEnabled(rootConfig.agentStatusApprovalSoundEnabled ?? legacyStatusSoundsEnabled);
+        setIslandEnabled(rootConfig.islandEnabled !== false);
         setCaffeinateMode(normalizeCaffeinateMode(rootConfig.caffeinateMode));
         setConfiguredProjects(rootConfig.configuredProjects ?? []);
         setProjectAliases(rootConfig.projectAliases ?? {});
@@ -941,6 +944,11 @@ export function App() {
                 onRemoveProject={async (path) => { await removeProject(path); await refreshProjects({ showToast: true }); }}
                 agentStatusCompletionSoundEnabled={agentStatusCompletionSoundEnabled}
                 agentStatusApprovalSoundEnabled={agentStatusApprovalSoundEnabled}
+                islandEnabled={islandEnabled}
+                onIslandEnabledChange={getBridge().config?.setIslandEnabled ? async (enabled) => {
+                  const config = await getBridge().config!.setIslandEnabled!({ enabled });
+                  setIslandEnabled(config.islandEnabled !== false);
+                } : undefined}
                 onStatusChangeNotificationsChange={async (input) => {
                   const previousCompletion = agentStatusCompletionSoundEnabled;
                   const previousApproval = agentStatusApprovalSoundEnabled;
@@ -2699,6 +2707,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
         onTakeControl={selectedActiveTerminal && runtime && terminalReadOnly && terminalConnected ? () => runtime.takeControl(selectedActiveTerminal.session.id).catch((error) => setToast({ tone: "error", message: asMessage(error) })) : undefined}
         focusRequest={promptFocusRequest}
         isAgentSession={Boolean(selectedActiveTerminal?.session.agentId)}
+        codexTerminal={selectedActiveTerminal?.session.agentId === "codex" ? selectedActiveTerminal.terminal : undefined}
         onTerminalFocusRequest={() => selectedActiveTerminal?.terminal.focus()}
         onInteraction={acknowledgeActiveStoppedSession}
         onInput={immediatelyClearActiveTab}
@@ -2900,6 +2909,38 @@ function BrowserSurface({
 function XTermSurface({ active, focusRequest, onResize, onCloseSearch, onError, showSearch, tab }: { active: boolean; focusRequest: number; onResize: (cols: number, rows: number) => void; onCloseSearch: () => void; onError: (message: string) => void; showSearch: boolean; tab: TerminalShellTab }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const runtime = getBridge().runtime;
+  const attachImage = tab.session.agentId === "codex" ? runtime?.attachClipboardImage : undefined;
+  useEffect(() => {
+    if (!attachImage) return;
+    const term = tab.terminal;
+    term.attachCustomKeyEventHandler((event) => {
+      if (event.type !== "keydown" || event.key.toLowerCase() !== "v" || !event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return true;
+      // Where Ctrl+V is the browser's paste shortcut, let it deliver the clipboard event.
+      if (!navigator.platform.startsWith("Mac")) return false;
+      // On macOS, Ctrl+V is Codex's shortcut. Prefer the browser's clipboard on secure origins.
+      if (term.options.disableStdin) return false;
+      event.preventDefault();
+      const fallback = () => {
+        if (["127.0.0.1", "localhost", "[::1]"].includes(location.hostname)) term.input("\x16", true);
+        else onError("Use Command+V to paste an image on this connection.");
+      };
+      if (!navigator.clipboard?.read) {
+        fallback();
+        return false;
+      }
+      void navigator.clipboard.read().then(async (items) => {
+        for (const item of items) {
+          const type = item.types.find((entry) => entry === "image/png" || entry === "image/jpeg");
+          if (type) {
+            await attachImage(tab.session.id, await item.getType(type));
+            return;
+          }
+        }
+      }, fallback).catch((error) => onError(asMessage(error)));
+      return false;
+    });
+    return () => term.attachCustomKeyEventHandler(() => true);
+  }, [attachImage, onError, tab]);
   useEffect(() => {
     if (!runtime) return;
     const update = () => { tab.terminal.options.disableStdin = !runtime.canControl(tab.session.id); };
@@ -2966,7 +3007,14 @@ function XTermSurface({ active, focusRequest, onResize, onCloseSearch, onError, 
     return () => { document.removeEventListener("mousedown", dismiss); document.removeEventListener("keydown", escape); };
   }, [linkMenu]);
   return (
-    <div aria-hidden={!active} className={cx("xterm-surface", active && "is-active")} ref={hostRef}>
+    <div aria-hidden={!active} className={cx("xterm-surface", active && "is-active")} ref={hostRef} onPasteCapture={attachImage ? (event) => {
+      if (!active || event.target !== tab.terminal.textarea) return;
+      const file = Array.from(event.clipboardData.files).find((entry) => entry.type.startsWith("image/"));
+      if (!file) return;
+      event.preventDefault();
+      event.stopPropagation();
+      void attachImage(tab.session.id, file).catch((error) => onError(asMessage(error)));
+    } : undefined}>
       {linkMenu ? (
         <div ref={linkMenuRef} className="terminal-link-context-menu" style={{ top: linkMenu.y, left: linkMenu.x }}>
           <button className="terminal-link-context-menu-item" type="button" onClick={() => { void getBridge().shell?.openExternal?.({ url: linkMenu.url }); setLinkMenu(null); }}>Open in Default Browser</button>
@@ -3733,6 +3781,7 @@ function ProjectDetailPane({ agentClis, detail, candidate, setToast, onRefresh, 
       {isLocal ? (
         <div aria-labelledby="project-detail-tab-tasks" className="detail-tab-panel" hidden={visibleDetailTab !== "tasks"} id="project-detail-tabpanel-tasks" role="tabpanel">
           <TasksDetailTab
+            key={candidate.uri}
             active={visibleDetailTab === "tasks"}
             agentClis={agentClis}
             candidate={candidate}
@@ -5003,9 +5052,11 @@ function removeExpandedProjectDirectory(paths: Set<string>, directoryPath: strin
   return next;
 }
 
-function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, candidates, scanErrors, initialSection, setToast, onBack, onRemoveProject, agentStatusCompletionSoundEnabled, agentStatusApprovalSoundEnabled, onStatusChangeNotificationsChange, onThemeChange, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, onTerminalAppearanceChange }: {
+function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, candidates, scanErrors, initialSection, setToast, onBack, onRemoveProject, islandEnabled, onIslandEnabledChange, agentStatusCompletionSoundEnabled, agentStatusApprovalSoundEnabled, onStatusChangeNotificationsChange, onThemeChange, terminalColorScheme, terminalFontFamily, terminalFontSize, terminalLineHeight, onTerminalAppearanceChange }: {
   appearanceTheme: AppearanceTheme; configuredProjects: string[];  bridgeAvailable: boolean; candidates: ProjectCandidate[]; scanErrors: string[]; initialSection?: SettingsSection; setToast: (toast: Toast) => void;
   onBack: () => void; onRemoveProject: (path: string) => Promise<void>;
+  islandEnabled: boolean;
+  onIslandEnabledChange?: (enabled: boolean) => Promise<void>;
   agentStatusCompletionSoundEnabled: boolean;
   agentStatusApprovalSoundEnabled: boolean;
   onStatusChangeNotificationsChange: (input: { completionEnabled?: boolean; approvalEnabled?: boolean }) => Promise<void>;
@@ -5046,6 +5097,8 @@ function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, ca
           <div className="settings-section-panel" hidden={activeSection !== "general"}>
             <div className="settings-section-heading"><h4>General</h4><span>Application behavior</span></div>
             <GeneralSettingsPanel
+              islandEnabled={islandEnabled}
+              onIslandEnabledChange={onIslandEnabledChange}
               agentStatusCompletionSoundEnabled={agentStatusCompletionSoundEnabled}
               agentStatusApprovalSoundEnabled={agentStatusApprovalSoundEnabled}
               setToast={setToast}
@@ -5078,12 +5131,28 @@ function SettingsView({ appearanceTheme, configuredProjects, bridgeAvailable, ca
   );
 }
 
-function GeneralSettingsPanel({ agentStatusCompletionSoundEnabled, agentStatusApprovalSoundEnabled, setToast, onStatusChangeNotificationsChange }: {
+function GeneralSettingsPanel({ islandEnabled, onIslandEnabledChange, agentStatusCompletionSoundEnabled, agentStatusApprovalSoundEnabled, setToast, onStatusChangeNotificationsChange }: {
+  islandEnabled: boolean;
+  onIslandEnabledChange?: (enabled: boolean) => Promise<void>;
   agentStatusCompletionSoundEnabled: boolean;
   agentStatusApprovalSoundEnabled: boolean;
   setToast: (toast: Toast) => void;
   onStatusChangeNotificationsChange: (input: { completionEnabled?: boolean; approvalEnabled?: boolean }) => Promise<void>;
 }) {
+  const [savingIsland, setSavingIsland] = useState(false);
+
+  async function toggleIsland() {
+    if (savingIsland || !onIslandEnabledChange) return;
+    setSavingIsland(true);
+    try {
+      await onIslandEnabledChange(!islandEnabled);
+    } catch (error) {
+      setToast({ tone: "error", message: asMessage(error) });
+    } finally {
+      setSavingIsland(false);
+    }
+  }
+
   const [savingSound, setSavingSound] = useState<AgentStatusSoundKind | null>(null);
 
   async function toggleSound(kind: AgentStatusSoundKind) {
@@ -5109,6 +5178,15 @@ function GeneralSettingsPanel({ agentStatusCompletionSoundEnabled, agentStatusAp
 
   return (
     <section className="workflow-panel">
+      {onIslandEnabledChange ? <>
+        <h5 className="settings-subsection-title">Island</h5>
+        <div className="settings-toggle-row">
+          <label className="checkbox-row">
+            <input type="checkbox" checked={islandEnabled} disabled={savingIsland} onChange={() => void toggleIsland()} />
+            <span>Enable Island notification area</span>
+          </label>
+        </div>
+      </> : null}
       <h5 className="settings-subsection-title">Sounds</h5>
       <div className="settings-sound-controls">
         <div className="settings-toggle-row">
@@ -6587,6 +6665,7 @@ function PromptInputBar({
   onTakeControl,
   focusRequest,
   isAgentSession,
+  codexTerminal,
   onTerminalFocusRequest,
   onInteraction: onInteractionCallback,
   onInput: onInputCallback,
@@ -6601,6 +6680,7 @@ function PromptInputBar({
   onTakeControl?: () => Promise<unknown>;
   focusRequest: number;
   isAgentSession: boolean;
+  codexTerminal?: XTerm;
   onTerminalFocusRequest: () => void;
   onInteraction?: () => void;
   onInput?: () => void;
@@ -6611,11 +6691,32 @@ function PromptInputBar({
   const draftKey = sessionId ?? projectId ?? "";
   const value = drafts[draftKey] ?? "";
   const setValue = (next: string) => setDrafts((current) => ({ ...current, [draftKey]: next }));
+  const submitAttachmentPrompt = codexTerminal ? getBridge().runtime?.submitAttachmentPrompt : undefined;
+  const [attachmentDrafts, setAttachmentDrafts] = useState<Record<string, { files: File[]; error?: string; sending?: boolean }>>({});
+  const attachmentDraft = attachmentDrafts[draftKey];
+  const attachedFiles = attachmentDraft?.files ?? [];
+  const isSending = attachmentDraft?.sending === true;
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const attachmentRequests = useRef(new Map<string, { text: string; files: File[]; requestId: string; sending: boolean }>());
   const [isComposing, setIsComposing] = useState(false);
   const historyKey = isAgentSession ? (agentHookSessionId ?? sessionId) : (projectId ? `${projectId}:shell` : null);
   const [historyCursor, setHistoryCursor] = useState<{ historyKey: string; index: number; draft: string } | null>(null);
   const historyByKey = useRef<Record<string, string[]>>({});
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    if (!getBridge().runtime?.submitAttachmentPrompt) return;
+    return getBridge().terminal?.onUpdate?.(({ session, reason }) => {
+      if (reason !== "closed") return;
+      attachmentRequests.current.delete(session.id);
+      setAttachmentDrafts((current) => {
+        if (!current[session.id]) return current;
+        const next = { ...current };
+        delete next[session.id];
+        return next;
+      });
+    });
+  }, []);
 
   useEffect(() => {
     setIsComposing(false);
@@ -6699,21 +6800,67 @@ function PromptInputBar({
     historyByKey.current[historyKey] = [...history, text];
   }
 
+  function finishSubmission(id: string, text: string) {
+    if (text) {
+      recordHistory(text);
+      if (isAgentSession) getBridge().terminal?.recordPrompt?.({ terminalSessionId: id, text });
+      else if (historyKey) getBridge().terminal?.recordPromptHistoryEntry?.({ key: historyKey, text });
+    }
+    onSubmitCallback?.(id);
+    setValue("");
+    setHistoryCursor((current) => current?.historyKey === historyKey ? null : current);
+  }
+
+  function addFiles(files: File[]) {
+    if (disabled || !submitAttachmentPrompt || !files.length || attachmentRequests.current.get(draftKey)?.sending) return;
+    setAttachmentDrafts((current) => {
+      const existing = current[draftKey]?.files ?? [];
+      const next = [...existing, ...files];
+      const error = next.length > maxPromptAttachments
+        ? `Attach up to ${maxPromptAttachments} files per prompt.`
+        : promptAttachmentSizeError(next);
+      return { ...current, [draftKey]: error ? { files: existing, error } : { files: next } };
+    });
+  }
+
   function submit() {
     const text = value;
-    if (!text || !sessionId || disabled || isComposing) return;
-    recordHistory(text);
-    if (isAgentSession) {
-      getBridge().terminal?.recordPrompt?.({ terminalSessionId: sessionId, text });
-    } else if (historyKey) {
-      getBridge().terminal?.recordPromptHistoryEntry?.({ key: historyKey, text });
+    if (!sessionId || disabled || isComposing || attachmentRequests.current.get(draftKey)?.sending) return;
+    if (submitAttachmentPrompt && attachedFiles.length) {
+      const previous = attachmentRequests.current.get(draftKey);
+      const requestId = previous?.text === text && previous.files === attachedFiles
+        ? previous.requestId
+        : crypto.getRandomValues(new Uint32Array(4)).join("-");
+      const request = { text, files: attachedFiles, requestId, sending: true };
+      attachmentRequests.current.set(draftKey, request);
+      setAttachmentDrafts((current) => ({ ...current, [draftKey]: { files: attachedFiles, sending: true } }));
+      const upload = Promise.all(attachedFiles.map(async (file) => ({ name: file.name, type: file.type, data: await file.arrayBuffer() })))
+        .then((files) => submitAttachmentPrompt({ sessionId, text, files, requestId }));
+      void upload.then(() => {
+        if (attachmentRequests.current.get(draftKey) !== request) return;
+        attachmentRequests.current.delete(draftKey);
+        setAttachmentDrafts((current) => {
+          const drafts = { ...current };
+          delete drafts[draftKey];
+          return drafts;
+        });
+        finishSubmission(sessionId, text);
+      }, (error) => {
+        if (attachmentRequests.current.get(draftKey) !== request) return;
+        request.sending = false;
+        setAttachmentDrafts((current) => ({ ...current, [draftKey]: { files: attachedFiles, error: asMessage(error) } }));
+      });
+      return;
     }
-    send(text);
-    setTimeout(() => send("\r"), 30);
-    onSubmitCallback?.(sessionId);
-    setValue("");
-    setHistoryCursor(null);
-    if (textareaRef.current) textareaRef.current.style.height = "";
+    if (!text) return;
+    if (codexTerminal?.modes.bracketedPasteMode) {
+      const paste = text.replaceAll("\x1b[201~", "");
+      send(`\x1b[200~${paste}\x1b[201~\r`);
+    } else {
+      send(text);
+      setTimeout(() => send("\r"), codexTerminal ? 200 : 30);
+    }
+    finishSubmission(sessionId, text);
   }
 
   function canUseHistoryNavigation(event: KeyboardEvent<HTMLTextAreaElement>, direction: "previous" | "next") {
@@ -6757,7 +6904,7 @@ function PromptInputBar({
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     onInteractionCallback?.();
     const nativeEvent = event.nativeEvent as { isComposing?: boolean; keyCode?: number };
-    if (isComposing || nativeEvent.isComposing || event.keyCode === 229 || nativeEvent.keyCode === 229) return;
+    if (isSending || isComposing || nativeEvent.isComposing || event.keyCode === 229 || nativeEvent.keyCode === 229) return;
     if (!event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) {
       if (event.key === "ArrowUp" && navigateHistory(event, "previous")) return;
       if (event.key === "ArrowDown" && navigateHistory(event, "next")) return;
@@ -6772,7 +6919,7 @@ function PromptInputBar({
     const nextValue = target.value;
     setHistoryCursor(null);
     onInputCallback?.();
-    if (!disabled && sessionId && isAgentSession && !value && nextValue.startsWith("/")) {
+    if (!disabled && sessionId && isAgentSession && !value && !attachedFiles.length && nextValue.startsWith("/")) {
       send(nextValue);
       setValue("");
       target.value = "";
@@ -6788,11 +6935,32 @@ function PromptInputBar({
     <>
     {!disabled ? <div className="mobile-terminal-keys" role="group" aria-label="Terminal keys">
       {([["Esc", "\u001b"], ["Tab", "\t"], ["Ctrl+C", "\u0003"], ["↑", "\u001b[A"], ["↓", "\u001b[B"], ["←", "\u001b[D"], ["→", "\u001b[C"], ["Enter", "\r"]] as const).map(([label, data]) => (
-        <button className="button compact" key={label} type="button" aria-label={`Terminal ${label}`} onPointerDown={(event) => event.preventDefault()} onClick={() => { onInteractionCallback?.(); send(data); }}>{label}</button>
+        <button className="button compact" key={label} type="button" aria-label={`Terminal ${label}`} disabled={isSending} onPointerDown={(event) => event.preventDefault()} onClick={() => { onInteractionCallback?.(); send(data); }}>{label}</button>
       ))}
     </div> : null}
-    <div className="prompt-input-bar" onPointerDown={() => onInteractionCallback?.()}>
+    <div className="prompt-input-bar" onPointerDown={() => onInteractionCallback?.()} aria-busy={isSending}>
       <span className="sr-only" role="status">{disabled ? unavailableReason : ""}</span>
+      {submitAttachmentPrompt && attachedFiles.length ? <ul className="prompt-attachment-list" aria-label="Attachments">
+        {attachedFiles.map((file, index) => (
+          <li key={`${index}-${file.name}`} title={file.name}>
+            <span>{file.name}</span>
+            <button type="button" aria-label={`Remove ${file.name}`} disabled={isSending} onClick={() => {
+              attachmentRequests.current.delete(draftKey);
+              setAttachmentDrafts((current) => ({ ...current, [draftKey]: { files: attachedFiles.filter((_, item) => item !== index) } }));
+            }}>×</button>
+          </li>
+        ))}
+      </ul> : null}
+      {submitAttachmentPrompt && (attachmentDraft?.error || isSending) ? <div className="prompt-attachment-status" role={attachmentDraft?.error ? "alert" : "status"}>{attachmentDraft?.error ?? "Sending attachments…"}</div> : null}
+      {submitAttachmentPrompt ? <>
+        <input ref={attachmentInputRef} type="file" multiple hidden onChange={(event) => {
+          addFiles(Array.from(event.currentTarget.files ?? []));
+          event.currentTarget.value = "";
+        }} />
+        <button type="button" aria-label="Attach files" title="Attach files" className="prompt-attachment-picker" disabled={disabled || isSending} onClick={() => attachmentInputRef.current?.click()}>
+          <PlusIcon />
+        </button>
+      </> : null}
       <textarea
         ref={textareaRef}
         className="prompt-input-textarea"
@@ -6801,6 +6969,7 @@ function PromptInputBar({
         autoCorrect="off"
         spellCheck={false}
         disabled={disabled}
+        readOnly={isSending}
         placeholder={disabled ? unavailableReason : "Type here… Enter to send, Shift+Enter for newline"}
         rows={1}
         value={value}
@@ -6808,13 +6977,19 @@ function PromptInputBar({
         onCompositionEnd={() => setIsComposing(false)}
         onInput={handleInput}
         onKeyDown={handleKeyDown}
+        onPaste={submitAttachmentPrompt ? (event) => {
+          const files = Array.from(event.clipboardData.files);
+          if (!files.length) return;
+          event.preventDefault();
+          addFiles(files);
+        } : undefined}
         onChange={(e) => {
           setHistoryCursor(null);
           setValue(e.target.value);
         }}
       />
       {onTakeControl ? <button aria-label="接管终端" className="button compact prompt-take-control" type="button" onClick={() => void onTakeControl()}>接管</button> : null}
-      <button aria-label="Send prompt" className="prompt-input-send" disabled={disabled || !value || isComposing} title="Send (Enter)" type="button" onClick={submit}>
+      <button aria-label="Send prompt" className="prompt-input-send" disabled={disabled || isSending || (!value && !attachedFiles.length) || isComposing} title="Send (Enter)" type="button" onClick={submit}>
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </button>
     </div>
