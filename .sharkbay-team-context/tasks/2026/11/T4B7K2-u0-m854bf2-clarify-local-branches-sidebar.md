@@ -12,13 +12,13 @@ agent: Codex GPT-6
 sessionId: 01a1fc39-bdd1-7d42-b481-672f4902ff85
 branch: linux-webui
 createdAt: 2026-11-21T08:08:18Z
-updatedAt: 2026-11-21T08:26:10Z
-completedAt: 2026-11-21T08:26:10Z
+updatedAt: 2026-11-21T10:33:07Z
+completedAt: 2026-11-21T10:33:07Z
 ---
 
 ## Summary
 
-仓库下方的 Other local branches 默认折叠，展开后可通过英文菜单将已有分支打开为工作树。创建后自动选中新工作树并更新分组。折叠箭头和分支计数各有留白，已部署到测试 VM。
+仓库下方的 Other local branches 默认折叠，展开后可通过英文菜单将已有分支打开为工作树。创建后自动选中新工作树并更新分组。折叠入口使用斜体标题和正体计数，已部署到测试 VM。
 
 ## Files
 
@@ -40,6 +40,8 @@ completedAt: 2026-11-21T08:26:10Z
 
 - 按截图调整折叠入口中箭头和计数的间距，保留标签与工作树名称的文字对齐。
 
+- 按最新截图去掉分支折叠入口的箭头，标题用斜体、计数用正体，保留文字对齐和原生折叠操作。
+
 ## Verification
 
 - `git diff --check`、`npm run typecheck`、工作树定向集成测试和 Linux Vite 构建通过。新资源可访问，Runtime PID 仍为 5059。
@@ -49,6 +51,8 @@ completedAt: 2026-11-21T08:26:10Z
 - VM 重启后服务为 active，并继续提供原部署。Safari 确认 Other local branches 显示计数 1，展开后可见 `test/other-local-branches`，保留未检出状态供用户测试。
 
 - 间距调整通过 `git diff --check` 和 Linux Vite 构建。Safari 确认箭头与标题多出 4 CSS px，计数左侧增加 6 CSS px，标题仍与工作树名称对齐。
+
+- 移除箭头后的 Linux Vite 构建和 `git diff --check` 通过，测试页 JS 和 CSS 完整返回。Safari 实测标题斜体、计数正体、无箭头，点击可展开和收起。
 
 ## Notes
 
