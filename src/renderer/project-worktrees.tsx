@@ -44,7 +44,10 @@ export function ProjectWorktrees({ repoPath, activePath, candidates, revision, a
 
   const worktrees = workspace?.worktrees ?? [];
   const checkedOut = new Set(worktrees.map((worktree) => worktree.branch));
-  const branches = workspace?.branches.filter((branch) => !checkedOut.has(branch)) ?? [];
+  const localBranches = new Set(workspace?.branches);
+  const branches = [...new Set([...localBranches, ...(workspace?.remoteBranches ?? [])])]
+    .filter((branch) => !checkedOut.has(branch)).sort()
+    .map((name) => ({ name, isLocal: localBranches.has(name) }));
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
@@ -121,37 +124,46 @@ export function ProjectWorktrees({ repoPath, activePath, candidates, revision, a
       {branches.length ? (
         <details className="project-other-branches">
           <summary>
-            Other local branches
+            Other branches
             <span className="project-other-branches-indicator">
               <span className="project-other-branches-count">{branches.length}</span>
               <span className="project-other-branches-arrow" aria-hidden="true">&gt;</span>
             </span>
           </summary>
-          {branches.map((branch) => (
+          {branches.map(({ name: branch, isLocal }) => (
             <button
               className="project-branch-item"
               key={branch}
               type="button"
-              title={branch}
-              aria-label={`Actions for branch ${branch}`}
+              title={isLocal ? branch : `origin/${branch}`}
+              aria-label={`Actions for branch ${branch}${isLocal ? "" : " (origin)"}`}
               aria-expanded={openMenuAnchor?.dataset.sidebarTarget === branch}
               data-sidebar-target={branch}
               disabled={busy}
               onClick={(event) => onActionMenu(event.currentTarget, {
                 open: () => void run(async () => {
-                  const created = await window.sharkBay!.config!.createWorktree!({ sourceProjectPath: repoPath, branchName: branch, existingBranch: true });
+                  const created = await window.sharkBay!.config!.createWorktree!({
+                    sourceProjectPath: repoPath, branchName: branch, existingBranch: isLocal, trackOrigin: !isLocal,
+                  });
                   await onOpen(repoPath, created.targetPath);
                 }),
-                remove: {
+                remove: isLocal ? {
                   label: "Delete Local Branch…",
                   run: () => {
                     if (!window.confirm(`Delete local branch ${branch}?`)) return;
                     void run(async () => { await window.sharkBay!.config!.deleteLocalBranch!({ repoPath, branch }); });
                   },
-                },
+                } : undefined,
               })}
             >
-              <span className="truncate">{branch}</span>
+              <span className="project-branch-label">
+                {!isLocal ? (
+                  <svg className="project-branch-source" aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
+                    <path d="M6 18a4 4 0 0 1-.6-7.95 6 6 0 0 1 11.55-1.38A4.67 4.67 0 1 1 18 18H6Z" />
+                  </svg>
+                ) : null}
+                <span className="truncate">{branch}</span>
+              </span>
               <span aria-hidden="true">…</span>
             </button>
           ))}

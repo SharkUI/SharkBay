@@ -202,6 +202,7 @@ export async function createWebBridge(): Promise<SharkBayBridge & { runtime: Web
       scan: async () => { const result = await request("projects.scan", undefined); return { candidates: result.candidates, roots: result.roots.map((root) => ({ ...root, path: root.path ?? root.inputPath })) }; }, getSetupStatus: (input) => request("projects.getSetupStatus", input),
       getDetail: (input) => request("projects.getDetail", input), getGitHub: (input) => request("projects.getGitHub", input),
       getGitWorkspace: (input) => request("projects.getGitWorkspace", input),
+      fetchGitBranches: (input) => request("projects.fetchGitBranches", input),
       listFiles: (input) => request("projects.listFiles", { projectUri: input.projectUri, directoryPath: input.directoryPath }),
       readFile: (input) => request("projects.readFile", input), writeFile: (input) => request("projects.writeFile", input),
       deleteFile: (input) => request("projects.deleteFile", input), renameFile: (input) => request("projects.renameFile", input),

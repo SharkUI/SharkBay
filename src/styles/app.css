@@ -876,6 +876,9 @@ body.is-resizing-columns * {
   font-size: 12px;
 }
 
+.project-branch-label { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.project-branch-source { flex: none; opacity: 0.72; }
+
 .project-tree-error { padding: 5px 8px; font-size: 12px; overflow-wrap: anywhere; white-space: pre-line; }
 
 .project-context-menu {

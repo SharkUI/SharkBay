@@ -3697,11 +3697,22 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
             }}>New Worktree</button>
           ) : null}
           {webWorktrees && menuProject?.gitRepository ? (
-            <button className="project-context-menu-item" type="button" onClick={() => {
+            <button className="project-context-menu-item" type="button" onClick={async () => {
               menuOpen.anchor?.focus({ preventScroll: true });
               setMenuOpen(null);
-              void onRefresh().then(() => setWorktreeRevision((revision) => revision + 1));
-            }}>Refresh Worktrees</button>
+              try {
+                await getBridge().projects?.fetchGitBranches?.({ repoPath: menuProject.displayPath });
+              } catch (error) {
+                alert(asMessage(error));
+              }
+              try {
+                await onRefresh();
+              } catch (error) {
+                alert(asMessage(error));
+              } finally {
+                setWorktreeRevision((revision) => revision + 1);
+              }
+            }}>Refresh Git</button>
           ) : null}
           <button
             className="project-context-menu-item"

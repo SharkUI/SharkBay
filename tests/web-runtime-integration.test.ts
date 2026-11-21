@@ -104,6 +104,43 @@ describe("local Web runtime end to end", () => {
     expect((await command(browser, "config.removeProject", { path: repoPath })).ok).toBe(true);
   });
 
+  it("fetches origin branches and opens one with tracking, excluding the team context branch", async () => {
+    const browser = await connect();
+    const repoPath = path.join(directory, "Remote branches repo");
+    const origin = path.join(directory, "origin.git");
+    const git = (...args: string[]) => execFileSync("git", ["-C", repoPath, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    await mkdir(repoPath);
+    git("init", "-b", "main");
+    git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.com", "commit", "--allow-empty", "-m", "initial");
+    git("init", "--bare", origin);
+    git("push", origin, "HEAD:refs/heads/main", "HEAD:refs/heads/feature/on-origin", "HEAD:refs/heads/sharkbay-team-context");
+    git("remote", "add", "-t", "main", "origin", origin);
+    git("branch", "sharkbay-team-context");
+    git("update-ref", "refs/remotes/origin/expired", "HEAD");
+    expect((await command(browser, "config.addProject", { path: repoPath })).ok).toBe(true);
+
+    expect((await command(browser, "projects.getGitWorkspace", { repoPath })).result.remoteBranches).toEqual(["expired"]);
+    expect((await command(browser, "projects.fetchGitBranches", { repoPath })).ok).toBe(true);
+    git("remote", "set-head", "origin", "main");
+    const workspace = (await command(browser, "projects.getGitWorkspace", { repoPath })).result;
+    expect(workspace.branches).toEqual(["main"]);
+    expect(workspace.remoteBranches).toEqual(["feature/on-origin", "main"]);
+    expect(git("show-ref", "--verify", "refs/remotes/origin/sharkbay-team-context")).toContain("sharkbay-team-context");
+    expect(git("config", "--get-all", "remote.origin.fetch")).toBe("+refs/heads/main:refs/remotes/origin/main");
+
+    const open = (branchName: string) => command(browser, "config.createWorktree", { sourceProjectPath: repoPath, branchName, trackOrigin: true });
+    expect((await open("sharkbay-team-context")).ok).toBe(false);
+    const opened = await open("feature/on-origin");
+    expect(opened.ok).toBe(true);
+    expect(git("rev-parse", "--symbolic-full-name", "feature/on-origin@{upstream}")).toBe("refs/remotes/origin/feature/on-origin");
+    expect(git("config", "--get-all", "remote.origin.fetch").split("\n")).toEqual([
+      "+refs/heads/main:refs/remotes/origin/main", "+refs/heads/feature/on-origin:refs/remotes/origin/feature/on-origin",
+    ]);
+    expect(git("worktree", "list", "--porcelain")).toContain("branch refs/heads/feature/on-origin");
+    expect((await command(browser, "config.removeWorktree", { repoPath, worktreePath: opened.result.targetPath })).ok).toBe(true);
+    expect((await command(browser, "config.removeProject", { path: repoPath })).ok).toBe(true);
+  });
+
   it("compresses static text when accepted and preserves clients that decline gzip", async () => {
     const url = `${server.origin}/assets/main-12345678.js`;
     const content = "console.log('SharkBay');\n".repeat(100);

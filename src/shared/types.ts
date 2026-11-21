@@ -65,6 +65,7 @@ export type CreateWorktreeInput = {
   sourceProjectPath: string;
   branchName: string;
   existingBranch?: boolean;
+  trackOrigin?: boolean;
 };
 
 export type GitWorktree = {
@@ -76,7 +77,7 @@ export type GitWorktree = {
   prunable: boolean;
 };
 
-export type GitWorkspace = { worktrees: GitWorktree[]; branches: string[] };
+export type GitWorkspace = { worktrees: GitWorktree[]; branches: string[]; remoteBranches: string[] };
 
 export type CreateWorktreeResult = {
   targetPath: string;

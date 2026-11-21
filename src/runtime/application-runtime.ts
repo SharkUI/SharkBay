@@ -7,7 +7,7 @@ import { createCoreRuntime } from "../core/core-runtime.js";
 import { toLocalProjectUri } from "../core/project-uri.js";
 import { CODEGRAPH_PLUGIN_ID } from "../plugins/bundled/codegraph-detector.js";
 import { addConfiguredProject, setIslandEnabled, setCaffeinateMode, loadRuntimeConfig, renameProject, removeConfiguredProject, setAppearanceTheme, setTerminalAppearance, setStatusChangeNotificationsEnabled, setPluginEnabledConfig } from "../main/config.js";
-import { createWorktree, deleteLocalBranch, readGitWorkspace, removeGitWorktree } from "../main/worktree.js";
+import { createWorktree, deleteLocalBranch, fetchGitBranches, readGitWorkspace, removeGitWorktree } from "../main/worktree.js";
 import { readProjectSetupStatus } from "../main/project-setup.js";
 import { reserveArtifactPath, resolveGitHubIdentity } from "../main/harness.js";
 import { parseHookSessions } from "../main/hooks/sessions.js";
@@ -95,6 +95,7 @@ export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] 
       "projects.getSetupStatus": async (input) => readProjectSetupStatus(await resolveRepo(input.repoPath), this.agents.hookConnectors, path.join(this.paths.userDataPath, "bin", "sharkbay-hook")),
       "projects.getDetail": (input) => this.core.getProjectDetail(this.paths, input),
       "projects.getGitWorkspace": async (input) => readGitWorkspace(await resolveRepo(input.repoPath)),
+      "projects.fetchGitBranches": async (input) => fetchGitBranches(await resolveRepo(input.repoPath)),
       "projects.getGitHub": (input) => this.core.readProjectGitHub(this.paths, input),
       "projects.listFiles": (input) => this.core.listProjectFiles(this.paths, input),
       "projects.readFile": (input) => this.core.readProjectFile(this.paths, input),

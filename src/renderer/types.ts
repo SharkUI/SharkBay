@@ -706,6 +706,7 @@ export type SharkBayBridge = {
     scan?: () => Promise<ScanResult | ProjectCandidate[]>;
     getDetail?: (input: { projectUri: string }) => Promise<ProjectDetail>;
     getGitWorkspace?: (input: { repoPath: string }) => Promise<import("../shared/types.js").GitWorkspace>;
+    fetchGitBranches?: (input: { repoPath: string }) => Promise<void>;
     getGitHub?: (input: { projectUri: string }) => Promise<GitHubInfo>;
     listFiles?: (input: ProjectFilesInput) => Promise<ProjectFilesResult>;
     readFile?: (input: ReadFileInput) => Promise<ReadFileResult>;

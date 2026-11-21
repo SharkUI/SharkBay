@@ -75,6 +75,7 @@ export type ApplicationMethodMap = {
   "projects.getSetupStatus": Command<{ repoPath: string }, T.ProjectSetupStatus>;
   "projects.getDetail": Command<{ projectUri: string }, T.ProjectDetail>;
   "projects.getGitWorkspace": Command<{ repoPath: string }, T.GitWorkspace>;
+  "projects.fetchGitBranches": Command<{ repoPath: string }, void>;
   "projects.getGitHub": Command<{ projectUri: string }, T.GitHubInfo>;
   "projects.listFiles": Command<Pick<T.ProjectFilesInput, "projectUri" | "directoryPath">, T.ProjectFilesResult>;
   "projects.readFile": Command<T.ReadFileInput, T.ReadFileResult>;
