@@ -14,6 +14,20 @@ const go = async (directory: string) => {
 };
 
 describe("host folder selection", () => {
+  it("shows operation errors beside the confirmation controls and allows retry", async () => {
+    const load = async () => listing;
+    const select = vi.fn();
+    await act(async () => {
+      tree = create(<HostFolderPicker load={load} purpose="remote" busy={false} operationError="Destination already exists" onSelect={select} onCancel={() => {}} />);
+    });
+
+    const footer = tree.root.findByProps({ className: "host-folder-footer" });
+    expect(footer.findByProps({ role: "alert" }).children).toEqual(["Destination already exists"]);
+    expect(button("Clone Here").props.disabled).toBe(false);
+    act(() => button("Clone Here").props.onClick());
+    expect(select).toHaveBeenCalledWith("/host");
+  });
+
   it("requires a successfully loaded path before selecting and allows retry after a failed path", async () => {
     const load = vi.fn(async () => listing);
     const select = vi.fn(), back = vi.fn();

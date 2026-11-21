@@ -52,7 +52,7 @@ export function HostFolderPicker({ load, purpose, busy, operationError, onSelect
       </form>
     </nav>
     <div ref={folderList} className="host-folder-list" aria-label="Host folders">
-      {error || operationError ? <p className="host-folder-error" role="alert">{error || operationError}</p> : null}
+      {error ? <p className="host-folder-error" role="alert">{error}</p> : null}
       {loading ? <p className="host-folder-empty" role="status">Loading folders…</p> : listing?.directories.map((entry) => <button key={entry.path} className="host-folder-entry" type="button" disabled={busy} onClick={() => setLocation({ path: entry.path })}>
         <svg className="host-folder-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M2.5 5a1.5 1.5 0 0 1 1.5-1.5h4l2 2h6A1.5 1.5 0 0 1 17.5 7v8a1.5 1.5 0 0 1-1.5 1.5H4A1.5 1.5 0 0 1 2.5 15Z" /></svg>
         <span>{entry.name}</span>
@@ -61,6 +61,7 @@ export function HostFolderPicker({ load, purpose, busy, operationError, onSelect
       {!loading && !error && listing?.directories.length === 0 ? <p className="host-folder-empty">No subfolders</p> : null}
     </div>
     <div className="host-folder-footer">
+      {operationError && !loading && !error ? <p className="host-folder-error" role="alert">{operationError}</p> : null}
       <button className="button secondary" type="button" disabled={busy} onClick={onCancel}>Cancel</button>
       <button className="button primary" type="button" disabled={disabled || !listing || Boolean(error) || draft.trim() !== listing.path} onClick={() => onSelect(listing!.path)}>
         {busy ? purpose === "local" ? "Adding…" : "Cloning…" : purpose === "local" ? "Add Project" : "Clone Here"}

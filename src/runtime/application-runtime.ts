@@ -7,7 +7,7 @@ import { createCoreRuntime } from "../core/core-runtime.js";
 import { toLocalProjectUri } from "../core/project-uri.js";
 import { CODEGRAPH_PLUGIN_ID } from "../plugins/bundled/codegraph-detector.js";
 import { addConfiguredProject, setIslandEnabled, setCaffeinateMode, loadRuntimeConfig, renameProject, removeConfiguredProject, setAppearanceTheme, setTerminalAppearance, setStatusChangeNotificationsEnabled, setPluginEnabledConfig } from "../main/config.js";
-import { createWorktree } from "../main/worktree.js";
+import { createWorktree, deleteLocalBranch, readGitWorkspace, removeGitWorktree } from "../main/worktree.js";
 import { readProjectSetupStatus } from "../main/project-setup.js";
 import { reserveArtifactPath, resolveGitHubIdentity } from "../main/harness.js";
 import { parseHookSessions } from "../main/hooks/sessions.js";
@@ -64,6 +64,29 @@ export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] 
       "config.renameProject": async (input) => { await resolveRepo(fileURLToLocalPath(input.uri)); return renameProject(this.paths, input); },
       "config.removeProject": async (input) => { await resolveRepo(fileURLToLocalPath(input.uri ?? input.path ?? "")); return removeConfiguredProject(this.paths, input); },
       "config.createWorktree": async (input) => createWorktree(this.paths, { ...input, sourceProjectPath: await resolveRepo(input.sourceProjectPath) }),
+      "config.openWorktree": async (input) => {
+        const workspace = await readGitWorkspace(await resolveRepo(input.repoPath));
+        if (!workspace.worktrees.some((worktree) => worktree.path === input.worktreePath && !worktree.prunable)
+          || await realpath(input.worktreePath) !== input.worktreePath) {
+          throw new ApplicationError("INVALID_INPUT", "The directory is not an available worktree");
+        }
+        return addConfiguredProject(this.paths, { path: input.worktreePath });
+      },
+      "config.removeWorktree": async (input) => {
+        const repoPath = await resolveRepo(input.repoPath);
+        const target = await resolveRepo(input.worktreePath);
+        if (target === repoPath || target !== input.worktreePath) throw new ApplicationError("INVALID_INPUT", "Select another worktree before removing this one");
+        if ((await this.core.listTerminalSessions()).some((session) => session.status === "running"
+          && [session.cwdUri, session.currentCwdUri].some((uri) => uri && isPathInside(target, fileURLToLocalPath(uri))))) {
+          throw new ApplicationError("INVALID_INPUT", "Close terminals in this worktree before removing it");
+        }
+        await removeGitWorktree(repoPath, target);
+        return removeConfiguredProject(this.paths, { path: target });
+      },
+      "config.deleteLocalBranch": async (input) => {
+        await deleteLocalBranch(await resolveRepo(input.repoPath), input.branch);
+        return loadRuntimeConfig(this.paths);
+      },
       "config.setAppearanceTheme": (input) => setAppearanceTheme(this.paths, input),
       "config.setTerminalAppearance": (input) => setTerminalAppearance(this.paths, input),
       "config.setStatusChangeNotifications": (input) => setStatusChangeNotificationsEnabled(this.paths, input),
@@ -71,6 +94,7 @@ export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] 
       "projects.listHostDirectories": (input) => listHostDirectories(input.path),
       "projects.getSetupStatus": async (input) => readProjectSetupStatus(await resolveRepo(input.repoPath), this.agents.hookConnectors, path.join(this.paths.userDataPath, "bin", "sharkbay-hook")),
       "projects.getDetail": (input) => this.core.getProjectDetail(this.paths, input),
+      "projects.getGitWorkspace": async (input) => readGitWorkspace(await resolveRepo(input.repoPath)),
       "projects.getGitHub": (input) => this.core.readProjectGitHub(this.paths, input),
       "projects.listFiles": (input) => this.core.listProjectFiles(this.paths, input),
       "projects.readFile": (input) => this.core.readProjectFile(this.paths, input),

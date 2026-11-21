@@ -68,6 +68,42 @@ afterAll(async () => {
   await server?.dispose(); await runtime?.dispose(); await rm(directory, { recursive: true, force: true });
 });
 describe("local Web runtime end to end", () => {
+  it("opens linked worktrees and manages local branches without deleting local files", async () => {
+    const browser = await connect();
+    const repoPath = path.join(directory, "Sidebar repo");
+    const linked = path.join(directory, "Linked worktree");
+    const git = (...args: string[]) => execFileSync("git", ["-C", repoPath, ...args], { encoding: "utf8" });
+    await mkdir(repoPath);
+    git("init", "-b", "main");
+    git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.com", "commit", "--allow-empty", "-m", "initial");
+    git("worktree", "add", "-b", "feature/linked", linked);
+    git("branch", "feature/available");
+    expect((await command(browser, "config.addProject", { path: repoPath })).ok).toBe(true);
+    const workspace = (await command(browser, "projects.getGitWorkspace", { repoPath })).result;
+    expect(workspace.worktrees.map((item: { path: string; branch: string }) => [item.path, item.branch])).toEqual([
+      [repoPath, "main"], [linked, "feature/linked"],
+    ]);
+    expect(workspace.branches).toContain("feature/available");
+    expect((await command(browser, "config.openWorktree", { repoPath, worktreePath: directory })).status).toBe(400);
+    expect((await command(browser, "config.openWorktree", { repoPath, worktreePath: linked })).ok).toBe(true);
+
+    const protectedFile = path.join(linked, ".local-task");
+    await writeFile(protectedFile, "keep this");
+    expect((await command(browser, "config.removeWorktree", { repoPath, worktreePath: linked })).ok).toBe(false);
+    expect(await readFile(protectedFile, "utf8")).toBe("keep this");
+    await rm(protectedFile);
+    expect((await command(browser, "config.removeWorktree", { repoPath, worktreePath: linked })).ok).toBe(true);
+    expect(git("branch", "--list", "feature/linked")).toContain("feature/linked");
+    expect((await command(browser, "config.deleteLocalBranch", { repoPath, branch: "feature/linked" })).ok).toBe(true);
+
+    const opened = await command(browser, "config.createWorktree", { sourceProjectPath: repoPath, branchName: "feature/available", existingBranch: true });
+    expect(opened.ok).toBe(true);
+    expect(git("worktree", "list", "--porcelain")).toContain("branch refs/heads/feature/available");
+    expect((await command(browser, "config.deleteLocalBranch", { repoPath, branch: "feature/available" })).ok).toBe(false);
+    expect((await command(browser, "config.removeWorktree", { repoPath, worktreePath: opened.result.targetPath })).ok).toBe(true);
+    expect((await command(browser, "config.removeProject", { path: repoPath })).ok).toBe(true);
+  });
+
   it("compresses static text when accepted and preserves clients that decline gzip", async () => {
     const url = `${server.origin}/assets/main-12345678.js`;
     const content = "console.log('SharkBay');\n".repeat(100);

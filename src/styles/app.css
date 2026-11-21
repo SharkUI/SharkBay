@@ -552,7 +552,7 @@ body.is-resizing-columns * {
   font-weight: 650;
 }
 
-.button:hover:not(:disabled) {
+.button:hover:not(:disabled):where(:not(.app-shell[data-host="web"] .project-panel .empty-state *)) {
   background: #254d54;
 }
 
@@ -680,7 +680,7 @@ body.is-resizing-columns * {
   text-align: left;
 }
 
-.project-row:hover {
+.project-row:hover:where(:not(.app-shell[data-host="web"] *)) {
   background: #eef5f3;
   border-color: #cbded9;
 }
@@ -697,6 +697,186 @@ body.is-resizing-columns * {
   border-color: #dedad1;
   border-style: dashed;
 }
+
+.project-row-shell.project-tree-row {
+  display: block;
+  position: relative;
+  min-width: 0;
+}
+
+.app-shell[data-host="web"] .project-tree-row > .project-row {
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 5px;
+  min-height: 42px;
+  padding: 6px 38px 6px 0;
+  border-color: transparent;
+  background: transparent;
+}
+
+.project-tree-row > .project-row .project-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.project-worktrees {
+  display: grid;
+  gap: 3px;
+  margin: 0 0 7px 11px;
+  /* Match the repository title's text after the icon. */
+  padding-left: 7px;
+  border-left: 1px solid color-mix(in srgb, currentColor 19%, transparent);
+}
+
+.project-worktree-item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+}
+
+.project-worktree-item.is-selected {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.project-worktree-open,
+.project-branch-item,
+.worktree-row-menu,
+.project-row-actions {
+  min-width: 0;
+  padding: 6px 8px;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.project-row-actions,
+.worktree-row-menu,
+.project-other-branches-indicator {
+  display: grid;
+  place-items: center;
+  width: 32px;
+}
+
+.project-row-actions,
+.worktree-row-menu {
+  min-height: 32px;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.project-row-actions {
+  position: absolute;
+  top: 5px;
+  right: 3px;
+}
+
+.worktree-row-menu { flex: none; }
+
+.worktree-row-menu.has-status {
+  --status-display: block;
+  --menu-display: none;
+  opacity: 1;
+  width: auto;
+  min-width: 32px;
+}
+
+.worktree-menu-status {
+  display: var(--status-display);
+  margin-inline-end: 4px;
+}
+.worktree-row-menu.has-status .worktree-menu-glyph { display: var(--menu-display); }
+
+.worktree-row-menu.has-status:is(:focus-visible, [aria-expanded="true"]) {
+  --status-display: none;
+  --menu-display: block;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .worktree-row-menu { opacity: 0; }
+  .project-worktree-item:is(:hover, :focus-within) > .worktree-row-menu,
+  .worktree-row-menu[aria-expanded="true"] { opacity: 1; }
+  .project-worktree-item:is(:hover, :focus-within) > .worktree-row-menu.has-status {
+    --status-display: none;
+    --menu-display: block;
+  }
+}
+
+:is(.project-row-actions, .worktree-row-menu):is(:focus-visible, [aria-expanded="true"]) {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.project-worktree-open {
+  display: grid;
+  flex: 1 1 0;
+  gap: 2px;
+  min-height: 32px;
+  padding-inline-end: 4px;
+}
+
+:is(.project-worktree-open, .project-branch-item, .project-other-branches summary):focus-visible {
+  outline: 2px solid color-mix(in srgb, currentColor 70%, transparent);
+  outline-offset: -2px;
+}
+
+.project-worktree-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 5px;
+}
+
+.project-worktree-title strong { font-size: 12px; font-weight: 600; }
+.project-worktree-title small,
+.project-worktree-detail,
+.project-other-branches-count { font-size: 11px; opacity: 0.72; }
+.project-worktree-title small { flex: none; }
+
+.project-other-branches summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 1px 6px 9px;
+  border-radius: 6px;
+  list-style: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.project-other-branches-indicator {
+  flex: none;
+  font-style: normal;
+}
+
+.project-other-branches-indicator > span { grid-area: 1 / 1; }
+.project-other-branches-arrow { visibility: hidden; }
+.project-other-branches summary:focus-visible .project-other-branches-count { opacity: 0; }
+.project-other-branches summary:focus-visible .project-other-branches-arrow { visibility: visible; }
+
+@media (hover: hover) and (pointer: fine) {
+  .project-other-branches summary:hover .project-other-branches-count { opacity: 0; }
+  .project-other-branches summary:hover .project-other-branches-arrow { visibility: visible; }
+}
+
+.project-other-branches summary::-webkit-details-marker { display: none; }
+
+.project-branch-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding-inline-start: 17px;
+  font-size: 12px;
+}
+
+.project-tree-error { padding: 5px 8px; font-size: 12px; overflow-wrap: anywhere; white-space: pre-line; }
 
 .project-context-menu {
   position: fixed;
@@ -746,6 +926,11 @@ body.is-resizing-columns * {
 
 .project-context-menu-item:disabled:hover {
   background: transparent;
+}
+
+.project-context-menu-item[aria-disabled="true"] {
+  opacity: 0.58;
+  cursor: default;
 }
 
 .project-context-submenu-anchor {
@@ -798,6 +983,19 @@ body.is-resizing-columns * {
   align-items: center;
   justify-content: space-between;
   padding: 4px 0 0;
+}
+
+.app-shell[data-host="web"] .project-panel-header {
+  column-gap: 2px;
+}
+
+.app-shell[data-host="web"] :is(.project-panel-header, .project-row-shell) > .icon-button:not(:focus-visible) {
+  background: transparent;
+  border-color: transparent;
+}
+
+.app-shell[data-host="web"] .project-panel .project-context-menu-item:hover:not(:focus-visible) {
+  background: transparent;
 }
 
 .project-panel-title {
@@ -878,6 +1076,8 @@ body.is-resizing-columns * {
   font-size: 12px;
   font-weight: 680;
 }
+
+.project-tree-row > .project-row .cell-title { font-size: 14px; }
 
 .cell-title-text {
   min-width: 0;
@@ -1343,6 +1543,24 @@ body.is-resizing-columns * {
 
 .detail-tab-panel[hidden] {
   display: none;
+}
+
+.app-shell[data-host="web"] .detail-panel .detail-tab-panel :is(
+  .subpanel, .queue-item, .empty-state, .muted-row, .button, .icon-button, .phase-pill,
+  .split-pill, .task-session-restore-card, .task-detail-hero, .task-detail-fact,
+  .task-detail-section, .task-detail-pre, .task-detail-file-row code
+) {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.app-shell[data-host="web"] .detail-panel .queue-item:hover:not(:disabled) {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.app-shell[data-host="web"] .detail-panel .queue-item:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
 }
 
 .files-card {
@@ -3633,6 +3851,7 @@ button.project-file-toggle:focus-visible {
 .host-folder-footer {
   display: flex;
   flex: 0 0 auto;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
   padding: 12px 16px;
@@ -3643,6 +3862,13 @@ button.project-file-toggle:focus-visible {
 .host-folder-footer .button.secondary { color: inherit; background: transparent; border-color: var(--folder-border); }
 .host-folder-footer .button.secondary:hover:not(:disabled) { background: var(--folder-hover); }
 .host-folder-error { margin: 0 8px 8px; color: #bc423a; font-size: 12px; overflow-wrap: anywhere; }
+.host-folder-footer .host-folder-error {
+  flex-basis: 100%;
+  max-height: 6em;
+  margin: 0;
+  overflow-y: auto;
+  white-space: pre-line;
+}
 
 .app-shell[data-theme="night"] .has-folder-picker {
   --folder-border: #31474b;
@@ -4952,6 +5178,7 @@ body.is-resizing-columns .app-shell[data-theme="night"] .column-resizer::before 
 .app-shell[data-theme="night"] .settings-section-heading span,
 .app-shell[data-theme="night"] .settings-list-row small,
 .app-shell[data-theme="night"] .cell-subtitle,
+.app-shell[data-theme="night"] .repository-fact span,
 .app-shell[data-theme="night"] .decision-meta,
 .app-shell[data-theme="night"] .form-note,
 .app-shell[data-theme="night"] .eyebrow,
@@ -5003,6 +5230,7 @@ body.is-resizing-columns .app-shell[data-theme="night"] .column-resizer::before 
 
 .app-shell[data-theme="night"] .task-detail-summary-section p,
 .app-shell[data-theme="night"] .task-detail-fact strong,
+.app-shell[data-theme="night"] .repository-fact strong,
 .app-shell[data-theme="night"] .task-detail-list li,
 .app-shell[data-theme="night"] .task-detail-timeline p,
 .app-shell[data-theme="night"] .task-detail-pre {
@@ -5038,7 +5266,7 @@ body.is-resizing-columns .app-shell[data-theme="night"] .column-resizer::before 
   color: #8fc1bb;
 }
 
-.app-shell[data-theme="night"] .project-row:hover,
+.app-shell[data-theme="night"]:where(:not([data-host="web"])) .project-row:hover,
 .app-shell[data-theme="night"] .project-file-row:hover,
 .app-shell[data-theme="night"] .project-file-row:focus-within,
 .app-shell[data-theme="night"] .dirty-file-row:hover,
@@ -5091,7 +5319,8 @@ body.is-resizing-columns .app-shell[data-theme="night"] .column-resizer::before 
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.24);
 }
 
-.app-shell[data-theme="night"] .dirty-file-status {
+.app-shell[data-theme="night"] .dirty-file-status,
+.app-shell[data-theme="night"] .repository-fact.is-warn strong {
   color: #d0ad7c;
 }
 
@@ -6374,6 +6603,13 @@ body.is-resizing-columns .app-shell[data-theme="morning"] .column-resizer::befor
     display: inline-grid;
     place-items: center;
   }
+
+  .app-shell[data-host="web"] .is-web .project-tree-row > .project-row { min-height: 44px; padding-right: 46px; }
+  .is-web :is(.project-worktree-open, .project-branch-item, .project-row-actions) { min-height: 44px; }
+  .is-web .project-other-branches summary { padding-block: 14px; }
+  .is-web .project-other-branches-indicator { min-width: 44px; }
+  .is-web :is(.worktree-row-menu, .project-row-actions) { min-width: 44px; min-height: 44px; }
+  .is-web .project-row-actions { top: 0; }
 
   .app-shell[data-host="web"] :is(.project-row-shell, .task-card-stack) {
     display: block;

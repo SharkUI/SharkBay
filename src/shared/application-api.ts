@@ -64,6 +64,9 @@ export type ApplicationMethodMap = {
   "config.renameProject": Command<T.RenameProjectInput, T.AppConfig>;
   "config.removeProject": Command<T.RemoveProjectInput, T.AppConfig>;
   "config.createWorktree": Command<T.CreateWorktreeInput, T.CreateWorktreeResult>;
+  "config.openWorktree": Command<{ repoPath: string; worktreePath: string }, T.AppConfig>;
+  "config.removeWorktree": Command<{ repoPath: string; worktreePath: string }, T.AppConfig>;
+  "config.deleteLocalBranch": Command<{ repoPath: string; branch: string }, T.AppConfig>;
   "config.setAppearanceTheme": Command<T.AppearanceThemeInput, T.AppConfig>;
   "config.setTerminalAppearance": Command<T.TerminalAppearanceInput, T.AppConfig>;
   "config.setStatusChangeNotifications": Command<T.StatusChangeNotificationsInput, T.AppConfig>;
@@ -71,6 +74,7 @@ export type ApplicationMethodMap = {
   "projects.listHostDirectories": Command<{ path?: string }, HostDirectoryListing>;
   "projects.getSetupStatus": Command<{ repoPath: string }, T.ProjectSetupStatus>;
   "projects.getDetail": Command<{ projectUri: string }, T.ProjectDetail>;
+  "projects.getGitWorkspace": Command<{ repoPath: string }, T.GitWorkspace>;
   "projects.getGitHub": Command<{ projectUri: string }, T.GitHubInfo>;
   "projects.listFiles": Command<Pick<T.ProjectFilesInput, "projectUri" | "directoryPath">, T.ProjectFilesResult>;
   "projects.readFile": Command<T.ReadFileInput, T.ReadFileResult>;

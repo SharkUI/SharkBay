@@ -188,6 +188,7 @@ export type ProjectCandidate = {
   iconSources?: ProjectIconSource[];
   services?: ProjectDevService[];
   dirtyWorktree?: boolean | null;
+  gitRepository?: { commonDir: string; primary: boolean };
 };
 
 export type ProjectFilesInput = {
@@ -689,7 +690,10 @@ export type SharkBayBridge = {
     removeProject?: (input: { path?: string; uri?: string }) => Promise<AppConfig | void>;
     renameProject?: (input: { uri: string; name: string }) => Promise<AppConfig | void>;
     pickProjectFolder?: () => Promise<{ cancelled: boolean; paths: string[] }>;
-    createWorktree?: (input: { sourceProjectPath: string; branchName: string }) => Promise<{ targetPath: string; branchName: string }>;
+    createWorktree?: (input: import("../shared/types.js").CreateWorktreeInput) => Promise<{ targetPath: string; branchName: string }>;
+    openWorktree?: (input: { repoPath: string; worktreePath: string }) => Promise<AppConfig>;
+    removeWorktree?: (input: { repoPath: string; worktreePath: string }) => Promise<AppConfig>;
+    deleteLocalBranch?: (input: { repoPath: string; branch: string }) => Promise<AppConfig>;
     setAppearanceTheme?: (input: { theme: AppearanceTheme }) => Promise<AppConfig>;
     setStatusChangeNotifications?: (input: { enabled?: boolean; completionEnabled?: boolean; approvalEnabled?: boolean }) => Promise<AppConfig>;
     setIslandEnabled?: (input: { enabled: boolean }) => Promise<AppConfig>;
@@ -701,6 +705,7 @@ export type SharkBayBridge = {
     getSetupStatus?: (input: { repoPath: string }) => Promise<import("../shared/types.js").ProjectSetupStatus>;
     scan?: () => Promise<ScanResult | ProjectCandidate[]>;
     getDetail?: (input: { projectUri: string }) => Promise<ProjectDetail>;
+    getGitWorkspace?: (input: { repoPath: string }) => Promise<import("../shared/types.js").GitWorkspace>;
     getGitHub?: (input: { projectUri: string }) => Promise<GitHubInfo>;
     listFiles?: (input: ProjectFilesInput) => Promise<ProjectFilesResult>;
     readFile?: (input: ReadFileInput) => Promise<ReadFileResult>;

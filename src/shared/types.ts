@@ -64,7 +64,19 @@ export type RenameProjectInput = {
 export type CreateWorktreeInput = {
   sourceProjectPath: string;
   branchName: string;
+  existingBranch?: boolean;
 };
+
+export type GitWorktree = {
+  path: string;
+  branch: string | null;
+  head: string;
+  primary: boolean;
+  locked: boolean;
+  prunable: boolean;
+};
+
+export type GitWorkspace = { worktrees: GitWorktree[]; branches: string[] };
 
 export type CreateWorktreeResult = {
   targetPath: string;
@@ -540,6 +552,7 @@ export type ProjectCandidate = {
   iconSources: ProjectIconSource[];
   services: ProjectDevService[];
   dirtyWorktree: boolean | null;
+  gitRepository?: { commonDir: string; primary: boolean };
 };
 
 export type GitMetadata = {

@@ -12,6 +12,7 @@ import { CodeEditor } from "./code-editor";
 import { CodeGraphPanel } from "./codegraph-panel";
 import { UpdateHint } from "./update-hint";
 import { ProjectStart } from "./project-start";
+import { ProjectWorktrees, type ProjectTreeRowActions } from "./project-worktrees";
 import { RuntimeStatus } from "./bridge/runtime-status";
 import { HostFolderPicker } from "./host-folder-picker";
 import { useCompactWebLayout, useWebViewport } from "./mobile-layout";
@@ -177,6 +178,7 @@ type PersistedTerminalSpaces = {
 };
 
 type TerminalPaneHandle = {
+  hasUnsavedEditors: (worktreePath: string) => boolean;
   openFileInEditor: (projectUri: string, projectName: string, relativePath: string) => Promise<void>;
   openGitDiff: (projectUri: string, projectName: string, relativePath: string, commits?: string[]) => Promise<void>;
   openBrowserTab: (projectUri: string, projectName: string, initialUrl: string) => Promise<void>;
@@ -923,6 +925,15 @@ export function App() {
                 return projectPath;
               }}
               onRemoveProject={async (uri) => { await removeProject(uri); await refreshProjects({ showToast: true }); }}
+              onOpenWorktree={async (repoPath, worktreePath) => {
+                const existing = candidates.find((entry) => entry.displayPath === worktreePath);
+                if (existing) { setSelectedId(existing.id); return; }
+                await getBridge().config!.openWorktree!({ repoPath, worktreePath });
+                const { candidates: next } = await refreshProjects();
+                const opened = next.find((entry) => entry.displayPath === worktreePath);
+                if (!opened) throw new Error("The worktree could not be opened");
+                setSelectedId(opened.id);
+              }}
               onRenameProject={async (uri, name) => { await renameProjectAlias(uri, name); await refreshProjects({ showToast: false }); }}
               onUninstallProtocol={async (repoPath, cleanTeamContext) => { await uninstallProtocol(repoPath, cleanTeamContext); await refreshProjects({ showToast: false }); }}
               projectAliases={projectAliases}
@@ -1065,6 +1076,7 @@ function DashboardView({
   onPickProject,
   onCloneProject,
   onRemoveProject,
+  onOpenWorktree,
   onRenameProject,
   onUninstallProtocol,
   onTerminalWorkingChange,
@@ -1093,6 +1105,7 @@ function DashboardView({
   onPickProject: (selectedPath?: string) => Promise<boolean>;
   onCloneProject: (url: string, parentPath?: string) => Promise<string | null>;
   onRemoveProject: (uri: string) => Promise<void>;
+  onOpenWorktree: (repoPath: string, worktreePath: string) => Promise<void>;
   onRenameProject: (uri: string, name: string) => Promise<void>;
   onUninstallProtocol: (repoPath: string, cleanTeamContext?: boolean) => Promise<void>;
   onTerminalWorkingChange: (working: boolean) => void;
@@ -1423,6 +1436,12 @@ function DashboardView({
               selectedId={selectedCandidate?.id ?? null}
               onSelect={(id) => { setSelectedId(id); setProjectsOpen(false); setDetailsOpen(false); }}
               onRemoveProject={onRemoveProject}
+              onOpenWorktree={async (repoPath, worktreePath) => {
+                await onOpenWorktree(repoPath, worktreePath);
+                setProjectsOpen(false);
+                setDetailsOpen(false);
+              }}
+              hasUnsavedEditors={(worktreePath) => terminalPaneRef.current?.hasUnsavedEditors(worktreePath) ?? false}
               onRenameProject={onRenameProject}
               onUninstallProtocol={onUninstallProtocol}
               onRefresh={onRefresh}
@@ -2093,6 +2112,8 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   }
 
   useImperativeHandle(ref, () => ({
+    hasUnsavedEditors: (worktreePath) => Object.values(spaces).some((space) => space.displayPath === worktreePath
+      && space.tabs.some((tab) => tab.kind === "editor" && tab.content !== tab.savedContent)),
     openFileInEditor: async (projectUri, projectName, relativePath) => {
       await openEditorTab(projectUri, projectName, selectedSpace?.displayPath ?? projectUri, relativePath);
     },
@@ -3288,13 +3309,15 @@ type ConfirmUninstallState = {
 };
 
 type ProjectMenuState = {
-  id: string;
   x: number;
   y: number;
-  canUninstallProtocol: boolean;
-};
+  anchor?: HTMLButtonElement;
+} & (
+  | { id: string; canUninstallProtocol: boolean; row?: never }
+  | { id?: never; row: ProjectTreeRowActions & { protocolInstalled?: boolean } }
+);
 
-function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, runningServiceProjectIds, projectActivityByProjectId, selectedId, onSelect, onRemoveProject, onRenameProject, onUninstallProtocol, onRefresh }: {
+function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, runningServiceProjectIds, projectActivityByProjectId, selectedId, onSelect, onRemoveProject, onOpenWorktree, hasUnsavedEditors, onRenameProject, onUninstallProtocol, onRefresh }: {
   agentStatusByProjectPath: AgentStatusByProjectPath;
   candidates: ProjectCandidate[];
   projectAliases: Record<string, string>;
@@ -3303,6 +3326,8 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
   selectedId: string | null;
   onSelect: (id: string) => void;
   onRemoveProject: (uri: string) => Promise<void>;
+  onOpenWorktree: (repoPath: string, worktreePath: string) => Promise<void>;
+  hasUnsavedEditors: (worktreePath: string) => boolean;
   onRenameProject: (uri: string, name: string) => Promise<void>;
   onUninstallProtocol: (repoPath: string, cleanTeamContext?: boolean) => Promise<void>;
   onRefresh: () => Promise<void>;
@@ -3315,6 +3340,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
   const [worktreeModal, setWorktreeModal] = useState<{ sourceProjectPath: string; name: string } | null>(null);
   const [worktreeBranch, setWorktreeBranch] = useState("");
   const [worktreeCreating, setWorktreeCreating] = useState(false);
+  const [worktreeRevision, setWorktreeRevision] = useState(0);
   const [removing, setRemoving] = useState(false);
   const [uninstalling, setUninstalling] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -3322,11 +3348,17 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
 
   useEffect(() => {
     if (!menuOpen) return;
+    if (menuOpen.anchor && !menuRef.current?.contains(document.activeElement)) {
+      menuRef.current?.querySelector("button")?.focus({ preventScroll: true });
+    }
     function handleClick(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setMenuOpen(null);
+      if (menuRef.current && !menuRef.current.contains(event.target as Node) && !menuOpen?.anchor?.contains(event.target as Node)) setMenuOpen(null);
     }
     function handleKey(event: globalThis.KeyboardEvent) {
-      if (event.key === "Escape") { event.preventDefault(); setMenuOpen(null); }
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      menuOpen?.anchor?.focus({ preventScroll: true });
+      setMenuOpen(null);
     }
     document.addEventListener("pointerdown", handleClick, true);
     document.addEventListener("keydown", handleKey, true);
@@ -3348,8 +3380,9 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
     }
   }
 
-  function openProjectMenu(candidate: ProjectCandidate, x: number, y: number) {
-    setMenuOpen({ id: candidate.id, x, y, canUninstallProtocol: false });
+  function openProjectMenu(candidate: ProjectCandidate, x: number, y: number, anchor?: HTMLButtonElement) {
+    setMenuOpen({ id: candidate.id, x, y, anchor, canUninstallProtocol: false });
+    if (candidate.gitRepository && getBridge().projects?.getGitWorkspace) return;
     const repoPath = localPathFromCandidate(candidate);
     const getStatus = getBridge().protocol?.getStatus;
     if (!repoPath || !getStatus) return;
@@ -3373,6 +3406,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
       await handler({ sourceProjectPath: worktreeModal.sourceProjectPath, branchName: worktreeBranch.trim() });
       setWorktreeModal(null);
       await onRefresh();
+      setWorktreeRevision((revision) => revision + 1);
     } catch (error) {
       alert(asMessage(error));
     } finally {
@@ -3380,7 +3414,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
     }
   }
 
-  async function openUninstallDialog(candidate: ProjectCandidate, repoPath: string) {
+  async function openUninstallDialog(candidate: ProjectCandidate, repoPath: string, allowTeamContextCleanup = true) {
     const name = projectAliases[candidate.uri] || candidate.name;
     setConfirmUninstall({
       repoPath,
@@ -3388,8 +3422,9 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
       canCleanTeamContext: false,
       cleanTeamContext: false,
       ownerCheckError: null,
-      checkingOwner: true,
+      checkingOwner: allowTeamContextCleanup,
     });
+    if (!allowTeamContextCleanup) return;
 
     let canCleanTeamContext = false;
     let ownerCheckError: string | null = null;
@@ -3412,11 +3447,46 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
     }
   }
 
+  const webWorktrees = Boolean(getBridge().projects?.getGitWorkspace);
+  const repositoryKey = (entry: ProjectCandidate) => entry.gitRepository?.commonDir ?? entry.id;
+  const projects = new Map<string, ProjectCandidate>();
+  for (const candidate of candidates) {
+    const key = webWorktrees ? repositoryKey(candidate) : candidate.id;
+    if (!projects.has(key) || candidate.gitRepository?.primary) projects.set(key, candidate);
+  }
+  const activeWorktree = candidates.find((candidate) => candidate.id === selectedId);
+  const menuProject = candidates.find((candidate) => candidate.id === menuOpen?.id);
+  const menuSource = menuProject && activeWorktree && webWorktrees && repositoryKey(menuProject) === repositoryKey(activeWorktree)
+    ? activeWorktree : menuProject;
+
+  function menuPosition(anchor: HTMLButtonElement, itemCount: number) {
+    const rect = anchor.getBoundingClientRect();
+    const height = itemCount * 32 + 12;
+    return {
+      anchor,
+      x: Math.max(8, Math.min(rect.right - 178, window.innerWidth - 186)),
+      y: rect.bottom + height + 12 <= window.innerHeight ? rect.bottom + 4 : Math.max(8, rect.top - height - 4),
+    };
+  }
+
+  function openTreeRowMenu(anchor: HTMLButtonElement, actions: ProjectTreeRowActions) {
+    if (menuOpen?.anchor === anchor) { setMenuOpen(null); return; }
+    const menu = { ...menuPosition(anchor, 2), row: actions };
+    setMenuOpen(menu);
+    const { worktree } = actions;
+    if (!worktree) return;
+    void getBridge().protocol?.getStatus?.({ repoPath: worktree.displayPath }).then((status) => {
+      setMenuOpen((current) => current === menu ? { ...menu, row: { ...menu.row, protocolInstalled: status.harnessInstalled } } : current);
+    }).catch(() => undefined);
+  }
+
   if (!candidates.length) return null;
   return (
     <section className="project-section">
       <div className="project-list" aria-label="Projects">
-        {candidates.map((candidate) => {
+        {Array.from(projects, ([id, candidate]) => {
+          const isActiveProject = activeWorktree && id === (webWorktrees ? repositoryKey(activeWorktree) : activeWorktree.id);
+          const usesTree = webWorktrees && Boolean(candidate.gitRepository);
           const hasRunningService = runningServiceProjectIds.has(candidate.id);
           const projectActivity = projectActivityForCandidate(candidate, projectActivityByProjectId);
           const hasProjectStatus = Boolean(projectActivity);
@@ -3425,10 +3495,12 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
           const displayName = projectAliases[candidate.uri] || candidate.name;
           const isRenaming = renamingId === candidate.id;
           return (
-            <div className="project-row-shell" key={candidate.id}>
+            <div className={cx("project-row-shell", usesTree && "project-tree-row")} key={id}>
             <button
-              className={cx("project-row", selectedId === candidate.id && "is-selected")}
-              onClick={() => onSelect(candidate.id)}
+              className={cx("project-row", isActiveProject && !usesTree && "is-selected")}
+              type="button"
+              title={usesTree ? candidate.displayPath : undefined}
+              onClick={() => onSelect(isActiveProject && activeWorktree ? activeWorktree.id : candidate.id)}
               onContextMenu={(event) => {
                 event.preventDefault();
                 openProjectMenu(candidate, event.clientX, event.clientY);
@@ -3436,8 +3508,8 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
               onKeyDown={(event) => {
                 if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
                 event.preventDefault();
-                const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-                openProjectMenu(candidate, rect.left + 24, rect.top + 24);
+                const { anchor, x, y } = menuPosition(event.currentTarget, 5);
+                openProjectMenu(candidate, x, y, anchor);
               }}
             >
               <ProjectIcon name={displayName} sources={candidate.iconSources ?? []} />
@@ -3462,15 +3534,40 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
                     <span className="cell-title-text truncate">{displayName}</span>
                   )}
                 </span>
-                <span className="cell-subtitle truncate" title={subtitle}>{subtitle}</span>
+                {!usesTree ? <span className="cell-subtitle truncate" title={subtitle}>{subtitle}</span> : null}
               </span>
               <span className="project-row-status">
-                {hasProjectStatus && projectActivity ? (
+                {(!usesTree || !isActiveProject) && hasProjectStatus && projectActivity ? (
                   <span data-status-tone={AGENT_STATUS_TONE[projectActivity]} className={cx("terminal-activity-pill", `is-${projectActivity}`)}>{AGENT_STATUS_LABELS[projectActivity]}</span>
                 ) : null}
               </span>
             </button>
-            <button aria-label={`More actions for ${displayName}`} className="icon-button touch-menu" type="button" onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); openProjectMenu(candidate, rect.left, rect.bottom); }}>…</button>
+            <button
+              aria-label={`More actions for ${displayName}`}
+              aria-expanded={menuOpen?.id === candidate.id}
+              className={usesTree ? "project-row-actions" : "icon-button touch-menu"}
+              type="button"
+              onClick={(event) => {
+                if (menuOpen?.id === candidate.id) { setMenuOpen(null); return; }
+                const { anchor, x, y } = menuPosition(event.currentTarget, 5);
+                openProjectMenu(candidate, x, y, anchor);
+              }}
+            >…</button>
+            {usesTree && isActiveProject && activeWorktree ? <ProjectWorktrees
+              repoPath={candidate.displayPath}
+              activePath={activeWorktree.displayPath}
+              candidates={candidates}
+              revision={worktreeRevision}
+              activity={(worktree) => {
+                const state = projectActivityForCandidate(worktree, projectActivityByProjectId);
+                return state ? <span data-status-tone={AGENT_STATUS_TONE[state]} className={cx("terminal-activity-pill", `is-${state}`)}>{AGENT_STATUS_LABELS[state]}</span> : null;
+              }}
+              onOpen={onOpenWorktree}
+              hasUnsavedEditors={hasUnsavedEditors}
+              onRefresh={onRefresh}
+              openMenuAnchor={menuOpen?.anchor}
+              onActionMenu={openTreeRowMenu}
+            /> : null}
             </div>
           );
         })}
@@ -3541,7 +3638,71 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
         </div>
       ) : null}
       {menuOpen ? (
-        <div ref={menuRef} className="project-context-menu" style={{ top: menuOpen.y, left: menuOpen.x }}>
+        <div
+          ref={menuRef}
+          className="project-context-menu"
+          style={{ top: menuOpen.y, left: menuOpen.x }}
+          onBlur={(event) => {
+            if (event.relatedTarget && event.relatedTarget !== menuOpen.anchor && !event.currentTarget.contains(event.relatedTarget)) setMenuOpen(null);
+          }}
+        >
+          {menuOpen.row ? (
+            <>
+            {menuOpen.row.open ? (
+              <button
+                className="project-context-menu-item"
+                type="button"
+                onClick={() => {
+                  menuOpen.anchor?.focus({ preventScroll: true });
+                  setMenuOpen(null);
+                  menuOpen.row?.open?.();
+                }}
+              >Open in New Worktree</button>
+            ) : null}
+            {menuOpen.row.worktree ? (
+              <button
+                className="project-context-menu-item"
+                type="button"
+                aria-disabled={!menuOpen.row.protocolInstalled}
+                onClick={() => {
+                  const worktree = menuOpen.row?.worktree;
+                  if (!worktree || !menuOpen.row?.protocolInstalled) return;
+                  setMenuOpen(null);
+                  void openUninstallDialog(worktree, worktree.displayPath, false);
+                }}
+              >Uninstall Protocol</button>
+            ) : null}
+            {menuOpen.row.remove ? <button
+              className="project-context-menu-item is-danger"
+              type="button"
+              aria-disabled={Boolean(menuOpen.row.remove.unavailable)}
+              title={menuOpen.row.remove.unavailable}
+              onClick={() => {
+                const remove = menuOpen.row?.remove;
+                if (!remove || remove.unavailable) return;
+                menuOpen.anchor?.focus({ preventScroll: true });
+                setMenuOpen(null);
+                remove.run();
+              }}
+            >{menuOpen.row.remove.label}</button> : null}
+            </>
+          ) : <>
+          {menuSource && menuSource.dirtyWorktree !== null ? (
+            <button className="project-context-menu-item" type="button" onClick={() => {
+              const repoPath = localPathFromCandidate(menuSource);
+              if (!repoPath) return;
+              setMenuOpen(null);
+              setWorktreeBranch("");
+              setWorktreeModal({ sourceProjectPath: repoPath, name: menuSource.name });
+            }}>New Worktree</button>
+          ) : null}
+          {webWorktrees && menuProject?.gitRepository ? (
+            <button className="project-context-menu-item" type="button" onClick={() => {
+              menuOpen.anchor?.focus({ preventScroll: true });
+              setMenuOpen(null);
+              void onRefresh().then(() => setWorktreeRevision((revision) => revision + 1));
+            }}>Refresh Worktrees</button>
+          ) : null}
           <button
             className="project-context-menu-item"
             type="button"
@@ -3573,24 +3734,6 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
               </button>
             );
           })()}
-          {(() => {
-            const candidate = candidates.find((c) => c.id === menuOpen.id);
-            const repoPath = candidate ? localPathFromCandidate(candidate) : null;
-            if (!candidate || !repoPath || candidate.dirtyWorktree === null) return null;
-            return (
-              <button
-                className="project-context-menu-item"
-                type="button"
-                onClick={() => {
-                  setMenuOpen(null);
-                  setWorktreeBranch("");
-                  setWorktreeModal({ sourceProjectPath: repoPath, name: candidate.name });
-                }}
-              >
-                New Worktree
-              </button>
-            );
-          })()}
           <button
             className="project-context-menu-item is-danger"
             type="button"
@@ -3602,6 +3745,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
           >
             Remove Project
           </button>
+          </>}
         </div>
       ) : null}
       {worktreeModal ? (

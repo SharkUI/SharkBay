@@ -4,6 +4,7 @@ import type { IpcRuntimeLike, ProjectCandidate, ProjectScanInput, ScanProjectsRe
 import { loadAppConfig, getRuntimeConfigPath } from "./config.js";
 import { discoverProjectDevServices } from "./dev-services.js";
 import { readGitMetadata } from "./git.js";
+import { readGitRepository } from "./worktree.js";
 import { resolveConfiguredRoots } from "./path-safety.js";
 import { resolveProjectIconSources } from "./project-icons.js";
 import { toLocalProjectUri } from "../core/project-uri.js";
@@ -83,6 +84,7 @@ async function resolveManualProjects(configuredProjects: string[]): Promise<Proj
         discoverProjectDevServices(real),
         readGitMetadata(real),
       ]);
+      const gitRepository = gitMetadata.gitRoot === real ? await readGitRepository(real).catch(() => undefined) : undefined;
       return {
         id: projectUri,
         uri: projectUri,
@@ -94,6 +96,7 @@ async function resolveManualProjects(configuredProjects: string[]): Promise<Proj
         iconSources,
         services,
         dirtyWorktree: gitMetadata.dirtyWorktree,
+        ...(gitRepository ? { gitRepository } : {}),
       } satisfies ProjectCandidate;
     } catch {
       return null;
