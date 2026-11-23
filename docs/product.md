@@ -1,6 +1,6 @@
 # Product Notes
 
-SharkBay is a lightweight GitHub-native development coordination tool for individuals and small teams using coding-agent CLIs across multiple repositories. GitHub remains its identity, permission and collaboration source; local state represents execution context. The macOS client and browser workbench share a local Node runtime.
+SharkBay is a lightweight GitHub-native development coordination tool for individuals and small teams using coding-agent CLIs across multiple repositories. GitHub remains its identity, permission and collaboration source; local state represents execution context. The default install provides a local runtime and browser workbench. The optional desktop app connects to that same runtime.
 
 The [current facts table](current-facts.md) defines current behavior and separates implemented capabilities from historical proposals.
 
@@ -31,7 +31,7 @@ SharkBay automatically registers status hooks when it launches a supported Agent
 ## Product Boundaries
 
 - Electron and WebUI are clients of the same local runtime; browser access requires a host-issued connection grant, including on loopback and LAN.
-- It is desktop-first and currently has an `1180px` minimum window width.
+- The desktop app currently has an `1180px` minimum window width.
 - It only operates on user-configured projects.
 - Agent CLIs run in runtime-owned terminal sessions that clients can observe; disconnecting a client does not stop those sessions.
 - It does not sync repository data unless a feature explicitly requires it, such as task protocol.

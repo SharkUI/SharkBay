@@ -21,7 +21,7 @@ npm install
 npm run dev
 ```
 
-The dev command builds the Node runtime, runs Vite on `127.0.0.1:5184`, watches Electron TypeScript and starts Electron. Electron discovers/starts one independent runtime, using ordinary Node during development and the bundled Node in packaged builds.
+The dev command builds the Node runtime, runs Vite on `127.0.0.1:5184`, watches Electron TypeScript and starts Electron. Development Electron discovers or starts one independent runtime with ordinary Node. Packaged desktop builds connect to the independently installed runtime.
 
 Local and LAN browsers can open `http://<host-ip>:17777/` directly without a code or cookie. The File menu's **Open in Browser** action also opens the same runtime. Other networks still require the host-issued connection link. Browser refresh and desktop reconnect attach existing terminals.
 
@@ -69,6 +69,12 @@ Distributable macOS artifacts:
 
 ```bash
 npm run dist
+```
+
+Runtime and WebUI npm tarball:
+
+```bash
+npm run pack:runtime
 ```
 
 Build outputs are written to `release/`.

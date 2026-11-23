@@ -13,6 +13,7 @@ import { createStartupTimer } from "../main/startup-timing.js";
 const args = process.argv.slice(2);
 const projects: string[] = [];
 let port = 17777;
+let host: "127.0.0.1" | "0.0.0.0" = "0.0.0.0";
 let background = false;
 let stopRequested = false;
 let userDataPath = process.env.SHARKBAY_RUNTIME_DATA_DIR ?? defaultRuntimeDataPath();
@@ -20,14 +21,16 @@ let configPath: string | undefined;
 for (let index = 0; index < args.length; index++) {
   const key = args[index];
   if (key === "--help") {
-    console.log("SharkBay WebUI\n  npm run start:runtime -- [--port 17777] [--data-dir path] [--config path] [--project path ...]\nUse --stop to stop the shared runtime and its terminals. Local and LAN browsers can open http://IP:17777/ directly. Other networks require a host-issued connection link. Existing host projects are copied into a separate WebUI profile on first start.\nIn the host terminal: Enter/connect = local and LAN addresses; revoke = revoke grant/session access (local and LAN access remains available).");
+    console.log("SharkBay WebUI\n  sharkbay serve [--port 17777] [--lan] [--data-dir path] [--config path] [--project path ...]\n  sharkbay serve --stop\nUse --lan on a trusted network to allow other devices to access host projects and terminals.");
     process.exit(0);
   }
   if (key === "--stop") { stopRequested = true; continue; }
   if (key === "--background") { background = true; continue; }
+  if (key === "--lan") { host = "0.0.0.0"; continue; }
   const value = args[++index];
   if (!value) throw new Error(`Missing value for ${key}`);
   if (key === "--port") port = Number(value);
+  else if (key === "--host" && (value === "127.0.0.1" || value === "0.0.0.0")) host = value;
   else if (key === "--data-dir") userDataPath = path.resolve(value);
   else if (key === "--config") configPath = path.resolve(value);
   else if (key === "--project") projects.push(await realpath(value));
@@ -79,13 +82,14 @@ try {
   startup("runtime-ready");
   const config = await loadAppConfig(configPath);
   const staticRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../dist/renderer");
-  const server = await createWebServer(runtime, { port, staticRoot });
+  const server = await createWebServer(runtime, { port, staticRoot, host });
   startup("http-listening");
   const control = await createRuntimeControl(runtime, server, () => { void stop().catch((error) => { console.error(error); process.exitCode = 1; }); });
   startup("control-ready");
   console.log(`SharkBay WebUI: ${server.origin}\nHost profile: ${userDataPath}\nProjects: ${config.configuredProjects.length}`);
   const connect = () => {
     console.log(`SharkBay WebUI: ${server.origin}`);
+    if (host === "127.0.0.1") return;
     const addresses = new Set(Object.values(os.networkInterfaces()).flatMap((entries) => entries?.filter((entry) => entry.family === "IPv4" && !entry.internal).map((entry) => entry.address) ?? []));
     for (const address of addresses) console.log(`SharkBay LAN WebUI: ${server.origin.replace("127.0.0.1", address)}`);
   };
@@ -94,8 +98,8 @@ try {
   terminal.on("line", (line) => {
     const command = line.trim();
     if (!command || command === "connect") connect();
-    else if (command === "revoke") { server.revoke(); console.log("Grant/session access revoked. Local and LAN access remains available. PTYs remain running."); }
-    else console.log("Enter/connect: local and LAN addresses; revoke: revoke grant/session access; Ctrl-C: stop runtime.");
+    else if (command === "revoke") { server.revoke(); console.log("Grant/session access revoked. PTYs remain running."); }
+    else console.log("Enter/connect: show WebUI addresses; revoke: revoke grant/session access; Ctrl-C: stop runtime.");
   });
   let stopping = false;
   const stop = async () => {

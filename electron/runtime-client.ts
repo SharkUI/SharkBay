@@ -10,10 +10,13 @@ export async function ensureRuntime(report: (stage: string) => void = () => {}):
   report("runtime-connect-started");
   try { const client = await RuntimeClient.connect(dataPath); report("existing-runtime-connected"); return client; }
   catch (error) { if (!["ENOENT", "ECONNREFUSED"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error; }
+  if (app.isPackaged) {
+    throw new Error("SharkBay Runtime is not running. Install SharkBay Runtime and start it with sharkbay serve, then reopen SharkBay Desktop.");
+  }
   await mkdir(dataPath, { recursive: true, mode: 0o700 });
-  const node = process.env.SHARKBAY_NODE_PATH ?? (app.isPackaged ? join(process.resourcesPath, "runtime", "bin", process.platform === "win32" ? "node.exe" : "node") : await resolveCommandPath("node"));
+  const node = process.env.SHARKBAY_NODE_PATH ?? await resolveCommandPath("node");
   if (!node) throw new Error("Node runtime was not found. Build the runtime before starting SharkBay.");
-  const root = app.isPackaged ? join(process.resourcesPath, "runtime") : app.getAppPath();
+  const root = app.getAppPath();
   const args = [join(root, "dist-runtime/src/server/main.js"), "--background", "--port", process.env.SHARKBAY_RUNTIME_PORT ?? "17777", "--data-dir", dataPath];
   if (process.env.SHARKBAY_CONFIG_PATH) args.push("--config", process.env.SHARKBAY_CONFIG_PATH);
   const log = await open(join(dataPath, "runtime.log"), "a", 0o600);

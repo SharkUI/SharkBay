@@ -1,6 +1,14 @@
 # Release And Packaging
 
-SharkBay packages with Electron Builder for macOS 13 Ventura or later on Apple Silicon (arm64). The [current facts table](current-facts.md) is the canonical summary of process ownership, shipped capabilities and release semantics.
+SharkBay distributes Runtime and WebUI together as an npm package. The optional Electron desktop client is packaged separately for macOS 13 Ventura or later on Apple Silicon (arm64). The [current facts table](current-facts.md) summarizes current behavior.
+
+## Runtime and WebUI
+
+`npm run pack:runtime` creates `release/sharkbay-runtime-<version>.tgz` using the repository version and locked direct runtime dependencies. The archive contains the compiled Node service, CLI, and WebUI assets. It targets Node.js 22.12+ in the 22.x series on macOS and Linux x64/arm64. Install the tarball in an isolated npm prefix for release validation before publishing it to the npm registry.
+
+Serve the installed WebUI with `sharkbay serve`. The default address is `http://127.0.0.1:17777/`. `sharkbay service enable` starts it with a macOS LaunchAgent or a Linux systemd user service, and `sharkbay service disable` stops and unregisters that service. The service uses the current user's default profile and the Node executable used at registration. `--lan` explicitly enables trusted LAN access. `SHARKBAY_RUNTIME_PORT` can set the service port.
+
+After finishing active sessions, disable a registered service before updating Node or uninstalling the package. Re-enable it from the desired Node environment to register its executable again. Linux hosts that need to serve the WebUI before login can enable systemd lingering for their service user.
 
 ## Commands
 
@@ -109,11 +117,11 @@ The package entry is `dist-electron/electron/main.js`.
 
 ## Native Modules
 
-The independent ordinary Node runtime loads `@lydell/node-pty` and `better-sqlite3` from `Contents/Resources/runtime/node_modules`. Electron does not load these modules. `npm run prepare:runtime` installs production dependencies for the build host Node version and architecture; build each target on a matching host. The runtime binary, dependencies, compiled service and WebUI are copied outside ASAR.
+The npm runtime loads `@lydell/node-pty` and `better-sqlite3` under ordinary Node. Validate installation and a real PTY on every advertised platform and Node ABI. The desktop package loads the existing runtime over the same-user control endpoint.
 
 ## Resources
 
-Runtime icons are read from `resources/` in development and from `process.resourcesPath/resources` in packaged builds. Current app themes use day, night, and morning icon variants.
+Desktop icons are read from `resources/` in development and from `process.resourcesPath/resources` in packaged builds. Current app themes use day, night, and morning icon variants.
 
 ## macOS Signing
 
@@ -177,8 +185,9 @@ Before producing distributable artifacts:
 2. `npm test`
 3. `npm run build`
 4. `npm run pack`
-5. Smoke test the unpacked app with a temporary project folder
-6. `npm run dist`
+5. `npm run pack:runtime`, then install the tarball and start it with a temporary runtime profile
+6. Start the unpacked desktop app against the installed runtime and verify WebUI, PTY, and desktop exit
+7. `npm run dist`
 
 Local builds use ad-hoc signing unless signing and notarization credentials are configured.
 
@@ -186,10 +195,10 @@ Local builds use ad-hoc signing unless signing and notarization credentials are 
 
 `tsconfig.node.json` includes tests for compilation and checking, while Electron Builder explicitly excludes `dist-electron/tests/**/*`, source maps, declarations and build metadata from the desktop package. Check the actual artifact manifest for release acceptance; TypeScript include patterns alone do not describe shipped contents.
 
-## Shared runtime package
+## Desktop migration
 
-`pack` and `dist` now run `prepare:runtime` after the build. The staged runtime includes ordinary Node, its license, the lockfile-resolved production dependencies, `dist-runtime/` and `dist/renderer/`, and is copied outside ASAR to `Resources/runtime`. Electron only connects to this service; do not rebuild runtime dependencies for Electron ABI.
+Publish and verify the Runtime npm package before offering the first desktop-only update. Include the installation and startup steps in that release's upgrade notes.
 
-Keep the separate `extraResources` mapping from `.runtime-bundle/node_modules` to `runtime/node_modules`: Electron Builder skips a resource source's root `node_modules` directory when copying its parent. After packaging, run `node scripts/verify-packaged-runtime.mjs` to verify the actual app's runtime startup and terminal lifecycle with an isolated profile.
+Finish active sessions and quit the old desktop app before stopping its bundled Runtime. Start the independently installed Runtime with the same profile to reuse the existing configuration, then launch the new desktop client. Closing or updating the desktop client leaves the Runtime and its sessions running. Keep the runtime and desktop versions on the same release when the control protocol changes.
 
-Use a target-native build machine and verify the packaged runtime's SQLite/PTY startup. Closing/updating the desktop client must not stop active runtime sessions. Runtime protocol changes require coordinated client/runtime versions; incompatible connections must fail explicitly. An active runtime is never silently replaced during client startup. Existing installed desktop versions still own their old backend and must be stopped before migrating daily usage to the shared-runtime release.
+After packaging, run `node scripts/verify-packaged-runtime.mjs <app-path> <installed-cli-path>` to verify desktop attachment to the installed Runtime with an isolated profile. Set `SHARKBAY_TEST_NODE` to the Node executable used to install the CLI.

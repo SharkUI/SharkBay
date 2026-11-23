@@ -10,7 +10,6 @@ const packageJson = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf
     npmRebuild: boolean;
     files: string[];
     extraResources: Array<{ from: string; to: string }>;
-    asarUnpack: string[];
     mac: {
       entitlements: string;
       entitlementsInherit: string;
@@ -30,8 +29,9 @@ describe("build config", () => {
     }));
   });
 
-  it("excludes non-runtime files from packaged app contents", () => {
+  it("excludes backend, native runtime dependencies and build files from the desktop app", () => {
     expect(packageJson.build.files).toEqual(expect.arrayContaining([
+      "!dist-electron/src/server/**/*",
       "!dist-electron/tests/**/*",
       "!dist-electron/**/*.map",
       "!dist-electron/**/*.d.ts",
@@ -44,28 +44,17 @@ describe("build config", () => {
       "!node_modules/**/*.d.ts.map",
       "!node_modules/**/*.md",
       "!node_modules/bun-pty/**/*",
-      "!node_modules/better-sqlite3/deps/**/*",
-      "!node_modules/better-sqlite3/src/**/*",
-      "!node_modules/better-sqlite3/build/Release/sqlite3.a",
-      "!node_modules/better-sqlite3/build/Release/test_extension.node",
-      "!node_modules/better-sqlite3/build/Release/.deps/**/*",
+      "!node_modules/@lydell/node-pty*/**/*",
+      "!node_modules/better-sqlite3/**/*",
     ]));
-    expect(packageJson.build.asarUnpack).toEqual(expect.arrayContaining([
-      "node_modules/@lydell/node-pty/**/*",
-      "node_modules/@lydell/node-pty-*/**/*",
-      "node_modules/better-sqlite3/build/Release/better_sqlite3.node",
-    ]));
-    expect(packageJson.build.asarUnpack).not.toContain("node_modules/better-sqlite3/**/*");
   });
 
-  it("copies dock icons and the independent Node runtime", () => {
+  it("copies desktop dock icons as extra resources", () => {
     expect(packageJson.build.npmRebuild).toBe(false);
     expect(packageJson.build.extraResources).toEqual([
       { from: "resources/shark-morning.png", to: "resources/shark-morning.png" },
       { from: "resources/shark-day.png", to: "resources/shark-day.png" },
       { from: "resources/shark-night.png", to: "resources/shark-night.png" },
-      { from: ".runtime-bundle", to: "runtime" },
-      { from: ".runtime-bundle/node_modules", to: "runtime/node_modules" },
     ]);
   });
 

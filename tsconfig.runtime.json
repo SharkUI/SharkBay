@@ -8,5 +8,5 @@
     "rootDir": ".",
     "outDir": "dist-runtime"
   },
-  "include": ["src/server/main.ts"]
+  "include": ["src/server/cli.ts"]
 }

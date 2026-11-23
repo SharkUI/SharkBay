@@ -9,7 +9,7 @@ SharkBay has one independent Node application runtime, a shared React workbench,
 - `electron/main.ts` creates the main `BrowserWindow`, loads the Vite dev server in development, and loads `dist/renderer/index.html` in packaged builds.
 - `electron/preload.mts` exposes the constrained `window.sharkBay` bridge.
 - `electron/ipc.ts` forwards business commands to the existing runtime over a user-private local socket. BrowserView, dialogs, sharing and desktop power controls remain in Electron.
-- `electron/runtime-client.ts` discovers the runtime or starts the bundled ordinary Node executable. Desktop shutdown disconnects the client; it does not stop runtime-owned PTYs or watchers.
+- `electron/runtime-client.ts` discovers and connects to the local runtime. The development launcher can start a source runtime. Desktop shutdown disconnects the client; runtime-owned PTYs and watchers continue.
 - `src/server/main.ts` owns profile locking, initialization and shutdown; `http-server.ts` serves the workbench and authenticated HTTP/WS.
 - `src/runtime/application-runtime.ts` owns Core, tasks, Hooks, Review/Artifact, Telegram and usage. Only this process writes their state.
 - `src/runtime/control-server.ts` exposes owner-only local administration and the same application commands to Electron. Protocol handshake and profile locking prevent two owners; browser network commands cannot register arbitrary host projects.

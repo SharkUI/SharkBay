@@ -12,8 +12,9 @@
     "lint": "npm run typecheck",
     "test": "vitest run --maxWorkers=1",
     "build": "npm run build:runtime && npm run build:desktop && vite build",
-    "pack": "npm run build && npm run prepare:runtime && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --dir",
-    "dist": "npm run build && npm run prepare:runtime && electron-builder --mac",
+    "pack": "npm run build:desktop && vite build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --dir",
+    "dist": "npm run build:desktop && vite build && electron-builder --mac",
+    "pack:runtime": "npm run build:runtime && vite build && node scripts/pack-runtime-npm.mjs",
     "build:runtime": "node scripts/build-runtime.mjs",
     "start:runtime": "node dist-runtime/src/server/main.js",
     "verify:webui": "npm run build:runtime && vite build && node scripts/verify-webui-runtime.mjs",
@@ -91,6 +92,7 @@
     "files": [
       "dist/renderer/**/*",
       "dist-electron/**/*",
+      "!dist-electron/src/server/**/*",
       "!dist-electron/tests/**/*",
       "!dist-electron/**/*.map",
       "!dist-electron/**/*.d.ts",
@@ -104,18 +106,8 @@
       "!node_modules/**/*.d.ts.map",
       "!node_modules/**/*.md",
       "!node_modules/bun-pty/**/*",
-      "!node_modules/better-sqlite3/deps/**/*",
-      "!node_modules/better-sqlite3/src/**/*",
-      "!node_modules/better-sqlite3/build/Release/sqlite3.a",
-      "!node_modules/better-sqlite3/build/Release/test_extension.node",
-      "!node_modules/better-sqlite3/build/Release/.deps/**/*",
-      "!node_modules/better-sqlite3/build/deps/**/*",
-      "!node_modules/better-sqlite3/build/**/Makefile",
-      "!node_modules/better-sqlite3/build/**/*.target.mk",
-      "!node_modules/better-sqlite3/build/**/*.Makefile",
-      "!node_modules/better-sqlite3/build/config.gypi",
-      "!node_modules/better-sqlite3/build/gyp-mac-tool",
-      "!node_modules/better-sqlite3/binding.gyp",
+      "!node_modules/@lydell/node-pty*/**/*",
+      "!node_modules/better-sqlite3/**/*",
       "src/island/**/*",
       "src/find-popover/**/*",
       "package.json",
@@ -133,20 +125,7 @@
       {
         "from": "resources/shark-night.png",
         "to": "resources/shark-night.png"
-      },
-      {
-        "from": ".runtime-bundle",
-        "to": "runtime"
-      },
-      {
-        "from": ".runtime-bundle/node_modules",
-        "to": "runtime/node_modules"
       }
-    ],
-    "asarUnpack": [
-      "node_modules/@lydell/node-pty/**/*",
-      "node_modules/@lydell/node-pty-*/**/*",
-      "node_modules/better-sqlite3/build/Release/better_sqlite3.node"
     ],
     "mac": {
       "category": "public.app-category.developer-tools",

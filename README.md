@@ -5,7 +5,7 @@
 <h1 align="center">SharkBay</h1>
 
 <p align="center">
-  <strong>macOS workbench for multi-agent vibe coding</strong>
+  <strong>GitHub-native workbench for multi-agent development</strong>
 </p>
 
 <p align="center">
@@ -16,7 +16,18 @@
   <img src="docs/screenshot.png" width="720" alt="SharkBay screenshot">
 </p>
 
-## Install
+## Install SharkBay Runtime + WebUI
+
+The independent npm package is designed for macOS and Linux on x64 or arm64 with Node.js 22.12+ in the 22.x series. Once published, install it with:
+
+```bash
+npm install -g @sharkbay/runtime
+sharkbay serve
+```
+
+Open `http://127.0.0.1:17777/`. Use `sharkbay service enable` to run it in the background and start it at login, or `sharkbay service disable` to stop and unregister it. Use `--lan` with `serve` or `service enable` to make the workbench available on a trusted local network. Reachable devices on that network can operate host projects and terminals.
+
+### Optional macOS desktop app
 
 ```bash
 brew install --cask SharkUI/tap/sharkbay
@@ -24,7 +35,7 @@ brew install --cask SharkUI/tap/sharkbay
 
 macOS 13 Ventura or later on Apple Silicon (arm64).
 
-Or download the signed and notarized app from [GitHub Releases](https://github.com/SharkUI/SharkBay/releases/latest).
+Or download the signed and notarized app from [GitHub Releases](https://github.com/SharkUI/SharkBay/releases/latest). The published v0.3.13 desktop app includes its Runtime. Desktop builds from this source connect to the separately started Runtime.
 
 ### New in 0.3.13
 
@@ -34,11 +45,11 @@ Attach or paste images and files in the Codex prompt bar on desktop or in the We
 
 ### Shared Runtime and Browser Access
 
-The macOS app and WebUI connect to one local Node runtime. Open `http://<host-ip>:17777/` from a local or LAN browser to access your projects and existing terminals; one client controls each terminal while others observe. Closing the desktop client leaves sessions running, and you can take control from another connected client.
+The macOS app and WebUI connect to one local Node runtime. One client controls each terminal while others observe. Closing the desktop client leaves sessions running, and you can take control from another connected client.
 
-The WebUI adapts to phones and tablets with full-screen project navigation, touch terminal keys, and preserved input drafts across reconnects. The packaged app includes Node and its runtime dependencies.
+The WebUI adapts to phones and tablets with full-screen project navigation, touch terminal keys, and preserved input drafts across reconnects.
 
-The runtime listens on all IPv4 interfaces at port `17777` by default. Local and LAN browsers connect directly without a code, connection fragment or session cookie. Reachable devices on these networks can operate host projects and terminals. Other networks still require a host-issued connection link. The host firewall must allow the connection; Host and Origin checks remain enforced. Revoking access invalidates explicit grants and sessions, but local/LAN network trust remains in effect. Project development URLs are not rewritten or proxied.
+The npm CLI listens on loopback at port `17777` by default. With `--lan`, open `http://<host-ip>:17777/` on another device on the trusted network. The older bundled Runtime listens on all IPv4 interfaces by default. Host and Origin checks apply on both paths.
 
 ### Multi-Agent Support
 
@@ -122,7 +133,7 @@ Electron · React · TypeScript · Vite · xterm · @lydell/node-pty · CodeMirr
 - Git
 - `gh` CLI (only for team context sync)
 
-Installed releases include their own Node runtime. Coding-agent CLIs use your existing local installations and accounts; GitHub remains the identity and collaboration system for task-context sync.
+Coding-agent CLIs use your existing local installations and accounts. GitHub remains the identity and collaboration system for task-context sync.
 
 ## Development
 

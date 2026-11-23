@@ -23,7 +23,7 @@ const maxClientQueue = 2 * 1024 * 1024;
 const eventNames = new Set<string>(Object.values(applicationEvents));
 const contentTypes: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon", ".woff2": "font/woff2" };
 
-export async function createWebServer(runtime: ApplicationRuntime, options: { port: number; staticRoot: string }) {
+export async function createWebServer(runtime: ApplicationRuntime, options: { port: number; staticRoot: string; host?: "127.0.0.1" | "0.0.0.0" }) {
   const auth = new SessionAuth();
   const clients = new Map<string, Client>();
   const desktopAttachmentClients = new Map<string, string>();
@@ -321,7 +321,7 @@ export async function createWebServer(runtime: ApplicationRuntime, options: { po
   }, 15000);
   heartbeat.unref();
   try {
-    await new Promise<void>((done, reject) => { server.once("error", reject); server.listen(options.port, "0.0.0.0", () => { server.off("error", reject); done(); }); });
+    await new Promise<void>((done, reject) => { server.once("error", reject); server.listen(options.port, options.host ?? "0.0.0.0", () => { server.off("error", reject); done(); }); });
   } catch (error) { clearInterval(heartbeat); runtime.off("event", onEvent); ws.close(); throw error; }
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Unable to bind local HTTP server");
