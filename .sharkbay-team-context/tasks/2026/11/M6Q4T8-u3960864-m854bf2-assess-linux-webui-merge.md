@@ -12,7 +12,7 @@ agent: Codex GPT-6
 sessionId: 01a1fe25-b227-7c43-932a-5fc49845d5a0
 branch: linux-webui
 createdAt: 2026-11-23T11:09:25Z
-updatedAt: 2026-11-23T11:19:30Z
+updatedAt: 2026-11-23T11:24:50Z
 completedAt: 2026-11-23T11:11:13Z
 ---
 
@@ -38,3 +38,4 @@ completedAt: 2026-11-23T11:11:13Z
 ## Notes
 - 用户要求评估，未合并、推送或变更发布。
 - C7M4K9-u3960864-m854bf2 已修复此阻塞项，提交为 `21ef04ae0482d1239f6bc96523ab52e574f1facb`。修复后 macOS、Linux 的集成测试均通过，相对 GitHub main 仍可快进。
+- 后续已由 V6M4R9-u3960864-m854bf2 快进合并至 GitHub main，当前指向 21ef04a。
