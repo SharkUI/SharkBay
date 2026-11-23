@@ -868,6 +868,7 @@ export type AgentLaunchResult = {
   initialCommand: string;
   injected: boolean;
   bootstrapPrompt?: string;
+  launchWarning?: string;
   skippedReason?: "not-installed" | "unsupported-agent";
 };
 
@@ -875,14 +876,15 @@ export async function prepareAgentLaunch(
   repoPath: string,
   agentId: string,
   initialCommand: string,
-  options: BootstrapPromptOptions & { reviewPrompt?: string; artifactPrompt?: string; prepareHarness?: (repoPath: string) => Promise<void> } = {},
+  options: BootstrapPromptOptions & { reviewPrompt?: string; artifactPrompt?: string; prepareHarness?: (repoPath: string) => Promise<string | undefined> } = {},
 ): Promise<AgentLaunchResult> {
   const prompt = options.reviewPrompt ?? options.artifactPrompt ?? bootstrapPrompt(options);
   const bootstrapArgs = agentBootstrapArgs(agentId, prompt);
   if (!bootstrapArgs) {
     return { initialCommand, injected: false, skippedReason: "unsupported-agent" };
   }
-  await options.prepareHarness?.(repoPath);
+  const launchWarning = await options.prepareHarness?.(repoPath);
+  if (launchWarning) return { initialCommand, injected: false, launchWarning };
   if (!await isHarnessInstalled(repoPath)) {
     return { initialCommand, injected: false, skippedReason: "not-installed" };
   }

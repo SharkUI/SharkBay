@@ -110,6 +110,44 @@ describe("local Web runtime end to end", () => {
     }
   });
 
+  it("starts Agents without injecting Task Protocol when automatic Harness preparation fails", async () => {
+    const browser = await connect();
+    const desktop = await RuntimeClient.connect(runtime.paths.userDataPath);
+    desktops.push(desktop);
+    const fresh = path.join(project, "harness-path-conflict");
+    const existing = path.join(project, "harness-incomplete");
+    const blockedFile = path.join(fresh, ".sharkbay");
+    const existingProtocol = path.join(existing, ".sharkbay", "harness", "protocol.md");
+    await mkdir(fresh);
+    await writeFile(blockedFile, "Existing project file\n");
+    await mkdir(path.join(path.dirname(existingProtocol), "review.sh"), { recursive: true });
+    await writeFile(existingProtocol, "Existing Task Protocol\n");
+    const launch = (repoPath: string) => ({ cwdUri: toLocalProjectUri(repoPath), agentId: "codex", initialCommand: "sh ./fixture-agent.sh" });
+    for (const repoPath of [fresh, existing]) {
+      await writeFile(path.join(repoPath, "fixture-agent.sh"), 'printf "%s\\n" started "$@" > launch-args\n');
+    }
+
+    try {
+      const browserLaunch = await command(browser, "terminal.create", launch(fresh));
+      expect(browserLaunch.ok).toBe(true);
+      expect(browserLaunch.result.launchWarning).toMatch(/Task Protocol.*unsafe file type/);
+      const desktopLaunch = await desktop.call<{ launchWarning?: string }>("terminal.create", launch(existing));
+      expect(desktopLaunch.launchWarning).toMatch(/Task Protocol.*(?:EISDIR|illegal operation on a directory)/);
+      for (const repoPath of [fresh, existing]) {
+        await vi.waitFor(async () => {
+          const args = await readFile(path.join(repoPath, "launch-args"), "utf8");
+          expect(args).toMatch(/^started\n/);
+          expect(args).not.toContain(".sharkbay/harness/protocol.md");
+        });
+      }
+      expect((await command(browser, "protocol.install", { repoPath: fresh })).ok).toBe(false);
+      expect(await readFile(blockedFile, "utf8")).toBe("Existing project file\n");
+      expect(await readFile(existingProtocol, "utf8")).toBe("Existing Task Protocol\n");
+    } finally {
+      runtime.core.closeAllTerminalSessions();
+    }
+  });
+
   it("adds session Hooks from either transport and keeps the host opt-out", async () => {
     const browser = await connect();
     const desktop = await RuntimeClient.connect(runtime.paths.userDataPath);

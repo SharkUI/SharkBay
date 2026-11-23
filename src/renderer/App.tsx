@@ -2246,6 +2246,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     try {
       const { hookSessionId, activate = true, ...createOptions } = options;
       const session = await createTerminal(cwdUri, projectName, createOptions);
+      if (session.launchWarning) setToast({ tone: "info", message: session.launchWarning });
       return attachTerminalSession(projectId, cwdUri, projectName, displayPath, session, { activate, hookSessionId });
     } catch (error) {
       if (!quiet) setToast({ tone: "error", message: asMessage(error) });

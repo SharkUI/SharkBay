@@ -672,6 +672,7 @@ export type TerminalSession = {
   createdAt: string;
   agentId?: string;
   statusHooksDisabled?: boolean;
+  launchWarning?: string;
   service?: { id: string; label: string; command: string };
 };
 

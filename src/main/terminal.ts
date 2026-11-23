@@ -61,7 +61,7 @@ export type TerminalManagerOptions = {
   inspectIntervalMs?: number;
   cwdInspectIntervalMs?: number;
   inspectProcessCwd?: CwdInspector;
-  prepareHarness?: (repoPath: string) => Promise<void>;
+  prepareHarness?: (repoPath: string) => Promise<string | undefined>;
   prepareAgentHooks?: (agentId: string, launch: SessionHookCommand) => Promise<SessionHookLaunch>;
   now?: () => number;
 };
@@ -95,7 +95,7 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
   private cwdInspectIntervalMs: number;
   private inspectProcessCwd: CwdInspector;
   private now: () => number;
-  private prepareHarness?: (repoPath: string) => Promise<void>;
+  private prepareHarness?: TerminalManagerOptions["prepareHarness"];
   private prepareAgentHooks?: TerminalManagerOptions["prepareAgentHooks"];
 
   constructor(options: TerminalManagerOptions = {}) {
@@ -113,6 +113,7 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
     let initialCommand = normalizeTerminalCommandLine(input.initialCommand);
     const initialCommandTitle = initialCommand ? normalizeTerminalCommandLine(input.initialCommandTitle) : null;
     let delayedBootstrapPrompt: string | null = null;
+    let launchWarning: string | undefined;
     const isSessionRestore = initialCommand ? /--resume\b|--continue\b|\bresume\b/u.test(initialCommand) : false;
     const hooks = input.agentId && initialCommand && !input.service
       ? await this.prepareAgentHooks?.(input.agentId, { command: initialCommand, cwd: spec.cwd, env: spec.env })
@@ -137,6 +138,7 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
         artifactPrompt: artifactPromptText,
         prepareHarness: !input.review && !input.artifact ? this.prepareHarness : undefined,
       });
+      launchWarning = launch.launchWarning;
       if (launch.injected && (input.agentId === "reasonix" || input.agentId === "opencode")) {
         delayedBootstrapPrompt = launch.bootstrapPrompt ?? null;
       }
@@ -275,7 +277,7 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
       timer.unref?.();
     }
 
-    return publicSession(session);
+    return { ...publicSession(session), ...(launchWarning ? { launchWarning } : {}) };
   }
 
   private async resolveLaunchSpec(runtime: RuntimePaths, cwdUri: string): Promise<TerminalLaunchSpec> {

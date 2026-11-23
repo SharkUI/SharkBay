@@ -48,12 +48,13 @@ export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] 
       }
     },
     prepareHarness: async (repoPath) => {
-      if (await this.isHarnessAutoInstallDisabled(repoPath)) return;
-      try { await this.tasks.prepareForAgentLaunch(repoPath); }
-      catch (error) {
+      try {
+        if (!await this.isHarnessAutoInstallDisabled(repoPath)) await this.tasks.prepareForAgentLaunch(repoPath);
+      } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        throw new ApplicationError("HARNESS_SETUP_FAILED", `Could not prepare Task Protocol: ${message}`);
+        return `Task Protocol could not be prepared for this session. ${message}`;
       }
+      return undefined;
     },
   });
   readonly terminals = new TerminalState(this.core, (name, payload) => this.emit("event", name, payload));

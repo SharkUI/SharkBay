@@ -357,6 +357,7 @@ export type TerminalSession = {
   status: TerminalSessionStatus;
   createdAt: string;
   agentId?: string;
+  launchWarning?: string;
   service?: { id: string; label: string; command: string };
 };
 
