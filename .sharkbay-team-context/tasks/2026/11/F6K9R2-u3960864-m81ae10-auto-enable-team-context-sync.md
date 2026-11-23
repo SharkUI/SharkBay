@@ -13,7 +13,9 @@ agent: Codex GPT-6
 sessionId: 01a1fe25-b227-7c43-932a-5fc49845d5a0
 branch: main
 createdAt: 2026-11-21T12:44:39Z
-updatedAt: 2026-11-21T13:05:10Z
+updatedAt: 2026-11-23T06:43:00Z
+commits:
+  - 78ce78002457234e82c31d66220bdee667c0b21c
 ---
 
 ## Summary
@@ -60,3 +62,4 @@ Runtime 先安装本地 Harness，再在打开项目或发现 origin 变化时�
 ## Notes
 - 起因见 K8T3H7-u3960864-m81ae10，本工作树的团队镜像中暂无该条目。
 - 1ZRFFN-u3960864-m81ae10 已确立只读远端仍可使用本地 Harness 的行为。
+- 后续通过 P4M7T9-u3960864-m854bf2 一并提交已部署的源码，哈希见 `commits`。
