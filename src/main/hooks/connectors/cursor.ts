@@ -32,6 +32,13 @@ function shellQuote(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`;
 }
 
+export function cursorSessionHookSettings(hookCliPath: string) {
+  const command = `${shellQuote(hookCliPath)} --source cursor`;
+  // Permission hooks can block operations. Status reporting only needs observational events.
+  const events = ["sessionStart", "sessionEnd", "beforeSubmitPrompt", "afterShellExecution", "afterFileEdit", "stop"];
+  return { version: 1, hooks: Object.fromEntries(events.map(event => [event, [{ command }]])) };
+}
+
 export class CursorConnector implements AgentConnector {
   readonly id = "cursor";
   readonly displayName = "Cursor CLI";

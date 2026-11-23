@@ -23,6 +23,12 @@ const EVENT_MAP: Record<string, HookEventKind> = {
 const HOOK_EVENTS = ["SessionStart", "SessionEnd", "BeforeTool", "AfterTool", "BeforeAgent", "AfterAgent", "Notification"];
 const MANAGED_MARKER = "sharkbay-managed";
 
+export function geminiSessionHooks(hookCliPath: string): Record<string, unknown[]> {
+  const command = `'${hookCliPath.replace(/'/g, "'\\''")}' --source gemini`;
+  const entry = { matcher: "*", hooks: [{ name: "sharkbay-status", type: "command", command }] };
+  return Object.fromEntries(HOOK_EVENTS.map(event => [event, [entry]]));
+}
+
 export class GeminiConnector implements AgentConnector {
   readonly id = "gemini";
   readonly displayName = "Gemini CLI";

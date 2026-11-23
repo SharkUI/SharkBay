@@ -93,6 +93,11 @@ const net = require("net");
 const SOCKET_PATH_FILE = ${socketPathFileLiteral};
 const idx = process.argv.indexOf("--source");
 const source = idx >= 0 && process.argv[idx + 1] ? process.argv[idx + 1] : "unknown";
+if (source === "cursor" || source === "gemini") process.stdout.write("{}\\n");
+if (process.env.SHARKBAY_DISABLED_STATUS_HOOK_AGENT === source) process.exit(0);
+if (process.argv.includes("--managed-launch") &&
+    (process.env.SHARKBAY_MANAGED_STATUS_HOOK_AGENT !== source || !process.env.SHARKBAY_AGENT_LAUNCH_TOKEN ||
+     process.env.SHARKBAY_AGENT_LAUNCH_TOKEN !== process.env.SHARKBAY_TERMINAL_SESSION_ID)) process.exit(0);
 let data = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (c) => { data += c; });

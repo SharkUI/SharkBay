@@ -720,6 +720,7 @@ body.is-resizing-columns * {
 
 .project-worktrees {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 3px;
   margin: 0 0 7px 11px;
   /* Match the repository title's text after the icon. */

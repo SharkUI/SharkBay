@@ -2,9 +2,9 @@ import { execFile } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { installHarness } from "../src/main/harness.js";
-import { deleteTeamContextBranch, hasLocalContextBranch, TeamworkSync } from "../src/main/teamwork-sync.js";
+import { deleteTeamContextBranch, TeamworkSync } from "../src/main/teamwork-sync.js";
 import { makeTempRoot, writeText } from "./helpers.js";
 
 const execFileAsync = promisify(execFile);
@@ -17,6 +17,75 @@ const gitIdentityEnv = {
 };
 
 describe("teamwork context sync", () => {
+  it("does not try to create the branch when the remote query fails", async () => {
+    const { repo } = await createInstalledSyncRepo("teamwork-sync-query-failure");
+    const sync = new TeamworkSync(repo);
+    const queryError = Object.assign(new Error("Authentication failed"), { code: 128 });
+    const git = vi.fn(async () => { throw queryError; });
+    sync["git"] = git;
+
+    await expect(sync.ensureContextBranch("SharkUI/AIBF", "SharkUI")).rejects.toBe(queryError);
+    expect(git.mock.calls).toEqual([[
+      ["ls-remote", "--exit-code", "--heads", "origin", "refs/heads/sharkbay-team-context"],
+    ]]);
+  });
+
+  it("adopts the branch created by another machine after both checked that it was absent", async () => {
+    const { root, remote, repo } = await createInstalledSyncRepo("teamwork-sync-race");
+    const other = path.join(root, "other");
+    await execFileAsync("git", ["init", other]);
+    await execFileAsync("git", ["-C", other, "remote", "add", "origin", remote]);
+    const machines = [
+      new TeamworkSync(repo, "origin", "origin", { login: "machine-one", id: 1 }),
+      new TeamworkSync(other, "origin", "origin", { login: "machine-two", id: 2 }),
+    ];
+    let absentCount = 0;
+    let acknowledgeAbsence!: () => void;
+    const bothChecked = new Promise<void>((resolve) => { acknowledgeAbsence = resolve; });
+    for (const sync of machines) {
+      const git = sync["git"].bind(sync);
+      sync["git"] = async (args, stdin) => {
+        try {
+          return await git(args, stdin);
+        } catch (error) {
+          if (args[0] === "ls-remote" && (error as { code?: number }).code === 2) {
+            if (++absentCount === 2) acknowledgeAbsence();
+            await bothChecked;
+          }
+          throw error;
+        }
+      };
+    }
+
+    const [first, second] = await Promise.all(machines.map((sync) => sync.ensureContextBranch("SharkUI/AIBF", "SharkUI")));
+    expect(absentCount).toBe(2);
+    expect(first).toMatch(/^[a-f0-9]{40}$/);
+    expect(second).toBe(first);
+    const { stdout } = await execFileAsync("git", ["--git-dir", remote, "rev-list", "--count", "sharkbay-team-context"]);
+    expect(stdout.trim()).toBe("1");
+  });
+
+  it("resumes from fetch after a successful creation and reports subsequent fetch failures", async () => {
+    const { repo } = await createInstalledSyncRepo("teamwork-sync-fetch-failure");
+    const sync = new TeamworkSync(repo, "origin", "origin", { login: "SharkUI", id: 3960864 });
+    const git = sync["git"].bind(sync);
+    let online = false;
+    const calls = vi.fn(async (args: string[], stdin?: string) => {
+      if (args[0] === "fetch" && !online) throw new Error("Could not resolve host");
+      return git(args, stdin);
+    });
+    sync["git"] = calls;
+
+    await expect(sync.ensureContextBranch("SharkUI/AIBF", "SharkUI")).rejects.toThrow("Could not resolve host");
+    online = true;
+    const head = await sync.ensureContextBranch("SharkUI/AIBF", "SharkUI");
+    expect(calls.mock.calls.filter(([args]) => args[0] === "push")).toHaveLength(1);
+    await expect(sync.syncOnce(head)).resolves.toMatchObject({ fetched: true, error: null });
+
+    online = false;
+    await expect(sync.syncOnce()).resolves.toEqual({ fetched: false, pushed: [], error: "Could not resolve host" });
+  });
+
   it("coalesces overlapping sync requests", async () => {
     const { repo } = await createInstalledSyncRepo("teamwork-sync-overlap");
 
@@ -93,9 +162,10 @@ describe("teamwork context sync", () => {
     Object.assign(process.env, gitIdentityEnv);
     try {
       const sync = new TeamworkSync(repo);
-      await expect(hasLocalContextBranch(repo)).resolves.toBe(false);
+      const checkTrackingRef = () => execFileAsync("git", ["-C", repo, "show-ref", "--verify", "--quiet", "refs/remotes/origin/sharkbay-team-context"]);
+      await expect(checkTrackingRef()).rejects.toMatchObject({ code: 1 });
       await sync.ensureContextBranch("SharkUI/AIBF", "SharkUI");
-      await expect(hasLocalContextBranch(repo)).resolves.toBe(true);
+      await expect(checkTrackingRef()).resolves.toMatchObject({ stdout: "" });
 
       const { stdout: branchList } = await execFileAsync("git", ["-C", repo, "ls-remote", "--heads", "origin", "sharkbay-team-context"]);
       expect(branchList).toContain("refs/heads/sharkbay-team-context");
@@ -108,7 +178,7 @@ describe("teamwork context sync", () => {
       await expect(fs.readFile(mirroredTask!, "utf8")).resolves.toContain("title: Sync completed task");
 
       await expect(deleteTeamContextBranch(repo)).resolves.toBe(true);
-      await expect(hasLocalContextBranch(repo)).resolves.toBe(false);
+      await expect(checkTrackingRef()).rejects.toMatchObject({ code: 1 });
       const { stdout: deletedBranchList } = await execFileAsync("git", ["-C", repo, "ls-remote", "--heads", "origin", "sharkbay-team-context"]);
       expect(deletedBranchList).toBe("");
     } finally {

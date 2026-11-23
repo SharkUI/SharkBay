@@ -24,14 +24,31 @@ export async function resolveManagedPath(repoPath: string, relativePath: string)
   return current;
 }
 
-export async function writeManagedFile(repoPath: string, relativePath: string, content: string, executable = false): Promise<void> {
+export async function writeManagedFile(repoPath: string, relativePath: string, content: string, executable = false, expected?: string | null): Promise<boolean> {
   const file = await resolveManagedPath(repoPath, relativePath);
-  const handle = await open(file, constants.O_WRONLY | constants.O_CREAT | constants.O_NOFOLLOW | constants.O_NONBLOCK, 0o644);
+  const flags = expected == null
+    ? constants.O_WRONLY | constants.O_CREAT | (expected === null ? constants.O_EXCL : 0)
+    : constants.O_RDWR;
+  let handle;
+  try {
+    handle = await open(file, flags | constants.O_NOFOLLOW | constants.O_NONBLOCK, 0o644);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (expected === null && code === "EEXIST" || typeof expected === "string" && code === "ENOENT") return false;
+    throw error;
+  }
   try {
     const entry = await handle.stat();
     if (!entry.isFile() || entry.nlink > 1) throw new Error("Managed file has an unsafe type or multiple links");
+    if (typeof expected === "string") {
+      const previous = Buffer.from(expected);
+      if (entry.size !== previous.length) return false;
+      const { buffer, bytesRead } = await handle.read({ buffer: Buffer.alloc(previous.length), position: 0 });
+      if (bytesRead !== previous.length || !buffer.equals(previous)) return false;
+    }
     await handle.truncate(0);
     await handle.writeFile(content, "utf8");
     if (executable) await handle.chmod(0o755);
+    return true;
   } finally { await handle.close(); }
 }

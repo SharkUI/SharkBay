@@ -149,6 +149,17 @@ export function createAgentRuntime(runtime: RuntimePaths, core: CoreRuntime, opt
       if (msg.terminalSessionId) {
         const session = terminalSessions.get(msg.terminalSessionId);
         if (!session || session.status !== "running" || (msg.launchToken && msg.launchToken !== session.id)) return;
+        if (session.statusHooksDisabled && session.agentId === msg.source) return;
+      } else if (msg.source === "opencode" && msg.pid != null &&
+        [...terminalSessions.values()].some(session => session.agentId === "opencode" && session.statusHooksDisabled)) {
+        // Older globally installed OpenCode plugins do not send the launch identity.
+        const pid = msg.pid;
+        void resolveTerminalForPid(pid).then(id => {
+          const session = id ? terminalSessions.get(id) : undefined;
+          if (session?.agentId === "opencode" && session.statusHooksDisabled) return;
+          hookStateManager.handleMessage(msg);
+        });
+        return;
       }
       hookStateManager.handleMessage(msg);
     });

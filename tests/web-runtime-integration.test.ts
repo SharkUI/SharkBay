@@ -68,6 +68,209 @@ afterAll(async () => {
   await server?.dispose(); await runtime?.dispose(); await rm(directory, { recursive: true, force: true });
 });
 describe("local Web runtime end to end", () => {
+  it("prepares Harness before a managed Agent starts and respects uninstall on both transports", async () => {
+    const browser = await connect();
+    const desktop = await RuntimeClient.connect(runtime.paths.userDataPath);
+    desktops.push(desktop);
+    const repoPath = path.join(project, "harness-launch");
+    const cwdUri = toLocalProjectUri(repoPath);
+    const protocol = path.join(repoPath, ".sharkbay/harness/protocol.md");
+    const helper = path.join(repoPath, ".sharkbay/harness/review.sh");
+    const observed = path.join(repoPath, "agent-args");
+    const launch = { cwdUri, agentId: "codex", initialCommand: "sh ./fixture-agent.sh" };
+    await mkdir(repoPath);
+    await writeFile(path.join(repoPath, "fixture-agent.sh"),
+      'test -f .sharkbay/harness/protocol.md && test -x .sharkbay/harness/review.sh && printf "%s\\n" "$@" > agent-args\n');
+    try {
+      expect((await command(browser, "protocol.getStatus", { repoPath })).result.installed).toBe(false);
+      for (const input of [{ cwdUri, initialCommand: "true" }, { ...launch, agentId: "unsupported" }, { ...launch, initialCommand: "true # resume" }]) {
+        expect((await command(browser, "terminal.create", input)).ok).toBe(true);
+        await expect(readFile(protocol)).rejects.toMatchObject({ code: "ENOENT" });
+      }
+
+      expect((await command(browser, "terminal.create", launch)).ok).toBe(true);
+      await vi.waitFor(async () => expect(await readFile(observed, "utf8")).toContain(".sharkbay/harness/protocol.md"));
+      const customProtocol = (await readFile(protocol, "utf8")) + "\n# Keep my Harness edits\n";
+      const machineId = await readFile(path.join(repoPath, ".sharkbay/machine-id"), "utf8");
+      await writeFile(protocol, customProtocol);
+      await rm(helper);
+      await desktop.call("terminal.create", launch);
+      await expect(readFile(helper, "utf8")).resolves.toContain("sharkbay-review-control");
+      expect(await readFile(protocol, "utf8")).toContain("# Keep my Harness edits");
+      expect(await readFile(path.join(repoPath, ".sharkbay/machine-id"), "utf8")).toBe(machineId);
+
+      expect((await command(browser, "protocol.uninstall", { repoPath })).ok).toBe(true);
+      await desktop.call("terminal.create", launch);
+      await expect(readFile(protocol)).rejects.toMatchObject({ code: "ENOENT" });
+      expect((await command(browser, "protocol.getStatus", { repoPath })).result).toMatchObject({ installed: false, autoInstallDisabled: true });
+      expect((await command(browser, "protocol.install", { repoPath })).result.installed).toBe(true);
+      expect((await command(browser, "config.get")).result.protocolAutoInstallDisabled).toBeUndefined();
+    } finally {
+      runtime.core.closeAllTerminalSessions();
+    }
+  });
+
+  it("adds session Hooks from either transport and keeps the host opt-out", async () => {
+    const browser = await connect();
+    const desktop = await RuntimeClient.connect(runtime.paths.userDataPath);
+    desktops.push(desktop);
+    const repoPath = path.join(project, "scoped-hooks");
+    const cwdUri = toLocalProjectUri(repoPath);
+    await mkdir(repoPath);
+    await writeFile(path.join(repoPath, "hook-fixture.sh"),
+      'printf "%s\\n" "${SHARKBAY_DISABLED_STATUS_HOOK_AGENT:-}" "$@" > "$1"\n');
+    const args = (name: string) => readFile(path.join(repoPath, name), "utf8");
+    const launch = (agentId: string, file: string) => ({ cwdUri, agentId, initialCommand: `sh ./hook-fixture.sh ${file}` });
+    try {
+      expect((await command(browser, "terminal.create", launch("codex", "codex-on"))).ok).toBe(true);
+      await vi.waitFor(async () => {
+        const output = await args("codex-on");
+        expect(output).toContain("\n-c\nhooks = { ");
+        expect(output).toContain("--source codex");
+        expect(output).not.toContain("--dangerously-bypass-hook-trust");
+      });
+      await desktop.call("terminal.create", launch("claude", "claude-on"));
+      await vi.waitFor(async () => {
+        const output = await args("claude-on");
+        const [, , flag, settings] = output.split("\n");
+        expect(flag).toBe("--settings");
+        expect(JSON.parse(settings!).hooks.SessionStart[0].hooks[0].command).toContain("--source claude");
+      });
+      expect((await command(browser, "agents.setHooksEnabled", { agentId: "codex", enabled: false })).ok).toBe(true);
+      expect((await command(browser, "config.get")).result.disabledSessionHooks).toEqual(["codex"]);
+      await desktop.call("terminal.create", launch("codex", "codex-off"));
+      await vi.waitFor(async () => {
+        const output = await args("codex-off");
+        expect(output).toMatch(/^codex\n/);
+        expect(output).not.toContain("hooks = {");
+      });
+    } finally {
+      await desktop.call("agents.setHooksEnabled", { agentId: "codex", enabled: true });
+      runtime.core.closeAllTerminalSessions();
+    }
+  });
+
+  it("loads session Hook plugins and defaults only in the launched Agent command", async () => {
+    const browser = await connect();
+    const repoPath = path.join(project, "additional-hooks");
+    const cwdUri = toLocalProjectUri(repoPath);
+    await mkdir(repoPath);
+    await writeFile(path.join(repoPath, "capture.sh"),
+      'file="$1"; shift\nprintf "%s\\n" "${GEMINI_CLI_SYSTEM_DEFAULTS_PATH:-}" "${QWEN_CODE_SYSTEM_DEFAULTS_PATH:-}" "${OPENCODE_CONFIG_CONTENT:-}" "${SHARKBAY_DISABLED_STATUS_HOOK_AGENT:-}" "$@" > "$file"\n');
+    const opencodeCli = path.join(repoPath, "opencode");
+    const opencodeHome = path.join(repoPath, "open code home");
+    await mkdir(opencodeHome);
+    await writeFile(opencodeCli, '#!/bin/sh\nif [ "$1" = "--version" ]; then echo 1.19.0; exit; fi\nexec sh ./capture.sh "$@"\n', { mode: 0o755 });
+    const output = async (name: string) => (await readFile(path.join(repoPath, name), "utf8")).split("\n");
+    async function launch(agentId: string, file = agentId, prefix = "") {
+      const next = agentId === "cursor" ? "" : `; sh ./capture.sh ${file}-next`;
+      const executable = agentId === "opencode" ? `'${opencodeCli}'` : "sh ./capture.sh";
+      const input = { cwdUri, agentId, initialCommand: `${prefix}${executable} ${file} --resume native-id${next}` };
+      const created = await command(browser, "terminal.create", input);
+      expect(created.ok).toBe(true);
+      try {
+        await vi.waitFor(async () => expect((await output(file)).slice(4, 6)).toEqual(["--resume", "native-id"]), { timeout: 2500 });
+      } catch (error) {
+        const terminalOutput = browser.messages.filter(message => message.name === "terminal:data" && message.payload.sessionId === created.result.id);
+        throw new Error(`Agent fixture ${file} did not launch: ${terminalOutput.map(message => message.payload.data).join("")}`, { cause: error });
+      }
+      return output(file);
+    }
+    try {
+      for (const [id, index] of [["gemini", 0], ["qwen", 1]] as const) {
+        const captured = await launch(id);
+        const settings = JSON.parse(await readFile(captured[index]!, "utf8"));
+        expect(settings.hooks.SessionStart[0].hooks[0].command).toContain(`--source ${id}`);
+      }
+      const cursor = await launch("cursor");
+      expect(cursor[6]).toBe("--plugin-dir");
+      const cursorHooks = JSON.parse(await readFile(path.join(cursor[7]!, "hooks", "hooks.json"), "utf8"));
+      expect(cursorHooks.hooks.sessionStart[0].command).toContain("--source cursor");
+      expect(cursorHooks.hooks.beforeShellExecution).toBeUndefined();
+      vi.stubEnv("HOME", opencodeHome);
+      vi.stubEnv("XDG_CONFIG_HOME", opencodeHome);
+      vi.stubEnv("SHELL", "/bin/sh");
+      expect((await launch("opencode", "cold"))[2]).toBe("");
+      const userPlugin = path.join(opencodeHome, "opencode", "plugins", "sharkbay-status.js");
+      expect(await readFile(userPlugin, "utf8")).toContain('SHARKBAY_MANAGED_STATUS_HOOK_AGENT !== "opencode"');
+      expect((await launch("opencode", "cold-again"))[2]).toBe("");
+      const warmHome = path.join(repoPath, "open code warm home");
+      vi.stubEnv("XDG_CONFIG_HOME", warmHome);
+      const sdk = path.join(warmHome, "opencode", "node_modules", "@opencode-ai", "plugin");
+      await mkdir(sdk, { recursive: true });
+      await writeFile(path.join(sdk, "package.json"), '{"version":"1.19.0"}');
+      const opencode = await launch("opencode", "open-code-on");
+      const [plugin] = JSON.parse(opencode[2]!).plugin;
+      expect(await readFile(new URL("index.js", plugin), "utf8")).toContain("SHARKBAY_AGENT_LAUNCH_TOKEN");
+      expect((await launch("qwen", "explicit", "QWEN_CODE_SYSTEM_DEFAULTS_PATH=chosen "))[1]).toBe("chosen");
+      await vi.waitFor(async () => {
+        for (const id of ["open-code-on", "gemini", "qwen"]) {
+          expect((await output(`${id}-next`)).slice(0, 4)).toEqual(["", "", "", ""]);
+        }
+      });
+      expect((await command(browser, "agents.setHooksEnabled", { agentId: "opencode", enabled: false })).ok).toBe(true);
+      expect((await launch("opencode", "disabled")).slice(0, 4)).toEqual(["", "", "", "opencode"]);
+      await vi.waitFor(async () => expect((await output("disabled-next")).slice(0, 4)).toEqual(["", "", "", ""]));
+    } finally {
+      vi.unstubAllEnvs();
+      await command(browser, "agents.setHooksEnabled", { agentId: "opencode", enabled: true });
+      runtime.core.closeAllTerminalSessions();
+    }
+  }, 10000);
+
+  it("registers managed Reasonix and Kiro hooks before launching and preserves user settings", async () => {
+    const browser = await connect();
+    const repoPath = path.join(project, "auto-registered-hooks");
+    const kiroHome = path.join(repoPath, "kiro-home");
+    const reasonixHome = path.join(repoPath, "reasonix-home");
+    const profile = path.join(kiroHome, "agents", "custom.json");
+    const reasonixSettings = path.join(reasonixHome, "settings.json");
+    await mkdir(path.dirname(profile), { recursive: true });
+    await mkdir(path.dirname(reasonixSettings), { recursive: true });
+    await writeFile(profile, '{"name":"custom","tools":["fs_read"],"allowedTools":[],"hooks":{"stop":[{"command":"echo user"}]}}');
+    await writeFile(reasonixSettings, '{"theme":"dark","hooks":{"Stop":[{"command":"echo user"}]}}');
+    const kiro = path.join(repoPath, "kiro-cli");
+    await writeFile(kiro, '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "kiro-cli $KIRO_FIXTURE_VERSION"; exit; fi\nprintf "%s\\n" "$SHARKBAY_MANAGED_STATUS_HOOK_AGENT" "$@" > kiro-args\n', { mode: 0o755 });
+    const commandPrefix = `'${kiro}' chat`;
+    async function launch(agentId: string, initialCommand: string) {
+      expect((await command(browser, "terminal.create", { cwdUri: toLocalProjectUri(repoPath), agentId, initialCommand })).ok).toBe(true);
+    }
+    const read = async (file: string) => JSON.parse(await readFile(file, "utf8"));
+    try {
+      vi.stubEnv("KIRO_HOME", kiroHome);
+      vi.stubEnv("REASONIX_HOME", reasonixHome);
+      vi.stubEnv("KIRO_FIXTURE_VERSION", "2.14.1");
+      await launch("reasonix", "true --resume");
+      const reasonix = await read(reasonixSettings);
+      expect(reasonix.theme).toBe("dark");
+      expect(reasonix.hooks.Stop).toEqual([{ command: "echo user" }, expect.objectContaining({ command: expect.stringContaining("--source reasonix --managed-launch") })]);
+      await launch("reasonix", "true --resume");
+      expect(await read(reasonixSettings)).toEqual(reasonix);
+
+      await launch("kiro", `${commandPrefix} --agent custom --resume-id session-123`);
+      const custom = await read(profile);
+      expect(custom.tools).toEqual(["fs_read"]);
+      expect(custom.allowedTools).toEqual([]);
+      expect(custom.hooks.stop).toEqual([{ command: "echo user" }, expect.objectContaining({ command: expect.stringContaining("--source kiro --managed-launch") })]);
+      await vi.waitFor(async () => expect(await readFile(path.join(repoPath, "kiro-args"), "utf8")).toBe("kiro\nchat\n--agent\ncustom\n--resume-id\nsession-123\n"));
+
+      await launch("kiro", `${commandPrefix} --resume-id session-123`);
+      expect(await read(path.join(kiroHome, "agents", "sharkbay-status.json"))).toMatchObject({ name: "sharkbay-status", tools: ["*"] });
+      await vi.waitFor(async () => expect(await readFile(path.join(repoPath, "kiro-args"), "utf8")).toContain("--agent\nsharkbay-status\n"));
+
+      vi.stubEnv("KIRO_FIXTURE_VERSION", "3.1.0");
+      await launch("kiro", `${commandPrefix} --v3 --resume-id session-123`);
+      const v3 = await read(path.join(kiroHome, "hooks", "sharkbay-status.json"));
+      expect(v3.version).toBe("v1");
+      expect(v3.hooks).toContainEqual(expect.objectContaining({ trigger: "SessionStart", action: expect.objectContaining({ command: expect.stringContaining("--managed-launch") }) }));
+      await vi.waitFor(async () => expect(await readFile(path.join(repoPath, "kiro-args"), "utf8")).toBe("kiro\nchat\n--v3\n--resume-id\nsession-123\n"));
+      expect(await read(profile)).toEqual(custom);
+    } finally {
+      vi.unstubAllEnvs();
+      runtime.core.closeAllTerminalSessions();
+    }
+  }, 10000);
+
   it("opens linked worktrees and manages local branches without deleting local files", async () => {
     const browser = await connect();
     const repoPath = path.join(directory, "Sidebar repo");

@@ -4,9 +4,10 @@ import { access, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { resolveCommandPath } from "./command-path.js";
 import { resolveManagedPath, writeManagedFile } from "./managed-path.js";
+import { githubRepoFromRemote } from "./git.js";
 import { isSafeTaskId } from "../shared/task-id.js";
 
 const execFileAsync = promisify(execFile);
@@ -16,6 +17,35 @@ const LEGACY_EXCLUDE_ENTRIES = [] as string[];
 const EXCLUDE_REMOVAL_ENTRIES = new Set([...EXCLUDE_ENTRIES, ...LEGACY_EXCLUDE_ENTRIES]);
 const EXCLUDE_BACKUP_FILE = "git-info-exclude.backup";
 const EXCLUDE_MISSING_MARKER = "git-info-exclude.missing";
+const PROTOCOL_PATH = ".sharkbay/harness/protocol.md";
+const FINGERPRINTS_PATH = ".sharkbay/harness/managed-files.json";
+const MACHINE_ID_PATH = ".sharkbay/machine-id";
+// Distinct official templates shipped before the managed-files record (v0.3.0–v0.3.13).
+const legacyHarnessFingerprints: Readonly<Record<string, readonly string[]>> = {
+  [PROTOCOL_PATH]: [
+    "27ebb7cc0633cadd06178be7b7375fdd6a83baba3b86ee3deee9ed1fb8067e28",
+    "0ea343c901afad67d0339dd53b995e69dcd0551cc98a538cf399b8cdfcf8c8c1",
+    "76da1edf1bee70a173b66a49c32dea114c839da2df25ba1b42f8b5d34784414b",
+    "be055d73420db0c0e4604dfdc7ea670cbbe6efc916d7b1f0d43a32654d334e93",
+  ],
+  ".sharkbay/harness/agent-session-id.sh": [
+    "f2b517ae5bd8d99c35095d500824fd332bb2912ca169186670263e1ccaf8e448",
+    "a26acc551c681e68fb7fe3f553a3c595f06d4f5181c71620e5edbc674495d29b",
+    "cdbf08e2c8730951b7bb9d3833bb7edfee8bf623c3ea9888256febd91511f2a0",
+  ],
+  ".sharkbay/harness/open-artifact.sh": [
+    "e7c2454a0bf027b2367b3c9965b2179de498f1b30f50f82c0556b2adf9f226ae",
+    "ba095b5fc9fe6755571c959e48c56a6dd6c5e3edbcc9385b052ead0b85a5e487",
+  ],
+  ".sharkbay/harness/review.sh": [
+    "42b93c35896cac8cc05c83d34d71a5c1d95cda6fc1b7924b70fe0df70ebb980b",
+    "02a80692c3edd326b312db73fcca8005124c87310e6d18c26e668f2aa2e24ffd",
+  ],
+  ".sharkbay/harness/artifact.sh": [
+    "9a64f1a6ea86e6dcc2f52449affe20bd36088c41366e5abd161178f7f3d19c0d",
+    "cf23bec7ee1a2797e760022c53c40885ac577f1e1890ec363d40a561bf0567c9",
+  ],
+};
 const AGENT_SESSION_ID_SCRIPT = [
   "#!/bin/sh",
   "set -eu",
@@ -445,15 +475,15 @@ export type HarnessLocalIdentity = {
 
 export async function resolveGitHubIdentity(): Promise<GitHubIdentity> {
   const ghPath = await resolveGitHubCliPath();
-  const { stdout } = await execFileAsync(ghPath, ["api", "user", "--jq", ".login + \"\\n\" + (.id|tostring) + \"\\n\" + .avatar_url"], { timeout: 10_000 });
+  const { stdout } = await execFileAsync(ghPath, ["api", "--hostname", "github.com", "user", "--jq", ".login + \"\\n\" + (.id|tostring) + \"\\n\" + .avatar_url"], { timeout: 10_000 });
   const [login, id, avatarUrl] = stdout.trim().split("\n");
   if (!login || !id) throw new Error("Failed to resolve GitHub identity from gh CLI");
   return { login: login!, id: Number(id), avatarUrl: avatarUrl ?? "" };
 }
 
-export async function checkRepoPermission(repo: string, login: string): Promise<string> {
+export async function checkRepoPermission(repo: string): Promise<string> {
   const ghPath = await resolveGitHubCliPath();
-  const { stdout } = await execFileAsync(ghPath, ["api", `repos/${repo}/collaborators/${login}/permission`, "--jq", ".permission"], { timeout: 10_000 });
+  const { stdout } = await execFileAsync(ghPath, ["api", "--hostname", "github.com", `repos/${repo}`, "--jq", 'if .archived or .disabled then "read" elif .permissions.admin then "admin" elif .permissions.push then "write" else "read" end'], { timeout: 10_000 });
   return stdout.trim();
 }
 
@@ -470,7 +500,7 @@ export function generateMachineId(): string {
 function managedHarnessFiles(options: ProtocolOptions): ManagedHarnessFile[] {
   return [
     {
-      path: ".sharkbay/harness/protocol.md",
+      path: PROTOCOL_PATH,
       content: generateProtocol(options),
     },
     {
@@ -496,13 +526,49 @@ function managedHarnessFiles(options: ProtocolOptions): ManagedHarnessFile[] {
   ];
 }
 
+async function ensureHarnessDirectories(repoPath: string, files: ManagedHarnessFile[]): Promise<void> {
+  const directories = [".sharkbay/harness", ".sharkbay/tasks", ".sharkbay/team-context"];
+  for (const relative of [...directories, MACHINE_ID_PATH, FINGERPRINTS_PATH, ...files.map(file => file.path)]) await resolveManagedPath(repoPath, relative);
+  for (const relative of directories) await mkdir(await resolveManagedPath(repoPath, relative), { recursive: true });
+}
+
 async function writeManagedHarnessFiles(repoPath: string, options: ProtocolOptions): Promise<void> {
   const files = managedHarnessFiles(options);
-  const directories = [".sharkbay/harness", ".sharkbay/tasks", ".sharkbay/team-context"];
-  for (const relative of [...directories, ".sharkbay/machine-id", ...files.map(file => file.path)]) await resolveManagedPath(repoPath, relative);
-  for (const relative of directories) await mkdir(await resolveManagedPath(repoPath, relative), { recursive: true });
-  await writeManagedFile(repoPath, ".sharkbay/machine-id", options.machineId);
+  await ensureHarnessDirectories(repoPath, files);
+  await writeManagedFile(repoPath, MACHINE_ID_PATH, options.machineId);
   for (const file of files) await writeManagedFile(repoPath, file.path, file.content, file.executable);
+  const fingerprints = Object.fromEntries(files.map(file => [file.path, harnessFingerprint(file.path, file.content)]));
+  await writeManagedFile(repoPath, FINGERPRINTS_PATH, JSON.stringify(fingerprints));
+}
+
+export async function maintainHarness(repoPath: string): Promise<boolean> {
+  const installed = await isHarnessInstalled(repoPath);
+  const options = await resolveProtocolOptions(repoPath, "", { resolveIdentity: false });
+  const files = managedHarnessFiles(options);
+  await ensureHarnessDirectories(repoPath, files);
+  if (!await getMachineId(repoPath)) await writeManagedFile(repoPath, MACHINE_ID_PATH, options.machineId, false, null);
+
+  const previous = await readHarnessFingerprints(repoPath);
+  const fingerprints = { ...previous };
+  let changed = false;
+  for (const file of files) {
+    const { current, reason } = await inspectManagedHarnessFile(repoPath, file, previous);
+    if (reason === "changed") continue;
+    if (reason) {
+      const updated = await writeManagedFile(repoPath, file.path, file.content, file.executable, current);
+      if (!updated) continue;
+      changed = true;
+    }
+    fingerprints[file.path] = harnessFingerprint(file.path, file.content);
+  }
+  if (JSON.stringify(fingerprints) !== JSON.stringify(previous)) {
+    await writeManagedFile(repoPath, FINGERPRINTS_PATH, JSON.stringify(fingerprints));
+  }
+  if (await isGitWorktree(repoPath)) {
+    if (!installed) await backupLocalExclude(repoPath);
+    await ensureLocalExclude(repoPath);
+  }
+  return changed;
 }
 
 export async function getHarnessUpdateStatus(repoPath: string): Promise<HarnessUpdateStatus> {
@@ -566,6 +632,34 @@ export async function getLocalHarnessIdentity(repoPath: string): Promise<Harness
     githubUserId: existing.githubUserId,
     machineId: await getMachineId(repoPath) ?? existing.machineId,
   };
+}
+
+export async function updateHarnessProject(repoPath: string, repo: string | null, identity?: GitHubIdentity): Promise<void> {
+  const relativePath = ".sharkbay/harness/protocol.md";
+  const current = await readFile(await resolveManagedPath(repoPath, relativePath), "utf8");
+  const previous = {
+    repo: readProtocolField(current, "Repo") ?? undefined,
+    githubLogin: readProtocolField(current, "GitHub login") ?? "unknown",
+    githubUserId: Number(readProtocolField(current, "GitHub user id")) || 0,
+    machineId: readProtocolField(current, "Machine id") ?? "unknown",
+    agent: "",
+  };
+  let next: string;
+  if (current === generateProtocol(previous)) {
+    next = generateProtocol({
+      ...previous,
+      repo: repo ?? undefined,
+      githubLogin: identity?.login ?? previous.githubLogin,
+      githubUserId: identity?.id ?? previous.githubUserId,
+    });
+  } else {
+    next = current.replace(/^- Repo:[^\r\n]*/m, () => `- Repo: ${repo ?? ""}`);
+    if (identity) {
+      next = next.replace(/^- GitHub login:[^\r\n]*/m, () => `- GitHub login: ${identity.login}`)
+        .replace(/^- GitHub user id:[^\r\n]*/m, () => `- GitHub user id: ${identity.id}`);
+    }
+  }
+  if (next !== current) await writeManagedFile(repoPath, relativePath, next, false, current);
 }
 
 type HarnessUninstallResult = {
@@ -679,30 +773,66 @@ export function cleanLocalExcludeContent(content: string): { content: string; re
   };
 }
 
+function harnessFingerprint(filePath: string, content: string): string {
+  if (filePath === PROTOCOL_PATH) {
+    // The project header and generated task example contain installation metadata.
+    const example = /^taskId: (A7K3P9-u(\d+)-m([^\r\n]*))$/m.exec(content);
+    if (example) {
+      const [, taskId, userId, machineId] = example;
+      content = content
+        .replaceAll(taskId!, "A7K3P9-u0-m")
+        .replace(/^actor:[^\r\n]*$/m, "actor: ")
+        .replace(`githubUserId: ${userId}\n`, "githubUserId: 0\n")
+        .replace(`machine: ${machineId}\n`, "machine: \n");
+    }
+    content = content.replace(/^- (Repo|GitHub login|GitHub user id|Machine id):[^\r\n]*/gm,
+      (_, field: string) => `- ${field}: ${field === "GitHub user id" ? "0" : ""}`);
+  }
+  return createHash("sha256").update(content).digest("hex");
+}
+
+async function readHarnessFingerprints(repoPath: string): Promise<Record<string, string>> {
+  const path = await resolveManagedPath(repoPath, FINGERPRINTS_PATH);
+  try {
+    const entries: unknown = JSON.parse(await readFile(path, "utf8"));
+    if (entries && typeof entries === "object" && !Array.isArray(entries)) {
+      return Object.fromEntries(Object.entries(entries).filter(([key, value]) =>
+        Object.hasOwn(legacyHarnessFingerprints, key) && typeof value === "string" && /^[a-f\d]{64}$/.test(value)));
+    }
+  } catch (error) {
+    if (!(error instanceof SyntaxError) && (error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  return {};
+}
+
+async function inspectManagedHarnessFile(repoPath: string, file: ManagedHarnessFile, known: Record<string, string>): Promise<{
+  current: string | null;
+  reason?: HarnessFileIssue["reason"];
+}> {
+  const path = await resolveManagedPath(repoPath, file.path);
+  try {
+    const current = await readFile(path, "utf8");
+    if (current === file.content) {
+      const needsExecutable = file.executable && ((await stat(path)).mode & 0o111) === 0;
+      return { current, reason: needsExecutable ? "outdated" : undefined };
+    }
+    const fingerprint = harnessFingerprint(file.path, current);
+    const official = known[file.path] === fingerprint || legacyHarnessFingerprints[file.path]?.includes(fingerprint) ||
+      fingerprint === harnessFingerprint(file.path, file.content);
+    return { current, reason: official ? "outdated" : "changed" };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { current: null, reason: "missing" };
+    throw error;
+  }
+}
+
 async function compareManagedHarnessFiles(repoPath: string, options: ProtocolOptions): Promise<HarnessUpdateStatus> {
+  const known = await readHarnessFingerprints(repoPath);
   const files: HarnessFileIssue[] = [];
   for (const file of managedHarnessFiles(options)) {
-    const filePath = await resolveManagedPath(repoPath, file.path);
-    let current: string;
-    try {
-      current = await readFile(filePath, "utf-8");
-    } catch {
-      files.push({ path: file.path, reason: "missing" });
-      continue;
-    }
-
-    let changed = current !== file.content;
-    if (!changed && file.executable) {
-      try {
-        const fileStat = await stat(filePath);
-        changed = (fileStat.mode & 0o111) === 0;
-      } catch {
-        changed = true;
-      }
-    }
-    if (changed) files.push({ path: file.path, reason: "changed" });
+    const { reason } = await inspectManagedHarnessFile(repoPath, file, known);
+    if (reason) files.push({ path: file.path, reason });
   }
-
   return { required: files.length > 0, files };
 }
 
@@ -745,13 +875,14 @@ export async function prepareAgentLaunch(
   repoPath: string,
   agentId: string,
   initialCommand: string,
-  options: BootstrapPromptOptions & { reviewPrompt?: string; artifactPrompt?: string } = {},
+  options: BootstrapPromptOptions & { reviewPrompt?: string; artifactPrompt?: string; prepareHarness?: (repoPath: string) => Promise<void> } = {},
 ): Promise<AgentLaunchResult> {
   const prompt = options.reviewPrompt ?? options.artifactPrompt ?? bootstrapPrompt(options);
   const bootstrapArgs = agentBootstrapArgs(agentId, prompt);
   if (!bootstrapArgs) {
     return { initialCommand, injected: false, skippedReason: "unsupported-agent" };
   }
+  await options.prepareHarness?.(repoPath);
   if (!await isHarnessInstalled(repoPath)) {
     return { initialCommand, injected: false, skippedReason: "not-installed" };
   }
@@ -842,7 +973,7 @@ async function readExistingProtocolOptions(repoPath: string): Promise<Partial<{ 
 
 function readProtocolField(content: string, field: string): string | null {
   const escaped = field.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = content.match(new RegExp(`^- ${escaped}:\\s*(.*)$`, "m"));
+  const match = content.match(new RegExp(`^- ${escaped}:[ \\t]*(.*)$`, "m"));
   return match?.[1]?.trim() || null;
 }
 
@@ -853,11 +984,6 @@ async function resolveRepoName(repoPath: string): Promise<string> {
   } catch {
     return "";
   }
-}
-
-function githubRepoFromRemote(remoteOrigin: string | null): string | null {
-  const match = remoteOrigin?.match(/github\.com[:/]([^/\s]+\/[^/\s]+?)(?:\.git)?$/);
-  return match?.[1] ?? null;
 }
 
 

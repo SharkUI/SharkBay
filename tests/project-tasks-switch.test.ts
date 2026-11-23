@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ProjectCandidate, TaskViewModel, TasksChangedEvent } from "../src/shared/types.js";
+import type { ProjectCandidate, ProtocolStatus, TaskViewModel, TasksChangedEvent } from "../src/shared/types.js";
 
 const source = ts.createSourceFile("App.tsx", readFileSync(new URL("../src/renderer/App.tsx", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const names = ["ProjectDetailPane", "TasksDetailTab", "localPathFromCandidate", "localPathFromProjectUri", "taskPill"];
@@ -30,7 +30,8 @@ function fixture() {
   const listeners = new Set<(event: TasksChangedEvent) => void>();
   const api = {
     getTasks: vi.fn(async ({ repoPath }: { repoPath: string }) => [task(repoPath)]),
-    getStatus: vi.fn(async () => ({ installed: false })),
+    getStatus: vi.fn(async (): Promise<Pick<ProtocolStatus, "installed" | "harnessUpdate" | "autoInstallDisabled"> & { lastError?: string }> =>
+      ({ installed: false, harnessUpdate: { required: false, files: [] } })),
     onTasksChanged: (callback: (event: TasksChangedEvent) => void) => { listeners.add(callback); return () => { listeners.delete(callback); }; },
   };
   const empty = () => null;
@@ -59,6 +60,34 @@ function fixture() {
 }
 
 describe("project Tasks identity", () => {
+  it("shows the team sync blocker alongside usable local tasks", async () => {
+    const f = fixture();
+    const reason = "Team sync needs write access to the GitHub repository on origin.";
+    f.api.getStatus.mockResolvedValue({ installed: true, lastError: reason, harnessUpdate: { required: false, files: [] } });
+    await f.render("A"); await f.selectTasks();
+
+    const status = tree.root.findByProps({ role: "status" });
+    expect(status.findByType("p").children).toEqual([reason]);
+    expect(f.titles()).toEqual(["/A"]);
+    expect(tree.root.findAllByType("button").some((button) => button.children.includes("Install Protocol"))).toBe(false);
+  });
+
+  it("only asks for user action for customized files or an explicitly disabled Harness", async () => {
+    const f = fixture();
+    await f.render("A"); await f.selectTasks();
+    expect(tree.root.findAllByType("h4")).toHaveLength(0);
+    f.api.getStatus.mockResolvedValue({
+      installed: true,
+      harnessUpdate: { required: true, files: [{ path: "review.sh", reason: "outdated" }, { path: "protocol.md", reason: "changed" }] },
+    });
+    await act(async () => { for (const callback of f.listeners) callback({ repoPath: "/A", tasks: [task("/A")] }); });
+    expect(tree.root.findByType("h4").children).toEqual(["Local Harness Changes"]);
+    expect(tree.root.findByProps({ className: "summary-text protocol-harness-files" }).children).toEqual(["protocol.md"]);
+    f.api.getStatus.mockResolvedValue({ installed: false, autoInstallDisabled: true, harnessUpdate: { required: false, files: [] } });
+    await act(async () => { for (const callback of f.listeners) callback({ repoPath: "/A", tasks: [] }); });
+    expect(tree.root.findByType("h4").children).toEqual(["Task Protocol Disabled"]);
+  });
+
   it("clears the previous task detail and protocol status while the new project loads", async () => {
     const f = fixture(); await f.render("A"); await f.selectTasks();
     expect(f.titles()).toEqual(["/A"]);

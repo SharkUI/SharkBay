@@ -24,6 +24,7 @@ import { isCaffeinateActive, normalizeCaffeinateMode, type CaffeinateMode } from
 import { codexActivityWithHook, codexTerminalActivity } from "./codex-input-state";
 import { maxPromptAttachments, promptAttachmentSizeError } from "../shared/application-api";
 import { buildAgentSessionRestoreCommand, inferAgentSessionRestoreAgent, type AgentSessionRestoreCommand } from "../shared/agent-session-restore";
+import { hasSessionHooks } from "../shared/session-hooks";
 import type {
   AgentCli,
   AgentProjectStatusEvent,
@@ -628,19 +629,8 @@ function shellQuote(value: string): string {
 function buildAgentLaunchCommand(agent: AgentCli): string {
   const baseCommand = agent.executablePath || agent.command;
   const flags = getAgentLaunchFlags(agent.id);
-  if (agent.id === "kiro" && getAgentHooksEnabled("kiro") && !flags.includes("--agent sharkbay")) {
-    flags.push("--agent sharkbay");
-  }
   const base = agent.id === "kiro" ? `${shellQuote(baseCommand)} chat` : shellQuote(baseCommand);
   return flags.length ? `${base} ${flags.join(" ")}` : base;
-}
-
-function getAgentLaunchFlagsForRestore(agentId: string): string[] {
-  const launchFlags = getAgentLaunchFlags(agentId);
-  if (agentId === "kiro" && getAgentHooksEnabled("kiro") && !launchFlags.includes("--agent sharkbay")) {
-    launchFlags.push("--agent sharkbay");
-  }
-  return launchFlags;
 }
 
 function cx(...names: Array<string | false | null | undefined>): string {
@@ -1189,7 +1179,7 @@ function DashboardView({
         agentName: payload.agentId,
         sessionId: payload.hookSessionId,
         availableAgents: agentClisForRestoreRef.current,
-        launchFlags: getAgentLaunchFlagsForRestore(payload.agentId),
+        launchFlags: getAgentLaunchFlags(payload.agentId),
       });
       if (!restore) return;
       void terminalPaneRef.current?.openAgentSession(payload.cwdUri, payload.projectName, restore.command, restore.title, restore.agentId, restore.hookSessionId);
@@ -3605,6 +3595,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
                     ? <>This removes the local protocol harness from <strong>{confirmUninstall.name}</strong> and deletes the team context branch.</>
                     : <>This removes the local protocol harness from <strong>{confirmUninstall.name}</strong>. Source files are not deleted.</>}
                 </p>
+                <p>You can reinstall Task Protocol from Tasks.</p>
               </div>
               <button aria-label="Close" className="icon-button" disabled={uninstalling} type="button" onClick={() => setConfirmUninstall(null)}><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
             </div>
@@ -4044,27 +4035,6 @@ function SessionsDetailTab({ active, agentClis, candidate, setToast, onRestoreAg
 
   if (!repoPath) return <EmptyState title="Sessions unavailable" body="Sessions are available for local projects with hooks installed." />;
 
-  const allHooksDisabled = agentClis.length > 0 && agentClis.filter((a) => hookSupportedAgents.has(a.id)).every((a) => !getAgentHooksEnabled(a.id));
-
-  if (allHooksDisabled) {
-    return (
-      <section className="subpanel confirm-panel protocol-action-card">
-        <div>
-          <h4>Enable Hooks</h4>
-          <p className="summary-text">Session tracking requires hooks. Enable status hooks for your installed agents to capture session activity.</p>
-        </div>
-        <div className="button-row">
-          <button className="button compact" type="button" onClick={() => {
-            for (const agent of agentClis) {
-              if (hookSupportedAgents.has(agent.id)) setAgentHooksEnabled(agent.id, true);
-            }
-            setToast({ tone: "success", message: "Hooks enabled for all agents." });
-          }}>Enable Hooks</button>
-        </div>
-      </section>
-    );
-  }
-
   if (!sessions.length) return <EmptyState title="No sessions" body="Agent sessions will appear here once hooks capture activity." />;
 
   return (
@@ -4072,9 +4042,6 @@ function SessionsDetailTab({ active, agentClis, candidate, setToast, onRestoreAg
       {sessions.map((session) => {
         const restoreAgentId = inferAgentSessionRestoreAgent(session.agentId);
         const restoreFlags = restoreAgentId ? getAgentLaunchFlags(restoreAgentId) : [];
-        if (restoreAgentId === "kiro" && getAgentHooksEnabled("kiro") && !restoreFlags.includes("--agent sharkbay")) {
-          restoreFlags.push("--agent sharkbay");
-        }
         const restore = buildAgentSessionRestoreCommand({ agentName: session.agentId, sessionId: session.sessionId, availableAgents: agentClis, launchFlags: restoreFlags });
         const modelShort = session.model ? formatSessionModelName(session.model) : null;
         const subtitle = [modelShort, session.lastEventAt ? formatRelativeTime(session.lastEventAt) : null].filter(Boolean).join(" · ");
@@ -4138,6 +4105,7 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
   const [reviewMenu, setReviewMenu] = useState<{ taskId: string; x: number; y: number; withOpen: boolean } | null>(null);
   const reviewMenuRef = useRef<HTMLDivElement | null>(null);
   const [busyAction, setBusyAction] = useState<"install" | "harness" | null>(null);
+  const customizedHarnessFiles = status?.harnessUpdate.files.filter((file) => file.reason === "changed") ?? [];
   const selected = useMemo(
     () => selectedTaskId ? tasks.find((task) => task.taskId === selectedTaskId) ?? null : null,
     [selectedTaskId, tasks],
@@ -4184,6 +4152,9 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
       if (event.repoPath === activeRepoPath) {
         setTasks(event.tasks);
         setSelectedTaskId((current) => current && event.tasks.some((task) => task.taskId === current) ? current : null);
+        void getStatusHandler({ repoPath: activeRepoPath }).then((nextStatus) => {
+          if (!cancelled) setStatus(nextStatus);
+        }).catch(() => {});
       }
     });
     return () => {
@@ -4334,11 +4305,11 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
 
   return (
     <>
-      {status && !status.installed ? (
+      {status?.autoInstallDisabled && !status.installed ? (
         <section className="subpanel confirm-panel protocol-action-card">
           <div>
-            <h4>Install Protocol</h4>
-            <p className="summary-text">Creates the local task harness for this project. Team sync is enabled automatically when a GitHub remote is configured.</p>
+            <h4>Task Protocol Disabled</h4>
+            <p className="summary-text">Reinstall the local harness to use Task Protocol in this project.</p>
           </div>
           <div className="button-row">
             <button className="button compact" disabled={busyAction !== null} type="button" onClick={() => void installProtocolHarness()}>
@@ -4348,23 +4319,30 @@ function TasksDetailTab({ active, agentClis, candidate, detail, setToast, onOpen
         </section>
       ) : null}
 
-      {status?.installed ? (
-        status.harnessUpdate.required ? (
-          <section className="subpanel confirm-panel protocol-action-card protocol-harness-card">
-            <div>
-              <h4>Harness Update</h4>
-              <p className="summary-text">Harness files differ from the current source. Update them?</p>
-              <p className="summary-text protocol-harness-files">
-                {status.harnessUpdate.files.length} {status.harnessUpdate.files.length === 1 ? "file" : "files"} need attention: {status.harnessUpdate.files.map((file) => file.path).join(", ")}
-              </p>
-            </div>
-            <div className="button-row">
-              <button className="button compact" disabled={busyAction !== null} type="button" onClick={() => void updateProtocolHarness()}>
-                {busyAction === "harness" ? "Updating" : "Update Harness"}
-              </button>
-            </div>
-          </section>
-        ) : null
+      {status?.installed && status.lastError ? (
+        <section className="subpanel protocol-action-card" role="status">
+          <div>
+            <h4>Team sync paused</h4>
+            <p className="summary-text">{status.lastError}</p>
+          </div>
+        </section>
+      ) : null}
+
+      {status?.installed && customizedHarnessFiles.length > 0 ? (
+        <section className="subpanel confirm-panel protocol-action-card protocol-harness-card">
+          <div>
+            <h4>Local Harness Changes</h4>
+            <p className="summary-text">Local changes were preserved. Replacing these files discards those edits.</p>
+            <p className="summary-text protocol-harness-files">
+              {customizedHarnessFiles.map((file) => file.path).join(", ")}
+            </p>
+          </div>
+          <div className="button-row">
+            <button className="button compact" disabled={busyAction !== null} type="button" onClick={() => void updateProtocolHarness()}>
+              {busyAction === "harness" ? "Replacing" : "Replace with Defaults"}
+            </button>
+          </div>
+        </section>
       ) : null}
 
       <div className="queue-list task-list-direct">
@@ -4707,7 +4685,7 @@ function taskRestoreCommand(task: TaskViewModel, status: ProtocolStatus | null, 
     agentName: task.agent,
     sessionId: task.sessionId,
     availableAgents: agentClis,
-    launchFlags: agentId ? getAgentLaunchFlagsForRestore(agentId) : [],
+    launchFlags: agentId ? getAgentLaunchFlags(agentId) : [],
   });
 }
 
@@ -5655,7 +5633,6 @@ const allAgentCliDefinitions: AgentCliDefinition[] = [
   { id: "opencode", label: "OpenCode", shortLabel: "O" },
 ];
 
-const hookSupportedAgents = new Set(["claude", "codex", "cursor", "gemini", "kiro", "qwen", "reasonix", "opencode"]);
 
 type AgentLaunchOption = { flag: string; label: string; description: string; type: "toggle" };
 
@@ -5728,7 +5705,7 @@ function AgentClisSettingsPanel({ active, bridgeAvailable, setToast }: { active:
       </div>
       <div className="agent-clis-detail">
         {selectedInstalled ? (
-          <AgentCliDetailInstalled agent={selectedInstalled} options={agentLaunchOptions[selectedId] ?? []} />
+          <AgentCliDetailInstalled key={selectedInstalled.id} agent={selectedInstalled} options={agentLaunchOptions[selectedId] ?? []} />
         ) : (
           <AgentCliDetailNotInstalled def={selectedDef} bridgeAvailable={bridgeAvailable} onInstalled={refresh} setToast={setToast} />
         )}
@@ -5752,20 +5729,36 @@ function setAgentLaunchFlags(agentId: string, flags: string[]) {
   localStorage.setItem(`sharkbay:agent-launch-flags:${agentId}`, JSON.stringify(flags));
 }
 
-function getAgentHooksEnabled(agentId: string): boolean {
-  return localStorage.getItem(`sharkbay:agent-hooks-enabled:${agentId}`) === "true";
-}
-
-function setAgentHooksEnabled(agentId: string, enabled: boolean) {
-  localStorage.setItem(`sharkbay:agent-hooks-enabled:${agentId}`, String(enabled));
-  window.sharkBay?.agents?.setHooksEnabled?.({ agentId, enabled });
+async function setAgentHooksEnabled(agentId: string, enabled: boolean) {
+  const set = getBridge().agents?.setHooksEnabled;
+  if (!set) throw new Error("Hook settings are unavailable.");
+  await set({ agentId, enabled });
 }
 
 function AgentCliDetailInstalled({ agent, options }: { agent: AgentCli; options: AgentLaunchOption[] }) {
   const [enabledFlags, setEnabledFlags] = useState<string[]>(() => getAgentLaunchFlags(agent.id));
-  const [hooksEnabled, setHooksEnabled] = useState<boolean>(() => getAgentHooksEnabled(agent.id));
+  const sessionHooks = hasSessionHooks(agent.id);
+  const [hooksEnabled, setHooksEnabled] = useState(sessionHooks);
+  const [hooksBusy, setHooksBusy] = useState(sessionHooks);
+  const [hooksError, setHooksError] = useState<string | null>(null);
 
-  useEffect(() => { setEnabledFlags(getAgentLaunchFlags(agent.id)); setHooksEnabled(getAgentHooksEnabled(agent.id)); }, [agent.id]);
+  useEffect(() => {
+    if (!sessionHooks) return;
+    let cancelled = false;
+    const get = getBridge().config?.get;
+    if (!get) {
+      setHooksBusy(false);
+      return;
+    }
+    void get().then(config => {
+      if (!cancelled) setHooksEnabled(!config.disabledSessionHooks?.includes(agent.id));
+    }).catch(error => {
+      if (!cancelled) setHooksError(asMessage(error));
+    }).finally(() => {
+      if (!cancelled) setHooksBusy(false);
+    });
+    return () => { cancelled = true; };
+  }, [agent.id, sessionHooks]);
 
   function toggleFlag(flag: string) {
     setEnabledFlags((current) => {
@@ -5775,10 +5768,13 @@ function AgentCliDetailInstalled({ agent, options }: { agent: AgentCli; options:
     });
   }
 
-  function toggleHooks() {
+  async function toggleHooks() {
     const next = !hooksEnabled;
-    setHooksEnabled(next);
-    setAgentHooksEnabled(agent.id, next);
+    setHooksBusy(true);
+    setHooksError(null);
+    try { await setAgentHooksEnabled(agent.id, next); setHooksEnabled(next); }
+    catch (error) { setHooksError(asMessage(error)); }
+    finally { setHooksBusy(false); }
   }
 
   return (
@@ -5810,12 +5806,17 @@ function AgentCliDetailInstalled({ agent, options }: { agent: AgentCli; options:
       <div className="agent-clis-options">
         <div className="agent-clis-options-title">Status hooks</div>
         <label className="agent-clis-option-row">
-          <input type="checkbox" checked={hooksEnabled} onChange={toggleHooks} disabled={!hookSupportedAgents.has(agent.id)} />
+          <input type="checkbox" checked={hooksEnabled} onChange={() => void toggleHooks()} disabled={hooksBusy || !sessionHooks} />
           <div className="agent-clis-option-info">
             <span className="agent-clis-option-label">Enable status hooks</span>
-            <small>{hookSupportedAgents.has(agent.id) ? "More accurate and timely status updates via agent hook integration" : "Not supported by this agent"}</small>
+            <small>{sessionHooks
+              ? agent.id === "codex"
+                ? "Applies to SharkBay sessions. Review new hooks in Codex with /hooks."
+                : "Automatically registered when launched from SharkBay."
+              : "Not supported by this agent"}</small>
           </div>
         </label>
+        {hooksError ? <div className="form-note" role="alert">{hooksError}</div> : null}
       </div>
       <AgentCliUsageSection agentId={agent.id} />
     </>

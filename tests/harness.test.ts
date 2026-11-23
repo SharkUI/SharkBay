@@ -7,6 +7,7 @@ import {
   cleanLocalExcludeContent,
   getHarnessUpdateStatus,
   installHarness,
+  maintainHarness,
   isHarnessInstalled,
   prepareAgentLaunch,
   bootstrapPrompt,
@@ -405,6 +406,34 @@ describe("harness install", () => {
     expect(BOOTSTRAP_PROMPT).not.toContain("CodeGraph is installed and configured");
     await expect(fs.stat(path.join(repo, "AGENTS.md")).catch(() => null)).resolves.toBeNull();
     await expect(fs.stat(path.join(repo, "QWEN.md")).catch(() => null)).resolves.toBeNull();
+  });
+
+  it("upgrades a released helper and restores missing managed files without replacing local edits", async () => {
+    const repo = await createRealGitRepoFixture(await makeTempRoot("harness-auto-upgrade"));
+    await installHarness(repo, harnessOptions);
+    const manifest = path.join(repo, ".sharkbay/harness/managed-files.json");
+    const review = path.join(repo, ".sharkbay/harness/review.sh");
+    const artifact = path.join(repo, ".sharkbay/harness/artifact.sh");
+    const opener = path.join(repo, ".sharkbay/harness/open-artifact.sh");
+    const expectedReview = await fs.readFile(review, "utf8");
+    // The review helper shipped in v0.3.5, before the control clients were relocated.
+    const oldReview = "#!/bin/sh\nset -eu\n\ncommand=\"${1:-}\"\n[ -n \"$command\" ] || { echo 'Usage: review.sh <start|status|wait|cancel|complete> [options]' >&2; exit 2; }\nshift\ncase \"$command\" in start|status|wait|cancel|complete) ;; *) echo \"Unknown review command: $command\" >&2; exit 2 ;; esac\n\nscript_dir=\"$(cd \"$(dirname \"$0\")\" && pwd)\"\nrepo_root=\"$(cd \"$script_dir/../..\" && pwd)\"\nclient=\"$HOME/Library/Application Support/SharkBay/bin/sharkbay-review-control\"\n[ -x \"$client\" ] || { echo 'SharkBay Review control client is unavailable' >&2; exit 1; }\n\nexec \"$client\" \"$command\" \"$@\" --repo \"$repo_root\"\n";
+    const customArtifact = "#!/bin/sh\n# local artifact helper\nexit 0\n";
+    await fs.rm(manifest);
+    await fs.writeFile(review, oldReview);
+    await fs.writeFile(artifact, customArtifact);
+    await fs.rm(opener);
+    const task = path.join(repo, ".sharkbay/tasks/keep.md");
+    await fs.writeFile(task, "Task contents");
+
+    await expect(maintainHarness(repo)).resolves.toBe(true);
+    await expect(fs.readFile(review, "utf8")).resolves.toBe(expectedReview);
+    await expect(fs.readFile(artifact, "utf8")).resolves.toBe(customArtifact);
+    expect((await fs.stat(opener)).mode & 0o111).not.toBe(0);
+    await expect(fs.readFile(task, "utf8")).resolves.toBe("Task contents");
+    await expect(fs.readFile(path.join(repo, ".sharkbay/machine-id"), "utf8")).resolves.toBe(harnessOptions.machineId);
+    expect(JSON.parse(await fs.readFile(manifest, "utf8"))[".sharkbay/harness/artifact.sh"]).toBeUndefined();
+    await expect(maintainHarness(repo)).resolves.toBe(false);
   });
 
   it("builds a status-specific, read-only review prompt", () => {

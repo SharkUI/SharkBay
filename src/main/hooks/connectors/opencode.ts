@@ -47,9 +47,7 @@ export class OpenCodeConnector implements AgentConnector {
   }
 
   async install(hookCliPath: string): Promise<void> {
-    const appDataPath = path.dirname(path.dirname(hookCliPath));
-    const socketPathFile = path.join(appDataPath, "hook-socket-path");
-    this.writePlugin(socketPathFile);
+    writeOpenCodeHookPlugin(this.pluginDir, hookCliPath);
     this.registerPlugin();
   }
 
@@ -101,22 +99,6 @@ export class OpenCodeConnector implements AgentConnector {
     };
   }
 
-  private writePlugin(socketPath: string): void {
-    fs.mkdirSync(this.pluginDir, { recursive: true });
-
-    const pluginPackageJson = JSON.stringify(
-      { name: "sharkbay-opencode-plugin", version: "1.0.0", type: "module", _managedBy: MANAGED_MARKER },
-      null,
-      2,
-    );
-    fs.writeFileSync(path.join(this.pluginDir, "package.json"), pluginPackageJson + "\n", "utf8");
-
-    const pluginScript = generatePluginScript(socketPath);
-    const tmp = this.pluginEntry + ".tmp";
-    fs.writeFileSync(tmp, pluginScript, "utf8");
-    fs.renameSync(tmp, this.pluginEntry);
-  }
-
   private registerPlugin(): void {
     const config = this.readConfig();
     if (!Array.isArray(config.plugin)) config.plugin = [];
@@ -157,6 +139,45 @@ export class OpenCodeConnector implements AgentConnector {
   }
 }
 
+export function writeOpenCodeHookPlugin(directory: string, hookCliPath: string): void {
+  const socketPathFile = path.join(path.dirname(path.dirname(hookCliPath)), "hook-socket-path");
+  fs.mkdirSync(directory, { recursive: true });
+  const manifest = { name: "sharkbay-opencode-plugin", version: "1.0.0", type: "module", _managedBy: MANAGED_MARKER };
+  fs.writeFileSync(path.join(directory, "package.json"), JSON.stringify(manifest, null, 2) + "\n", "utf8");
+  const entry = path.join(directory, "index.js");
+  fs.writeFileSync(entry + ".tmp", generatePluginScript(socketPathFile), "utf8");
+  fs.renameSync(entry + ".tmp", entry);
+}
+
+const managedPluginHeader = "// SharkBay OpenCode plugin — forwards lifecycle events to HookBridge.\n";
+
+export function hasOpenCodeUserHook(configDir: string): boolean {
+  try {
+    const file = path.join(configDir, "plugins", "sharkbay-status.js");
+    return fs.lstatSync(file).isFile() && fs.readFileSync(file, "utf8").startsWith(managedPluginHeader);
+  } catch { return false; }
+}
+
+export function registerOpenCodeUserHook(hookCliPath: string, configDir: string): void {
+  const directory = path.join(configDir, "plugins");
+  const file = path.join(directory, "sharkbay-status.js");
+  const socketPathFile = path.join(path.dirname(path.dirname(hookCliPath)), "hook-socket-path");
+  const source = generatePluginScript(socketPathFile, true);
+  try {
+    if (!fs.lstatSync(file).isFile()) throw new Error("OpenCode plugin path is not a regular file");
+    const existing = fs.readFileSync(file, "utf8");
+    if (existing === source) return;
+    if (!existing.startsWith(managedPluginHeader)) {
+      throw new Error("OpenCode plugin file belongs to the user");
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(file + ".tmp", source, { flag: "w", mode: 0o600 });
+  fs.renameSync(file + ".tmp", file);
+}
+
 function stripJsoncComments(text: string): string {
   let result = "";
   let i = 0;
@@ -192,19 +213,24 @@ function stripJsoncComments(text: string): string {
   return result;
 }
 
-function generatePluginScript(socketPathFile: string): string {
-  return `// SharkBay OpenCode plugin — forwards lifecycle events to HookBridge.
-// Auto-generated. Do not edit manually.
+function generatePluginScript(socketPathFile: string, managedLaunch = false): string {
+  return `${managedPluginHeader}// Auto-generated. Do not edit manually.
 import { createConnection } from "node:net";
 import { readFileSync } from "node:fs";
 
 const SOCKET_PATH_FILE = ${JSON.stringify(socketPathFile)};
 
 function send(payload) {
+  if (process.env.SHARKBAY_DISABLED_STATUS_HOOK_AGENT === "opencode") return;
+  ${managedLaunch ? 'if (process.env.SHARKBAY_MANAGED_STATUS_HOOK_AGENT !== "opencode" || !process.env.SHARKBAY_AGENT_LAUNCH_TOKEN || process.env.SHARKBAY_AGENT_LAUNCH_TOKEN !== process.env.SHARKBAY_TERMINAL_SESSION_ID) return;' : ''}
   let socketPath;
   try { socketPath = readFileSync(SOCKET_PATH_FILE, "utf8").trim(); } catch { return; }
   if (!socketPath) return;
-  const msg = JSON.stringify({ source: "opencode", payload, pid: process.pid }) + "\\n";
+  const msg = JSON.stringify({
+    source: "opencode", payload, pid: process.pid,
+    terminalSessionId: process.env.SHARKBAY_TERMINAL_SESSION_ID,
+    launchToken: process.env.SHARKBAY_AGENT_LAUNCH_TOKEN,
+  }) + "\\n";
   const conn = createConnection(socketPath, () => { conn.end(msg); });
   conn.on("error", () => {});
   conn.setTimeout(3000, () => conn.destroy());

@@ -1,4 +1,5 @@
 import { normalizeCaffeinateMode } from "../shared/caffeinate.js";
+import { hasSessionHooks } from "../shared/session-hooks.js";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -75,6 +76,28 @@ export async function loadAppConfig(configPath = getConfigPath()): Promise<AppCo
 
 export async function getConfiguredRoots(runtime: IpcRuntimeLike): Promise<AppConfig> {
   return loadAppConfig(getRuntimeConfigPath(runtime));
+}
+
+export async function setProtocolAutoInstallDisabled(runtime: IpcRuntimeLike, repoPath: string, disabled: boolean): Promise<void> {
+  const config = await getConfiguredRoots(runtime);
+  const projects = new Set(config.protocolAutoInstallDisabled);
+  if (projects.has(repoPath) === disabled) return;
+  if (disabled) projects.add(repoPath);
+  else projects.delete(repoPath);
+  config.protocolAutoInstallDisabled = [...projects];
+  config.updatedAt = today();
+  await saveAppConfig(config, getRuntimeConfigPath(runtime));
+}
+
+export async function setSessionHooksEnabled(runtime: IpcRuntimeLike, agentId: string, enabled: boolean): Promise<void> {
+  const config = await getConfiguredRoots(runtime);
+  const disabled = new Set(config.disabledSessionHooks);
+  if (disabled.has(agentId) === !enabled) return;
+  if (enabled) disabled.delete(agentId);
+  else disabled.add(agentId);
+  config.disabledSessionHooks = [...disabled];
+  config.updatedAt = today();
+  await saveAppConfig(config, getRuntimeConfigPath(runtime));
 }
 
 export async function saveAppConfig(config: AppConfig, configPath = getConfigPath()): Promise<void> {
@@ -246,6 +269,12 @@ function normalizeAppConfig(value: unknown): AppConfig {
   const terminalFontFamily = normalizeOptionalStringValue(value.terminalFontFamily);
   const terminalFontSize = normalizeOptionalNumberValue(value.terminalFontSize);
   const terminalLineHeight = normalizeOptionalNumberValue(value.terminalLineHeight);
+  const protocolAutoInstallDisabled = Array.isArray(value.protocolAutoInstallDisabled)
+    ? [...new Set(value.protocolAutoInstallDisabled.filter((item): item is string => typeof item === "string" && path.isAbsolute(item)))]
+    : [];
+  const disabledSessionHooks = Array.isArray(value.disabledSessionHooks)
+    ? [...new Set(value.disabledSessionHooks.filter((id): id is string => typeof id === "string" && hasSessionHooks(id)))]
+    : [];
   return {
     schemaVersion: 1,
     configuredRoots: Array.isArray(value.configuredRoots)
@@ -258,6 +287,8 @@ function normalizeAppConfig(value: unknown): AppConfig {
     disabledPluginIds: Array.isArray(value.disabledPluginIds)
       ? [...new Set(value.disabledPluginIds.filter((item): item is string => typeof item === "string" && item.trim().length > 0))]
       : [],
+    ...(protocolAutoInstallDisabled.length ? { protocolAutoInstallDisabled } : {}),
+    ...(disabledSessionHooks.length ? { disabledSessionHooks } : {}),
     appearanceTheme: normalizeAppearanceTheme(value.appearanceTheme),
     statusChangeNotificationsEnabled: legacyStatusSoundsEnabled,
     agentStatusCompletionSoundEnabled: typeof value.agentStatusCompletionSoundEnabled === "boolean"

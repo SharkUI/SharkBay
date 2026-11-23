@@ -24,9 +24,6 @@ export function ProjectStart({ repoPath, agents, bridge, renderLaunchIcon, onLau
       if (version !== request.current) return;
       setStatus(next);
       setLoadError(false);
-      for (const [id, enabled] of Object.entries(next.hooks)) {
-        localStorage.setItem(`sharkbay:agent-hooks-enabled:${id}`, String(enabled));
-      }
     } catch {
       if (version === request.current) { setStatus(null); setLoadError(true); }
     }
@@ -39,6 +36,14 @@ export function ProjectStart({ repoPath, agents, bridge, renderLaunchIcon, onLau
     return () => { request.current++; window.removeEventListener("focus", onFocus); };
   }, [refresh]);
 
+  const harnessInstalled = status?.harness.installed === true;
+  useEffect(() => {
+    if (harnessInstalled) return;
+    return bridge.protocol?.onTasksChanged?.((event) => {
+      if (event.repoPath === repoPath && !actionPending.current) void refresh();
+    });
+  }, [bridge, harnessInstalled, refresh, repoPath]);
+
   async function run(name: string, action: () => Promise<unknown>) {
     if (actionPending.current) return;
     actionPending.current = true;
@@ -49,29 +54,10 @@ export function ProjectStart({ repoPath, agents, bridge, renderLaunchIcon, onLau
   }
 
   const supported = agents.filter(agent => status?.hooks[agent.id] !== undefined);
-  const missing = supported.filter(agent => !status?.hooks[agent.id]);
   const loadingLabel = loadError ? "Check failed" : "Checking…";
   const githubReady = status?.github.state === "ready";
-  const harnessReady = status?.harness.installed && !status.harness.updateRequired;
-  const hooksReady = Boolean(status && supported.length && !missing.length);
-
-  async function configureHarness() {
-    const install = status?.harness.installed ? bridge.protocol?.updateHarness : bridge.protocol?.install;
-    if (!install) throw new Error("Harness installation is unavailable.");
-    await install({ repoPath });
-    await refresh();
-  }
-
-  async function enableHooks() {
-    const enable = bridge.agents?.setHooksEnabled;
-    if (!enable) throw new Error("Hook installation is unavailable.");
-    try {
-      for (const agent of missing) {
-        await enable({ agentId: agent.id, enabled: true });
-        localStorage.setItem(`sharkbay:agent-hooks-enabled:${agent.id}`, "true");
-      }
-    } finally { await refresh(); }
-  }
+  const harnessReady = harnessInstalled && !status?.harness.updateRequired;
+  const hooksEnabled = supported.some(agent => status?.hooks[agent.id]);
 
   async function configureGitHub() {
     if (status?.github.command) await onCommand(status.github.command);
@@ -102,15 +88,13 @@ export function ProjectStart({ repoPath, agents, bridge, renderLaunchIcon, onLau
             <span className={githubReady ? "is-ready" : "project-start-muted"}>{!status ? loadingLabel : githubReady ? "✓ Ready" : status.github.state === "missing" ? "Not installed · optional" : "Not signed in · optional"}</span>
             {status && !githubReady && <button className="project-start-action" type="button" disabled={Boolean(busy)} onClick={() => void run("github", configureGitHub)}>{status.github.state === "missing" ? "Install" : "Sign in"}</button>}
           </div>
-          <div className="project-start-row">
+          {harnessInstalled && <div className="project-start-row">
             <span>Harness</span>
-            <span className={harnessReady ? "is-ready" : "project-start-muted"}>{busy === "harness" ? "Installing…" : !status ? loadingLabel : harnessReady ? "✓ Ready" : status.harness.installed ? "Update available" : "Not installed"}</span>
-            {status && !harnessReady && <button className="project-start-action" type="button" disabled={Boolean(busy)} onClick={() => void run("harness", configureHarness)}>{status.harness.installed ? "Update" : "Install"}</button>}
-          </div>
+            <span className={harnessReady ? "is-ready" : "project-start-muted"}>{harnessReady ? "✓ Ready" : "Local changes · see Tasks"}</span>
+          </div>}
           <div className="project-start-row">
             <span>Hooks</span>
-            <span className={hooksReady ? "is-ready" : "project-start-muted"} title={missing.map(agent => agent.label).join(", ")}>{busy === "hooks" ? "Enabling…" : !status ? loadingLabel : hooksReady ? "✓ Configured" : !supported.length ? "No supported agents" : missing.length === 1 ? `${missing[0]!.label} not enabled` : `${missing.length} agents not enabled`}</span>
-            {status && missing.length > 0 && <button className="project-start-action" type="button" disabled={Boolean(busy)} onClick={() => void run("hooks", enableHooks)}>Enable</button>}
+            <span className={hooksEnabled ? "is-ready" : "project-start-muted"}>{!status ? loadingLabel : hooksEnabled ? "Automatic" : !supported.length ? "No supported agents" : "Off"}</span>
           </div>
           {loadError && <button className="project-start-action" type="button" disabled={Boolean(busy)} onClick={() => void refresh()}>Retry status check</button>}
         </div>

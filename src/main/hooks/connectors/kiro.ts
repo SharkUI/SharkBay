@@ -11,6 +11,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import type { AgentConnector, ConnectorStatus, HookEventKind, UnifiedHookEvent } from "../types.js";
+import type { SessionHookLaunch } from "../session-launch.js";
+import { readJsonFile, writeJsonAtomic } from "../../json-file.js";
 
 const EVENT_MAP: Record<string, HookEventKind> = {
   agentSpawn: "session_start",
@@ -18,16 +20,138 @@ const EVENT_MAP: Record<string, HookEventKind> = {
   preToolUse: "tool_start",
   postToolUse: "tool_end",
   stop: "turn_end",
+  SessionStart: "session_start",
+  UserPromptSubmit: "prompt",
+  PreToolUse: "tool_start",
+  PostToolUse: "tool_end",
+  Stop: "turn_end",
+  SessionEnd: "session_end",
 };
 
 const HOOK_EVENTS = ["agentSpawn", "userPromptSubmit", "preToolUse", "postToolUse", "stop"];
 const MANAGED_MARKER = "sharkbay-managed";
 const DEFAULT_TOOLS = ["*"];
+const STANDALONE_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SessionEnd"];
+const DEFAULT_PROFILE = "sharkbay-status";
+const agentFlag = /((?:^|\s)['"]?--agent['"]?(?:=|\s+)['"]?)([\w.-]+)(?=['"\s]|$)/u;
+
+export async function registerKiroLaunchHooks(
+  hookCli: string, command: string, cwd: string, env: NodeJS.ProcessEnv, version: string,
+): Promise<SessionHookLaunch> {
+  const osHome = env.HOME || os.homedir();
+  const home = env.KIRO_HOME && path.isAbsolute(env.KIRO_HOME) ? env.KIRO_HOME : path.join(osHome, ".kiro");
+  const settings = await readJsonFile(path.join(home, "settings", "cli.json"));
+  if (!settings.ok && settings.reason !== "missing") throw new Error(settings.message);
+  const config = settings.ok && record(settings.data) ? settings.data : {};
+  const engine = command.match(/(?:^|\s)--agent-engine(?:=|\s+)['"]?(v[123])(?=['"\s]|$)/u)?.[1]
+    ?? command.match(/(?:^|\s)--(v[23])(?=\s|$)/u)?.[1]
+    ?? env.KIRO_AGENT_ENGINE
+    ?? config["chat.agentEngine"];
+  const [,major,minor] = version.match(/(\d+)\.(\d+)\.\d+/u) ?? [];
+  const v3 = engine === "v3" || (engine == null && Number(major) >= 3);
+  const supportedStandalone = Number(major) >= 3 || Number(major) === 2 && Number(minor) >= 29;
+  const hookCommand = `'${hookCli.replace(/'/g, "'\\''")}' --source kiro --managed-launch`;
+  if (v3 && supportedStandalone) {
+    const dir = Number(major) === 2 && Number(minor) < 31 ? path.join(osHome, ".kiro") : home;
+    const file = path.join(dir, "hooks", "sharkbay-status.json");
+    await updateKiroFile(file, (current, exists) => {
+      if (exists && (current.version !== "v1" || Object.keys(current).some(key => key !== "version" && key !== "hooks")
+        || !Array.isArray(current.hooks) || !current.hooks.length || !current.hooks.every(isManagedListEntry))) {
+        throw new Error("Kiro standalone hook file belongs to the user");
+      }
+      return { version: "v1", hooks: STANDALONE_EVENTS.map(event => listEntry(event, hookCommand)) };
+    });
+    return {};
+  }
+  if (v3) return {};
+  const explicit = command.match(agentFlag)?.[2];
+  if (!explicit && /(?:^|\s)['"]?--agent['"]?(?:=|\s|$)/u.test(command)) return {};
+  const configured = typeof config["chat.defaultAgent"] === "string" ? config["chat.defaultAgent"] : undefined;
+  const selected = explicit ?? configured;
+  const builtin = !selected || selected === "kiro_default";
+  const profile = builtin ? DEFAULT_PROFILE : selected;
+  if (!/^[\w.-]+$/u.test(profile) || profile === "." || profile === "..") return {};
+  const globalAgents = env.KIRO_AGENT_CONFIG_DIR && path.isAbsolute(env.KIRO_AGENT_CONFIG_DIR)
+    ? env.KIRO_AGENT_CONFIG_DIR
+    : path.join(home, "agents");
+  const file = await findKiroProfile(profile, cwd, globalAgents, !env.KIRO_AGENT_CONFIG_DIR && !builtin);
+  await updateKiroFile(file, (current, exists) => {
+    if (builtin && exists && (current.name !== DEFAULT_PROFILE || (!Object.values(record(current.hooks) ? current.hooks : {})
+      .some(entries => Array.isArray(entries) && entries.some(isManagedObjectEntry))))) {
+      throw new Error("Kiro profile name is already in use");
+    }
+    if (!builtin && !exists) throw new Error("The selected Kiro profile does not have an editable configuration");
+    return { ...(exists ? current : { name: DEFAULT_PROFILE, tools: DEFAULT_TOOLS }), hooks: mergeProfileHooks(current, hookCommand) };
+  });
+  if (!builtin) return {};
+  return explicit ? { command: command.replace(agentFlag, `$1${DEFAULT_PROFILE}`) } : { args: ["--agent", DEFAULT_PROFILE] };
+}
+
+async function findKiroProfile(profile: string, cwd: string, globalAgents: string, checkWorkspace: boolean): Promise<string> {
+  if (checkWorkspace) {
+    for (let dir = cwd; ; dir = path.dirname(dir)) {
+      const candidate = path.join(dir, ".kiro", "agents", `${profile}.json`);
+      if (fs.existsSync(candidate)) return candidate;
+      if (fs.existsSync(path.join(dir, ".git")) || dir === path.dirname(dir)) break;
+    }
+  }
+  return path.join(globalAgents, `${profile}.json`);
+}
+
+async function updateKiroFile(file: string, merge: (current: Record<string, unknown>, exists: boolean) => Record<string, unknown>): Promise<void> {
+  const stat = await fs.promises.lstat(file).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "ENOENT") throw error;
+  });
+  if (stat && !stat.isFile()) throw new Error("Kiro hook configuration is not a regular file");
+  const read = await readJsonFile(file);
+  if (!read.ok && read.reason !== "missing") throw new Error(read.message);
+  const current = read.ok ? read.data : {};
+  if (!record(current)) throw new Error("Unsupported Kiro configuration");
+  const next = merge(current, read.ok);
+  if (JSON.stringify(current) === JSON.stringify(next)) return;
+  await fs.promises.mkdir(path.dirname(file), { recursive: true });
+  await writeJsonAtomic(file, next);
+}
+
+function mergeProfileHooks(current: Record<string, unknown>, command: string): unknown {
+  if (Array.isArray(current.hooks) || (current.hooks === undefined && record(current.permissions))) {
+    return [...(Array.isArray(current.hooks) ? current.hooks.filter(entry => !isManagedListEntry(entry)) : []),
+      ...HOOK_EVENTS.map(event => listEntry(event, command))];
+  }
+  if (current.hooks !== undefined && !record(current.hooks)) throw new Error("Unsupported Kiro hooks");
+  const hooks = { ...(record(current.hooks) ? current.hooks : {}) };
+  for (const event of HOOK_EVENTS) {
+    const existing = hooks[event];
+    if (existing !== undefined && !Array.isArray(existing)) throw new Error("Unsupported Kiro hook list");
+    hooks[event] = [
+      ...(Array.isArray(existing) ? existing.filter(entry => !isManagedObjectEntry(entry)) : []),
+      { command, timeout_ms: 5000, ...(event === "preToolUse" || event === "postToolUse" ? { matcher: "*" } : {}), _managedBy: MANAGED_MARKER },
+    ];
+  }
+  return hooks;
+}
+
+function listEntry(trigger: string, command: string) {
+  return { name: `sharkbay-status-${trigger}`, trigger, action: { type: "command", command }, timeout: 5 };
+}
+
+function isManagedListEntry(value: unknown): boolean {
+  return record(value) && typeof value.name === "string" && value.name.startsWith("sharkbay-status-")
+    && record(value.action) && typeof value.action.command === "string" && value.action.command.includes("--source kiro");
+}
+
+function isManagedObjectEntry(value: unknown): boolean {
+  return record(value) && value._managedBy === MANAGED_MARKER;
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
 
 export class KiroConnector implements AgentConnector {
   readonly id = "kiro";
   readonly displayName = "Kiro CLI";
-  readonly supportedEvents: readonly HookEventKind[] = ["session_start", "prompt", "tool_start", "tool_end", "turn_end"];
+  readonly supportedEvents: readonly HookEventKind[] = ["session_start", "prompt", "tool_start", "tool_end", "turn_end", "session_end"];
 
   private readonly agentsDir = path.join(os.homedir(), ".kiro", "agents");
   private readonly configPath = path.join(os.homedir(), ".kiro", "agents", "sharkbay.json");

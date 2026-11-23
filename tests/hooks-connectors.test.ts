@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { ClaudeConnector, CodexConnector, QwenConnector } from "../src/main/hooks/connectors/claude-family.js";
+import { ClaudeConnector, CodexConnector, QwenConnector, sessionHookArguments } from "../src/main/hooks/connectors/claude-family.js";
 import { AgentHookStateManager } from "../src/main/hooks/state-manager.js";
 
 import { GeminiConnector } from "../src/main/hooks/connectors/gemini.js";
@@ -12,6 +12,18 @@ import { ReasonixConnector } from "../src/main/hooks/connectors/reasonix.js";
 import { OpenCodeConnector } from "../src/main/hooks/connectors/opencode.js";
 
 describe("hook connectors", () => {
+  it("honors explicitly supplied session configuration and keeps global-only agents out of automatic setup", () => {
+    const hookCli = "/tmp/SharkBay profile/bin/sharkbay-hook";
+    expect(sessionHookArguments("claude", hookCli, "claude --settings=./local.json")).toEqual([]);
+    expect(sessionHookArguments("codex", hookCli, "codex -c 'hooks.Stop=[]'")).toEqual([]);
+    expect(sessionHookArguments("reasonix", hookCli, "reasonix")).toEqual([]);
+    const [flag, payload] = sessionHookArguments("claude", hookCli, "claude --resume fixture");
+    expect(flag).toBe("--settings");
+    expect(JSON.parse(payload!).hooks.SessionStart).toEqual([
+      { hooks: [{ type: "command", command: "'/tmp/SharkBay profile/bin/sharkbay-hook' --source claude" }] },
+    ]);
+  });
+
   it("uninstalls every Claude managed event while preserving user hooks and detects extra-event remnants", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "sharkbay-claude-roundtrip-"));
     const configPath = path.join(root, "settings.json");

@@ -36,6 +36,20 @@ export async function readGitMetadata(repoPath: string): Promise<GitMetadata> {
   }
 }
 
+export async function readOriginUrls(repoPath: string): Promise<{ fetch: string; push: string[] } | null> {
+  const urls = await git(repoPath, ["config", "--get-regexp", "^remote\\.origin\\.(url|pushurl)$"]).catch(() => "");
+  const lines = urls.split("\n");
+  const fetch = lines.find((line) => line.startsWith("remote.origin.url "))?.slice("remote.origin.url ".length);
+  if (!fetch) return null;
+  const push = lines.filter((line) => line.startsWith("remote.origin.pushurl ")).map((line) => line.slice("remote.origin.pushurl ".length));
+  return { fetch, push: push.length ? push : [fetch] };
+}
+
+export function githubRepoFromRemote(remote: string | null): string | null {
+  const match = remote?.match(/^(?:https?:\/\/(?:[^/\s@]+@)?github\.com\/|ssh:\/\/(?:[^/\s@]+@)?github\.com(?::\d+)?\/|(?:[^/\s@]+@)?github\.com:)([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/i);
+  return match?.[1] ?? null;
+}
+
 export async function readGitHistory(repoPath: string, limit = 50): Promise<GitEvent[]> {
   const raw = await git(repoPath, [
     "reflog",

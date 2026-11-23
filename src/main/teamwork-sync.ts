@@ -1,4 +1,5 @@
 import { execFile, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 import { readdir, readFile, mkdir, mkdtemp, rm, rename } from "node:fs/promises";
 import { join, dirname, basename } from "node:path";
@@ -8,18 +9,11 @@ import { resolveManagedPath, writeManagedFile } from "./managed-path.js";
 const execFileAsync = promisify(execFile);
 
 const BRANCH = "sharkbay-team-context";
+const BRANCH_REF = `refs/heads/${BRANCH}`;
 const REMOTE_REF = `origin/${BRANCH}`;
 const TASKS_PREFIX = ".sharkbay-team-context/tasks/";
 const MIRROR_DIR = ".sharkbay/team-context";
-const INTERVAL_MS = 60_000;
 const MAX_PUSH_RETRIES = 3;
-
-export type SyncStatus = {
-  enabled: boolean;
-  lastSyncAt: string | null;
-  pendingCount: number;
-  lastError: string | null;
-};
 
 export type SyncResult = {
   fetched: boolean;
@@ -43,50 +37,41 @@ interface RemoteTask {
 }
 
 export class TeamworkSync {
-  private repoPath: string;
-  private timer: ReturnType<typeof setInterval> | null = null;
   private syncInFlight: Promise<SyncResult> | null = null;
   private lastSyncAt: string | null = null;
-  private lastError: string | null = null;
   private pendingCount = 0;
 
-  constructor(repoPath: string) {
-    this.repoPath = repoPath;
-  }
+  constructor(
+    private readonly repoPath: string,
+    private readonly fetchRemote = "origin",
+    private readonly pushRemote = fetchRemote,
+    private readonly identity?: { login: string; id: number },
+  ) {}
 
-  start(): void {
-    if (this.timer) return;
-    void this.syncOnce();
-    this.timer = setInterval(() => { void this.syncOnce(); }, INTERVAL_MS);
-  }
-
-  stop(): void {
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
-  }
-
-  getStatus(): SyncStatus {
+  getStatus() {
     return {
-      enabled: this.timer !== null,
       lastSyncAt: this.lastSyncAt,
       pendingCount: this.pendingCount,
-      lastError: this.lastError,
     };
   }
 
-  /** Ensure the remote context branch exists; create if missing. */
-  async ensureContextBranch(repo: string, login: string): Promise<void> {
-    // Check if remote branch exists
+  private async remoteBranchExists(): Promise<boolean> {
     try {
-      await this.git(["ls-remote", "--exit-code", "origin", `refs/heads/${BRANCH}`]);
-      // Exists — just fetch
-      await this.fetch();
-      return;
-    } catch { /* branch doesn't exist, create it */ }
+      await this.git(["ls-remote", "--exit-code", "--heads", this.fetchRemote, BRANCH_REF]);
+      return true;
+    } catch (error) {
+      if ((error as { code?: number }).code === 2) return false;
+      throw error;
+    }
+  }
 
-    // Create orphan branch with minimal structure
+  /** Ensure the remote context branch exists; create if missing. */
+  async ensureContextBranch(repo: string, login: string): Promise<string> {
+    if (!await this.remoteBranchExists()) await this.createContextBranch(repo, login);
+    return this.fetch();
+  }
+
+  private async createContextBranch(repo: string, login: string): Promise<void> {
     const indexDir = await mkdtemp(join(tmpdir(), "sharkbay-context-index-"));
     const indexFile = join(indexDir, "index");
     const env = { ...process.env, GIT_INDEX_FILE: indexFile };
@@ -101,67 +86,58 @@ export class TeamworkSync {
       await this.gitEnv(["update-index", "--add", "--cacheinfo", `100644,${gitkeepBlob},.sharkbay-team-context/tasks/.gitkeep`], env);
 
       const treeHash = await this.gitEnv(["write-tree"], env);
-      const commitHash = await this.git(["commit-tree", treeHash, "-m", "init: sharkbay-team-context"]);
-      await this.git(["push", "origin", `${commitHash}:refs/heads/${BRANCH}`]);
-      await this.git(["fetch", "origin", BRANCH]);
+      const commitHash = await this.commitTree(treeHash, "-m", "init: sharkbay-team-context");
+      try {
+        await this.git(["push", `--force-with-lease=${BRANCH_REF}:`, this.pushRemote, `${commitHash}:${BRANCH_REF}`]);
+      } catch (error) {
+        // A concurrent initializer may have won the create-only push.
+        if (!await this.remoteBranchExists()) throw error;
+      }
     } finally {
       await rm(indexDir, { recursive: true, force: true });
     }
   }
 
-  syncOnce(): Promise<SyncResult> {
+  syncOnce(fetchedHead?: string): Promise<SyncResult> {
     if (this.syncInFlight) return this.syncInFlight;
-    const sync = this.runSyncOnce().finally(() => {
+    const sync = this.runSyncOnce(fetchedHead).finally(() => {
       if (this.syncInFlight === sync) this.syncInFlight = null;
     });
     this.syncInFlight = sync;
     return sync;
   }
 
-  private async runSyncOnce(): Promise<SyncResult> {
+  private async runSyncOnce(fetchedHead?: string): Promise<SyncResult> {
     try {
-      // 1. Fetch
-      const fetched = await this.fetch();
-
-      // 2. Refresh mirror
-      await this.refreshMirrorFromRemote();
-
-      // 3+4. Find completed local tasks that are missing remotely or newer
-      // than the remote copy, then push with retry.
-      const pushedTasks = await this.pushPendingTasksWithRetry();
-      const pushed: string[] = [];
-      if (pushedTasks.length > 0) {
-        pushed.push(...pushedTasks.map((t) => t.taskId));
-        // 7. Refresh mirror again after successful push
-        await this.refreshMirrorFromRemote();
-      }
-
+      const remoteHead = fetchedHead ?? await this.fetch();
+      await this.refreshMirrorFromRemote(remoteHead);
+      const pushedTasks = await this.pushPendingTasksWithRetry(remoteHead);
       this.lastSyncAt = new Date().toISOString();
-      this.lastError = null;
-      return { fetched, pushed, error: null };
+      return { fetched: true, pushed: pushedTasks.map((task) => task.taskId), error: null };
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      this.lastError = msg;
       return { fetched: false, pushed: [], error: msg };
     }
   }
 
-  private async fetch(): Promise<boolean> {
+  private async fetch(): Promise<string> {
+    const snapshot = `refs/sharkbay/context-fetch/${randomUUID()}`;
     try {
-      await this.git(["fetch", "origin", BRANCH]);
-      return true;
-    } catch {
-      return false;
+      await this.git(["fetch", "--no-tags", "--no-write-fetch-head", this.fetchRemote,
+        `+${BRANCH_REF}:refs/remotes/${REMOTE_REF}`, `+${BRANCH_REF}:${snapshot}`]);
+      return await this.git(["rev-parse", snapshot]);
+    } finally {
+      await this.git(["update-ref", "-d", snapshot]).catch(() => {});
     }
   }
 
-  private async listRemoteFiles(): Promise<string[]> {
-    const out = await this.git(["ls-tree", "-r", "--name-only", "-z", REMOTE_REF, "--", TASKS_PREFIX]);
+  private async listRemoteFiles(remoteHead: string): Promise<string[]> {
+    const out = await this.git(["ls-tree", "-r", "--name-only", "-z", remoteHead, "--", TASKS_PREFIX]);
     return out ? out.split("\0").filter(Boolean) : [];
   }
 
-  private async refreshMirrorFromRemote(): Promise<void> {
-    const remoteFiles = await this.listRemoteFiles();
+  private async refreshMirrorFromRemote(remoteHead: string): Promise<void> {
+    const remoteFiles = await this.listRemoteFiles(remoteHead);
     const mirrorTasksDir = await resolveManagedPath(this.repoPath, `${MIRROR_DIR}/tasks`);
     const parent = await resolveManagedPath(this.repoPath, MIRROR_DIR);
     await mkdir(parent, { recursive: true });
@@ -170,7 +146,7 @@ export class TeamworkSync {
     try {
       for (const filePath of remoteFiles) {
         if (!filePath.startsWith(TASKS_PREFIX)) throw new Error("Remote task path is unsafe");
-        const content = await this.git(["show", `${REMOTE_REF}:${filePath}`]);
+        const content = await this.git(["show", `${remoteHead}:${filePath}`]);
         const relativePath = filePath.slice(TASKS_PREFIX.length);
         // Validate the live path as well, even though this write is staged.
         await resolveManagedPath(this.repoPath, `${MIRROR_DIR}/tasks/${relativePath}`);
@@ -195,7 +171,7 @@ export class TeamworkSync {
     } finally { await rm(staging, { recursive: true, force: true }); }
   }
 
-  private async findPendingTasks(remoteFiles: string[]): Promise<CompletedTask[]> {
+  private async findPendingTasks(remoteHead: string, remoteFiles: string[]): Promise<CompletedTask[]> {
     const tasksDir = join(this.repoPath, ".sharkbay", "tasks");
     let entries: string[];
     try {
@@ -204,7 +180,7 @@ export class TeamworkSync {
       return [];
     }
 
-    const remoteTasks = await this.readRemoteTasks(remoteFiles);
+    const remoteTasks = await this.readRemoteTasks(remoteHead, remoteFiles);
 
     const pending: CompletedTask[] = [];
     for (const entry of entries) {
@@ -233,43 +209,41 @@ export class TeamworkSync {
     return pending;
   }
 
-  private async pushPendingTasksWithRetry(): Promise<CompletedTask[]> {
+  private async pushPendingTasksWithRetry(remoteHead: string): Promise<CompletedTask[]> {
     for (let attempt = 0; attempt < MAX_PUSH_RETRIES; attempt++) {
-      const remoteFiles = await this.listRemoteFiles();
-      const tasks = await this.findPendingTasks(remoteFiles);
+      const remoteFiles = await this.listRemoteFiles(remoteHead);
+      const tasks = await this.findPendingTasks(remoteHead, remoteFiles);
       this.pendingCount = tasks.length;
       if (tasks.length === 0) return [];
 
+      let commitHash: string;
       try {
-        await this.pushTasks(tasks);
-        this.pendingCount = 0;
-        return tasks;
+        commitHash = await this.pushTasks(tasks, remoteHead);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
-        if (msg.includes("rejected") || msg.includes("non-fast-forward")) {
+        if (msg.includes("(stale info)") || msg.includes("(fetch first)") || msg.includes("non-fast-forward")) {
           // Fetch and recompute pending tasks; another agent may have pushed a
           // newer copy while this sync was preparing its tree.
-          await this.fetch();
-          await this.refreshMirrorFromRemote();
+          remoteHead = await this.fetch();
+          await this.refreshMirrorFromRemote(remoteHead);
           continue;
         }
         throw e;
       }
+      this.pendingCount = 0;
+      await this.refreshMirrorFromRemote(commitHash);
+      return tasks;
     }
     throw new Error("Push failed after retries");
   }
 
-  private async pushTasks(tasks: CompletedTask[]): Promise<void> {
+  private async pushTasks(tasks: CompletedTask[], remoteHead: string): Promise<string> {
     const indexDir = await mkdtemp(join(tmpdir(), "sharkbay-context-index-"));
     const indexFile = join(indexDir, "index");
     const env = { ...process.env, GIT_INDEX_FILE: indexFile };
 
     try {
-      try {
-        await this.gitEnv(["read-tree", REMOTE_REF], env);
-      } catch {
-        await this.gitEnv(["read-tree", "--empty"], env);
-      }
+      await this.gitEnv(["read-tree", remoteHead], env);
 
       for (const task of tasks) {
         const date = parseDateOrNow(task.completedAt);
@@ -282,23 +256,20 @@ export class TeamworkSync {
 
       const treeHash = await this.gitEnv(["write-tree"], env);
 
-      let parentArg: string[];
-      try {
-        const parentHash = await this.git(["rev-parse", REMOTE_REF]);
-        parentArg = ["-p", parentHash];
-      } catch {
-        parentArg = [];
-      }
-
-      const commitHash = await this.git([
-        "commit-tree", treeHash, ...parentArg, "-m", `sync: push ${tasks.length} task(s)`,
-      ]);
-
-      await this.git(["update-ref", `refs/remotes/${REMOTE_REF}`, commitHash]);
-      await this.git(["push", "origin", `${commitHash}:refs/heads/${BRANCH}`]);
+      const commitHash = await this.commitTree(treeHash, "-p", remoteHead, "-m", `sync: push ${tasks.length} task(s)`);
+      await this.git(["push", `--force-with-lease=${BRANCH_REF}:${remoteHead}`, this.pushRemote, `${commitHash}:${BRANCH_REF}`]);
+      return commitHash;
     } finally {
       await rm(indexDir, { recursive: true, force: true });
     }
+  }
+
+  private commitTree(tree: string, ...args: string[]): Promise<string> {
+    const config = this.identity ? [
+      "-c", `user.name=${this.identity.login}`,
+      "-c", `user.email=${this.identity.id}+${this.identity.login}@users.noreply.github.com`,
+    ] : [];
+    return this.git([...config, "commit-tree", tree, ...args]);
   }
 
   private async git(args: string[], stdin?: string): Promise<string> {
@@ -317,7 +288,10 @@ export class TeamworkSync {
         proc.stdin.end(stdin);
       });
     }
-    const { stdout } = await execFileAsync("git", ["-C", this.repoPath, ...args], { timeout: 15_000, maxBuffer: 4 * 1024 * 1024 });
+    const { stdout } = await execFileAsync("git", ["-C", this.repoPath, ...args], {
+      timeout: 15_000, maxBuffer: 4 * 1024 * 1024,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "Never", LC_ALL: "C" },
+    });
     return String(stdout).trimEnd();
   }
 
@@ -326,14 +300,14 @@ export class TeamworkSync {
     return stdout.trimEnd();
   }
 
-  private async readRemoteTasks(remoteFiles: string[]): Promise<Map<string, RemoteTask>> {
+  private async readRemoteTasks(remoteHead: string, remoteFiles: string[]): Promise<Map<string, RemoteTask>> {
     const remoteTasks = new Map<string, RemoteTask>();
     for (const path of remoteFiles) {
       const basename = path.split("/").pop()?.replace(/\.md$/, "") ?? "";
       const filenameTaskId = extractTaskId(basename);
       if (!filenameTaskId) continue;
 
-      const content = await this.git(["show", `${REMOTE_REF}:${path}`]);
+      const content = await this.git(["show", `${remoteHead}:${path}`]);
       const frontmatter = parseTaskFrontmatter(content) ?? {};
       const taskId = frontmatter["taskId"] || filenameTaskId;
       remoteTasks.set(taskId, {
@@ -344,15 +318,6 @@ export class TeamworkSync {
       });
     }
     return remoteTasks;
-  }
-}
-
-export async function hasLocalContextBranch(repoPath: string): Promise<boolean> {
-  try {
-    await execFileAsync("git", ["-C", repoPath, "rev-parse", "--verify", "--quiet", REMOTE_REF], { timeout: 3_000 });
-    return true;
-  } catch {
-    return false;
   }
 }
 

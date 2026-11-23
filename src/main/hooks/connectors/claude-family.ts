@@ -129,17 +129,38 @@ function tomlString(s: string): string {
   return JSON.stringify(s);
 }
 
-function buildHookEntries(hookCliPath: string, source: string): Record<string, unknown[]> {
+function buildHookEntries(hookCliPath: string, source: string, global = true): Record<string, unknown[]> {
   const command = `${shellQuote(hookCliPath)} --source ${source}`;
   const entries: Record<string, unknown[]> = {};
   for (const spec of hookEventSpecs(source)) {
     const hook: Record<string, unknown> = { type: "command", command };
     if (spec.timeout != null) hook.timeout = spec.timeout;
-    const group: Record<string, unknown> = { hooks: [hook], _managedBy: MANAGED_MARKER };
+    const group: Record<string, unknown> = { hooks: [hook], ...(global ? { _managedBy: MANAGED_MARKER } : {}) };
     if (spec.matcher != null) group.matcher = spec.matcher;
     entries[spec.name] = [group];
   }
   return entries;
+}
+
+export function qwenSessionHooks(hookCliPath: string): Record<string, unknown[]> {
+  const { PermissionDenied: _unsupported, ...hooks } = buildHookEntries(hookCliPath, "qwen", false);
+  return hooks;
+}
+
+export function sessionHookArguments(agentId: string, hookCliPath: string, command: string): string[] {
+  if (agentId === "claude" && !/(?:^|\s)['"]?--settings['"]?(?:[\s=]|$)/u.test(command)) {
+    return ["--settings", JSON.stringify({ hooks: buildHookEntries(hookCliPath, agentId, false) })];
+  }
+  if (agentId !== "codex" || /(?:^|\s)['"]?(?:-c[\s=]*|--config[\s=]+)['"]?hooks(?:\.|\s*=)/u.test(command)) return [];
+  const hookCommand = tomlString(`${shellQuote(hookCliPath)} --source codex`);
+  // Codex merges its SessionFlags hook source with the user's other sources.
+  const codexEvents = HOOK_EVENT_SPECS.filter(({ name }) => name !== "Notification" && name !== "PermissionDenied");
+  const events = [...codexEvents, { name: "Interrupt", matcher: null, timeout: 1 }].map(({ name, matcher, timeout }) => {
+    const filter = matcher === null ? "" : `matcher = ${tomlString(matcher)}, `;
+    const duration = timeout === null ? "" : `, timeout = ${timeout}`;
+    return `${name} = [{ ${filter}hooks = [{ type = "command", command = ${hookCommand}${duration} }] }]`;
+  });
+  return ["-c", `hooks = { ${events.join(", ")} }`];
 }
 
 // ---------------------------------------------------------------------------

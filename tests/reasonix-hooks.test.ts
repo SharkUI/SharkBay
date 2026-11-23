@@ -1,6 +1,8 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { afterEach, describe, expect, it } from "vitest";
 import { HookBridge } from "../src/main/hooks/bridge.js";
 import { ReasonixConnector } from "../src/main/hooks/connectors/reasonix.js";
@@ -95,7 +97,7 @@ describe("Reasonix status hooks", () => {
       expect(installed.theme).toBe("dark");
       expect(installed.hooks.Stop[0]).toEqual({ command: "notify-send done", description: "User hook" });
       expect(installed.hooks.Stop[1]).toMatchObject({
-        command: `'${hookPath}' --source reasonix`,
+        command: `'${hookPath}' --source reasonix --managed-launch`,
         description: "SharkBay agent status",
         timeout: 5000,
       });
@@ -137,6 +139,37 @@ describe("Reasonix status hooks", () => {
       expect(script).toContain("process.env.SHARKBAY_SESSION_ID || process.env.SHARKBAY_RESTORED_SESSION_ID");
       expect(script).toContain("parsed = { ...parsed, sharkbaySessionId }");
     } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("forwards automatically registered hooks only for the managed Agent launch", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "sb-"));
+    const appDataPath = path.join(root, "app");
+    const bridge = new HookBridge({ socketDir: root });
+    try {
+      await bridge.start(appDataPath);
+      const events: unknown[] = [];
+      bridge.on("event", event => events.push(event));
+      async function send(agent: string) {
+        const helper = spawn(process.execPath, [path.join(appDataPath, "bin", "sharkbay-hook"), "--source", "reasonix", "--managed-launch"], {
+          env: {
+            ...process.env, SHARKBAY_DISABLED_STATUS_HOOK_AGENT: "", SHARKBAY_MANAGED_STATUS_HOOK_AGENT: agent,
+            SHARKBAY_TERMINAL_SESSION_ID: "terminal", SHARKBAY_AGENT_LAUNCH_TOKEN: "terminal",
+          },
+        });
+        helper.stdin.end('{"event":"SessionStart"}');
+        await once(helper, "close");
+      }
+      await send("");
+      await send("kiro");
+      expect(events).toEqual([]);
+      const expected = once(bridge, "event");
+      await send("reasonix");
+      const [event] = await expected;
+      expect(event).toMatchObject({ source: "reasonix", terminalSessionId: "terminal", launchToken: "terminal" });
+    } finally {
+      await bridge.stop();
       await fs.rm(root, { recursive: true, force: true });
     }
   });

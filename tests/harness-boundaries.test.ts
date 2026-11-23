@@ -76,7 +76,7 @@ describe("managed harness write boundaries", () => {
     await symlink(outside, path.join(repo, ".sharkbay", relative));
     const sync = new TeamworkSync(repo);
     sync["git"] = async args => args[0] === "ls-tree" ? ".sharkbay-team-context/tasks/2026/task.md" : "fixture";
-    await expect(sync["refreshMirrorFromRemote"]()).rejects.toThrow(/symlink|unsafe|outside/i);
+    await expect(sync["refreshMirrorFromRemote"]("fixture")).rejects.toThrow(/symlink|unsafe|outside/i);
     expect(await readdir(outside)).toEqual([]);
   });
   it.each(["../../../outside/task", "/outside", "..", "task/name", "task\\name", "task\nname"])("rejects unsafe task identifiers before reserving files", async (id) => {

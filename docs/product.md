@@ -11,7 +11,7 @@ The [current facts table](current-facts.md) defines current behavior and separat
 - **Terminal workspace**: keep per-project terminal tabs alive while switching projects and Settings.
 - **Development services**: expose detected `dev` and `dev:*` commands as service pills.
 - **Browser tabs**: open web URLs in embedded project browser tabs.
-- **TASKS tab**: show protocol status, install protocol, list task records, and inspect raw Markdown task details.
+- **TASKS tab**: show task records, raw Markdown, and protocol issues that require attention.
 - **Git tab**: show repository facts, dirty files, and recent reflog history.
 - **Files tab**: lazily browse project files and edit and save supported text files in the built-in CodeMirror editor.
 - **Settings**: manage configured projects, project status, and appearance theme.
@@ -22,9 +22,11 @@ SharkBay supports one project source: exact directories selected by the user. Co
 
 ## Task Protocol
 
-Task Protocol is opt-in per project. Installing it adds a repo-local `.sharkbay` harness and enables task-file sync through the remote `sharkbay-team-context` branch when GitHub permissions allow it. When SharkBay launches a supported agent, it injects a first-message bootstrap prompt that tells the agent to read `.sharkbay/harness/protocol.md`; it does not generate or repair per-agent entry files during launch.
+On a new supported Agent launch, SharkBay prepares the local `.sharkbay` harness and injects a prompt to read its protocol. It restores missing managed files and upgrades verified official copies. The Tasks tab shows local changes that need a decision. Uninstalling in SharkBay disables automatic installation for that project on the host. Use Tasks to reinstall. Team sync connects in the background through the remote `sharkbay-team-context` branch when GitHub permissions allow it.
 
 Task Protocol does not replace Git commits or code review. It gives humans and agents a compact local record of current work, verification, files touched, and future context.
+
+SharkBay automatically registers status hooks when it launches a supported Agent CLI. Users can disable them per agent in SharkBay. The CLI’s own trust and settings still apply. SharkBay uses session configuration where available. Reasonix gets managed entries in its user settings. Kiro V3 gets one standalone hooks file, and Kiro V2 gets hooks in the selected profile or a SharkBay profile based on Kiro’s built-in default. OpenCode uses a session plugin where available and otherwise gets one auto-discovered user plugin.
 
 ## Product Boundaries
 

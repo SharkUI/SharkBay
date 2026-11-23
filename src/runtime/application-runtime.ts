@@ -6,10 +6,12 @@ import { fileURLToPath } from "node:url";
 import { createCoreRuntime } from "../core/core-runtime.js";
 import { toLocalProjectUri } from "../core/project-uri.js";
 import { CODEGRAPH_PLUGIN_ID } from "../plugins/bundled/codegraph-detector.js";
-import { addConfiguredProject, setIslandEnabled, setCaffeinateMode, loadRuntimeConfig, renameProject, removeConfiguredProject, setAppearanceTheme, setTerminalAppearance, setStatusChangeNotificationsEnabled, setPluginEnabledConfig } from "../main/config.js";
+import { addConfiguredProject, setIslandEnabled, setCaffeinateMode, loadRuntimeConfig, renameProject, removeConfiguredProject, setAppearanceTheme, setTerminalAppearance, setStatusChangeNotificationsEnabled, setPluginEnabledConfig, setProtocolAutoInstallDisabled, setSessionHooksEnabled } from "../main/config.js";
 import { createWorktree, deleteLocalBranch, fetchGitBranches, readGitWorkspace, removeGitWorktree } from "../main/worktree.js";
 import { readProjectSetupStatus } from "../main/project-setup.js";
 import { reserveArtifactPath, resolveGitHubIdentity } from "../main/harness.js";
+import { prepareSessionHookLaunch } from "../main/hooks/session-launch.js";
+import { hasSessionHooks } from "../shared/session-hooks.js";
 import { parseHookSessions } from "../main/hooks/sessions.js";
 import { TokenUsageDb } from "../main/token-usage-db.js";
 import { TokenUsageCollector } from "../main/token-usage-collector.js";
@@ -29,9 +31,32 @@ type Handlers = { [M in ApplicationMethod]: (input: ApplicationMethodMap[M]["inp
 import type { RuntimePaths } from "../shared/types.js";
 
 export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] }> {
-  readonly core = createCoreRuntime();
-  readonly terminals = new TerminalState(this.core, (name, payload) => this.emit("event", name, payload));
   private readonly tasks = createTaskRuntime((name, payload) => this.emit("event", name, payload));
+  readonly core = createCoreRuntime({
+    prepareAgentHooks: async (agentId, launch) => {
+      if (!hasSessionHooks(agentId)) return {};
+      try {
+        const config = await loadRuntimeConfig(this.paths);
+        if (config.disabledSessionHooks?.includes(agentId)) return { disabled: true };
+        const hookCli = path.join(this.paths.userDataPath, "bin", "sharkbay-hook");
+        if (agentId !== "kiro" && agentId !== "reasonix"
+            && await this.agents.hookConnectors.get(agentId)?.status(hookCli) === "installed") return {};
+        return await prepareSessionHookLaunch(agentId, hookCli, launch);
+      } catch {
+        console.warn(`Unable to prepare SharkBay status hooks for ${agentId}`);
+        return {};
+      }
+    },
+    prepareHarness: async (repoPath) => {
+      if (await this.isHarnessAutoInstallDisabled(repoPath)) return;
+      try { await this.tasks.prepareForAgentLaunch(repoPath); }
+      catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new ApplicationError("HARNESS_SETUP_FAILED", `Could not prepare Task Protocol: ${message}`);
+      }
+    },
+  });
+  readonly terminals = new TerminalState(this.core, (name, payload) => this.emit("event", name, payload));
   private agents!: ReturnType<typeof createAgentRuntime>;
   private usage!: TokenUsageDb;
   private collector!: TokenUsageCollector;
@@ -62,7 +87,12 @@ export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] 
         return cloneProject(this.paths, { ...input, parentPath: await resolveHostDirectory(input.parentPath) });
       },
       "config.renameProject": async (input) => { await resolveRepo(fileURLToLocalPath(input.uri)); return renameProject(this.paths, input); },
-      "config.removeProject": async (input) => { await resolveRepo(fileURLToLocalPath(input.uri ?? input.path ?? "")); return removeConfiguredProject(this.paths, input); },
+      "config.removeProject": async (input) => {
+        const repoPath = await resolveRepo(fileURLToLocalPath(input.uri ?? input.path ?? ""));
+        const config = await removeConfiguredProject(this.paths, input);
+        await this.tasks.stopProject(repoPath);
+        return config;
+      },
       "config.createWorktree": async (input) => createWorktree(this.paths, { ...input, sourceProjectPath: await resolveRepo(input.sourceProjectPath) }),
       "config.openWorktree": async (input) => {
         const workspace = await readGitWorkspace(await resolveRepo(input.repoPath));
@@ -92,8 +122,16 @@ export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] 
       "config.setStatusChangeNotifications": (input) => setStatusChangeNotificationsEnabled(this.paths, input),
       "projects.scan": () => this.core.scanProjects(this.paths),
       "projects.listHostDirectories": (input) => listHostDirectories(input.path),
-      "projects.getSetupStatus": async (input) => readProjectSetupStatus(await resolveRepo(input.repoPath), this.agents.hookConnectors, path.join(this.paths.userDataPath, "bin", "sharkbay-hook")),
-      "projects.getDetail": (input) => this.core.getProjectDetail(this.paths, input),
+      "projects.getSetupStatus": async (input) => {
+        const repoPath = await resolveRepo(input.repoPath);
+        const config = await loadRuntimeConfig(this.paths);
+        return readProjectSetupStatus(repoPath, this.agents.hookConnectors, path.join(this.paths.userDataPath, "bin", "sharkbay-hook"), config.disabledSessionHooks);
+      },
+      "projects.getDetail": async (input) => {
+        const detail = await this.core.getProjectDetail(this.paths, input);
+        void this.tasks.trackProject(detail.displayPath);
+        return detail;
+      },
       "projects.getGitWorkspace": async (input) => readGitWorkspace(await resolveRepo(input.repoPath)),
       "projects.fetchGitBranches": async (input) => fetchGitBranches(await resolveRepo(input.repoPath)),
       "projects.getGitHub": (input) => this.core.readProjectGitHub(this.paths, input),
@@ -142,10 +180,8 @@ export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] 
       "agents.listInstallRecipes": (input) => this.core.listInstallRecipes(this.paths, input),
       "agents.installTool": (input) => this.core.installTool(this.paths, input),
       "agents.setHooksEnabled": async (input) => {
-        const connector = this.agents.hookConnectors.get(input.agentId);
-        if (!connector) throw new ApplicationError("UNKNOWN_AGENT", "Unknown agent connector");
-        if (input.enabled) await connector.install(path.join(this.paths.userDataPath, "bin", "sharkbay-hook"), this.agents.hookBridge.path);
-        else await connector.uninstall();
+        if (!hasSessionHooks(input.agentId)) throw new ApplicationError("UNKNOWN_AGENT", "Unknown agent connector");
+        await this.queueConfig(() => setSessionHooksEnabled(this.paths, input.agentId, input.enabled));
       },
       "targets.pathExists": async (input) => { await resolveRepo(input.path); return this.core.pathExistsOnTarget(this.paths, input); },
       "plugins.list": () => this.core.listPlugins(),
@@ -157,10 +193,18 @@ export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] 
       },
       "diagnostics.read": () => this.core.readDiagnostics(),
       "protocol.getTasks": async (input) => this.tasks.getTasks(await resolveRepo(input.repoPath)),
-      "protocol.getStatus": async (input) => this.tasks.getStatus(await resolveRepo(input.repoPath)),
-      "protocol.install": async (input) => this.tasks.install(await resolveRepo(input.repoPath)),
-      "protocol.enable": async (input) => this.tasks.install(await resolveRepo(input.repoPath)),
-      "protocol.uninstall": async (input) => this.tasks.uninstall(await resolveRepo(input.repoPath), input.cleanTeamContext),
+      "protocol.getStatus": async (input) => {
+        const repoPath = await resolveRepo(input.repoPath);
+        const status = await this.tasks.getStatus(repoPath);
+        return status.installed ? status : { ...status, autoInstallDisabled: await this.isHarnessAutoInstallDisabled(repoPath) };
+      },
+      "protocol.install": async (input) => this.installProtocol(await resolveRepo(input.repoPath)),
+      "protocol.enable": async (input) => this.installProtocol(await resolveRepo(input.repoPath)),
+      "protocol.uninstall": async (input) => {
+        const repoPath = await resolveRepo(input.repoPath);
+        return this.tasks.uninstall(repoPath, input.cleanTeamContext,
+          () => this.queueConfig(() => setProtocolAutoInstallDisabled(this.paths, repoPath, true)));
+      },
       "protocol.resolveIdentity": () => resolveGitHubIdentity(),
       "protocol.syncNow": async (input) => this.tasks.syncNow(await resolveRepo(input.repoPath)),
       "protocol.updateHarness": async (input) => this.tasks.updateHarness(await resolveRepo(input.repoPath)),
@@ -225,6 +269,16 @@ export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] 
     const operation = this.configQueue.then(action);
     this.configQueue = operation.catch(() => {});
     return operation;
+  }
+
+  private async isHarnessAutoInstallDisabled(repoPath: string): Promise<boolean> {
+    return (await loadRuntimeConfig(this.paths)).protocolAutoInstallDisabled?.includes(repoPath) ?? false;
+  }
+
+  private async installProtocol(repoPath: string) {
+    const status = await this.tasks.install(repoPath);
+    await this.queueConfig(() => setProtocolAutoInstallDisabled(this.paths, repoPath, false));
+    return status;
   }
 
   async executeLocal(method: string, input: any, clientId: string): Promise<unknown> {

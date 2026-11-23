@@ -10,6 +10,8 @@ import { resolveProjectUri } from "./path-safety.js";
 import { toLocalProjectUri } from "../core/project-uri.js";
 import { prependPathDirectories, resolveCommandSearchPaths } from "./command-path.js";
 import { prepareAgentLaunch, reserveReviewPath, reserveArtifactPath, reviewPrompt, artifactPrompt } from "./harness.js";
+import type { SessionHookCommand, SessionHookLaunch } from "./hooks/session-launch.js";
+import { hasSessionHooks } from "../shared/session-hooks.js";
 import type {
   RuntimePaths,
   TerminalCloseInput,
@@ -59,6 +61,8 @@ export type TerminalManagerOptions = {
   inspectIntervalMs?: number;
   cwdInspectIntervalMs?: number;
   inspectProcessCwd?: CwdInspector;
+  prepareHarness?: (repoPath: string) => Promise<void>;
+  prepareAgentHooks?: (agentId: string, launch: SessionHookCommand) => Promise<SessionHookLaunch>;
   now?: () => number;
 };
 
@@ -91,12 +95,16 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
   private cwdInspectIntervalMs: number;
   private inspectProcessCwd: CwdInspector;
   private now: () => number;
+  private prepareHarness?: (repoPath: string) => Promise<void>;
+  private prepareAgentHooks?: TerminalManagerOptions["prepareAgentHooks"];
 
   constructor(options: TerminalManagerOptions = {}) {
     super();
     this.inspectIntervalMs = options.inspectIntervalMs ?? defaultTerminalInspectIntervalMs;
     this.cwdInspectIntervalMs = options.cwdInspectIntervalMs ?? defaultTerminalCwdInspectIntervalMs;
     this.inspectProcessCwd = options.inspectProcessCwd ?? resolveProcessCwd;
+    this.prepareHarness = options.prepareHarness;
+    this.prepareAgentHooks = options.prepareAgentHooks;
     this.now = options.now ?? Date.now;
   }
 
@@ -106,6 +114,11 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
     const initialCommandTitle = initialCommand ? normalizeTerminalCommandLine(input.initialCommandTitle) : null;
     let delayedBootstrapPrompt: string | null = null;
     const isSessionRestore = initialCommand ? /--resume\b|--continue\b|\bresume\b/u.test(initialCommand) : false;
+    const hooks = input.agentId && initialCommand && !input.service
+      ? await this.prepareAgentHooks?.(input.agentId, { command: initialCommand, cwd: spec.cwd, env: spec.env })
+      : undefined;
+    if (hooks?.command) initialCommand = hooks.command;
+    if (hooks?.args?.length) initialCommand += ` ${hooks.args.map(shellQuote).join(" ")}`;
     if (input.agentId && initialCommand && !input.service && !isSessionRestore) {
       const codeGraphEnabled = input.protocolBootstrap?.codeGraphEnabled ?? false;
       let reviewPromptText: string | undefined;
@@ -122,11 +135,18 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
         codeGraphEnabled,
         reviewPrompt: reviewPromptText,
         artifactPrompt: artifactPromptText,
+        prepareHarness: !input.review && !input.artifact ? this.prepareHarness : undefined,
       });
       if (launch.injected && (input.agentId === "reasonix" || input.agentId === "opencode")) {
         delayedBootstrapPrompt = launch.bootstrapPrompt ?? null;
       }
       initialCommand = launch.initialCommand;
+    }
+    if (initialCommand && hooks) {
+      const env = Object.entries(hooks.env ?? {}).map(([key, value]) => `${key}=${shellQuote(value)}`);
+      if (input.agentId && hasSessionHooks(input.agentId)) env.push(`SHARKBAY_MANAGED_STATUS_HOOK_AGENT=${shellQuote(input.agentId)}`);
+      if (hooks.disabled && input.agentId) env.push(`SHARKBAY_DISABLED_STATUS_HOOK_AGENT=${shellQuote(input.agentId)}`);
+      if (env.length) initialCommand = `${env.join(" ")} ${initialCommand}`;
     }
     const shellInitialCommand = !input.service ? initialCommand : null;
     const command = input.service && initialCommand
@@ -140,7 +160,11 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
       cols: input.cols ?? 80,
       rows: input.rows ?? 24,
       name: "xterm-256color",
-      env: { ...spec.env, SHARKBAY_TERMINAL_SESSION_ID: id, SHARKBAY_AGENT_LAUNCH_TOKEN: id },
+      env: {
+        ...spec.env,
+        SHARKBAY_TERMINAL_SESSION_ID: id,
+        SHARKBAY_AGENT_LAUNCH_TOKEN: id,
+      },
     });
     const foregroundProcess = safeForegroundProcess(ptyProcess);
     const initialTitle = terminalDisplayTitle({
@@ -161,6 +185,7 @@ export class TerminalManager extends EventEmitter<TerminalManagerEvents> {
       status: "running",
       createdAt: new Date().toISOString(),
       agentId: input.service ? undefined : input.agentId,
+      statusHooksDisabled: hooks?.disabled,
       service: input.service,
       pty: ptyProcess,
       cwd: spec.cwd,
@@ -743,6 +768,7 @@ function publicSession(session: TerminalRecord | TerminalSession): TerminalSessi
     status: session.status,
     createdAt: session.createdAt,
     agentId: session.agentId,
+    statusHooksDisabled: session.statusHooksDisabled,
     service: session.service,
     cols: "pty" in session ? session.pty.cols : session.cols,
     rows: "pty" in session ? session.pty.rows : session.rows,

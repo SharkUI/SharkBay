@@ -9,6 +9,8 @@ export type AppConfig = {
   configuredProjects: string[];
   projectAliases: Record<string, string>;
   disabledPluginIds: string[];
+  protocolAutoInstallDisabled?: string[];
+  disabledSessionHooks?: string[];
   appearanceTheme: AppearanceTheme;
   statusChangeNotificationsEnabled: boolean;
   agentStatusCompletionSoundEnabled: boolean;
@@ -669,6 +671,7 @@ export type TerminalSession = {
   status: TerminalSessionStatus;
   createdAt: string;
   agentId?: string;
+  statusHooksDisabled?: boolean;
   service?: { id: string; label: string; command: string };
 };
 
@@ -940,6 +943,7 @@ export type ProjectSetupStatus = {
 
 export type ProtocolStatus = {
   installed: boolean;
+  autoInstallDisabled?: boolean;
   harnessInstalled: boolean;
   harnessUpdate: HarnessUpdateStatus;
   syncEnabled: boolean;
@@ -956,7 +960,7 @@ export type ProtocolStatus = {
 
 export type HarnessFileIssue = {
   path: string;
-  reason: "missing" | "changed";
+  reason: "missing" | "outdated" | "changed";
 };
 
 export type HarnessUpdateStatus = {

@@ -11,6 +11,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import type { AgentConnector, ConnectorStatus, HookEventKind, UnifiedHookEvent } from "../types.js";
+import { readJsonFile, writeJsonAtomic } from "../../json-file.js";
 
 const EVENT_MAP: Record<string, HookEventKind> = {
   SessionStart: "session_start",
@@ -61,11 +62,24 @@ export class ReasonixConnector implements AgentConnector {
   }
 
   async install(hookCliPath: string): Promise<void> {
-    const config = this.readConfig();
+    const stat = await fs.promises.lstat(this.configPath).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+    });
+    if (stat && !stat.isFile()) throw new Error("Reasonix settings are not a regular file");
+    const current = await readJsonFile(this.configPath);
+    if (!current.ok && current.reason !== "missing") throw new Error(current.message);
+    const config = current.ok ? current.data : {};
+    if (!isRecord(config) || (config.hooks !== undefined && !isRecord(config.hooks))) {
+      throw new Error("Unsupported Reasonix hook configuration");
+    }
     const hooks = readHooks(config);
+    if (HOOK_SPECS.some(spec => hooks[spec.event] !== undefined && !Array.isArray(hooks[spec.event]))) {
+      throw new Error("Unsupported Reasonix hook list");
+    }
+    const original = JSON.stringify(hooks);
     removeManagedHooks(hooks);
 
-    const command = `${shellQuote(hookCliPath)} --source reasonix`;
+    const command = reasonixHookCommand(hookCliPath);
     for (const spec of HOOK_SPECS) {
       const entry: Record<string, unknown> = {
         command,
@@ -78,7 +92,9 @@ export class ReasonixConnector implements AgentConnector {
     }
 
     config.hooks = hooks;
-    this.writeConfig(config);
+    if (JSON.stringify(hooks) === original) return;
+    await fs.promises.mkdir(path.dirname(this.configPath), { recursive: true });
+    await writeJsonAtomic(this.configPath, config);
   }
 
   async uninstall(): Promise<void> {
@@ -95,7 +111,11 @@ export class ReasonixConnector implements AgentConnector {
     const hooks = readHooks(this.readConfig());
     const managed = Object.values(hooks).flat().filter(isManagedHook);
     if (!managed.length) return "not_installed";
-    if (expectedHookCliPath && !managed.every((entry: any) => entry.command === `${shellQuote(expectedHookCliPath)} --source reasonix`)) return "outdated";
+    if (expectedHookCliPath && (!managed.every(entry => entry.command === reasonixHookCommand(expectedHookCliPath))
+      || !HOOK_SPECS.every(({ event }) => {
+        const entries = hooks[event];
+        return Array.isArray(entries) && entries.filter(isManagedHook).length === 1;
+      }))) return "outdated";
     return "installed";
   }
 
@@ -143,11 +163,15 @@ export class ReasonixConnector implements AgentConnector {
   }
 }
 
-function reasonixHome(): string {
-  const override = process.env.REASONIX_HOME?.trim();
-  if (override) return path.resolve(override);
-  if (process.platform === "win32" && process.env.APPDATA) return path.join(process.env.APPDATA, "reasonix");
-  return path.join(os.homedir(), ".reasonix");
+export function reasonixHome(env = process.env, cwd = process.cwd()): string {
+  const override = env.REASONIX_HOME?.trim();
+  if (override) return path.resolve(cwd, override);
+  if (process.platform === "win32" && env.APPDATA) return path.join(env.APPDATA, "reasonix");
+  return path.join(env.HOME || os.homedir(), ".reasonix");
+}
+
+function reasonixHookCommand(hookCliPath: string): string {
+  return `${shellQuote(hookCliPath)} --source reasonix --managed-launch`;
 }
 
 function readHooks(config: Record<string, unknown>): Record<string, unknown[]> {
@@ -167,7 +191,7 @@ function removeManagedHooks(hooks: Record<string, unknown[]>): boolean {
   return changed;
 }
 
-function isManagedHook(value: unknown): boolean {
+function isManagedHook(value: unknown): value is { command: string } {
   return isRecord(value)
     && value.description === MANAGED_DESCRIPTION
     && typeof value.command === "string"

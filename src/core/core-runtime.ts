@@ -1,10 +1,11 @@
 import { SharkBayCoreService } from "./core-service.js";
 import { LocalProvider } from "../providers/local/local-provider.js";
+import { TerminalManager, type TerminalManagerOptions } from "../main/terminal.js";
 
 export type CoreRuntime = SharkBayCoreService & { dispose(): Promise<void> };
 
-export function createCoreRuntime(): CoreRuntime {
-  const core = new SharkBayCoreService([new LocalProvider()]);
+export function createCoreRuntime(terminalOptions?: TerminalManagerOptions): CoreRuntime {
+  const core = new SharkBayCoreService([new LocalProvider(new TerminalManager(terminalOptions))]);
   let disposal: Promise<void> | undefined;
   return Object.assign(core, {
     dispose(): Promise<void> {

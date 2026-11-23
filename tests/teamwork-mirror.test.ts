@@ -31,7 +31,7 @@ async function fixture() {
     if (!files.has(key)) throw new Error("remote read failed");
     return files.get(key)!;
   };
-  return { repo, sync, files, refresh: () => sync["refreshMirrorFromRemote"]() };
+  return { repo, sync, files, refresh: () => sync["refreshMirrorFromRemote"]("fixture") };
 }
 
 describe("complete task mirror snapshots", () => {
