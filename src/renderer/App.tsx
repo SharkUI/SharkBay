@@ -3438,16 +3438,16 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
     }
   }
 
-  const webWorktrees = Boolean(getBridge().projects?.getGitWorkspace);
+  const hasGitWorkspace = Boolean(getBridge().projects?.getGitWorkspace);
   const repositoryKey = (entry: ProjectCandidate) => entry.gitRepository?.commonDir ?? entry.id;
   const projects = new Map<string, ProjectCandidate>();
   for (const candidate of candidates) {
-    const key = webWorktrees ? repositoryKey(candidate) : candidate.id;
+    const key = hasGitWorkspace ? repositoryKey(candidate) : candidate.id;
     if (!projects.has(key) || candidate.gitRepository?.primary) projects.set(key, candidate);
   }
   const activeWorktree = candidates.find((candidate) => candidate.id === selectedId);
   const menuProject = candidates.find((candidate) => candidate.id === menuOpen?.id);
-  const menuSource = menuProject && activeWorktree && webWorktrees && repositoryKey(menuProject) === repositoryKey(activeWorktree)
+  const menuSource = menuProject && activeWorktree && hasGitWorkspace && repositoryKey(menuProject) === repositoryKey(activeWorktree)
     ? activeWorktree : menuProject;
 
   function menuPosition(anchor: HTMLButtonElement, itemCount: number) {
@@ -3476,8 +3476,8 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
     <section className="project-section">
       <div className="project-list" aria-label="Projects">
         {Array.from(projects, ([id, candidate]) => {
-          const isActiveProject = activeWorktree && id === (webWorktrees ? repositoryKey(activeWorktree) : activeWorktree.id);
-          const usesTree = webWorktrees && Boolean(candidate.gitRepository);
+          const isActiveProject = activeWorktree && id === (hasGitWorkspace ? repositoryKey(activeWorktree) : activeWorktree.id);
+          const usesTree = hasGitWorkspace && Boolean(candidate.gitRepository);
           const hasRunningService = runningServiceProjectIds.has(candidate.id);
           const projectActivity = projectActivityForCandidate(candidate, projectActivityByProjectId);
           const hasProjectStatus = Boolean(projectActivity);
@@ -3688,7 +3688,7 @@ function ProjectList({ agentStatusByProjectPath, candidates, projectAliases, run
               setWorktreeModal({ sourceProjectPath: repoPath, name: menuSource.name });
             }}>New Worktree</button>
           ) : null}
-          {webWorktrees && menuProject?.gitRepository ? (
+          {hasGitWorkspace && menuProject?.gitRepository ? (
             <button className="project-context-menu-item" type="button" onClick={async () => {
               menuOpen.anchor?.focus({ preventScroll: true });
               setMenuOpen(null);

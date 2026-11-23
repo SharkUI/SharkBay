@@ -680,7 +680,7 @@ body.is-resizing-columns * {
   text-align: left;
 }
 
-.project-row:hover:where(:not(.app-shell[data-host="web"] *)) {
+.project-row:hover:where(:not(.app-shell[data-host="web"] *, .project-tree-row > .project-row)) {
   background: #eef5f3;
   border-color: #cbded9;
 }
@@ -704,7 +704,7 @@ body.is-resizing-columns * {
   min-width: 0;
 }
 
-.app-shell[data-host="web"] .project-tree-row > .project-row {
+.app-shell[data-host] .project-tree-row > .project-row {
   grid-template-columns: 22px minmax(0, 1fr) auto;
   gap: 5px;
   min-height: 42px;
@@ -986,19 +986,16 @@ body.is-resizing-columns * {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  column-gap: 2px;
   padding: 4px 0 0;
 }
 
-.app-shell[data-host="web"] .project-panel-header {
-  column-gap: 2px;
-}
-
-.app-shell[data-host="web"] :is(.project-panel-header, .project-row-shell) > .icon-button:not(:focus-visible) {
+.app-shell[data-host] :is(.project-panel-header, .project-row-shell) > .icon-button:not(:focus-visible) {
   background: transparent;
   border-color: transparent;
 }
 
-.app-shell[data-host="web"] .project-panel .project-context-menu-item:hover:not(:focus-visible) {
+.app-shell[data-host] .project-panel .project-context-menu-item:hover:not(:focus-visible) {
   background: transparent;
 }
 
@@ -5270,7 +5267,7 @@ body.is-resizing-columns .app-shell[data-theme="night"] .column-resizer::before 
   color: #8fc1bb;
 }
 
-.app-shell[data-theme="night"]:where(:not([data-host="web"])) .project-row:hover,
+.app-shell[data-theme="night"]:where(:not([data-host="web"])) .project-row:hover:where(:not(.project-tree-row > .project-row)),
 .app-shell[data-theme="night"] .project-file-row:hover,
 .app-shell[data-theme="night"] .project-file-row:focus-within,
 .app-shell[data-theme="night"] .dirty-file-row:hover,
