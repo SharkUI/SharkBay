@@ -17,6 +17,7 @@ import { RuntimeStatus } from "./bridge/runtime-status";
 import { HostFolderPicker } from "./host-folder-picker";
 import { useCompactWebLayout, useWebViewport } from "./mobile-layout";
 import { copyText } from "./clipboard";
+import { bindTerminalObserver } from "./terminal-observer";
 import { TerminalCreateMenu } from "./terminal-create-menu";
 import { colorSchemes, getColorScheme } from "./color-schemes";
 import { promptSearchKeys } from "./prompt-search";
@@ -1626,6 +1627,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   const [, refreshRuntimeControl] = useState(0);
   const spacesRef = useRef<Record<string, TerminalSpace>>({});
   const closingTerminalIds = useRef(new Set<string>());
+  const dismissedTerminalIds = useRef(new Set<string>());
   const terminalAppearanceRef = useRef({ appearanceTheme, colorScheme: terminalColorScheme, fontFamily: terminalFontFamily, fontSize: terminalFontSize, lineHeight: terminalLineHeight });
   useEffect(() => {
     terminalAppearanceRef.current = { appearanceTheme, colorScheme: terminalColorScheme, fontFamily: terminalFontFamily, fontSize: terminalFontSize, lineHeight: terminalLineHeight };
@@ -1843,9 +1845,6 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
 
   useEffect(() => {
     spacesRef.current = spaces;
-    for (const id of closingTerminalIds.current) {
-      if (!findTerminalTab(spaces, id)) closingTerminalIds.current.delete(id);
-    }
     if (restoredSpaces.current) scheduleTerminalSpacesSnapshot();
   }, [scheduleTerminalSpacesSnapshot, spaces]);
   useEffect(() => {
@@ -1997,9 +1996,12 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       if (!active) return;
       const ids = new Set(terminals.map((entry) => entry.session.id));
       for (const space of Object.values(spacesRef.current)) for (const tab of space.tabs) {
-        if (tab.kind === "terminal" && !ids.has(tab.session.id)) removeTab(tab.session.id, findTabWithSpace(spacesRef.current, tab.session.id));
+        if (tab.kind === "terminal" && !ids.has(tab.session.id) && !dismissedTerminalIds.current.has(tab.session.id)) {
+          removeTab(tab.session.id, findTabWithSpace(spacesRef.current, tab.session.id));
+        }
       }
       for (const entry of terminals) {
+        if (dismissedTerminalIds.current.has(entry.session.id) || closingTerminalIds.current.has(entry.session.id)) continue;
         const exists = findTerminalTab(spacesRef.current, entry.session.id);
         if (!exists) attachTerminalSession(entry.projectUri, entry.projectUri, entry.projectName, entry.displayPath, entry.session, { activate: false });
         if (!exists) runtime.attachTerminal(entry.session.id);
@@ -2008,7 +2010,17 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     };
     const offTerminals = runtime.onTerminalsChanged(sync);
     const offControl = runtime.onControl(() => refreshRuntimeControl((value) => value + 1));
-    const offConnection = runtime.onConnection((state) => { refreshRuntimeControl((value) => value + 1); if (state === "connected") void runtime.listTerminals().then((terminals) => { sync(terminals); for (const entry of terminals) runtime.attachTerminal(entry.session.id); }).catch(() => {}); });
+    const offConnection = runtime.onConnection((state) => {
+      refreshRuntimeControl((value) => value + 1);
+      if (state !== "connected") return;
+      void runtime.listTerminals().then((terminals) => {
+        if (!active) return;
+        sync(terminals);
+        for (const entry of terminals) {
+          if (!dismissedTerminalIds.current.has(entry.session.id)) runtime.attachTerminal(entry.session.id);
+        }
+      }).catch(() => {});
+    });
     const offNotice = runtime.onNotice((message) => setToast({ tone: "error", message }));
     void runtime.listTerminals().then(sync).catch((error) => setToast({ tone: "error", message: asMessage(error) }));
     return () => { active = false; offTerminals(); offControl(); offConnection(); offNotice(); };
@@ -2262,6 +2274,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     session: TerminalSession,
     options: { activate: boolean; hookSessionId?: string; reviewRun?: ReviewRun },
   ): string {
+    if (dismissedTerminalIds.current.has(session.id)) return session.id;
     if (findTerminalTab(spacesRef.current, session.id)) return session.id;
     // Runtime subscriptions keep their original callback, so read the latest appearance here.
     const appearance = terminalAppearanceRef.current;
@@ -2346,6 +2359,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   }
 
   function appendTerminalOutput(event: TerminalDataEvent) {
+    if (dismissedTerminalIds.current.has(event.sessionId)) return;
     const tab = findTerminalTab(spacesRef.current, event.sessionId);
     if (!tab) {
       bufferPendingTerminalOutput(event);
@@ -2401,6 +2415,10 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   }
 
   function updateTerminalSession(event: TerminalUpdateEvent) {
+    if (event.reason === "closed") {
+      dismissTerminalTab(event.session.id);
+      return;
+    }
     setSpaces((current) => mapTerminalTab(current, event.session.id, (currentTab) => ({ ...currentTab, session: event.session })));
   }
 
@@ -2451,7 +2469,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
   }
 
   async function resizeTerminal(sessionId: string, cols: number, rows: number): Promise<void> {
-    const isClosed = () => closingTerminalIds.current.has(sessionId) || !findTerminalTab(spacesRef.current, sessionId);
+    const isClosed = () => closingTerminalIds.current.has(sessionId) || dismissedTerminalIds.current.has(sessionId) || !findTerminalTab(spacesRef.current, sessionId);
     if (isClosed()) return;
     if (getBridge().runtime && !getBridge().runtime!.canControl(sessionId)) return;
     if (!validTerminalResizeDimensions(cols, rows)) return;
@@ -2477,26 +2495,48 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
       removeTab(tabId, match);
       return;
     }
-    if (match?.tab.kind === "terminal") closingTerminalIds.current.add(tabId);
+    if (match?.tab.kind === "terminal") {
+      if (closingTerminalIds.current.has(tabId) || dismissedTerminalIds.current.has(tabId)) return;
+      const runtime = getBridge().runtime;
+      if (runtime && !runtime.canControl(tabId)) {
+        dismissTerminalTab(tabId, true);
+        return;
+      }
+      closingTerminalIds.current.add(tabId);
+    }
     try {
       if (match?.tab.kind === "browser") {
         await closeBrowser(tabId);
         removeTab(tabId, match);
       } else if (match?.tab.kind === "terminal" && match.tab.reviewRun?.status === "running" && cancelReview) {
         await cancelReview({ runId: match.tab.reviewRun.id });
-      } else await closeTerminal(tabId);
+      } else {
+        await closeTerminal(tabId);
+        dismissTerminalTab(tabId);
+      }
     } catch (error) {
       setToast({ tone: "error", message: asMessage(error) });
-      removeTab(tabId, match);
+      if (match?.tab.kind === "browser") removeTab(tabId, match);
+    } finally {
+      closingTerminalIds.current.delete(tabId);
     }
   }
 
-  function removeTab(tabId: string, match: ReturnType<typeof findTabWithSpace>) {
+  function dismissTerminalTab(sessionId: string, localOnly = false) {
+    // Terminal ids are unique. A stale list or a live remote PTY must not reopen a dismissed tab.
+    if (dismissedTerminalIds.current.has(sessionId)) return;
+    dismissedTerminalIds.current.add(sessionId);
+    pendingTerminalOutput.current.delete(sessionId);
+    getBridge().runtime?.detachTerminal?.(sessionId);
+    removeTab(sessionId, findTabWithSpace(spacesRef.current, sessionId), localOnly);
+  }
+
+  function removeTab(tabId: string, match: ReturnType<typeof findTabWithSpace>, localOnly = false) {
     if (match?.tab.kind === "terminal") {
       const termTab = match.tab as TerminalShellTab;
       termTab.disposables.forEach((d) => d.dispose());
       termTab.terminal.dispose();
-      if (termTab.session.agentId) {
+      if (termTab.session.agentId && !localOnly) {
         clearAgentSessionsForTerminal(termTab.session.id);
       }
     }
@@ -2622,6 +2662,8 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                       : undefined;
                     const tabTitle = taskTitle ? formatTaskTabTitle(taskTitle) : nativeTabTitle;
                     const fullTabTitle = taskTitle ?? nativeTabTitle;
+                    const closeLabel = tab.kind === "terminal" && runtime && !runtime.canControl(tabId)
+                      ? "Hide " + fullTabTitle + " on this device" : "Close " + fullTabTitle;
                     const lightState = agentTabLightState(tab, isActiveTab, hookStateByTerminalId);
                     return (
                       <div
@@ -2644,7 +2686,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                           )}
                           <span className="truncate" title={taskTitle}>{tabTitle}{tab.kind === "editor" && tab.content !== tab.savedContent ? " •" : ""}</span>
                         </button>
-                        <button aria-label={`Close ${fullTabTitle}`} className="terminal-tab-close" type="button" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); void closeTab(tabId); }}><CloseGlyph /></button>
+                        <button aria-label={closeLabel} title={closeLabel} className="terminal-tab-close" type="button" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); void closeTab(tabId); }}><CloseGlyph /></button>
                       </div>
                     );
                   })}
@@ -2921,6 +2963,7 @@ function BrowserSurface({
 function XTermSurface({ active, focusRequest, onResize, onCloseSearch, onError, showSearch, tab }: { active: boolean; focusRequest: number; onResize: (cols: number, rows: number) => void; onCloseSearch: () => void; onError: (message: string) => void; showSearch: boolean; tab: TerminalShellTab }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const runtime = getBridge().runtime;
+  const { terminal, session: { id: sessionId } } = tab;
   const attachImage = tab.session.agentId === "codex" ? runtime?.attachClipboardImage : undefined;
   useEffect(() => {
     if (!attachImage) return;
@@ -2953,13 +2996,6 @@ function XTermSurface({ active, focusRequest, onResize, onCloseSearch, onError, 
     });
     return () => term.attachCustomKeyEventHandler(() => true);
   }, [attachImage, onError, tab]);
-  useEffect(() => {
-    if (!runtime) return;
-    const update = () => { tab.terminal.options.disableStdin = !runtime.canControl(tab.session.id); };
-    update();
-    const offControl = runtime.onControl(update), offConnection = runtime.onConnection(update);
-    return () => { offControl(); offConnection(); };
-  }, [runtime, tab]);
   const openedRef = useRef(false);
   const onResizeRef = useRef(onResize);
   const [linkMenu, setLinkMenu] = useState<{ url: string; x: number; y: number } | null>(null);
@@ -2979,6 +3015,14 @@ function XTermSurface({ active, focusRequest, onResize, onCloseSearch, onError, 
     return () => { scrollSub.dispose(); writeSub.dispose(); };
   }, [tab]);
   useEffect(() => { if (!hostRef.current || openedRef.current) return; tab.terminal.open(hostRef.current); openedRef.current = true; }, [tab]);
+  useEffect(() => {
+    if (!runtime || !hostRef.current) return;
+    const observer = bindTerminalObserver(terminal, hostRef.current);
+    const update = () => observer.setReadOnly(!runtime.canControl(sessionId));
+    update();
+    const offControl = runtime.onControl(update), offConnection = runtime.onConnection(update);
+    return () => { offControl(); offConnection(); observer.dispose(); };
+  }, [runtime, terminal, sessionId]);
   useEffect(() => {
     if (!active || !openedRef.current) return;
     const fitAndResize = () => {
@@ -3019,7 +3063,7 @@ function XTermSurface({ active, focusRequest, onResize, onCloseSearch, onError, 
     return () => { document.removeEventListener("mousedown", dismiss); document.removeEventListener("keydown", escape); };
   }, [linkMenu]);
   return (
-    <div aria-hidden={!active} className={cx("xterm-surface", active && "is-active")} ref={hostRef} onPasteCapture={attachImage ? (event) => {
+    <div aria-hidden={!active} className={cx("xterm-surface", active && "is-active")} onPasteCapture={attachImage ? (event) => {
       if (!active || event.target !== tab.terminal.textarea) return;
       const file = Array.from(event.clipboardData.files).find((entry) => entry.type.startsWith("image/"));
       if (!file) return;
@@ -3027,6 +3071,7 @@ function XTermSurface({ active, focusRequest, onResize, onCloseSearch, onError, 
       event.stopPropagation();
       void attachImage(tab.session.id, file).catch((error) => onError(asMessage(error)));
     } : undefined}>
+      <div className="xterm-viewport-host" ref={hostRef} />
       {linkMenu ? (
         <div ref={linkMenuRef} className="terminal-link-context-menu" style={{ top: linkMenu.y, left: linkMenu.x }}>
           <button className="terminal-link-context-menu-item" type="button" onClick={() => { void getBridge().shell?.openExternal?.({ url: linkMenu.url }); setLinkMenu(null); }}>Open in Default Browser</button>
@@ -3042,7 +3087,7 @@ function XTermSurface({ active, focusRequest, onResize, onCloseSearch, onError, 
           className="terminal-scroll-bottom"
           title="Scroll to bottom"
           type="button"
-          onClick={() => { tab.terminal.scrollToBottom(); if (!isUserEditingElsewhere()) tab.terminal.focus(); }}
+          onClick={() => { tab.terminal.scrollToBottom(); if (hostRef.current) hostRef.current.scrollTop = hostRef.current.scrollHeight; if (!isUserEditingElsewhere()) tab.terminal.focus(); }}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </button>
