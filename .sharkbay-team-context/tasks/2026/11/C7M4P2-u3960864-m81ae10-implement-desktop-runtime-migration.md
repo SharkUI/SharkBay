@@ -12,7 +12,7 @@ agent: Codex GPT-6
 sessionId: 01a2082f-7bb5-7830-a7b1-a85c81393c1c
 branch: main
 createdAt: 2026-11-24T09:24:15Z
-updatedAt: 2026-11-24T12:03:12Z
+updatedAt: 2026-11-24T12:10:35Z
 completedAt: 2026-11-24T11:58:56Z
 ---
 
@@ -71,6 +71,7 @@ completedAt: 2026-11-24T11:58:56Z
 
 - 用户请求以独立 SharkBay Review 审计任务完成情况。请将 B9M4K2 的约定逐项与当前工作区改动、签名 QA 产物、升级日志、测试日志比对，标出可核验、中间态及无证据的交付，并给出当前 completed 状态是否合适和下一步。代码包含未提交的新文件，审查需覆盖这些任务相关文件。
 - 已启动独立 Codex 完成审计，Review 运行 ID 为 `review-62266db6-82c7-4f12-9483-27e8c8ca6e0f`。
+- 首轮审查因尝试申请沙箱提权执行签名检查而卡住，已取消重试。审查请仅用只读源码、工作区差异和已有 QA 日志；遇到环境限制记录为验证边界，直接继续报告即可，请勿申请提权、启动 App 或重跑安装流程。主会话已在现有权限下独立复查全部 QA App 严格签名。
 
 ## Verification
 
@@ -86,6 +87,7 @@ completedAt: 2026-11-24T11:58:56Z
 - 改为授权后关闭窗口的签名桥接版通过 0.3.14 → 1.0 原生替换，ShipIt 确认重新启动应用。已加专项断言验证安装获准前不会关闭窗口，关闭动作先于原生移交。
 - 最终签名链退出码 0。0.3.13 → 0.3.14 原位完成，旧 Runtime 和活跃 PTY 保留，浏览器和新 PTY 可用。缓存 1.0 后挂起 Runtime，安装被拦截且版本仍为 0.3.14。恢复服务后原生替换并重启 1.0，原项目配置仍可读。杀死候选进程后 LaunchAgent 重启成功。再执行用户服务 bootout/bootstrap，重新打开 1.0，Desktop 从原 profile 连接，包内没有旧 Runtime。
 - 最后一次 TypeScript 检查和 git diff --check 通过，单元测试 704 项通过。此前同一 Runtime 实现的宿主 51 项、集成 22 项通过。隔离应用退出，QA LaunchAgent 已移除。
+- 审计期间重新执行 `codesign --verify --deep --strict`，0.3.13 QA、0.3.14 QA、1.0 QA 三个 App 全部通过。
 
 ## Notes
 - 生产发布另行放行。桥接包需确认 1.x 更新地址、签名与固定 Runtime 摘要。
