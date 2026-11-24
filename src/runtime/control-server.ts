@@ -3,7 +3,7 @@ import { mkdir, chmod, rm, lstat, realpath } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { ApplicationRuntime } from "./application-runtime.js";
-import { runtimeControlPath, runtimeProtocolVersion } from "./control-client.js";
+import { maxRuntimeResponseBytes, runtimeControlPath, runtimeProtocolVersion } from "./control-client.js";
 import type { createWebServer } from "../server/http-server.js";
 
 export async function createRuntimeControl(runtime: ApplicationRuntime, web: Awaited<ReturnType<typeof createWebServer>>, stop?: () => void) {
@@ -20,10 +20,16 @@ export async function createRuntimeControl(runtime: ApplicationRuntime, web: Awa
     const clientId = `desktop-${randomUUID()}`;
     let attachmentUpload: ReturnType<typeof web.openDesktopAttachmentUpload> | undefined;
     let ready = false, buffer = "";
-    const send = (value: unknown) => {
+    const send = (value: { id: string; ok: boolean; result?: unknown; error?: string } | { kind: "event"; name: string; payload: unknown }) => {
       if (socket.destroyed) return;
-      const data = JSON.stringify(value) + "\n";
-      if (socket.writableLength + Buffer.byteLength(data) > 4 * 1024 * 1024) { socket.destroy(); return; }
+      let data = JSON.stringify(value) + "\n";
+      let size = Buffer.byteLength(data);
+      if (size > maxRuntimeResponseBytes) {
+        if (!("id" in value)) return;
+        data = JSON.stringify({ id: value.id, ok: false, error: "Runtime response is too large" }) + "\n";
+        size = Buffer.byteLength(data);
+      }
+      if (socket.writableLength + size > 2 * maxRuntimeResponseBytes) { socket.destroy(); return; }
       socket.write(data);
     };
     const event = (name: string, payload: unknown) => { if (ready) send({ kind: "event", name, payload }); };

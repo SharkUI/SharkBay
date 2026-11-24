@@ -68,6 +68,27 @@ afterAll(async () => {
   await server?.dispose(); await runtime?.dispose(); await rm(directory, { recursive: true, force: true });
 });
 describe("local Web runtime end to end", () => {
+  it("keeps desktop IPC connected when projects have large task histories", async () => {
+    const desktop = await RuntimeClient.connect(runtime.paths.userDataPath);
+    desktops.push(desktop);
+    const tasksDir = path.join(project, ".sharkbay", "tasks");
+    const taskFile = path.join(tasksDir, "large-history.md");
+    await mkdir(tasksDir, { recursive: true });
+    try {
+      const header = "---\ntaskId: large-history\ntitle: Large history\n---\n";
+      const body = "记录".repeat(1400000);
+      await writeFile(taskFile, header + body);
+      const tasks = await desktop.call("protocol.getTasks", { repoPath: project });
+      expect(tasks[0]?.rawMarkdown.length).toBe(header.length + body.length);
+      await writeFile(taskFile, header + "a".repeat(17 * 1024 * 1024));
+      await expect(desktop.call("protocol.getTasks", { repoPath: project })).rejects.toThrow("Runtime response is too large");
+      await expect(desktop.call("hello", { protocol: 1 })).resolves.toMatchObject({ protocol: 1 });
+    } finally {
+      desktop.dispose();
+      await rm(taskFile, { force: true });
+    }
+  }, 15000);
+
   it("prepares Harness before a managed Agent starts and respects uninstall on both transports", async () => {
     const browser = await connect();
     const desktop = await RuntimeClient.connect(runtime.paths.userDataPath);

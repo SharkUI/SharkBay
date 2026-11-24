@@ -6,6 +6,7 @@ import path from "node:path";
 import { lstat, realpath } from "node:fs/promises";
 
 export const runtimeProtocolVersion = 1;
+export const maxRuntimeResponseBytes = 32 * 1024 * 1024;
 export const defaultRuntimeDataPath = () => path.join(os.homedir(), ".sharkbay", "runtime");
 export function runtimeControlPath(dataPath: string): string {
   const hash = createHash("sha256").update(path.resolve(dataPath)).digest("hex").slice(0, 12);
@@ -16,13 +17,21 @@ export class RuntimeClient extends EventEmitter<{ event: [string, unknown]; disc
   private pending = new Map<string, { resolve: (value: any) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   private constructor(private socket: net.Socket) {
     super();
-    let buffer = "";
+    const parts: string[] = [];
+    let bytes = 0;
     socket.setEncoding("utf8");
-    socket.on("data", (chunk) => {
-      buffer += chunk;
-      if (buffer.length > 4 * 1024 * 1024) { socket.destroy(new Error("Runtime response is too large")); return; }
-      for (let end; (end = buffer.indexOf("\n")) >= 0;) {
-        const line = buffer.slice(0, end); buffer = buffer.slice(end + 1);
+    socket.on("data", (chunk: string) => {
+      for (let start = 0; start < chunk.length;) {
+        const end = chunk.indexOf("\n", start);
+        const part = chunk.slice(start, end < 0 ? chunk.length : end);
+        bytes += Buffer.byteLength(part);
+        if (bytes >= maxRuntimeResponseBytes) { socket.destroy(new Error("Runtime response is too large")); return; }
+        parts.push(part);
+        if (end < 0) break;
+        const line = parts.join("");
+        parts.length = 0;
+        bytes = 0;
+        start = end + 1;
         let message;
         try { message = JSON.parse(line); } catch { socket.destroy(new Error("Invalid runtime response")); return; }
         if (message.kind === "event") { this.emit("event", message.name, message.payload); continue; }
