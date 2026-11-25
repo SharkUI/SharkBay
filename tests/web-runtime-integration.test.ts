@@ -5,6 +5,8 @@ import { mkdtemp, mkdir, realpath, rm, writeFile, symlink, readFile, chmod } fro
 import { networkInterfaces, tmpdir } from "node:os";
 import path from "node:path";
 import http from "node:http";
+import { createConnection } from "node:net";
+import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 import { WebSocket } from "ws";
 import { createWebBridge } from "../src/renderer/bridge/web-bridge.js";
@@ -68,6 +70,44 @@ afterAll(async () => {
   await server?.dispose(); await runtime?.dispose(); await rm(directory, { recursive: true, force: true });
 });
 describe("local Web runtime end to end", () => {
+  it("keeps desktop IPC connected when projects have large task histories", async () => {
+    const desktop = await RuntimeClient.connect(runtime.paths.userDataPath);
+    desktops.push(desktop);
+    const legacy = createConnection(runtimeControlPath(await realpath(runtime.paths.userDataPath)));
+    const legacyReplies = createInterface({ input: legacy })[Symbol.asyncIterator]();
+    async function legacyCall(method: string, input?: unknown) {
+      const id = randomUUID();
+      legacy.write(JSON.stringify({ id, method, input }) + "\n");
+      for (;;) {
+        const line = await legacyReplies.next();
+        if (line.done) throw new Error("Legacy Runtime client disconnected");
+        const response = JSON.parse(line.value);
+        if (response.id === id) return response;
+      }
+    }
+    const tasksDir = path.join(project, ".sharkbay", "tasks");
+    const taskFile = path.join(tasksDir, "large-history.md");
+    await mkdir(tasksDir, { recursive: true });
+    try {
+      const header = "---\ntaskId: large-history\ntitle: Large history\n---\n";
+      const body = "记录".repeat(1400000);
+      await writeFile(taskFile, header + body);
+      const tasks = await desktop.call("protocol.getTasks", { repoPath: project });
+      expect(tasks[0]?.rawMarkdown.length).toBe(header.length + body.length);
+      expect(await legacyCall("hello", { protocol: 1 })).toMatchObject({ ok: true });
+      expect(await legacyCall("protocol.getTasks", { repoPath: project }))
+        .toMatchObject({ ok: false, error: "Runtime response is too large" });
+      expect(await legacyCall("hello", { protocol: 1 })).toMatchObject({ ok: true });
+      await writeFile(taskFile, header + "a".repeat(17 * 1024 * 1024));
+      await expect(desktop.call("protocol.getTasks", { repoPath: project })).rejects.toThrow("Runtime response is too large");
+      await expect(desktop.call("hello", { protocol: 1 })).resolves.toMatchObject({ protocol: 1 });
+    } finally {
+      legacy.destroy();
+      desktop.dispose();
+      await rm(taskFile, { force: true });
+    }
+  }, 15000);
+
   it("prepares Harness before a managed Agent starts and respects uninstall on both transports", async () => {
     const browser = await connect();
     const desktop = await RuntimeClient.connect(runtime.paths.userDataPath);

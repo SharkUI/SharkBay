@@ -3,7 +3,7 @@ import { mkdir, chmod, rm, lstat, realpath } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { ApplicationRuntime } from "./application-runtime.js";
-import { runtimeControlPath, runtimeProtocolVersion, type RuntimeHello } from "./control-client.js";
+import { legacyRuntimeResponseBytes, maxRuntimeResponseBytes, runtimeControlPath, runtimeProtocolVersion, type RuntimeHello } from "./control-client.js";
 import type { createWebServer } from "../server/http-server.js";
 
 export async function createRuntimeControl(
@@ -26,10 +26,17 @@ export async function createRuntimeControl(
     const clientId = `desktop-${randomUUID()}`;
     let attachmentUpload: ReturnType<typeof web.openDesktopAttachmentUpload> | undefined;
     let ready = false, buffer = "";
-    const send = (value: unknown) => {
+    let responseLimit = legacyRuntimeResponseBytes;
+    const send = (value: { id: string; ok: boolean; result?: unknown; error?: string } | { kind: "event"; name: string; payload: unknown }) => {
       if (socket.destroyed) return;
-      const data = JSON.stringify(value) + "\n";
-      if (socket.writableLength + Buffer.byteLength(data) > 4 * 1024 * 1024) { socket.destroy(); return; }
+      let data = JSON.stringify(value) + "\n";
+      let size = Buffer.byteLength(data);
+      if (size > responseLimit) {
+        if (!("id" in value)) return;
+        data = JSON.stringify({ id: value.id, ok: false, error: "Runtime response is too large" }) + "\n";
+        size = Buffer.byteLength(data);
+      }
+      if (socket.writableLength + size > 2 * responseLimit) { socket.destroy(); return; }
       socket.write(data);
     };
     const event = (name: string, payload: unknown) => { if (ready) send({ kind: "event", name, payload }); };
@@ -51,6 +58,7 @@ export async function createRuntimeControl(
             let result: unknown;
             if (request.method === "hello") {
               if (request.input?.protocol !== runtimeProtocolVersion) throw new Error("Incompatible SharkBay runtime protocol; update the client and runtime together.");
+              if (!ready && request.input?.maxResponseBytes === maxRuntimeResponseBytes) responseLimit = maxRuntimeResponseBytes;
               ready = true; result = { protocol: runtimeProtocolVersion, pid: process.pid, origin: web.origin, clientId, runtime: identity };
             } else {
               if (!ready) throw new Error("Runtime handshake required");
