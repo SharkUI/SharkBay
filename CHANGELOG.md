@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.14] — 2026-11-25
+
+### Upgrade Note
+- Prepares existing macOS installations for the standalone Runtime and WebUI. Existing terminals can keep running while the app updates and the Runtime downloads.
+- When prompted, finish active work, restart your Mac, and open SharkBay to complete the migration with your existing projects and settings.
+- After the Runtime migration, SharkBay can offer the 1.0 desktop update when it becomes available.
+
 ## [0.3.13] — 2026-11-20
 
 ### Added

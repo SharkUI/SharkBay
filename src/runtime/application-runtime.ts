@@ -62,6 +62,7 @@ export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] 
   private usage!: TokenUsageDb;
   private collector!: TokenUsageCollector;
   private releaseLock?: () => Promise<void>;
+  private closeStartupEndpoints?: () => Promise<void>;
   private backfillTimer?: ReturnType<typeof setTimeout>;
   private backfill?: Promise<unknown>;
   private readonly backfillCancellation = new AbortController();
@@ -215,13 +216,14 @@ export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] 
     };
   }
 
-  async start(prepare?: () => Promise<void>): Promise<void> {
+  async start(prepare?: () => Promise<void>, beforeActivate?: () => Promise<() => Promise<void>>): Promise<void> {
     const startup = createStartupTimer("runtime");
     if (this.started || this.disposal) throw new Error("Runtime can only be started once");
     this.releaseLock = await acquireProfileLock(this.paths);
     startup("profile-lock-acquired");
     try {
       await prepare?.();
+      this.closeStartupEndpoints = await beforeActivate?.();
       const config = await loadRuntimeConfig(this.paths);
       startup("config-loaded");
       await this.core.applyDisabledPlugins(config.disabledPluginIds);
@@ -360,7 +362,7 @@ export class ApplicationRuntime extends EventEmitter<{ event: [string, unknown] 
         () => this.core.stopJobs(), () => this.core.cancelAllCodeGraphJobs(), () => Promise.allSettled([...this.pending]),
         () => this.tasks.stop(), () => this.telegram?.dispose(), () => this.agents?.stop(), () => this.backfill,
         () => this.collector?.dispose(), () => this.core.dispose(), () => this.terminals.dispose(),
-        () => this.usage?.close(), () => this.releaseLock?.(),
+        () => this.usage?.close(), () => this.closeStartupEndpoints?.(), () => this.releaseLock?.(),
       ]) { try { await cleanup(); } catch (error) { errors.push(error); } }
       if (errors.length) throw new AggregateError(errors, "Runtime cleanup failed");
     })();
