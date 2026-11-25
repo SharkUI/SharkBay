@@ -67,7 +67,7 @@ beforeEach(async () => {
   mocks.ensureRuntime.mockReset().mockResolvedValue({ call: async () => ({ appearanceTheme: "day" }) });
   mocks.startup.mockClear();
   mocks.app = Object.assign(new EventEmitter(), {
-    isPackaged: true, setName: vi.fn(), setPath: vi.fn(), requestSingleInstanceLock: () => true, whenReady: () => Promise.resolve(),
+    isPackaged: true, getName: () => "sharkbay", setName: vi.fn(), setPath: vi.fn(), requestSingleInstanceLock: () => true, whenReady: () => Promise.resolve(),
     getPath: () => "/tmp/sharkbay-update-test", getLocale: () => "en", getAppPath: () => "/app",
     quit: vi.fn(), dock: { setBadge: vi.fn() },
   });

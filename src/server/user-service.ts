@@ -1,18 +1,25 @@
 import { spawnSync } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { homedir, tmpdir, userInfo } from "node:os";
+import { homedir, userInfo } from "node:os";
 import { dirname, join } from "node:path";
 import { setTimeout } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { RuntimeClient, defaultRuntimeDataPath, runtimeProtocolVersion } from "../runtime/control-client.js";
+import { changeRegisteredMacRuntimeService, macRuntimeServiceLabel as label, macRuntimeServicePlist, runtimeServiceEnvironment } from "../runtime/mac-runtime-service.js";
 
 const unit = "sharkbay-runtime.service";
-const label = "xyz.sharkbay.runtime";
-
 export async function changeUserService(action: "enable" | "disable", lan: boolean): Promise<void> {
   const mac = process.platform === "darwin";
   if (!mac && process.platform !== "linux") throw new Error("SharkBay background services are supported on macOS and Linux.");
 
+  if (mac) {
+    const savedProfile = await changeRegisteredMacRuntimeService(label, action, lan);
+    if (action === "disable") {
+      console.log("SharkBay background service disabled.");
+      return;
+    }
+    if (savedProfile) return waitForService(savedProfile);
+  }
   const profile = defaultRuntimeDataPath();
   const file = mac
     ? join(homedir(), "Library", "LaunchAgents", `${label}.plist`)
@@ -27,13 +34,11 @@ export async function changeUserService(action: "enable" | "disable", lan: boole
   });
 
   if (action === "disable") {
-    if (mac) {
-      if (run(name, registeredArgs, true)) run(name, ["bootout", target]);
-    } else if (current) {
+    if (current) {
       run(name, ["--user", "disable", "--now", unit]);
     }
     await rm(file, { force: true });
-    if (!mac && current) run(name, ["--user", "daemon-reload"]);
+    if (current) run(name, ["--user", "daemon-reload"]);
     console.log("SharkBay background service disabled.");
     return;
   }
@@ -42,13 +47,9 @@ export async function changeUserService(action: "enable" | "disable", lan: boole
   if (!/^\d+$/.test(port) || Number(port) > 65535) throw new Error("Invalid SHARKBAY_RUNTIME_PORT");
   const args = [process.execPath, fileURLToPath(new URL("./cli.js", import.meta.url)),
     "serve", "--background", "--data-dir", profile, "--port", port, ...(lan ? ["--lan"] : [])];
-  const env = {
-    PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
-    SHELL: process.env.SHELL || userInfo().shell || "/bin/sh",
-    TMPDIR: tmpdir(),
-  };
+  const env = runtimeServiceEnvironment();
   const log = join(profile, "runtime.log");
-  const content = mac ? launchAgent(args, env, log) : systemdUnit(args, env);
+  const content = mac ? macRuntimeServicePlist(label, args, env, log) : systemdUnit(args, env);
   if (current && current !== content) {
     throw new Error("SharkBay already has a different service configuration. Run sharkbay service disable before enabling it again.");
   }
@@ -72,11 +73,16 @@ export async function changeUserService(action: "enable" | "disable", lan: boole
   }
   if (!current) await writeFile(file, content, { flag: "wx", mode: 0o600 });
   if (mac) {
+    run(name, ["enable", target]);
     run(name, ["bootstrap", domain, file]);
   } else {
     run(name, ["--user", "daemon-reload"]);
     run(name, ["--user", "enable", "--now", unit]);
   }
+  await waitForService(profile);
+}
+
+async function waitForService(profile: string) {
   const deadline = Date.now() + 10000;
   while (Date.now() < deadline) {
     const client = await RuntimeClient.connect(profile).catch((error: NodeJS.ErrnoException) => {
@@ -92,7 +98,7 @@ export async function changeUserService(action: "enable" | "disable", lan: boole
     }
     await setTimeout(100);
   }
-  throw new Error(`SharkBay service is installed, but the runtime did not start. Check ${mac ? log : `journalctl --user -u ${unit}`}.`);
+  throw new Error(`SharkBay service is installed, but the runtime did not start. Check ${process.platform === "darwin" ? join(profile, "runtime.log") : `journalctl --user -u ${unit}`}.`);
 }
 
 function run(command: string, args: string[], quiet = false): boolean {
@@ -101,22 +107,6 @@ function run(command: string, args: string[], quiet = false): boolean {
   if (result.status === 0) return true;
   if (quiet) return false;
   throw new Error(`${command} ${args.join(" ")} failed: ${result.stderr.trim() || result.stdout.trim() || result.signal || result.status}`);
-}
-
-function launchAgent(args: string[], env: Record<string, string>, log: string): string {
-  const xml = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>${label}</string>
-  <key>ProgramArguments</key><array>${args.map((arg) => `<string>${xml(arg)}</string>`).join("")}</array>
-  <key>EnvironmentVariables</key><dict>${Object.entries(env).map(([key, value]) => `<key>${key}</key><string>${xml(value)}</string>`).join("")}</dict>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
-  <key>StandardOutPath</key><string>${xml(log)}</string>
-  <key>StandardErrorPath</key><string>${xml(log)}</string>
-</dict></plist>
-`;
 }
 
 function systemdUnit(args: string[], env: Record<string, string>): string {

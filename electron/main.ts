@@ -31,7 +31,7 @@ const startup = createStartupTimer("desktop", (line) => {
   void startupLogDirectory.then(() => appendFile(join(directory, "startup.log"), `${line}\n`)).catch(() => {});
 });
 
-app.setName("SharkBay");
+if (!app.isPackaged || app.getName() === "sharkbay") app.setName("SharkBay");
 if (process.env.SHARKBAY_ELECTRON_DATA_DIR) app.setPath("userData", process.env.SHARKBAY_ELECTRON_DATA_DIR);
 const ownsWindow = app.requestSingleInstanceLock();
 if (!ownsWindow) app.quit();
@@ -422,6 +422,7 @@ if (ownsWindow) app.whenReady().then(async () => {
   islandEnabled = config.islandEnabled !== false;
 
   await registerIpcHandlers(runtime, {
+    reconnectRuntime: app.isPackaged ? () => ensureRuntime() : undefined,
     onIslandEnabledChanged: setIslandEnabled,
     onAppearanceThemeChanged: setAppearanceTheme,
     onStatusChangeNotificationsChanged: (preferences) => {
@@ -528,7 +529,7 @@ app.on("before-quit", (event) => {
   void Promise.race([cleanupDone, cleanupTimeout]).finally(() => {
     cleanupComplete = true;
     if (installUpdateOnQuit && appUpdates?.getState().status === "ready") {
-      appUpdates.install();
+      void appUpdates.install();
     } else {
       app.quit();
     }

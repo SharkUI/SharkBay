@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import ts from "typescript";
@@ -21,6 +21,13 @@ async function crashedPid() {
   await once(child, "spawn");
   const exited = once(child, "exit"); child.kill("SIGKILL"); await exited;
   return child.pid!;
+}
+async function writeLockModule(directory: string) {
+  const source = await readFile(new URL("../src/runtime/profile-lock.ts", import.meta.url), "utf8");
+  await symlink(path.resolve("node_modules"), path.join(directory, "node_modules"), "dir");
+  await writeFile(path.join(directory, "lock.mjs"), ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  }).outputText);
 }
 
 describe("runtime lock recovery without starting the application", () => {
@@ -47,8 +54,7 @@ describe("runtime lock recovery without starting the application", () => {
     const { paths, files } = await fixture();
     const directory = path.dirname(paths.configPath);
     await writeFile(files[0]!, JSON.stringify({ token: "crashed", pid: await crashedPid() }));
-    const source = await readFile(new URL("../src/runtime/profile-lock.ts", import.meta.url), "utf8");
-    await writeFile(path.join(directory, "lock.mjs"), ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText);
+    await writeLockModule(directory);
     const worker = path.join(directory, "worker.mjs");
     await writeFile(worker, `import { acquireProfileLock } from './lock.mjs';
       try {
@@ -67,6 +73,57 @@ describe("runtime lock recovery without starting the application", () => {
       await Promise.all(exits);
       await expect(readFile(files[0]!)).rejects.toMatchObject({ code: "ENOENT" });
     } finally { for (const child of children) if (child.exitCode === null) child.kill("SIGKILL"); }
+  });
+
+  it.each(["creation", "recovery"])("recovers after SIGKILL during lock %s", async (phase) => {
+    const { paths } = await fixture();
+    const directory = path.dirname(paths.configPath);
+    const file = path.join(await realpath(paths.userDataPath), "runtime.lock");
+    if (phase === "recovery") await writeFile(file, JSON.stringify({ pid: await crashedPid(), token: "stale" }));
+    await writeLockModule(directory);
+    const worker = path.join(directory, "interrupt.mjs");
+    const method = phase === "creation" ? "link" : "unlink";
+    const argument = phase === "creation" ? 1 : 0;
+    await writeFile(worker, `
+      import fs from 'node:fs/promises';
+      import { syncBuiltinESMExports } from 'node:module';
+      const original = fs.${method};
+      fs.${method} = async (...args) => {
+        if (args[${argument}] === ${JSON.stringify(file)}) {
+          process.stdout.write('paused\\n');
+          await new Promise(resolve => setTimeout(resolve, 60_000));
+        }
+        return original(...args);
+      };
+      syncBuiltinESMExports();
+      const { acquireProfileLock } = await import('./lock.mjs');
+      await acquireProfileLock(${JSON.stringify(paths)});
+    `);
+    const child = spawn(process.execPath, [worker], { stdio: ["ignore", "pipe", "inherit"] });
+    try {
+      const paused = await Promise.race([once(child.stdout!, "data"), once(child, "exit")]);
+      expect(String(paused[0]).trim()).toBe("paused");
+      if (phase === "creation") await expect(readFile(file)).rejects.toMatchObject({ code: "ENOENT" });
+      else await expect(acquireProfileLock(paths)).rejects.toThrow(/already held|unverified/i);
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) {
+        const exited = once(child, "exit");
+        child.kill("SIGKILL");
+        await exited;
+      }
+    }
+    const release = await acquireProfileLock(paths);
+    try {
+      expect(JSON.parse(await readFile(file, "utf8")).pid).toBe(process.pid);
+      await expect(acquireProfileLock(paths)).rejects.toThrow(/already held|unverified/i);
+    } finally { await release(); }
+  });
+
+  it("never removes an ownerless recovery directory left by a legacy Runtime", async () => {
+    const { paths, files } = await fixture();
+    await writeFile(files[0]!, JSON.stringify({ token: "stale", pid: await crashedPid() }));
+    await mkdir(`${files[0]}.recovery`);
+    await expect(acquireProfileLock(paths)).rejects.toThrow(/already held|unverified/i);
   });
 
   it("keeps live, malformed and permission-denied owners locked", async () => {

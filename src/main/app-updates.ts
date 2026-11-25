@@ -11,14 +11,16 @@ export class AppUpdates {
   private checking = false;
   private manual = false;
   private timer: ReturnType<typeof setInterval> | null = null;
+  private authorizingInstall = false;
 
   constructor(
     private readonly updater: UpdateClient,
     private readonly enabled: boolean,
     private readonly onChanged: (state: AppUpdateState) => void,
+    private readonly canUpdate?: () => Promise<boolean>,
   ) {
     updater.autoDownload = true;
-    updater.autoInstallOnAppQuit = true;
+    updater.autoInstallOnAppQuit = !canUpdate;
     updater.allowPrerelease = false;
     updater.allowDowngrade = false;
     if (!enabled) return;
@@ -71,8 +73,12 @@ export class AppUpdates {
 
     this.checking = true;
     this.manual = manual;
-    this.setState({ status: "checking", manual });
     try {
+      if (this.canUpdate && !await this.canUpdate()) {
+        if (manual) this.setState({ status: "error", manual, message: "The desktop update will be available after the Runtime switches to the background service." });
+        return this.state;
+      }
+      this.setState({ status: "checking", manual });
       const result = await this.updater.checkForUpdates();
       await result?.downloadPromise;
     } catch (error) {
@@ -83,14 +89,21 @@ export class AppUpdates {
     return this.state;
   }
 
-  install(): void {
-    if (this.state.status !== "ready") return;
-    this.setState({ status: "installing", version: this.state.version });
+  async install(beforeHandoff?: () => void): Promise<void> {
+    if (this.state.status !== "ready" || this.authorizingInstall) return;
     try {
+      this.authorizingInstall = true;
+      if (this.canUpdate && !await this.canUpdate()) {
+        this.setState({ status: "error", manual: true, message: "The Runtime service is unavailable. Restart SharkBay or try again after the service reconnects." });
+        return;
+      }
+      if (this.state.status !== "ready") return;
+      this.setState({ status: "installing", version: this.state.version });
+      beforeHandoff?.();
       this.updater.quitAndInstall();
     } catch (error) {
       this.reportError(error);
-    }
+    } finally { this.authorizingInstall = false; }
   }
 
   private reportError(error: unknown): void {

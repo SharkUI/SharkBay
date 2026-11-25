@@ -16,30 +16,49 @@
   <img src="docs/screenshot.png" width="720" alt="SharkBay screenshot">
 </p>
 
-## Install SharkBay Runtime + WebUI
+## Install SharkBay
 
-The independent npm package is designed for macOS and Linux on x64 or arm64 with Node.js 22.12+ in the 22.x series. Once published, install it with:
+### macOS desktop
+
+Download [SharkBay 0.3.14](https://github.com/SharkUI/SharkBay/releases/tag/v0.3.14)
+for macOS 13 Ventura or later on Apple Silicon (arm64). You can also install
+the app with Homebrew:
+
+```bash
+brew install --cask SharkUI/tap/sharkbay
+```
+
+### Upgrade from 0.3.13 or earlier
+
+Install and open [0.3.14](https://github.com/SharkUI/SharkBay/releases/tag/v0.3.14)
+first. Your terminals can keep running while the update installs and the new
+Runtime downloads in the background. When SharkBay says the Runtime is ready,
+finish active work, restart your Mac, and open SharkBay again. Your projects
+and settings carry over. The Runtime includes its own Node.js.
+
+After the migration, SharkBay can offer the 1.0 desktop update when it becomes
+available. Keep the 0.3.14 download link for a manual upgrade if an older app
+no longer offers it automatically.
+
+### Standalone Runtime + WebUI
+
+The standalone npm package is designed for macOS and Linux on x64 or arm64
+with Node.js 22.12+ in the 22.x series. Until it is available on npm, follow the
+[Runtime packaging instructions](docs/release.md#runtime-and-webui) to install
+it from a local tarball. Once published, install and start it with:
 
 ```bash
 npm install -g @sharkbay/runtime
 sharkbay serve
 ```
 
-Open `http://127.0.0.1:17777/`. Use `sharkbay service enable` to run it in the background and start it at login, or `sharkbay service disable` to stop and unregister it. Use `--lan` with `serve` or `service enable` to make the workbench available on a trusted local network. Reachable devices on that network can operate host projects and terminals.
+Open `http://127.0.0.1:17777/`. Use `sharkbay service enable` to run it in the
+background and start it at login, or `sharkbay service disable` to stop it and
+disable login startup. Use `--lan` with `serve` or `service enable` to make the
+workbench available on a trusted local network. Reachable devices on that
+network can operate host projects and terminals.
 
-### Optional macOS desktop app
-
-```bash
-brew install --cask SharkUI/tap/sharkbay
-```
-
-macOS 13 Ventura or later on Apple Silicon (arm64).
-
-Or download the signed and notarized app from [GitHub Releases](https://github.com/SharkUI/SharkBay/releases/latest). The published v0.3.13 desktop app includes its Runtime. Desktop builds from this source connect to the separately started Runtime.
-
-### New in 0.3.13
-
-Attach or paste images and files in the Codex prompt bar on desktop or in the WebUI. Submit multiline prompts with one Enter press, hide the Island from desktop settings, and switch projects without retaining the previous Tasks view. Finish active work and stop the previous shared runtime before upgrading. See the [changelog](CHANGELOG.md#0313--2026-11-20).
+See the [changelog](CHANGELOG.md#0314--2026-11-25) for release details.
 
 ## Features
 

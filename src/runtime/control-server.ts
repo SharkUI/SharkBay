@@ -3,10 +3,16 @@ import { mkdir, chmod, rm, lstat, realpath } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { ApplicationRuntime } from "./application-runtime.js";
-import { maxRuntimeResponseBytes, runtimeControlPath, runtimeProtocolVersion } from "./control-client.js";
+import { legacyRuntimeResponseBytes, maxRuntimeResponseBytes, runtimeControlPath, runtimeProtocolVersion, type RuntimeHello } from "./control-client.js";
 import type { createWebServer } from "../server/http-server.js";
 
-export async function createRuntimeControl(runtime: ApplicationRuntime, web: Awaited<ReturnType<typeof createWebServer>>, stop?: () => void) {
+export async function createRuntimeControl(
+  runtime: ApplicationRuntime,
+  web: Awaited<ReturnType<typeof createWebServer>>,
+  stop?: () => void,
+  isReady: () => boolean = () => true,
+  identity?: RuntimeHello["runtime"],
+) {
   const socketPath = runtimeControlPath(await realpath(runtime.paths.userDataPath));
   await mkdir(path.dirname(socketPath), { recursive: true, mode: 0o700 });
   const directory = await lstat(path.dirname(socketPath));
@@ -20,16 +26,17 @@ export async function createRuntimeControl(runtime: ApplicationRuntime, web: Awa
     const clientId = `desktop-${randomUUID()}`;
     let attachmentUpload: ReturnType<typeof web.openDesktopAttachmentUpload> | undefined;
     let ready = false, buffer = "";
+    let responseLimit = legacyRuntimeResponseBytes;
     const send = (value: { id: string; ok: boolean; result?: unknown; error?: string } | { kind: "event"; name: string; payload: unknown }) => {
       if (socket.destroyed) return;
       let data = JSON.stringify(value) + "\n";
       let size = Buffer.byteLength(data);
-      if (size > maxRuntimeResponseBytes) {
+      if (size > responseLimit) {
         if (!("id" in value)) return;
         data = JSON.stringify({ id: value.id, ok: false, error: "Runtime response is too large" }) + "\n";
         size = Buffer.byteLength(data);
       }
-      if (socket.writableLength + size > 2 * maxRuntimeResponseBytes) { socket.destroy(); return; }
+      if (socket.writableLength + size > 2 * responseLimit) { socket.destroy(); return; }
       socket.write(data);
     };
     const event = (name: string, payload: unknown) => { if (ready) send({ kind: "event", name, payload }); };
@@ -47,10 +54,12 @@ export async function createRuntimeControl(runtime: ApplicationRuntime, web: Awa
           try { request = JSON.parse(line); } catch { socket.destroy(); return; }
           if (typeof request.id !== "string" || typeof request.method !== "string") { socket.destroy(); return; }
           try {
+            if (!isReady()) throw new Error("Runtime migration is in progress");
             let result: unknown;
             if (request.method === "hello") {
               if (request.input?.protocol !== runtimeProtocolVersion) throw new Error("Incompatible SharkBay runtime protocol; update the client and runtime together.");
-              ready = true; result = { protocol: runtimeProtocolVersion, pid: process.pid, origin: web.origin, clientId };
+              if (!ready && request.input?.maxResponseBytes === maxRuntimeResponseBytes) responseLimit = maxRuntimeResponseBytes;
+              ready = true; result = { protocol: runtimeProtocolVersion, pid: process.pid, origin: web.origin, clientId, runtime: identity };
             } else {
               if (!ready) throw new Error("Runtime handshake required");
               if (request.method === "connect") result = web.connectionUrl();
@@ -75,6 +84,7 @@ export async function createRuntimeControl(runtime: ApplicationRuntime, web: Awa
     });
   });
   await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(socketPath, resolve); });
-  await chmod(socketPath, 0o600);
+  try { await chmod(socketPath, 0o600); }
+  catch (error) { await new Promise<void>((resolve) => server.close(() => resolve())); throw error; }
   return { async dispose() { for (const socket of clients) socket.destroy(); await new Promise<void>((resolve) => server.close(() => resolve())); await rm(socketPath, { force: true }); } };
 }
