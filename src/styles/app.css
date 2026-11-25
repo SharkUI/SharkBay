@@ -5075,6 +5075,8 @@ button.project-file-toggle:focus-visible {
 
 .xterm-surface .xterm {
   height: calc(100% - 8px);
+  /* Keep xterm's repeated-glyph measurement consistent with rendered rows. */
+  text-spacing-trim: space-all;
 }
 
 .xterm-surface .xterm-scrollable-element {

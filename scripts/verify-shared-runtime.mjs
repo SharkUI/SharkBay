@@ -85,6 +85,23 @@ try {
   assert.equal(browserTerminal.pid, terminal.session.pid);
   assert.equal(await browserCdp.evaluate(`window.sharkBay.runtime.canControl(${JSON.stringify(terminal.session.id)})`), false);
   const sessionId = JSON.stringify(terminal.session.id);
+  const terminalCols = async () => (await client.call("terminal.list")).find(({ session }) => session.id === terminal.session.id)?.session.cols;
+  async function verifyCjkRightEdge(controller, label) {
+    const cols = await until(terminalCols, `${label} terminal column count`);
+    const chars = Math.floor(cols / 2);
+    const row = (cols % 2 ? "." : "") + "你好，世界。".repeat(chars).slice(0, chars - 1) + "末";
+    const command = `printf '\\033[2J\\033[H%s\\r\\n' '${row}'\r`;
+    await controller.evaluate(`window.sharkBay.terminal.input({sessionId:${sessionId},data:${JSON.stringify(command)}})`);
+    const overflow = await until(() => controller.evaluate(`(() => {
+      const screen = document.querySelector(".xterm-surface.is-active .xterm-screen");
+      const row = Array.from(screen.querySelectorAll(".xterm-rows > div")).find(row => row.textContent.trimEnd() === ${JSON.stringify(row)});
+      if (!row) return;
+      return { pixels: row.lastElementChild.getBoundingClientRect().right - screen.getBoundingClientRect().right };
+    })()`), `${label} renders an entire row of Chinese text`);
+    assert.ok(overflow.pixels <= 2, `${label} clips Chinese at the right edge by ${overflow.pixels}px`);
+    console.log(`UI_CHECK ${label} renders Chinese punctuation and the last full-width character within the grid`);
+  }
+  await verifyCjkRightEdge(desktopCdp, "Electron");
   const observerViewport = ".xterm-surface.is-active .xterm-viewport-host.is-observer";
   const rows = await until(() => browserCdp.evaluate(`(() => {
     const view = document.querySelector("${observerViewport}");
@@ -172,6 +189,13 @@ try {
   await until(() => browserCdp.evaluate(`!!document.querySelector(".xterm.enable-mouse-events")`), "takeover restores application mouse tracking");
   await browserCdp.evaluate(`window.sharkBay.terminal.input({ sessionId: ${JSON.stringify(terminal.session.id)}, data: "echo SHARED_RUNTIME_UI_OK\\r" })`);
   await new Promise((resolve) => setTimeout(resolve, 500));
+  const wideCols = await terminalCols();
+  await browserCdp.send("Emulation.setDeviceMetricsOverride", { width: 700, height: 500, deviceScaleFactor: 1, mobile: false });
+  await until(async () => (await terminalCols()) < wideCols, "Chrome narrows the PTY");
+  await verifyCjkRightEdge(browserCdp, "Chrome after narrowing the viewport");
+  await browserCdp.send("Emulation.clearDeviceMetricsOverride");
+  await until(async () => (await terminalCols()) === wideCols, "Chrome restores the original PTY width");
+  await verifyCjkRightEdge(browserCdp, "Chrome");
   const socketPrototype = await browserCdp.send("Runtime.evaluate", { expression: "WebSocket.prototype" });
   const sockets = await browserCdp.send("Runtime.queryObjects", { prototypeObjectId: socketPrototype.result.objectId });
   const disconnected = await browserCdp.send("Runtime.callFunctionOn", {
