@@ -4761,6 +4761,15 @@ button.project-file-toggle:focus-visible {
   display: block;
 }
 
+.xterm-viewport-host {
+  height: 100%;
+}
+
+.xterm-viewport-host.is-observer {
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
 .terminal-link-context-menu {
   position: fixed;
   z-index: 50;
@@ -6841,6 +6850,9 @@ body.is-resizing-columns .app-shell[data-theme="morning"] .column-resizer::befor
 
   .is-web .xterm-surface {
     bottom: 0;
+  }
+
+  .is-web .xterm-viewport-host {
     overflow-x: auto;
   }
 

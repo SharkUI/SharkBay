@@ -50,7 +50,7 @@ try {
   client = await until(async () => { try { return await RuntimeClient.connect(data); } catch { return null; } }, "Node runtime");
   const hello = await client.call("hello", { protocol: 1 }); assert.equal(hello.pid, backend.pid);
   const reused = execFileSync(process.execPath, ["dist-runtime/src/server/main.js", "--data-dir", data, "--config", config], { env, encoding: "utf8", timeout: 5000 });
-  assert.ok(reused.includes("Existing SharkBay runtime:"));
+  assert.ok(reused.includes("Existing SharkBay WebUI:"));
   console.log("UI_CHECK runtime ready");
   await mkdir(path.join(directory, "electron"));
   const electron = createRequire(import.meta.url)("electron");
@@ -63,7 +63,7 @@ try {
   await until(() => desktopCdp.evaluate(`Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Terminal' && !button.disabled)`), "desktop workbench");
   const link = await client.call("connect");
   const chrome = process.env.SHARKBAY_TEST_CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-  browser = launch(chrome, ["--headless=new", "--no-first-run", "--no-default-browser-check", "--remote-debugging-port=0", `--user-data-dir=${path.join(directory, "chrome")}`, "--window-size=1500,900", link]);
+  browser = launch(chrome, ["--headless=new", "--no-first-run", "--no-default-browser-check", "--remote-debugging-port=0", `--user-data-dir=${path.join(directory, "chrome")}`, "--window-size=1500,500", link]);
   console.log("UI_CHECK Chrome launched");
   browserCdp = await page(browser, (url) => url.startsWith(hello.origin));
   await until(() => browserCdp.evaluate(`!!document.querySelector('.project-row')`), "browser project list");
@@ -84,11 +84,113 @@ try {
   const browserTerminal = await browserCdp.evaluate(`window.sharkBay.runtime.listTerminals().then(rows => rows[0].session)`);
   assert.equal(browserTerminal.pid, terminal.session.pid);
   assert.equal(await browserCdp.evaluate(`window.sharkBay.runtime.canControl(${JSON.stringify(terminal.session.id)})`), false);
+  const sessionId = JSON.stringify(terminal.session.id);
+  const observerViewport = ".xterm-surface.is-active .xterm-viewport-host.is-observer";
+  const rows = await until(() => browserCdp.evaluate(`(() => {
+    const view = document.querySelector("${observerViewport}");
+    return view?.scrollHeight > view?.clientHeight + 40 && view.querySelector(".xterm-rows").childElementCount;
+  })()`), "desktop grid taller than observer");
+  const fixtureCommand = `stty -echo; printf '\\033[?1049h\\033[?1003h\\033[?1006h\\033[2J\\033[1;1HOBSERVER_SELECTION\\033[${rows - 2};1HOBSERVER_LAST_ROW\\033[2;1H'; read -r fixture; printf '\\033[?1049l'; for i in $(seq 1 ${rows + 10}); do printf 'OBSERVER_HISTORY_%s\\n' "$i"; done; read -r fixture; stty echo\r`;
+  await desktopCdp.evaluate(`window.sharkBay.terminal.input({sessionId:${sessionId},data:${JSON.stringify(fixtureCommand)}})`);
+  const display = await until(() => browserCdp.evaluate(`(() => {
+    const view = document.querySelector("${observerViewport}");
+    if (!view || !Array.from(view.querySelectorAll(".xterm-rows > div")).some(row => row.textContent.trim() === "OBSERVER_LAST_ROW")) return;
+    const bounds = view.getBoundingClientRect();
+    const first = view.querySelector(".xterm-rows").firstElementChild.getBoundingClientRect();
+    return {x: first.left + 2, y: first.top + first.height / 2, wheelY: bounds.top + 80};
+  })()`), "complete observer grid");
+  const wheel = (deltaY) => browserCdp.send("Input.dispatchMouseEvent", {type:"mouseWheel", x:display.x, y:display.wheelY, deltaX:0, deltaY});
+  await wheel(1800);
+  await until(() => browserCdp.evaluate(`(() => {
+    const view = document.querySelector("${observerViewport}");
+    const last = Array.from(view.querySelectorAll(".xterm-rows > div")).find(row => row.textContent.trim() === "OBSERVER_LAST_ROW")?.getBoundingClientRect();
+    const bounds = view.getBoundingClientRect();
+    return last && last.top >= bounds.top && last.bottom <= bounds.bottom;
+  })()`), "wheel reveals last row");
+  await wheel(-1800);
+  await until(() => browserCdp.evaluate(`document.querySelector("${observerViewport}").scrollTop === 0`), "wheel returns to top");
+  const mouse = (type, x, buttons) => browserCdp.send("Input.dispatchMouseEvent", {type, x, y:display.y, button:type === "mouseMoved" ? "none" : "left", buttons, clickCount:1});
+  await mouse("mousePressed", display.x, 1);
+  await mouse("mouseMoved", display.x + 150, 1);
+  await mouse("mouseReleased", display.x + 150, 0);
+  const copied = await browserCdp.evaluate(`(() => {
+    const data = new DataTransfer();
+    document.querySelector("${observerViewport} .xterm").dispatchEvent(new ClipboardEvent("copy", {clipboardData:data,bubbles:true,cancelable:true}));
+    return data.getData("text/plain");
+  })()`);
+  assert.match(copied, /OBSERVER_SELECTION/);
+  assert.equal(await desktopCdp.evaluate(`!!document.querySelector(".xterm.enable-mouse-events")`), true);
+  let mouseEncodingReplayed = false;
+  const inspectSnapshot = (name, frame) => {
+    if (name === "terminal:data" && frame.sessionId === terminal.session.id && frame.reset) {
+      mouseEncodingReplayed ||= frame.data.includes("\x1b[?1006h");
+    }
+  };
+  client.on("event", inspectSnapshot);
+  await client.call("terminal.attach", {sessionId:terminal.session.id});
+  client.off("event", inspectSnapshot);
+  assert.equal(mouseEncodingReplayed, true);
+  await desktopCdp.evaluate(`window.sharkBay.terminal.input({sessionId:${sessionId},data:"\\r"})`);
+  const hasRow = (text) => `Array.from(document.querySelectorAll(".xterm-surface.is-active .xterm-rows > div")).some(row => row.textContent.trim() === ${JSON.stringify(text)})`;
+  await until(() => browserCdp.evaluate(hasRow(`OBSERVER_HISTORY_${rows + 10}`)), "observer receives terminal history");
+  await wheel(-1800);
+  await until(() => browserCdp.evaluate(hasRow("OBSERVER_HISTORY_1")), "observer wheel scrolls into history");
+  assert.equal(await desktopCdp.evaluate(hasRow("OBSERVER_HISTORY_1")), false);
+  console.log("UI_CHECK observer reaches the last row, scrolls history independently, and copies a drag selection");
+  const fixtureInput = JSON.stringify({cwdUri:`local:${project}`});
+  const newTerminal = (cdp) => cdp.evaluate(`window.sharkBay.terminal.create(${fixtureInput})`);
+  const dismissed = [await newTerminal(desktopCdp), await newTerminal(desktopCdp)];
+  const tabButtons = 'document.querySelectorAll(".terminal-tab-close")';
+  const tabCount = (cdp) => cdp.evaluate(`${tabButtons}.length`);
+  await until(async () => await tabCount(browserCdp) === 3, "observer has both fixtures");
+  await browserCdp.evaluate(`${tabButtons}[2].click()`);
+  await until(async () => await tabCount(browserCdp) === 2, "observer closes first fixture");
+  await browserCdp.evaluate(`${tabButtons}[1].click()`);
+  await until(async () => await tabCount(browserCdp) === 1, "observer closes second fixture");
+  const fresh = await newTerminal(browserCdp);
+  await until(async () => await tabCount(browserCdp) >= 2, "new tab reconciled");
+  assert.equal(await tabCount(browserCdp), 2);
+  const live = await client.call("terminal.list");
+  assert.ok(dismissed.every(session => live.some(entry => entry.session.id === session.id && entry.session.pid === session.pid)));
+  await until(async () => await tabCount(desktopCdp) === 4, "desktop has all four tabs");
+  for (const remaining of [3, 2]) {
+    await desktopCdp.evaluate(`${tabButtons}[1].click()`);
+    await until(async () => await tabCount(desktopCdp) === remaining, "controller closes fixture");
+  }
+  const freshDesktop = await newTerminal(desktopCdp);
+  await until(async () => await tabCount(desktopCdp) >= 3, "new desktop tab reconciled");
+  assert.equal(await tabCount(desktopCdp), 3);
+  assert.ok((await client.call("terminal.list")).every(entry => !dismissed.some(session => entry.session.id === session.id)));
+  await browserCdp.evaluate(`window.sharkBay.terminal.close({sessionId:${JSON.stringify(fresh.id)}})`);
+  await desktopCdp.evaluate(`window.sharkBay.terminal.close({sessionId:${JSON.stringify(freshDesktop.id)}})`);
+  await until(async () => (await client.call("terminal.list")).length === 1, "fixture tabs closed by their controllers");
+  await until(async () => await tabCount(browserCdp) === 1, "observer returns to one tab");
+  console.log("UI_CHECK two hidden observer tabs and two controller-closed tabs stay gone after opening new tabs");
   await browserCdp.evaluate(`document.querySelector('[aria-label="接管终端"]').click()`);
   await until(() => browserCdp.evaluate(`window.sharkBay.runtime.canControl(${JSON.stringify(terminal.session.id)})`), "browser takes control");
   await until(async () => !(await desktopCdp.evaluate(`window.sharkBay.runtime.canControl(${JSON.stringify(terminal.session.id)})`)), "desktop becomes observer");
+  await until(() => browserCdp.evaluate(`!!document.querySelector(".xterm.enable-mouse-events")`), "takeover restores application mouse tracking");
   await browserCdp.evaluate(`window.sharkBay.terminal.input({ sessionId: ${JSON.stringify(terminal.session.id)}, data: "echo SHARED_RUNTIME_UI_OK\\r" })`);
   await new Promise((resolve) => setTimeout(resolve, 500));
+  const socketPrototype = await browserCdp.send("Runtime.evaluate", { expression: "WebSocket.prototype" });
+  const sockets = await browserCdp.send("Runtime.queryObjects", { prototypeObjectId: socketPrototype.result.objectId });
+  const disconnected = await browserCdp.send("Runtime.callFunctionOn", {
+    objectId: sockets.objects.objectId, awaitPromise: true, returnByValue: true,
+    functionDeclaration: `async function () {
+      const socket = this.find(socket => socket.readyState === WebSocket.OPEN && socket.url.endsWith("/api/events"));
+      await new Promise(resolve => { socket.addEventListener("close", resolve, {once:true}); socket.close(); });
+      await new Promise(requestAnimationFrame);
+      const button = document.querySelector(".terminal-tab-close");
+      const disabled = button.disabled;
+      button.click();
+      return disabled;
+    }`,
+  });
+  assert.equal(disconnected.result.value, true, "Disconnected terminal close is disabled");
+  await until(() => browserCdp.evaluate(`window.sharkBay.runtime.connection() === "connected"
+    && document.querySelector(".terminal-tab-close")?.disabled === false`), "terminal tab stays available after reconnect");
+  assert.ok((await client.call("terminal.list")).some(entry => entry.session.pid === terminal.session.pid));
+  console.log("UI_CHECK disconnected terminal stays open across reconnect");
   await browserCdp.screenshot("browser.png");
   try { await desktopCdp.send("Page.bringToFront"); await desktopCdp.screenshot("electron.png"); }
   catch { console.log("UI_CHECK native screenshot unavailable; browser screenshot captured"); }
@@ -111,6 +213,11 @@ try {
   console.log(`Screenshots: ${screenshots}`);
 } catch (error) {
   console.error("UI failure:", error.message);
+  if (browserCdp) console.error("Browser terminal:", await browserCdp.evaluate(`(() => {
+    const view = document.querySelector(".xterm-viewport-host");
+    return view && {rows:view.querySelector(".xterm-rows")?.childElementCount, height:view.clientHeight,
+      scrollHeight:view.scrollHeight, scrollTop:view.scrollTop, text:view.innerText.slice(0,500)};
+  })()`).catch(() => "unavailable"));
   if (desktopCdp) { console.error("Desktop DOM:", await desktopCdp.evaluate(`document.body.innerText.slice(0,1500)`).catch(() => "unavailable")); await desktopCdp.screenshot("failure.png").catch(() => {}); }
   console.error("Desktop startup diagnostics:", desktop?.stderr().slice(-4000) ?? "not started");
   throw error;

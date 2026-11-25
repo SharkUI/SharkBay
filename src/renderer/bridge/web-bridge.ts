@@ -13,6 +13,7 @@ export type WebRuntimeBridge = {
   onNotice: (callback: (message: string) => void) => () => void;
   listTerminals: () => Promise<RuntimeTerminal[]>;
   attachTerminal: (sessionId: string) => void;
+  detachTerminal?: (sessionId: string) => void;
   canControl: (sessionId: string) => boolean;
   takeControl: (sessionId: string) => Promise<void>;
   attachClipboardImage?: (sessionId: string, image: Blob) => Promise<void>;
@@ -162,6 +163,7 @@ export async function createWebBridge(): Promise<SharkBayBridge & { runtime: Web
     onConnection: (callback) => { callback(connection); return subscribe("connection", callback); },
     onControl: (callback) => subscribe("control", callback), onTerminalsChanged: (callback) => subscribe("terminals", callback), onNotice: (callback) => subscribe("notice", callback),
     listTerminals, attachTerminal, canControl,
+    detachTerminal: (sessionId) => { attached.delete(sessionId); sequences.delete(sessionId); },
     takeControl: async (sessionId) => { await request("terminal.claim", { sessionId }); owners.set(sessionId, clientId); publish("control", undefined); attachTerminal(sessionId); },
     attachClipboardImage: async (sessionId, image) => {
       if (!canControl(sessionId)) throw new Error("Take control of this terminal to paste an image.");

@@ -5,6 +5,7 @@ import type { SerializeAddon } from "@xterm/addon-serialize";
 import type { CoreRuntime } from "../core/core-runtime.js";
 import type { TerminalSession, TerminalDataEvent, TerminalUpdateEvent } from "../shared/types.js";
 import { ApplicationError, type TerminalFrame } from "../shared/application-api.js";
+import { xtermMouse } from "../shared/xterm-mouse.js";
 
 type Screen = { terminal: Terminal; serializer: SerializeAddon; queue: Promise<void>; sequence: number };
 
@@ -41,7 +42,10 @@ export class TerminalState {
   }
   private snapshot(sessionId: string, screen: Screen): TerminalFrame {
     // Cancel incomplete ANSI input and reset in the write queue before replaying the snapshot.
-    return { sessionId, stream: "stdout", data: `\x18\x1bc${screen.serializer.serialize({ scrollback: 2000 })}`, sequence: screen.sequence,
+    // SerializeAddon includes mouse tracking but omits the mouse report encoding.
+    const encoding = xtermMouse(screen.terminal).activeEncoding;
+    const mouseEncoding = encoding === "SGR" ? "\x1b[?1006h" : encoding === "SGR_PIXELS" ? "\x1b[?1016h" : "";
+    return { sessionId, stream: "stdout", data: `\x18\x1bc${screen.serializer.serialize({ scrollback: 2000 })}${mouseEncoding}`, sequence: screen.sequence,
       reset: true, cols: screen.terminal.cols, rows: screen.terminal.rows };
   }
   register(session: TerminalSession): void {
