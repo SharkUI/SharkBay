@@ -6,6 +6,11 @@ import path from "node:path";
 import { lstat, realpath } from "node:fs/promises";
 
 export const runtimeProtocolVersion = 1;
+export type RuntimeHello = {
+  pid: number;
+  origin: string;
+  runtime?: { version: string; executable: string; cli: string };
+};
 export const defaultRuntimeDataPath = () => path.join(os.homedir(), ".sharkbay", "runtime");
 export function runtimeControlPath(dataPath: string): string {
   const hash = createHash("sha256").update(path.resolve(dataPath)).digest("hex").slice(0, 12);
@@ -40,7 +45,7 @@ export class RuntimeClient extends EventEmitter<{ event: [string, unknown]; disc
     socket.once("close", disconnected);
   }
 
-  static async connect(dataPath: string): Promise<RuntimeClient> {
+  static async connect(dataPath: string, timeoutMs = 2000): Promise<RuntimeClient> {
     const socketPath = runtimeControlPath(await realpath(dataPath));
     const directory = await lstat(path.dirname(socketPath));
     const endpoint = await lstat(socketPath);
@@ -51,20 +56,20 @@ export class RuntimeClient extends EventEmitter<{ event: [string, unknown]; disc
     }
     const socket = net.createConnection(socketPath);
     await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => { socket.destroy(); reject(new Error("Runtime connection timed out")); }, 2000);
+      const timeout = setTimeout(() => { socket.destroy(); reject(new Error("Runtime connection timed out")); }, timeoutMs);
       socket.once("connect", () => { clearTimeout(timeout); resolve(); });
       socket.once("error", (error) => { clearTimeout(timeout); reject(error); });
     });
     const client = new RuntimeClient(socket);
-    try { await client.call("hello", { protocol: runtimeProtocolVersion }); return client; }
+    try { await client.call("hello", { protocol: runtimeProtocolVersion }, timeoutMs); return client; }
     catch (error) { client.dispose(); throw error; }
   }
 
-  call<T = any>(method: string, input?: unknown): Promise<T> {
+  call<T = any>(method: string, input?: unknown, timeoutMs = 120000): Promise<T> {
     if (this.socket.destroyed) return Promise.reject(new Error("Runtime disconnected"));
     const id = randomUUID();
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`Runtime command timed out: ${method}`)); }, 120000);
+      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`Runtime command timed out: ${method}`)); }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
       this.socket.write(JSON.stringify({ id, method, input }) + "\n");
     });

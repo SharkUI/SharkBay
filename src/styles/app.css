@@ -5077,6 +5077,10 @@ button.project-file-toggle:focus-visible {
   height: calc(100% - 8px);
 }
 
+.xterm-surface .xterm-scrollable-element {
+  min-height: 100%;
+}
+
 .xterm-surface .xterm-viewport,
 .xterm-surface .xterm-screen {
   scrollbar-width: none;

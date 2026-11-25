@@ -1,6 +1,6 @@
 {
   "name": "sharkbay",
-  "version": "0.3.13",
+  "version": "0.3.14",
   "private": true,
   "description": "A local macOS control panel for software projects.",
   "license": "GPL-3.0-only",
@@ -15,6 +15,8 @@
     "pack": "npm run build:desktop && vite build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --dir",
     "dist": "npm run build:desktop && vite build && electron-builder --mac",
     "pack:runtime": "npm run build:runtime && vite build && node scripts/pack-runtime-npm.mjs",
+    "pack:runtime:migration": "npm run build:runtime && vite build && node scripts/pack-macos-migration-runtime.mjs",
+    "pack:desktop:migration": "node scripts/pack-macos-migration-desktop.mjs",
     "build:runtime": "node scripts/build-runtime.mjs",
     "start:runtime": "node dist-runtime/src/server/main.js",
     "verify:webui": "npm run build:runtime && vite build && node scripts/verify-webui-runtime.mjs",
@@ -84,7 +86,8 @@
     "publish": {
       "provider": "github",
       "owner": "SharkUI",
-      "repo": "SharkBay"
+      "repo": "SharkBay",
+      "channel": "desktop"
     },
     "directories": {
       "output": "release"

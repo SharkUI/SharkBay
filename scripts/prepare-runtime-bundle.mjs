@@ -4,9 +4,10 @@ import path from "node:path";
 
 if (process.versions.electron) throw new Error("Prepare the runtime with ordinary Node, not Electron");
 const root = process.cwd();
-const target = path.join(root, ".runtime-bundle");
-await rm(target, { recursive: true, force: true });
-await mkdir(path.join(target, "bin"), { recursive: true });
+const target = process.argv[2] ? path.resolve(process.argv[2]) : path.join(root, ".runtime-bundle");
+if (!process.argv[2]) await rm(target, { recursive: true, force: true });
+await mkdir(target, { mode: 0o700 });
+await mkdir(path.join(target, "bin"));
 await cp(process.execPath, path.join(target, "bin", process.platform === "win32" ? "node.exe" : "node"));
 await cp("dist-runtime", path.join(target, "dist-runtime"), { recursive: true });
 await mkdir(path.join(target, "dist"), { recursive: true });

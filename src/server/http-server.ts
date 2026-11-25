@@ -23,7 +23,12 @@ const maxClientQueue = 2 * 1024 * 1024;
 const eventNames = new Set<string>(Object.values(applicationEvents));
 const contentTypes: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon", ".woff2": "font/woff2" };
 
-export async function createWebServer(runtime: ApplicationRuntime, options: { port: number; staticRoot: string; host?: "127.0.0.1" | "0.0.0.0" }) {
+export async function createWebServer(runtime: ApplicationRuntime, options: {
+  port: number;
+  staticRoot: string;
+  host?: "127.0.0.1" | "0.0.0.0";
+  isReady?: () => boolean;
+}) {
   const auth = new SessionAuth();
   const clients = new Map<string, Client>();
   const desktopAttachmentClients = new Map<string, string>();
@@ -41,7 +46,13 @@ export async function createWebServer(runtime: ApplicationRuntime, options: { po
     if (client.socket.bufferedAmount + Buffer.byteLength(encoded) > maxClientQueue) { client.socket.terminate(); return; }
     client.socket.send(encoded);
   };
-  const server = http.createServer((req, res) => { void handle(req, res); });
+  const server = http.createServer((req, res) => {
+    if (options.isReady?.() === false) {
+      res.writeHead(503).end();
+      return;
+    }
+    void handle(req, res);
+  });
   server.requestTimeout = 30000;
   server.headersTimeout = 10000;
 
@@ -271,6 +282,7 @@ export async function createWebServer(runtime: ApplicationRuntime, options: { po
   }
 
   server.on("upgrade", (req, socket, head) => {
+    if (options.isReady?.() === false) { socket.end("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n"); return; }
     try {
       checkHost(req); checkOrigin(req);
       if (new URL(req.url ?? "/", origin).pathname !== "/api/events") throw new ApplicationError("NOT_FOUND", "Not found", 404);

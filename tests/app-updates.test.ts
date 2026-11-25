@@ -2,14 +2,14 @@ import { EventEmitter } from "node:events";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppUpdates } from "../src/main/app-updates.js";
 
-function setup(enabled = true) {
+function setup(enabled = true, canUpdate?: () => Promise<boolean>) {
   const client = Object.assign(new EventEmitter(), {
     autoDownload: false, autoInstallOnAppQuit: false, allowPrerelease: true, allowDowngrade: true,
     checkForUpdates: vi.fn().mockResolvedValue(null),
     quitAndInstall: vi.fn(),
   });
   const changed = vi.fn();
-  const updates = new AppUpdates(client as never, enabled, changed);
+  const updates = new AppUpdates(client as never, enabled, changed, canUpdate);
   return { client, updates, changed };
 }
 
@@ -28,6 +28,33 @@ describe("application updates", () => {
     updates.install();
     expect(client.checkForUpdates).not.toHaveBeenCalled();
     expect(client.quitAndInstall).not.toHaveBeenCalled();
+  });
+
+  it("blocks bridge checks and native handoff until the background Runtime is ready", async () => {
+    const canUpdate = vi.fn().mockResolvedValue(false);
+    const closeWindows = vi.fn();
+    const { client, updates } = setup(true, canUpdate);
+    expect(client.autoInstallOnAppQuit).toBe(false);
+    await updates.check();
+    expect(await updates.check(true)).toMatchObject({ status: "error", manual: true });
+    expect(client.checkForUpdates).not.toHaveBeenCalled();
+
+    canUpdate.mockResolvedValue(true);
+    await updates.check();
+    expect(client.checkForUpdates).toHaveBeenCalledOnce();
+    client.emit("update-downloaded", { version: "1.0.0" });
+    canUpdate.mockResolvedValue(false);
+    await updates.install(closeWindows);
+    expect(closeWindows).not.toHaveBeenCalled();
+    expect(client.quitAndInstall).not.toHaveBeenCalled();
+    expect(updates.getState()).toMatchObject({ status: "error", manual: true });
+    canUpdate.mockResolvedValue(true);
+    await updates.check(true);
+    client.emit("update-downloaded", { version: "1.0.0" });
+    await Promise.all([updates.install(closeWindows), updates.install(closeWindows)]);
+    expect(closeWindows).toHaveBeenCalledOnce();
+    expect(closeWindows.mock.invocationCallOrder[0]).toBeLessThan(client.quitAndInstall.mock.invocationCallOrder[0]!);
+    expect(client.quitAndInstall).toHaveBeenCalledOnce();
   });
 
   it("checks at startup and every four hours, and stops polling on exit", async () => {

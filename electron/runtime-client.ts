@@ -1,12 +1,24 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, open } from "node:fs/promises";
 import { join } from "node:path";
 import { app } from "electron";
 import { resolveCommandPath } from "../src/main/command-path.js";
 import { RuntimeClient, defaultRuntimeDataPath } from "../src/runtime/control-client.js";
+import { committedDesktopRuntime, connectCommittedDesktopRuntime, effectiveMigrationProfile } from "./desktop-migration.js";
+import { sameProfile } from "../src/runtime/migration-state.js";
 
 export async function ensureRuntime(report: (stage: string) => void = () => {}): Promise<RuntimeClient> {
-  const dataPath = process.env.SHARKBAY_RUNTIME_DATA_DIR ?? defaultRuntimeDataPath();
+  const migrated = await committedDesktopRuntime();
+  if (migrated) {
+    if (!sameProfile(migrated, await effectiveMigrationProfile(migrated, migrated.userDataPath))) {
+      throw new Error("The requested Runtime profile differs from the migrated profile. Check SHARKBAY_RUNTIME_DATA_DIR and SHARKBAY_CONFIG_PATH.");
+    }
+    return connectCommittedDesktopRuntime(migrated);
+  }
+  const qaProfile = app.isPackaged && existsSync(join(process.resourcesPath, "runtime-migration-qa"));
+  const dataPath = process.env.SHARKBAY_RUNTIME_DATA_DIR
+    ?? (qaProfile ? join(app.getPath("userData"), "qa-runtime") : defaultRuntimeDataPath());
   report("runtime-connect-started");
   try { const client = await RuntimeClient.connect(dataPath); report("existing-runtime-connected"); return client; }
   catch (error) { if (!["ENOENT", "ECONNREFUSED"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error; }

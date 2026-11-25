@@ -6,9 +6,9 @@ SharkBay distributes Runtime and WebUI together as an npm package. The optional 
 
 `npm run pack:runtime` creates `release/sharkbay-runtime-<version>.tgz` using the repository version and locked direct runtime dependencies. The archive contains the compiled Node service, CLI, and WebUI assets. It targets Node.js 22.12+ in the 22.x series on macOS and Linux x64/arm64. Install the tarball in an isolated npm prefix for release validation before publishing it to the npm registry.
 
-Serve the installed WebUI with `sharkbay serve`. The default address is `http://127.0.0.1:17777/`. `sharkbay service enable` starts it with a macOS LaunchAgent or a Linux systemd user service, and `sharkbay service disable` stops and unregisters that service. The service uses the current user's default profile and the Node executable used at registration. `--lan` explicitly enables trusted LAN access. `SHARKBAY_RUNTIME_PORT` can set the service port.
+Serve the installed WebUI with `sharkbay serve`. The default address is `http://127.0.0.1:17777/`. `sharkbay service enable` starts it with a macOS LaunchAgent or a Linux systemd user service. `sharkbay service disable` stops the process and disables login startup. On macOS, enabling it again uses the saved profile, executable, port, and LAN settings. New services use the current user's default profile and the Node executable used at registration. `--lan` explicitly enables trusted LAN access. `SHARKBAY_RUNTIME_PORT` can set the initial service port.
 
-After finishing active sessions, disable a registered service before updating Node or uninstalling the package. Re-enable it from the desired Node environment to register its executable again. Linux hosts that need to serve the WebUI before login can enable systemd lingering for their service user.
+After finishing active sessions, disable a registered service before updating Node or uninstalling the package. On Linux, re-enable it from the desired Node environment to register its executable again. Linux hosts that need to serve the WebUI before login can enable systemd lingering for their service user.
 
 ## Commands
 
@@ -54,16 +54,18 @@ For each release:
 1. Increase the application version and run the release checks below.
 2. Produce Developer ID signed, notarized and stapled artifacts. The ZIP must
    contain the final signed app; if any artifact changes, regenerate its
-   blockmap and `latest-mac.yml` so sizes and checksums match.
-3. Upload the DMG, ZIP, their generated blockmaps, and `latest-mac.yml` to the
-   same GitHub Release. Include an architecture-compatible ZIP for each
+   blockmap and update manifest so sizes and checksums match.
+3. Upload the DMG, ZIP, their generated blockmaps, and the release's update
+   manifest to the same GitHub Release. For 1.x, use `desktop-mac.yml`.
+   Include an architecture-compatible ZIP for each
    supported Mac architecture. The current release ships arm64.
 4. Verify all assets before publishing the release as a stable, non-draft
    release. A commit or tag alone does not deliver an application update.
 
 Use `npx electron-builder --mac --publish never` for local distributable
 verification without uploading. The packaged app must include
-`Contents/Resources/app-update.yml` pointing to the intended GitHub repository.
+`Contents/Resources/app-update.yml` pointing to `SharkUI/SharkBay` and the
+`desktop` update channel for 1.x.
 Keep publishing credentials on the build machine; public update clients do
 not need a GitHub token.
 
@@ -76,6 +78,71 @@ application or publish a test version to the production feed.
 
 Versions shipped before this updater need one manual installation of an
 updater-enabled release. Subsequent releases can update automatically.
+
+### macOS 0.3.14 Migration And 1.x Release
+
+Publish 0.3.14 and 1.x in `SharkUI/SharkBay`. Give older clients two weeks to
+auto-update to 0.3.14 before making 1.0 the latest release. The bridge and 1.x
+use the `desktop` update channel in the same repository.
+
+Build the self-contained archive on an arm64 Mac with Node 22:
+
+```bash
+npm run pack:runtime:migration
+npm run pack:desktop:migration -- bridge migration-inputs.json release/v0.3.13/SharkBay-0.3.13-arm64-mac.zip
+npm run pack:desktop:migration -- 1.0 migration-inputs.json
+```
+
+The production input file uses `owner` set to `SharkUI` and `repo` set to
+`SharkBay`. Its `runtime` object contains `version` (`1.0.0`), the archive's
+HTTPS `url` and the `sha256` printed by the Runtime build. Host the archive as
+the `sharkbay-runtime-1.0.0-macos-arm64.tar.gz` asset of v0.3.14 so the bridge
+can download it during the transition. The bridge is built from the v0.3.13 tag and uses
+the original signed ZIP's bundled Runtime. Check the legacy Runtime manifest
+and run against the final signed assets. The commands build local artifacts.
+
+1. Publish v0.3.14 as the latest stable release with its notarized DMG, ZIP,
+   blockmaps, Runtime archive, and both `latest-mac.yml` and `desktop-mac.yml`.
+   The two manifests are identical and describe the bridge. Keep v0.3.14 as
+   the latest release for at least 14 days from publication.
+2. After the window and release verification, publish v1.0.0 as the latest
+   stable release with its notarized desktop assets and `desktop-mac.yml`.
+   Omit `latest-mac.yml` from v1.0.0 and all later releases. The legacy updater
+   only looks for that file and cannot automatically download a 1.x package.
+3. Keep the v0.3.14 assets downloadable and link directly to its release page
+   from the v1.0.0 upgrade notes. Users still on 0.3.13 or earlier can manually
+   install 0.3.14, complete the Runtime migration, and then update to 1.x.
+
+The bridge stages the Runtime while the old process is serving existing
+terminals. Once that process has exited, opening the bridge starts the new
+service. When it is ready, the bridge offers 1.x through the new feed. The
+Runtime binds to loopback by default. An existing trusted-LAN user can set
+`SHARKBAY_MIGRATION_LAN=1` on the bridge's first launch to retain LAN access.
+The bridge stores the effective profile, config and port for the replacement
+service and 1.0 Desktop. If an existing 1.0.0 Runtime already runs the same
+profile through its verified LaunchAgent, the bridge keeps that Runtime and
+its terminals running and uses it for the 1.0 update checks.
+
+For signed upgrade QA, use a fixture repository and add a `qa` object with
+an isolated `name`, `appId`, `serviceLabel` and numeric Runtime `port`. Build
+`legacy-qa`, `bridge` and `1.0` with the same input file. The `legacy-qa` command
+takes the same signed legacy ZIP as `bridge`. The optional QA-only `host`
+(`127.0.0.1:PORT`) runs the GitHub provider against a loopback fixture. These
+local QA builds use Developer ID signatures without notarization. They exercise
+the native update client across the change in which release GitHub marks latest.
+Run the loopback acceptance chain with
+`node scripts/verify-macos-migration.mjs migration-inputs.json` after building the three ZIPs.
+Add `--adopt-standalone` to test an existing Runtime, its custom configuration,
+and disabling and re-enabling its LaunchAgent.
+
+Candidate probes hold the canonical profile locks and use a SQLite backup.
+They leave the live data untouched before committing the handoff. If the
+bridge cancels the candidate before commit, 0.3.14 reopens the live profile
+with its bundled Runtime. Keep the pre-migration snapshot for inspection. The
+bridge verifies the installed LaunchAgent and its login settings before
+offering 1.0. If the job is unloaded, 1.0 can register the verified plist at
+`~/Library/LaunchAgents/xyz.sharkbay.runtime.plist`. For service failures,
+check `runtime.log` in the recorded profile.
 
 ### Signed Update Acceptance
 

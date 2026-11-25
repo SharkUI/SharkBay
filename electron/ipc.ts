@@ -1,4 +1,5 @@
 import { BrowserWindow, dialog, ipcMain, shell, type WebContents } from "electron";
+import { setTimeout as delay } from "node:timers/promises";
 import { BrowserManager } from "../src/main/browser-tabs.js";
 import { CaffeinateController } from "../src/main/caffeinate.js";
 import { shareLocalArtifact, type ShareArtifactInput, type ShareArtifactResult } from "../src/main/share-artifact.js";
@@ -11,6 +12,7 @@ import type { AppConfig, AppearanceTheme, BrowserActionInput, BrowserCloseInput,
 import type { RuntimeClient } from "../src/runtime/control-client.js";
 
 export type IpcCallbacks = {
+  reconnectRuntime?: () => Promise<RuntimeClient>;
   onIslandEnabledChanged?: (enabled: boolean) => void;
   onAppearanceThemeChanged?: (theme: AppearanceTheme) => void;
   onStatusChangeNotificationsChanged?: (config: Pick<AppConfig, "statusChangeNotificationsEnabled" | "agentStatusCompletionSoundEnabled" | "agentStatusApprovalSoundEnabled">) => void;
@@ -21,9 +23,20 @@ let activeFindBrowserId: string | null = null;
 let lastFindQuery = "";
 let refocusPopoverOnResult = false;
 let runtimeClient: RuntimeClient | undefined;
+let runtimeReconnect: AbortController | undefined;
 export function shouldAllowBrowserCertificateError(webContents: WebContents, url: string): boolean { return browserManager.shouldAllowCertificateError(webContents, url); }
-export async function openRuntimeInBrowser(): Promise<void> { if (!runtimeClient) throw new Error("Runtime is not connected"); await shell.openExternal(await runtimeClient.call<string>("connect")); }
-export async function disconnectRuntime(): Promise<void> { runtimeClient?.dispose(); await caffeinate.setActive(false); }
+export async function openRuntimeInBrowser(): Promise<void> { await shell.openExternal(await callRuntime<string>("connect")); }
+export async function disconnectRuntime(): Promise<void> {
+  runtimeReconnect?.abort();
+  const client = runtimeClient;
+  runtimeClient = undefined;
+  client?.dispose();
+  await caffeinate.setActive(false);
+}
+async function callRuntime<T = any>(method: string, input?: unknown): Promise<T> {
+  if (!runtimeClient) throw new Error("Runtime is not connected");
+  return runtimeClient.call<T>(method, input);
+}
 function handle<P, R>(channel: string, callback: (payload: P) => Promise<R>): void {
   ipcMain.removeHandler(channel);
   ipcMain.handle(channel, (event, payload: P) => {
@@ -32,8 +45,15 @@ function handle<P, R>(channel: string, callback: (payload: P) => Promise<R>): vo
   });
 }
 export async function registerIpcHandlers(client: RuntimeClient, callbacks: IpcCallbacks = {}): Promise<void> {
-  runtimeClient = client;
-  client.on("event", (name, payload) => {
+  runtimeReconnect?.abort();
+  const reconnect = new AbortController();
+  runtimeReconnect = reconnect;
+  const notifyConnection = (state: "connected" | "disconnected") => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send(channels.runtimeConnection, state);
+    }
+  };
+  const relayRuntimeEvent = (name: string, payload: unknown) => {
     if (name === "runtime:config") {
       callbacks.onIslandEnabledChanged?.((payload as AppConfig).islandEnabled !== false);
       callbacks.onAppearanceThemeChanged?.((payload as AppConfig).appearanceTheme);
@@ -41,8 +61,34 @@ export async function registerIpcHandlers(client: RuntimeClient, callbacks: IpcC
     }
     const channel = name === "desktop:restoreAgentSession" ? appChannels.restoreAgentSession : name === "desktop:launchAgentSession" ? appChannels.launchAgentSession : name;
     for (const window of BrowserWindow.getAllWindows()) if (!window.isDestroyed()) window.webContents.send(channel, payload);
-  });
-  client.on("disconnected", () => { for (const window of BrowserWindow.getAllWindows()) if (!window.isDestroyed()) window.webContents.send(channels.runtimeConnection, "disconnected"); });
+  };
+  const reconnectRuntime = callbacks.reconnectRuntime;
+  function bindRuntime(current: RuntimeClient) {
+    runtimeClient = current;
+    current.on("event", relayRuntimeEvent);
+    current.once("disconnected", () => {
+      current.off("event", relayRuntimeEvent);
+      if (runtimeClient !== current) return;
+      runtimeClient = undefined;
+      notifyConnection("disconnected");
+      if (reconnectRuntime) void retryRuntime(reconnectRuntime);
+    });
+  }
+  async function retryRuntime(connect: () => Promise<RuntimeClient>) {
+    while (!reconnect.signal.aborted) {
+      try { await delay(1_000, undefined, { signal: reconnect.signal }); } catch { return; }
+      const next = await connect().catch(() => undefined);
+      if (!next) continue;
+      if (reconnect.signal.aborted) {
+        next.dispose();
+        return;
+      }
+      bindRuntime(next);
+      notifyConnection("connected");
+      return;
+    }
+  }
+  bindRuntime(client);
   const methods: Record<string, string> = {
     [channels.listRoots]: "config.get", [channels.addProject]: "config.addProject", [channels.removeProject]: "config.removeProject", [channels.renameProject]: "config.renameProject", [channels.createWorktree]: "config.createWorktree",
     [channels.openWorktree]: "config.openWorktree", [channels.removeWorktree]: "config.removeWorktree", [channels.deleteLocalBranch]: "config.deleteLocalBranch",
@@ -58,20 +104,20 @@ export async function registerIpcHandlers(client: RuntimeClient, callbacks: IpcC
     if (method === "projects.scan") input = undefined;
     if (method === "projects.listFiles") input = { projectUri: input.projectUri, directoryPath: input.directoryPath };
     if (method === "protocol.install" || method === "protocol.enable") input = { repoPath: input.repoPath };
-    return client.call(method, input);
+    return callRuntime(method, input);
   };
   for (const [channel, method] of Object.entries(methods)) handle(channel, (input) => command(method, input));
   for (const [channel, method] of [[channels.terminalInput, "terminal.input"], [channels.recordSessionPrompt, "terminal.recordPrompt"], [channels.recordPromptHistoryEntry, "terminal.recordPromptHistoryEntry"]]) {
     ipcMain.on(channel!, (_event, input) => { void command(method!, input).catch((error) => { for (const window of BrowserWindow.getAllWindows()) window.webContents.send(channels.runtimeNotice, error.message); }); });
   }
-  handle(channels.runtimeHello, () => client.call("hello", { protocol: 1 }));
-  handle(channels.runtimeList, () => client.call("terminal.list"));
-  handle(channels.runtimeAttach, (input) => client.call("terminal.attach", input));
-  handle(channels.runtimeClaim, (input) => client.call("terminal.claim", input));
-  handle(channels.runtimeConnect, () => client.call("connect"));
+  handle(channels.runtimeHello, () => callRuntime("hello", { protocol: 1 }));
+  handle(channels.runtimeList, () => callRuntime("terminal.list"));
+  handle(channels.runtimeAttach, (input) => callRuntime("terminal.attach", input));
+  handle(channels.runtimeClaim, (input) => callRuntime("terminal.claim", input));
+  handle(channels.runtimeConnect, () => callRuntime("connect"));
   handle(channels.terminalSubmitAttachments, async (input: AttachmentPromptInput) => {
     const form = attachmentPromptForm(input);
-    const { origin, token } = await client.call<{ origin: string; token: string }>("terminal.attachmentUpload");
+    const { origin, token } = await callRuntime<{ origin: string; token: string }>("terminal.attachmentUpload");
     const url = new URL("/api/terminal/attachment-prompt", origin);
     url.searchParams.set("sessionId", input.sessionId);
     const response = await fetch(url, {
@@ -116,7 +162,7 @@ export async function registerIpcHandlers(client: RuntimeClient, callbacks: IpcC
       if (result.canceled || !result.filePaths[0]) return { cancelled: true };
       parentPath = result.filePaths[0];
     }
-    return client.call("config.cloneProject", { ...payload, parentPath });
+    return callRuntime("config.cloneProject", { ...payload, parentPath });
   });
   ipcMain.removeHandler(channels.pickProjectFolder);
   ipcMain.handle(channels.pickProjectFolder, async (event) => {
@@ -237,10 +283,10 @@ export async function registerIpcHandlers(client: RuntimeClient, callbacks: IpcC
   });
 
 
-  handle(channels.islandGetAllSessions, () => client.call("desktop.sessions"));
+  handle(channels.islandGetAllSessions, () => callRuntime("desktop.sessions"));
   ipcMain.on(channels.islandTabsSync, (_event, tabs: unknown) => {
     if (!Array.isArray(tabs)) return;
-    void client.call("desktop.tabs", tabs).catch(() => {});
+    void callRuntime("desktop.tabs", tabs).catch(() => {});
     const island = BrowserWindow.getAllWindows().find((window) => window.isAlwaysOnTop());
     if (island && !island.isDestroyed()) island.webContents.send("island:tabs", tabs);
   });

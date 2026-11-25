@@ -2498,6 +2498,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
     if (match?.tab.kind === "terminal") {
       if (closingTerminalIds.current.has(tabId) || dismissedTerminalIds.current.has(tabId)) return;
       const runtime = getBridge().runtime;
+      if (runtime && runtime.connection() !== "connected") return;
       if (runtime && !runtime.canControl(tabId)) {
         dismissTerminalTab(tabId, true);
         return;
@@ -2662,7 +2663,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                       : undefined;
                     const tabTitle = taskTitle ? formatTaskTabTitle(taskTitle) : nativeTabTitle;
                     const fullTabTitle = taskTitle ?? nativeTabTitle;
-                    const closeLabel = tab.kind === "terminal" && runtime && !runtime.canControl(tabId)
+                    const closeLabel = tab.kind === "terminal" && terminalConnected && runtime && !runtime.canControl(tabId)
                       ? "Hide " + fullTabTitle + " on this device" : "Close " + fullTabTitle;
                     const lightState = agentTabLightState(tab, isActiveTab, hookStateByTerminalId);
                     return (
@@ -2686,7 +2687,7 @@ const TerminalPane = forwardRef<TerminalPaneHandle, {
                           )}
                           <span className="truncate" title={taskTitle}>{tabTitle}{tab.kind === "editor" && tab.content !== tab.savedContent ? " •" : ""}</span>
                         </button>
-                        <button aria-label={closeLabel} title={closeLabel} className="terminal-tab-close" type="button" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); void closeTab(tabId); }}><CloseGlyph /></button>
+                        <button aria-label={closeLabel} title={closeLabel} className="terminal-tab-close" type="button" disabled={tab.kind === "terminal" && !terminalConnected} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); void closeTab(tabId); }}><CloseGlyph /></button>
                       </div>
                     );
                   })}

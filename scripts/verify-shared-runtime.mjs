@@ -172,6 +172,25 @@ try {
   await until(() => browserCdp.evaluate(`!!document.querySelector(".xterm.enable-mouse-events")`), "takeover restores application mouse tracking");
   await browserCdp.evaluate(`window.sharkBay.terminal.input({ sessionId: ${JSON.stringify(terminal.session.id)}, data: "echo SHARED_RUNTIME_UI_OK\\r" })`);
   await new Promise((resolve) => setTimeout(resolve, 500));
+  const socketPrototype = await browserCdp.send("Runtime.evaluate", { expression: "WebSocket.prototype" });
+  const sockets = await browserCdp.send("Runtime.queryObjects", { prototypeObjectId: socketPrototype.result.objectId });
+  const disconnected = await browserCdp.send("Runtime.callFunctionOn", {
+    objectId: sockets.objects.objectId, awaitPromise: true, returnByValue: true,
+    functionDeclaration: `async function () {
+      const socket = this.find(socket => socket.readyState === WebSocket.OPEN && socket.url.endsWith("/api/events"));
+      await new Promise(resolve => { socket.addEventListener("close", resolve, {once:true}); socket.close(); });
+      await new Promise(requestAnimationFrame);
+      const button = document.querySelector(".terminal-tab-close");
+      const disabled = button.disabled;
+      button.click();
+      return disabled;
+    }`,
+  });
+  assert.equal(disconnected.result.value, true, "Disconnected terminal close is disabled");
+  await until(() => browserCdp.evaluate(`window.sharkBay.runtime.connection() === "connected"
+    && document.querySelector(".terminal-tab-close")?.disabled === false`), "terminal tab stays available after reconnect");
+  assert.ok((await client.call("terminal.list")).some(entry => entry.session.pid === terminal.session.pid));
+  console.log("UI_CHECK disconnected terminal stays open across reconnect");
   await browserCdp.screenshot("browser.png");
   try { await desktopCdp.send("Page.bringToFront"); await desktopCdp.screenshot("electron.png"); }
   catch { console.log("UI_CHECK native screenshot unavailable; browser screenshot captured"); }
