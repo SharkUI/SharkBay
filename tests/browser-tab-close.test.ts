@@ -25,6 +25,7 @@ function harness(ids: string[], activeId: string) {
   const setToast = vi.fn();
   const closeTab = runInNewContext(`${script}\ncloseTab`, {
     spacesRef, closeBrowser, closeTerminal, setToast,
+    closingTerminalIds: { current: new Set() },
     getBridge: () => ({}),
     asMessage: (error: Error) => error.message,
     setSpaces: (update: (spaces: Record<string, Space>) => Record<string, Space>) => { spacesRef.current = update(spacesRef.current) as typeof spacesRef.current; },

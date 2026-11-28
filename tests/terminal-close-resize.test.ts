@@ -26,11 +26,12 @@ function fixture() {
   const resize = vi.fn(() => resizing.promise), close = vi.fn(() => closing.promise);
   const toast = vi.fn();
   const tabs = new Map([["terminal", { tab: { kind: "terminal", session: { status: "running" } } }]]);
-  const code = [handler("resizeTerminal"), handler("closeTerminal"), handler("closeTab")].join("\n");
+  const code = [handler("resizeTerminal"), handler("closeTerminal"), handler("closeTab"), handler("dismissTerminalTab")].join("\n");
   const handlers = runInNewContext(ts.transpile(code + "\n({ resizeTerminal, closeTab })", { target: ts.ScriptTarget.ES2022 }), {
-    getBridge: () => ({ terminal: { resize, close }, runtime: { canControl: () => true } }),
+    getBridge: () => ({ terminal: { resize, close }, runtime: { connection: () => "connected", canControl: () => true } }),
     validTerminalResizeDimensions: () => true,
     closingTerminalIds: { current: new Set() }, spacesRef: { current: {} },
+    dismissedTerminalIds: { current: new Set() }, pendingTerminalOutput: { current: new Map() },
     findTabWithSpace: (_spaces: unknown, id: string) => tabs.get(id),
     findTerminalTab: (_spaces: unknown, id: string) => tabs.get(id)?.tab,
     removeTab: (id: string) => tabs.delete(id), setToast: toast, asMessage: String,

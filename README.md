@@ -20,35 +20,33 @@
 
 ### macOS desktop
 
-Download [SharkBay 0.3.14](https://github.com/SharkUI/SharkBay/releases/tag/v0.3.14)
-for macOS 13 Ventura or later on Apple Silicon (arm64). You can also install
-the app with Homebrew:
+On a new installation, install the Runtime below and start it before opening
+the desktop app. Download [SharkBay 1.0.0](https://github.com/SharkUI/SharkBay/releases/tag/v1.0.0)
+for macOS 13 Ventura or later on Apple Silicon (arm64), or install the desktop
+app with Homebrew:
 
 ```bash
 brew install --cask SharkUI/tap/sharkbay
 ```
 
-### Upgrade from 0.3.13 or earlier
+### Upgrade from 0.3.x
 
-Install and open [0.3.14](https://github.com/SharkUI/SharkBay/releases/tag/v0.3.14)
-first. Your terminals can keep running while the update installs and the new
-Runtime downloads in the background. When SharkBay says the Runtime is ready,
-finish active work, restart your Mac, and open SharkBay again. Your projects
-and settings carry over. The Runtime includes its own Node.js.
-
-After the migration, SharkBay can offer the 1.0 desktop update when it becomes
-available. Keep the 0.3.14 download link for a manual upgrade if an older app
-no longer offers it automatically.
+On 0.3.13 or earlier, manually install and open [0.3.14](https://github.com/SharkUI/SharkBay/releases/tag/v0.3.14)
+first. On 0.3.14, let the Runtime finish downloading in the background. When
+SharkBay says it is ready, finish active work, restart your Mac, and reopen
+SharkBay to complete the migration. Your projects and settings carry over, and
+the migrated Runtime includes Node.js. Once migration is complete, the app
+offers the 1.0 desktop update. Complete these steps before using `brew upgrade`
+to replace an older desktop app.
 
 ### Standalone Runtime + WebUI
 
-The standalone npm package is designed for macOS and Linux on x64 or arm64
-with Node.js 22.12+ in the 22.x series. Until it is available on npm, follow the
-[Runtime packaging instructions](docs/release.md#runtime-and-webui) to install
-it from a local tarball. Once published, install and start it with:
+The standalone npm package targets macOS and Linux on x64 or arm64 with Node.js
+22.12+ in the 22.x series. Install the package from the GitHub Release and
+start it with:
 
 ```bash
-npm install -g @sharkbay/runtime
+npm install -g https://github.com/SharkUI/SharkBay/releases/download/v1.0.0/sharkbay-runtime-1.0.0.tgz
 sharkbay serve
 ```
 
@@ -58,7 +56,7 @@ disable login startup. Use `--lan` with `serve` or `service enable` to make the
 workbench available on a trusted local network. Reachable devices on that
 network can operate host projects and terminals.
 
-See the [changelog](CHANGELOG.md#0314--2026-11-25) for release details.
+See the [changelog](CHANGELOG.md#100--2026-11-28) for release details.
 
 ## Features
 

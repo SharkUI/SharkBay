@@ -4,7 +4,7 @@ SharkBay distributes Runtime and WebUI together as an npm package. The optional 
 
 ## Runtime and WebUI
 
-`npm run pack:runtime` creates `release/sharkbay-runtime-<version>.tgz` using the repository version and locked direct runtime dependencies. The archive contains the compiled Node service, CLI, and WebUI assets. It targets Node.js 22.12+ in the 22.x series on macOS and Linux x64/arm64. Install the tarball in an isolated npm prefix for release validation before publishing it to the npm registry.
+`npm run pack:runtime` creates `release/sharkbay-runtime-<version>.tgz` using the repository version and locked direct runtime dependencies. The archive contains the compiled Node service, CLI, and WebUI assets. It targets Node.js 22.12+ in the 22.x series on macOS and Linux x64/arm64. Install the tarball in an isolated npm prefix for release validation before publishing it. For 1.0.0, attach it to the GitHub Release so npm can install it directly from the release URL.
 
 Serve the installed WebUI with `sharkbay serve`. The default address is `http://127.0.0.1:17777/`. `sharkbay service enable` starts it with a macOS LaunchAgent or a Linux systemd user service. `sharkbay service disable` stops the process and disables login startup. On macOS, enabling it again uses the saved profile, executable, port, and LAN settings. New services use the current user's default profile and the Node executable used at registration. `--lan` explicitly enables trusted LAN access. `SHARKBAY_RUNTIME_PORT` can set the initial service port.
 
@@ -81,9 +81,10 @@ updater-enabled release. Subsequent releases can update automatically.
 
 ### macOS 0.3.14 Migration And 1.x Release
 
-Publish 0.3.14 and 1.x in `SharkUI/SharkBay`. Give older clients two weeks to
-auto-update to 0.3.14 before making 1.0 the latest release. The bridge and 1.x
-use the `desktop` update channel in the same repository.
+Publish 0.3.14 and 1.x in `SharkUI/SharkBay`. The bridge and 1.x use the
+`desktop` update channel in the same repository. For 1.0, the maintainer
+approved shortening the initial two-week migration window. Keep the manual
+bridge installation available for clients that miss the automatic update.
 
 Build the self-contained archive on an arm64 Mac with Node 22:
 
@@ -103,9 +104,8 @@ and run against the final signed assets. The commands build local artifacts.
 
 1. Publish v0.3.14 as the latest stable release with its notarized DMG, ZIP,
    blockmaps, Runtime archive, and both `latest-mac.yml` and `desktop-mac.yml`.
-   The two manifests are identical and describe the bridge. Keep v0.3.14 as
-   the latest release for at least 14 days from publication.
-2. After the window and release verification, publish v1.0.0 as the latest
+   The two manifests are identical and describe the bridge.
+2. After the migration window and release verification, publish v1.0.0 as the latest
    stable release with its notarized desktop assets and `desktop-mac.yml`.
    Omit `latest-mac.yml` from v1.0.0 and all later releases. The legacy updater
    only looks for that file and cannot automatically download a 1.x package.
@@ -264,7 +264,7 @@ Local builds use ad-hoc signing unless signing and notarization credentials are 
 
 ## Desktop migration
 
-Publish and verify the Runtime npm package before offering the first desktop-only update. Include the installation and startup steps in that release's upgrade notes.
+Make the Runtime npm tarball available with the first desktop-only update. Verify the tarball and include the installation and startup steps in the release notes.
 
 Finish active sessions and quit the old desktop app before stopping its bundled Runtime. Start the independently installed Runtime with the same profile to reuse the existing configuration, then launch the new desktop client. Closing or updating the desktop client leaves the Runtime and its sessions running. Keep the runtime and desktop versions on the same release when the control protocol changes.
 

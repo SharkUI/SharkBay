@@ -30,7 +30,7 @@ SharkBay automatically registers status hooks when it launches a supported Agent
 
 ## Product Boundaries
 
-- Electron and WebUI are clients of the same local runtime; browser access requires a host-issued connection grant, including on loopback and LAN.
+- Electron and WebUI are clients of the same local runtime; the standalone Runtime listens on loopback by default. When LAN access is enabled, devices on the trusted local network can operate host projects and terminals without a connection grant.
 - The desktop app currently has an `1180px` minimum window width.
 - It only operates on user-configured projects.
 - Agent CLIs run in runtime-owned terminal sessions that clients can observe; disconnecting a client does not stop those sessions.

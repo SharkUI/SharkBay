@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.0] — 2026-11-28
+
+### Changed
+- Runtime and WebUI ship as a standalone npm tarball. The optional Apple Silicon desktop app connects to that Runtime. Closing or updating Desktop leaves Runtime terminals running.
+- Terminal observers can scroll, copy, and hide tabs locally while another client controls the terminal.
+
+### Fixed
+- The standalone Runtime and Desktop handle large control replies without disconnecting the desktop client.
+- Observer terminals fill the available viewport, and Chinese terminal text stays visible at the right edge.
+
+### Upgrade Note
+- On 0.3.13 and earlier, install [0.3.14](https://github.com/SharkUI/SharkBay/releases/tag/v0.3.14) and complete its Runtime migration first. The migrated service uses the Runtime pinned by the bridge. Installations using the standalone 1.0.0 tarball also get the large-reply Runtime fix.
+
 ## [0.3.14] — 2026-11-25
 
 ### Upgrade Note
